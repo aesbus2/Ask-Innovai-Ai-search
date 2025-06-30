@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Metro AI Chat</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f5f5f5; }
+    .container { display: flex; flex-direction: column; height: 100vh; }
+    .header {
+      background: #6E32A0;
+      color: white;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header h1 { margin: 0; font-size: 1.5em; }
+    .material-icons { vertical-align: middle; }
+    .chat-section {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .sidebar {
+      width: 280px;
+      background: #fff;
+      border-right: 1px solid #ddd;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid #eee;
+      font-weight: bold;
+      font-size: 1.1em;
+    }
+    .chat-list { flex: 1; overflow-y: auto; }
+    .chat-link {
+      padding: 14px 20px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .chat-link.active, .chat-link:hover { background: #f9f9f9; }
+    .program-filters {
+      padding: 16px;
+      border-top: 1px solid #eee;
+    }
+    .main-chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .search-bar {
+      padding: 12px 24px;
+      background: #fff;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .search-input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 1em;
+    }
+    .search-btn {
+      background: #6E32A0;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      background: #fafafa;
+    }
+    .message-row {
+      margin-bottom: 20px;
+      max-width: 70%;
+      position: relative;
+    }
+    .user-msg {
+      background: #E20074;
+      color: white;
+      align-self: flex-end;
+      margin-left: auto;
+      padding: 12px 18px;
+      border-radius: 18px 4px 18px 18px;
+    }
+    .assistant-msg {
+      background: #fff;
+      padding: 12px 18px;
+      border-radius: 4px 18px 18px 18px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      position: relative;
+    }
+    .chat-actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .chat-actions .material-icons {
+      cursor: pointer;
+      color: #888;
+    }
+    .chat-actions .material-icons:hover {
+      color: #6E32A0;
+    }
+    .chat-input-row {
+      display: flex;
+      padding: 18px 24px;
+      border-top: 1px solid #ddd;
+      background: white;
+    }
+    .chat-input {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 1em;
+    }
+    .send-btn {
+      margin-left: 12px;
+      background: #FA9D28;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 0 24px;
+      font-size: 1em;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1><span class="material-icons">chat_bubble_outline</span> Metro AI Chat</h1>
+      <span class="material-icons">dark_mode</span>
+    </div>
+    <div class="chat-section">
+      <div class="sidebar">
+        <div class="sidebar-header">Recent Chats</div>
+        <div id="chats" class="chat-list"></div>
+        <div class="program-filters">
+          <div><strong>Programs:</strong></div>
+          <label><input type="checkbox" value="Metro" checked onchange="toggleProgram(this)"> Metro</label><br>
+          <label><input type="checkbox" value="ASW" onchange="toggleProgram(this)"> ASW</label>
+        </div>
+      </div>
+      <div class="main-chat">
+        <div class="search-bar">
+          <input id="searchInput" class="search-input" type="text" placeholder="Search knowledge base...">
+          <button class="search-btn" onclick="searchDocs()">Search</button>
+        </div>
+        <div id="messages" class="messages"></div>
+        <div class="chat-input-row">
+          <input id="chatInput" class="chat-input" type="text" placeholder="Ask something..." onkeydown="if(event.key==='Enter')sendMessage()">
+          <button class="send-btn" onclick="sendMessage()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/static/chat.js"></script>
+  <script>
+    function appendActions(container, messageId) {
+      const actions = document.createElement('div');
+      actions.className = 'chat-actions';
+      actions.innerHTML = `
+        <span class="material-icons" onclick="rateMessage('${messageId}', 'up')">thumb_up</span>
+        <span class="material-icons" onclick="rateMessage('${messageId}', 'down')">thumb_down</span>
+        <span class="material-icons" onclick="expandMessage('${messageId}')">expand_more</span>
+      `;
+      container.appendChild(actions);
+    }
+
+    function rateMessage(id, value) {
+      fetch('/rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ article_id: id, value })
+      });
+    }
+
+    function expandMessage(id) {
+      console.log(`Expanding message: ${id}`);
+      // Implement logic to request a longer version from the LLM here
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Metro AI - Vector Database Importer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+            border-bottom: 3px solid #E20074;
+            padding-bottom: 15px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 8px;
+            border-left: 4px solid #6E32A0;
+        }
+
+        .section h2 {
+            margin-top: 0;
+            color: #6E32A0;
+            font-size: 1.4em;
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        select, input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+            transition: border-color 0.3s;
+        }
+
+        select:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: #6E32A0;
+            box-shadow: 0 0 0 3px rgba(110, 50, 160, 0.1);
+        }
+
+        button {
+            background: #E20074;
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        button:hover {
+            background: #c3005f;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(226, 0, 116, 0.3);
+        }
+
+        button.secondary {
+            background: #6E32A0;
+        }
+
+        button.secondary:hover {
+            background: #5a2a87;
+        }
+
+        button.debug {
+            background: #17a2b8;
+        }
+
+        button.debug:hover {
+            background: #138496;
+        }
+
+        .status {
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #ddd;
+        }
+
+        .status.idle {
+            background: #f8f9fa;
+            border-left-color: #6c757d;
+        }
+
+        .status.running {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+            animation: pulse 2s infinite;
+        }
+
+        .status.completed {
+            background: #d4edda;
+            border-left-color: #28a745;
+        }
+
+        .status.failed {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .result-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+
+        .result-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .result-card h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        #current-step {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border-left: 4px solid #0066cc;
+            display: none;
+        }
+
+        #logs-container {
+            display: none;
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        #logs-content {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            line-height: 1.4;
+        }
+
+        #debugOverlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            padding: 50px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        #debugContent {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 800px;
+            margin: 0 auto;
+            font-family: monospace;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+
+        .warning {
+            color: #dc3545;
+            font-weight: 600;
+        }
+
+        .success {
+            color: #28a745;
+            font-weight: 600;
+        }
+
+        .info {
+            color: #17a2b8;
+            font-weight: 600;
+        }
+
+        /* NEW: Import type styling */
+        .import-type-section {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .import-type-section h3 {
+            margin: 0 0 15px 0;
+            color: #856404;
+            font-size: 1.2em;
+        }
+
+        .import-type-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .import-type-options {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .import-option {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 2px solid #ddd;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .import-option:hover {
+            border-color: #6E32A0;
+            background: #f8f9fa;
+        }
+
+        .import-option.selected {
+            border-color: #E20074;
+            background: #fff5f8;
+        }
+
+        .import-option h4 {
+            margin: 0 0 8px 0;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .import-option p {
+            margin: 0;
+            font-size: 0.9em;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .last-import-info {
+            background: #e3f2fd;
+            padding: 12px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-size: 0.9em;
+            border-left: 4px solid #2196f3;
+        }
+
+        /* Enhanced tooltips */
+        .tooltip {
+            position: relative;
+            cursor: help;
+        }
+
+        .tooltip:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 1000;
+        }
+
+        .tooltip:hover::before {
+            content: '';
+            position: absolute;
+            bottom: 117%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Metro AI - Vector Database Importer</h1>
+
+        <!-- NEW: Import Type Selection -->
+        <div class="import-type-section">
+            <h3>📋 Import Configuration</h3>
+            <div class="import-type-options">
+                <div class="import-option selected" onclick="selectImportType('full')">
+                    <h4>🔄 Full Import</h4>
+                    <p>Import all documents from scratch. This will process every document in the selected collections, regardless of when they were last updated.</p>
+                </div>
+                <div class="import-option" onclick="selectImportType('incremental')">
+                    <h4>⚡ Incremental Import</h4>
+                    <p>Import only documents that have been updated since the last import. Much faster for regular updates.</p>
+                </div>
+            </div>
+            
+            <!-- Last Import Info -->
+            <div id="lastImportInfo" class="last-import-info" style="display: none;">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="section">
+                <h2>📊 Import Settings</h2>
+                
+                <div class="control-group">
+                    <label for="collectionSelect" class="tooltip" data-tooltip="Choose which document collection to import">
+                        Collection to Import:
+                    </label>
+                    <select id="collectionSelect">
+                        <option value="all">All Collections</option>
+                        <option value="announcements">Announcements</option>
+                        <option value="call-assist">Call Assist</option>
+                        <option value="devices">Devices</option>
+                        <option value="mpower">MPower</option>
+                        <option value="plans">Plans</option>
+                        <option value="quality-pages">Quality Pages</option>
+                        <option value="services">Services</option>
+                        <option value="ttk">TTK</option>
+                        <option value="wnp-pages">WNP Pages</option>
+                        <option value="apps">Apps</option>
+                        <option value="promotions">Promotions</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="maxDocsInput" class="tooltip" data-tooltip="Limit the number of documents per collection (leave empty for no limit)">
+                        Max Documents per Collection:
+                    </label>
+                    <input type="number" id="maxDocsInput" placeholder="Leave empty for no limit" min="1">
+                </div>
+
+                <!-- Hidden import type selector for form submission -->
+                <input type="hidden" id="importTypeSelect" value="full">
+
+                <button onclick="startImport()" style="width: 100%; margin-bottom: 15px;">
+                    🚀 Start Import
+                </button>
+
+                <button onclick="checkConfig()" class="secondary" style="width: 100%;">
+                    🔧 Check Configuration
+                </button>
+            </div>
+
+            <div class="section">
+                <h2>📈 Quick Actions</h2>
+                
+                <button onclick="searchOpenSearch()" class="debug">
+                    🔍 Test Search
+                </button>
+                
+                <input type="text" id="searchInput" placeholder="Enter search term..." style="margin-bottom: 15px; margin-top: 10px;">
+                <div id="searchResults"></div>
+
+                <button onclick="countDocsByProgram()" class="secondary">
+                    📊 Count by Program
+                </button>
+
+                <button onclick="countDocsByCollectionAndProgram()" class="secondary">
+                    📋 Detailed Counts
+                </button>
+
+                <div id="programCounts"></div>
+
+                <button onclick="toggleLogs()" class="debug">
+                    📝 View Logs
+                </button>
+
+                <button id="debugToggleBtn" class="debug">
+                    🐛 Debug Info
+                </button>
+            </div>
+        </div>
+
+        <!-- NEW: Incremental Import Management Section -->
+        <div class="section" style="margin-top: 30px;">
+            <h2>⚡ Incremental Import Management</h2>
+            
+            <div class="grid" style="margin-bottom: 20px;">
+                <div>
+                    <button onclick="checkDocumentUpdates()" class="secondary" style="width: 100%; margin-bottom: 10px;">
+                        Show recent Updates
+                    </button>
+                    <div id="documentUpdates"></div>
+                </div>
+                
+                <div>
+                    <button onclick="getImportStatistics()" class="secondary" style="width: 100%; margin-bottom: 10px;">
+                        📊 View Statistics
+                    </button>
+                    <div id="importStats"></div>
+                </div>
+            </div>
+            
+            <div class="grid">
+                <div>
+                    <button onclick="cleanupOldChunks()" class="debug" style="width: 100%; margin-bottom: 10px;">
+                        🧹 Cleanup Old Data
+                    </button>
+                    <small style="color: #666; font-style: italic;">Remove chunks older than X days (SAFE: keeps recent content)</small>
+                </div>
+                
+                <div>
+                    <button onclick="reindexDocument()" class="debug" style="width: 100%; margin-bottom: 10px;">
+                        🔄 Reindex Document
+                    </button>
+                    <div style="margin-top: 10px;">
+                        <label for="reindexDocId" style="font-size: 0.9em; color: #666;">Document ID:</label>
+                        <input type="text" id="reindexDocId" placeholder="Enter document ID..." style="width: 100%; padding: 6px; margin: 4px 0; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em;">
+                        
+                        <label for="reindexDocName" style="font-size: 0.9em; color: #666;">Document Name (optional):</label>
+                        <input type="text" id="reindexDocName" placeholder="Enter document name to help identify..." style="width: 100%; padding: 6px; margin: 4px 0; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em;">
+                        
+                        <button onclick="searchDocumentForReindex()" style="width: 48%; padding: 6px; margin: 4px 1%; background: #17a2b8; color: white; border: none; border-radius: 4px; font-size: 0.85em;">
+                            🔍 Search Docs
+                        </button>
+                        
+                        <button onclick="browseDocumentsForReindex()" style="width: 48%; padding: 6px; margin: 4px 1%; background: #6E32A0; color: white; border: none; border-radius: 4px; font-size: 0.85em;">
+                            📋 Browse Docs
+                        </button>
+                    </div>
+                    <small style="color: #666; font-style: italic;">Force reindex a specific document by ID</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Step Display -->
+        <div id="current-step">
+            <strong>Current Step:</strong> <span id="step-text"></span>
+        </div>
+
+        <!-- Status Display -->
+        <div id="status-container">
+            <div class="status idle">
+                <h3>Status: READY</h3>
+                <p>Ready to start import process.</p>
+            </div>
+        </div>
+
+        <!-- Results Display -->
+        <div id="results-container" style="display: none;">
+            <h2>📋 Import Results</h2>
+            <div id="results-grid" class="results-grid"></div>
+        </div>
+
+        <!-- Logs Container -->
+        <div id="logs-container">
+            <h3>📝 Import Logs</h3>
+            <div id="logs-content"></div>
+            <button onclick="toggleLogs()" style="margin-top: 15px;">Close Logs</button>
+        </div>
+
+        <!-- Debug Overlay -->
+        <div id="debugOverlay" onclick="this.style.display='none'">
+            <div id="debugContent" onclick="event.stopPropagation()">
+                <h3>🐛 Debug Information</h3>
+                <div>Loading debug info...</div>
+                <button onclick="document.getElementById('debugOverlay').style.display='none'" style="margin-top: 20px;">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/main.js"></script>
+    
+    <!-- FIXED: Essential functions defined directly in HTML to avoid loading issues -->
+    <script>
+        // Wait for main.js to load, then define missing functions if needed
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, checking functions...');
+            
+            // Define missing functions if main.js didn't load properly
+            if (typeof window.countDocsByProgram === 'undefined') {
+                console.log('main.js functions not found, defining fallback functions...');
+                
+                window.countDocsByProgram = async function() {
+                    const container = document.getElementById("programCounts");
+                    if (!container) return;
+                    
+                    container.innerHTML = "Counting documents...";
+                    try {
+                        const response = await fetch('/count_by_program');
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            const items = Object.entries(data.program_counts).map(
+                                ([prog, count]) => `<div><strong>${prog}</strong>: ${count} documents</div>`
+                            );
+                            container.innerHTML = `<div class="result-card"><h4>Document Counts</h4>${items.join('')}</div>`;
+                        } else {
+                            container.innerHTML = `<span class="warning">Error: ${data.error}</span>`;
+                        }
+                    } catch (error) {
+                        container.innerHTML = `<span class="warning">Failed: ${error.message}</span>`;
+                    }
+                };
+                
+                window.countDocsByCollectionAndProgram = async function() {
+                    const container = document.getElementById("programCounts");
+                    if (!container) return;
+                    
+                    container.innerHTML = "Counting documents...";
+                    try {
+                        const response = await fetch('/count_by_collection_and_program');
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            let html = '<div class="result-card"><h4>Document Counts by Collection & Program</h4>';
+                            const counts = data.collection_program_counts;
+                            for (const [collection, programs] of Object.entries(counts)) {
+                                html += `<div><strong>${collection}</strong></div><ul>`;
+                                for (const [program, count] of Object.entries(programs)) {
+                                    html += `<li>${program}: ${count} documents</li>`;
+                                }
+                                html += `</ul>`;
+                            }
+                            html += `</div>`;
+                            container.innerHTML = html;
+                        } else {
+                            container.innerHTML = `<span class="warning">Error: ${data.error}</span>`;
+                        }
+                    } catch (error) {
+                        container.innerHTML = `<span class="warning">Failed: ${error.message}</span>`;
+                    }
+                };
+                
+                window.checkLastImportInfo = async function() {
+                    try {
+                        const response = await fetch("/last_import_info");
+                        const data = await response.json();
+                        const infoDiv = document.getElementById("lastImportInfo");
+                        
+                        if (data.status === 'success' && data.last_import_timestamp && infoDiv) {
+                            const timestamp = new Date(data.last_import_timestamp).toLocaleString();
+                            infoDiv.innerHTML = `
+                                <div style="background: #e3f2fd; padding: 8px; border-radius: 4px; margin: 8px 0; font-size: 0.9em;">
+                                    <strong>📅 Last Import:</strong> ${timestamp}
+                                    <button onclick="clearImportTimestamp()" style="margin-left: 10px; padding: 2px 6px; font-size: 0.8em; background: #fff3cd; border: 1px solid #ffc107; border-radius: 3px; cursor: pointer;">
+                                        Reset
+                                    </button>
+                                </div>
+                            `;
+                        }
+                    } catch (error) {
+                        console.error("Failed to load last import info:", error);
+                    }
+                };
+                
+                window.clearImportTimestamp = async function() {
+                    if (!confirm("Reset import timestamp? Next incremental import will process all documents.")) return;
+                    try {
+                        const response = await fetch("/clear_import_timestamp", { method: "POST" });
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            alert("Import timestamp reset!");
+                            if (typeof window.checkLastImportInfo === 'function') {
+                                window.checkLastImportInfo();
+                            }
+                        } else {
+                            alert(`Error: ${data.error}`);
+                        }
+                    } catch (error) {
+                        alert(`Failed: ${error.message}`);
+                    }
+                };
+                
+                window.checkDocumentUpdates = async function() {
+                    const collectionSelect = document.getElementById("collectionSelect");
+                    const collection = collectionSelect ? collectionSelect.value : "plans";
+                    const container = document.getElementById("documentUpdates");
+                    
+                    if (collection === "all") {
+                        alert("Please select a specific collection");
+                        return;
+                    }
+                    if (!container) return;
+                    
+                    container.innerHTML = "Checking updates...";
+                    try {
+                        const response = await fetch(`/check_document_updates/${collection}`);
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            let html = '<div class="result-card"><h4>Document Updates</h4>';
+                            html += `<p>Collection: ${data.collection}</p>`;
+                            html += `<p>Updated: ${data.updated_documents}</p>`;
+                            if (data.updates_available) {
+                                html += `<div style="color: #E20074;">✨ Updates Available!</div>`;
+                            } else {
+                                html += `<div style="color: #28a745;">✅ Up to date</div>`;
+                            }
+                            html += `</div>`;
+                            container.innerHTML = html;
+                        } else {
+                            container.innerHTML = `<span class="warning">Error: ${data.error}</span>`;
+                        }
+                    } catch (error) {
+                        container.innerHTML = `<span class="warning">Failed: ${error.message}</span>`;
+                    }
+                };
+                
+                window.getImportStatistics = async function() {
+                    const container = document.getElementById("importStats");
+                    if (!container) return;
+                    
+                    container.innerHTML = "Loading...";
+                    try {
+                        const response = await fetch('/import_statistics');
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            const stats = data.statistics;
+                            let html = '<div class="result-card"><h4>Statistics</h4>';
+                            html += `<p>Documents: ${stats.total_documents || 0}</p>`;
+                            html += `<p>Chunks: ${stats.total_chunks || 0}</p>`;
+                            html += `</div>`;
+                            container.innerHTML = html;
+                        } else {
+                            container.innerHTML = `<span class="warning">Error: ${data.error}</span>`;
+                        }
+                    } catch (error) {
+                        container.innerHTML = `<span class="warning">Failed: ${error.message}</span>`;
+                    }
+                };
+                
+                window.cleanupOldChunks = async function() {
+                    const days = prompt("Enter days to keep (chunks older will be deleted):", "30");
+                    if (!days || isNaN(days)) return;
+                    
+                    if (!confirm(`Delete chunks older than ${days} days? This cannot be undone.`)) return;
+                    
+                    try {
+                        const response = await fetch("/cleanup_old_chunks", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ max_age_days: parseInt(days) })
+                        });
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            alert(`✅ Cleaned up ${data.chunks_cleaned} old chunks`);
+                        } else {
+                            alert(`❌ Failed: ${data.error}`);
+                        }
+                    } catch (error) {
+                        alert(`Failed: ${error.message}`);
+                    }
+                };
+                
+                window.reindexDocument = async function() {
+                    const docId = document.getElementById("reindexDocId");
+                    const collectionSelect = document.getElementById("collectionSelect");
+                    
+                    if (!docId || !docId.value.trim()) {
+                        alert("Please enter a document ID");
+                        return;
+                    }
+                    if (!collectionSelect || collectionSelect.value === "all") {
+                        alert("Please select a specific collection");
+                        return;
+                    }
+                    
+                    const documentId = docId.value.trim();
+                    const collection = collectionSelect.value;
+                    
+                    if (!confirm(`Reindex document ${documentId} in ${collection}?`)) return;
+                    
+                    try {
+                        const response = await fetch("/reindex_document", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ document_id: documentId, collection: collection })
+                        });
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            alert(`✅ Reindexed! Chunks: ${data.chunks_indexed}`);
+                            docId.value = "";
+                            const nameField = document.getElementById("reindexDocName");
+                            if (nameField) nameField.value = "";
+                        } else {
+                            alert(`❌ Failed: ${data.error}`);
+                        }
+                    } catch (error) {
+                        alert(`Failed: ${error.message}`);
+                    }
+                };
+                
+                window.searchDocumentForReindex = async function() {
+                    alert("Search function - use Browse Docs instead or enter ID directly");
+                };
+                
+                window.browseDocumentsForReindex = async function() {
+                    alert("Browse function not available in fallback mode. Please enter document ID directly.");
+                };
+                
+                console.log('✅ Fallback functions defined');
+            } else {
+                console.log('✅ main.js functions loaded successfully');
+            }
+            
+            // Initialize import type selection with more robust approach
+            setTimeout(() => {
+                console.log('Initializing import type...');
+                if (typeof window.selectImportType === 'function') {
+                    window.selectImportType('full');
+                } else {
+                    // Fallback initialization
+                    document.querySelectorAll('.import-option').forEach((option, index) => {
+                        if (index === 0) option.classList.add('selected');
+                        else option.classList.remove('selected');
+                    });
+                    const importTypeInput = document.getElementById('importTypeSelect');
+                    if (importTypeInput) importTypeInput.value = 'full';
+                }
+            }, 300);
+        });
+
+        // FIXED: More robust selectImportType function
+        function selectImportType(type) {
+            console.log('selectImportType called with:', type);
+            
+            try {
+                // Update UI with better error handling
+                const options = document.querySelectorAll('.import-option');
+                console.log('Found import options:', options.length);
+                
+                options.forEach((option) => {
+                    const isSelected = (type === 'full' && option.innerHTML.includes('Full Import')) ||
+                                     (type === 'incremental' && option.innerHTML.includes('Incremental Import'));
+                    
+                    if (isSelected) {
+                        option.classList.add('selected');
+                    } else {
+                        option.classList.remove('selected');
+                    }
+                });
+                
+                // Update hidden input
+                const importTypeInput = document.getElementById('importTypeSelect');
+                if (importTypeInput) {
+                    importTypeInput.value = type;
+                    console.log('Set import type input to:', type);
+                } else {
+                    console.warn('importTypeSelect input not found');
+                }
+                
+                // Show/hide last import info
+                const lastImportDiv = document.getElementById('lastImportInfo');
+                if (lastImportDiv) {
+                    if (type === 'incremental') {
+                        lastImportDiv.style.display = 'block';
+                        setTimeout(() => {
+                            if (typeof window.checkLastImportInfo === 'function') {
+                                window.checkLastImportInfo();
+                            }
+                        }, 100);
+                    } else {
+                        lastImportDiv.style.display = 'none';
+                    }
+                } else {
+                    console.warn('lastImportInfo div not found');
+                }
+                
+                console.log('✅ Import type set to:', type);
+                
+            } catch (error) {
+                console.error('Error in selectImportType:', error);
+            }
+        }
+
+        // Make globally available
+        window.selectImportType = selectImportType;
+        
+    </script>
+</body>
+</html>

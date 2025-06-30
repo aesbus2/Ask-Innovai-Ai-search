@@ -1,0 +1,34 @@
+# Core web dependencies
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.1
+python-dotenv>=1.0.1
+python-multipart>=0.0.9
+
+
+# LangChain ecosystem - using compatible versions
+langchain-core>=0.1.33,<0.2.0
+langchain-openai>=0.0.2
+langchain-community>=0.0.10
+
+# AI models
+openai>=1.0.0
+sentence-transformers>=3.0.0
+transformers>=4.35.0
+
+# make sure sentences are not broken by chunks
+#spacy>=3.7.0
+
+
+# Additional dependencies that might be required by the above
+torch>=2.0.0
+numpy>=1.22.0
+
+# OpenSearch for vector database
+opensearch-py>=2.4.0
+
+# HTML parsing and web scraping
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+
+# System monitoring and debugging
+psutil>=5.9.0
