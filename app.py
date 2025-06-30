@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-app.py - Vector DB Importer - FIXED VECTOR SERIALIZATION
+app.py - Vector DB Importer - FIXED VECTOR SERIALIZATION  TESTING
 Properly converts numpy embeddings to JSON-serializable lists
 """
 
