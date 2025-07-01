@@ -1,0 +1,14 @@
+/root
+
+App.py (Main app file)
+opensearch_client.py (handles actual import to index files into OpenSearch collections)
+embedder.py (Handles document embedding using transformer embedding service using all-miniLM-L6-v2)
+sentence_splitter.py (handles chunking of data, chunks based on actual sentences)
+requirements.txt (installs required dependencies)
+
+/root/static
+
+main.js (handles import information from endpoints and triggers sync frequency)
+index.html (admin  page for syncing from Mongo DB to OpenSearch)
+chat.html (frontend chat interface)
+chat.js  (Handles chat and search responses from OpenSearch)
