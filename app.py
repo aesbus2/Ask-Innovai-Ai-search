@@ -1,5 +1,6 @@
-# Enhanced app.py for Digital Ocean App Platform
-# Version: 2.1.0 - With proper API data processing rules and cleaned variables
+# Simplified app.py for Digital Ocean App Platform
+# Version: 2.3.0 - Removed discovery complexity, direct API calls
+# Enhanced API processing with Q&A and speaker boundary rules
 
 import os
 import logging
@@ -59,8 +60,8 @@ except ImportError as e:
 # Create FastAPI app
 app = FastAPI(
     title="Ask InnovAI",
-    description="AI-Powered Knowledge Assistant with Enhanced API Processing",
-    version="2.2.0"
+    description="AI-Powered Knowledge Assistant with Simplified API Processing",
+    version="2.3.0"
 )
 
 # Enable CORS
@@ -79,19 +80,19 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Failed to mount static files: {e}")
 
-# Configuration with validation - CLEANED UP VARIABLES
+# SIMPLIFIED Configuration - Direct API endpoint
 GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", "https://tcxn3difq23zdxlph2heigba.agents.do-ai.run")
 GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
-API_BASE_URL = os.getenv("API_BASE_URL")  # No hardcoded default
-API_DISCOVERY_ENDPOINT = os.getenv("API_DISCOVERY_ENDPOINT", "/api/content")
+API_BASE_URL = os.getenv("API_BASE_URL")  # Direct endpoint URL - no discovery needed
 API_AUTH_KEY = os.getenv("API_AUTH_KEY", "Authorization")
-API_AUTH_VALUE = os.getenv("API_AUTH_VALUE")  # No hardcoded default
+API_AUTH_VALUE = os.getenv("API_AUTH_VALUE")
 
-logger.info(f"🔧 Configuration loaded:")
+logger.info(f"🔧 Simplified Configuration:")
 logger.info(f"   GENAI_ENDPOINT: {GENAI_ENDPOINT}")
 logger.info(f"   GENAI_ACCESS_KEY: {'✅ Set' if GENAI_ACCESS_KEY else '❌ Missing'}")
 logger.info(f"   API_BASE_URL: {'✅ Set' if API_BASE_URL else '❌ Missing'}")
 logger.info(f"   API_AUTH_VALUE: {'✅ Set' if API_AUTH_VALUE else '❌ Missing'}")
+logger.info(f"   Simplified: No discovery pattern - direct API calls")
 
 # Simple import status tracking
 import_status = {
@@ -140,7 +141,7 @@ class ImportRequest(BaseModel):
     import_type: str = "full"
 
 # ============================================================================
-# ENHANCED API DATA PROCESSING FUNCTIONS
+# ENHANCED API DATA PROCESSING FUNCTIONS (UNCHANGED - THESE WORK PERFECTLY)
 # ============================================================================
 
 def extract_qa_pairs(evaluation_text: str) -> List[str]:
@@ -380,111 +381,21 @@ async def process_evaluation(evaluation: Dict) -> Dict:
         return {"status": "error", "error": str(e)}
 
 # ============================================================================
-# API DISCOVERY AND DATA FETCHING - UPDATED TO USE API_BASE_URL
+# SIMPLIFIED API DATA FETCHING - NO DISCOVERY PATTERN
 # ============================================================================
 
-async def discover_api_endpoints():
-    """Discover available API endpoints using the discovery endpoint"""
+async def fetch_evaluations(max_docs: int = None):
+    """Simplified: Fetch evaluations directly from the API endpoint"""
     try:
-        discovery_url = API_BASE_URL.rstrip('/') + API_DISCOVERY_ENDPOINT
-        headers = {API_AUTH_KEY: API_AUTH_VALUE, "Content-Type": "application/json"}
-        
-        logger.info(f"🔍 Discovering API endpoints at: {discovery_url}")
-        
-        response = requests.get(discovery_url, headers=headers, timeout=15)
-        response.raise_for_status()
-        
-        discovery_data = response.json()
-        logger.info(f"📋 Discovery response: {discovery_data}")
-        
-        return discovery_data
-        
-    except Exception as e:
-        logger.error(f"❌ API discovery failed: {e}")
-        raise Exception(f"API discovery failed: {str(e)}")
-
-async def get_evaluations_endpoint():
-    """Get the evaluations endpoint from discovery"""
-    try:
-        discovery_data = await discover_api_endpoints()
-        
-        if not isinstance(discovery_data, dict):
-            raise Exception("Discovery response is not a valid JSON object")
-        
-        evaluations_endpoint = None
-        
-        # Try different common patterns for endpoint discovery
-        if "endpoints" in discovery_data:
-            endpoints = discovery_data["endpoints"]
-            if isinstance(endpoints, dict):
-                for key in ["evaluations", "evaluation", "evals", "data"]:
-                    if key in endpoints:
-                        evaluations_endpoint = endpoints[key]
-                        break
-        elif "evaluations_endpoint" in discovery_data:
-            evaluations_endpoint = discovery_data["evaluations_endpoint"]
-        elif "evaluations_url" in discovery_data:
-            evaluations_endpoint = discovery_data["evaluations_url"]
-        elif "base_url" in discovery_data and "evaluations_path" in discovery_data:
-            base = discovery_data["base_url"].rstrip('/')
-            path = discovery_data["evaluations_path"]
-            evaluations_endpoint = f"{base}{path}"
-        else:
-            for key, value in discovery_data.items():
-                if "evaluation" in key.lower() and (key.endswith("_endpoint") or key.endswith("_url")):
-                    evaluations_endpoint = value
-                    break
-        
-        if not evaluations_endpoint:
-            available_keys = list(discovery_data.keys())
-            raise Exception(f"No evaluations endpoint found in discovery response. Available keys: {available_keys}")
-        
-        # Convert relative URLs to absolute URLs
-        if evaluations_endpoint.startswith('/'):
-            evaluations_endpoint = API_BASE_URL.rstrip('/') + evaluations_endpoint
-        
-        logger.info(f"✅ Found evaluations endpoint: {evaluations_endpoint}")
-        return evaluations_endpoint
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to determine evaluations endpoint: {e}")
-        raise
-
-async def run_import(collection: str = "all", max_docs: int = None):
-    """Enhanced import process with proper API data processing"""
-    try:
-        update_import_status("running", "Starting enhanced import with API discovery")
-        log_import("🚀 Starting enhanced data import with API discovery")
-        
-        if not API_AUTH_VALUE:
-            raise Exception("API_AUTH_VALUE is required")
-        
-        if not API_BASE_URL:
-            raise Exception("API_BASE_URL is required")
-        
-        # Discover the evaluations endpoint
-        update_import_status("running", "Discovering API endpoints")
-        log_import(f"🔍 Discovering endpoints from: {API_BASE_URL}{API_DISCOVERY_ENDPOINT}")
-        
-        try:
-            evaluations_endpoint = await get_evaluations_endpoint()
-        except Exception as e:
-            raise Exception(f"API discovery failed: {str(e)}. Please check your API_BASE_URL and API_DISCOVERY_ENDPOINT settings.")
-        
-        log_import(f"✅ Using evaluations endpoint: {evaluations_endpoint}")
-        
-        # Fetch data from discovered endpoint
-        update_import_status("running", "Fetching evaluation data from API")
-        
         headers = {API_AUTH_KEY: API_AUTH_VALUE, "Content-Type": "application/json"}
         params = {}
         if max_docs:
             params["limit"] = max_docs
         
-        log_import(f"📡 Request to: {evaluations_endpoint}")
+        log_import(f"📡 Fetching evaluations from: {API_BASE_URL}")
         log_import(f"📋 Request params: {params}")
         
-        response = requests.get(evaluations_endpoint, headers=headers, params=params, timeout=60)
+        response = requests.get(API_BASE_URL, headers=headers, params=params, timeout=60)
         
         # Log response details
         log_import(f"📊 Response status: {response.status_code}")
@@ -492,10 +403,10 @@ async def run_import(collection: str = "all", max_docs: int = None):
         log_import(f"📏 Response content length: {len(response.content)}")
         
         if response.status_code != 200:
-            raise Exception(f"Evaluations API returned HTTP {response.status_code}: {response.text[:200]}")
+            raise Exception(f"API returned HTTP {response.status_code}: {response.text[:200]}")
         
         if not response.text.strip():
-            raise Exception("Evaluations API returned empty response")
+            raise Exception("API returned empty response")
         
         # Parse JSON
         try:
@@ -504,11 +415,11 @@ async def run_import(collection: str = "all", max_docs: int = None):
         except json.JSONDecodeError as e:
             log_import(f"❌ JSON parsing failed: {str(e)}")
             log_import(f"Raw response preview: {response.text[:300]}")
-            raise Exception(f"Evaluations API returned invalid JSON: {str(e)}")
+            raise Exception(f"API returned invalid JSON: {str(e)}")
         
         # Extract evaluations from response
         evaluations = data.get("evaluations", [])
-        log_import(f"📋 Fetched {len(evaluations)} evaluations from API")
+        log_import(f"📋 Found {len(evaluations)} evaluations")
         
         if not evaluations:
             if isinstance(data, list):
@@ -516,9 +427,35 @@ async def run_import(collection: str = "all", max_docs: int = None):
                 log_import(f"📋 Data is array format: {len(evaluations)} items")
             else:
                 log_import(f"⚠️ No evaluations found. Response keys: {list(data.keys())}")
-                results = {"total_documents_processed": 0, "total_chunks_indexed": 0, "import_type": "full"}
-                update_import_status("completed", results=results)
-                return
+        
+        return evaluations
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to fetch evaluations: {e}")
+        raise Exception(f"API request failed: {str(e)}")
+
+async def run_import(collection: str = "all", max_docs: int = None):
+    """Simplified import process - direct API call, no discovery"""
+    try:
+        update_import_status("running", "Starting simplified import")
+        log_import("🚀 Starting simplified data import - direct API call")
+        
+        if not API_AUTH_VALUE:
+            raise Exception("API_AUTH_VALUE is required")
+        
+        if not API_BASE_URL:
+            raise Exception("API_BASE_URL is required")
+        
+        # Fetch evaluations directly
+        update_import_status("running", "Fetching evaluation data from API")
+        
+        evaluations = await fetch_evaluations(max_docs)
+        
+        if not evaluations:
+            log_import(f"⚠️ No evaluations found")
+            results = {"total_documents_processed": 0, "total_chunks_indexed": 0, "import_type": "full"}
+            update_import_status("completed", results=results)
+            return
         
         # Process evaluations with enhanced rules
         update_import_status("running", f"Processing {len(evaluations)} evaluations with API rules")
@@ -559,8 +496,8 @@ async def run_import(collection: str = "all", max_docs: int = None):
             "errors": errors,
             "import_type": "full",
             "completed_at": datetime.now().isoformat(),
-            "endpoint_used": evaluations_endpoint,
-            "discovery_endpoint": f"{API_BASE_URL}{API_DISCOVERY_ENDPOINT}",
+            "api_endpoint": API_BASE_URL,
+            "simplified": True,
             "api_rules_applied": [
                 "Keep Question and Answers together",
                 "Never split between speakers",
@@ -568,7 +505,7 @@ async def run_import(collection: str = "all", max_docs: int = None):
             ]
         }
         
-        log_import(f"🎉 Enhanced import completed:")
+        log_import(f"🎉 Simplified import completed:")
         log_import(f"   📄 Documents processed: {total_processed}")
         log_import(f"   🧩 Total chunks: {total_chunks}")
         log_import(f"   📋 Q&A chunks: {total_qa_chunks}")
@@ -578,7 +515,7 @@ async def run_import(collection: str = "all", max_docs: int = None):
         update_import_status("completed", results=results)
         
     except Exception as e:
-        error_msg = f"Enhanced import failed: {str(e)}"
+        error_msg = f"Simplified import failed: {str(e)}"
         log_import(f"❌ {error_msg}")
         update_import_status("failed", error=error_msg)
 
@@ -589,7 +526,7 @@ async def run_import(collection: str = "all", max_docs: int = None):
 def validate_system_on_startup():
     """Validate that everything is working with API processing rules"""
     
-    logger.info("🔍 Validating enhanced API processing system...")
+    logger.info("🔍 Validating simplified API processing system...")
     
     # Test embedder
     if EMBEDDER_AVAILABLE:
@@ -629,7 +566,7 @@ def validate_system_on_startup():
         transcript_chunks = split_transcript_by_speakers(test_eval["transcript"])
         logger.info(f"✅ Speaker-aware splitting working: {len(transcript_chunks)} chunks")
         
-        logger.info("🎉 Enhanced API processing validation successful!")
+        logger.info("🎉 Simplified API processing validation successful!")
         return True
         
     except Exception as e:
@@ -646,8 +583,8 @@ async def ping():
     return {
         "status": "ok", 
         "timestamp": datetime.now().isoformat(),
-        "service": "ask-innovai-enhanced",
-        "version": "2.2.0"
+        "service": "ask-innovai-simplified",
+        "version": "2.3.0"
     }
 
 @app.get("/debug/simple")
@@ -657,7 +594,7 @@ async def debug_simple():
         "status": "ok",
         "message": "Simple debug endpoint working",
         "timestamp": datetime.now().isoformat(),
-        "service": "ask-innovai-enhanced"
+        "service": "ask-innovai-simplified"
     }
 
 @app.get("/test-json")
@@ -687,8 +624,8 @@ async def get_index():
     except FileNotFoundError:
         return HTMLResponse(content="""
         <html><body>
-        <h1>🤖 Ask InnovAI Admin - Enhanced</h1>
-        <p>Enhanced admin interface with API processing rules.</p>
+        <h1>🤖 Ask InnovAI Admin - Simplified</h1>
+        <p>Simplified admin interface with direct API processing.</p>
         <p>Available endpoints:</p>
         <ul>
         <li><a href="/ping">/ping</a> - Health check</li>
@@ -706,15 +643,15 @@ async def get_chat():
     except FileNotFoundError:
         return HTMLResponse(content="""
         <html><body>
-        <h1>🤖 Ask InnovAI Chat - Enhanced</h1>
-        <p>Enhanced chat interface with proper API data processing.</p>
+        <h1>🤖 Ask InnovAI Chat - Simplified</h1>
+        <p>Simplified chat interface with proper API data processing.</p>
         <p><a href="/">← Back to Admin</a></p>
         </body></html>
         """)
 
 @app.get("/health")
 async def health():
-    """Enhanced health check with API processing validation"""
+    """Enhanced health check - simplified"""
     try:
         components = {}
         
@@ -731,11 +668,10 @@ async def health():
             "host": opensearch_host or "not set"
         }
         
-        # API Source status - UPDATED TO USE API_BASE_URL
+        # API Source status - simplified
         components["api_source"] = {
             "status": "configured" if (API_BASE_URL and API_AUTH_VALUE) else "not configured",
-            "base_url": API_BASE_URL or "not set",
-            "discovery_endpoint": API_DISCOVERY_ENDPOINT
+            "endpoint": API_BASE_URL or "not set"
         }
         
         # Enhanced embedder status
@@ -764,6 +700,7 @@ async def health():
         # API Processing Rules status
         components["api_processing"] = {
             "status": "enhanced",
+            "simplified": True,
             "rules_implemented": [
                 "Keep Question and Answers together",
                 "Never split between speakers",
@@ -777,7 +714,7 @@ async def health():
             "components": components,
             "import_status": import_status["status"],
             "environment": "digital_ocean",
-            "version": "2.2.0_enhanced"
+            "version": "2.3.0_simplified"
         }
         
     except Exception as e:
@@ -896,7 +833,7 @@ async def get_logs():
 
 @app.post("/import")
 async def start_import(request: ImportRequest, background_tasks: BackgroundTasks):
-    """Start enhanced import process"""
+    """Start simplified import process"""
     if import_status["status"] == "running":
         raise HTTPException(status_code=400, detail="Import already running")
     
@@ -910,9 +847,9 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
         "error": None
     })
     
-    # Start enhanced import
+    # Start simplified import
     background_tasks.add_task(run_import, request.collection, request.max_docs)
-    return {"status": "success", "message": "Enhanced import started with API processing rules"}
+    return {"status": "success", "message": "Simplified import started with API processing rules"}
 
 # Additional helpful endpoints
 @app.get("/last_import_info")
@@ -968,14 +905,13 @@ async def clear_import_timestamp():
             "error": str(e)
         }
 
-# Debug endpoints - UPDATED TO USE API_BASE_URL
+# Debug endpoints - simplified
 @app.get("/debug/config")
 async def debug_config():
-    """Debug configuration"""
+    """Debug configuration - simplified"""
     return {
         "api_base_url_set": bool(API_BASE_URL),
         "api_base_url": API_BASE_URL or "NOT_SET",
-        "api_discovery_endpoint": API_DISCOVERY_ENDPOINT,
         "api_auth_key": API_AUTH_KEY,
         "api_auth_value_set": bool(API_AUTH_VALUE),
         "opensearch_host": os.getenv("OPENSEARCH_HOST", "NOT_SET"),
@@ -983,6 +919,7 @@ async def debug_config():
         "genai_key_set": bool(GENAI_ACCESS_KEY),
         "embedder_available": EMBEDDER_AVAILABLE,
         "api_processing_enhanced": True,
+        "simplified": True,  # Indicates we removed discovery complexity
         "api_rules": [
             "Keep Question and Answers together",
             "Never split between speakers",
@@ -1023,7 +960,8 @@ async def test_api_processing():
             "rules_verified": [
                 f"Q&A kept together: {len(qa_chunks) > 0}",
                 f"Speaker boundaries respected: {len(transcript_chunks) > 0}"
-            ]
+            ],
+            "simplified": True
         }
     except Exception as e:
         return {
@@ -1034,16 +972,16 @@ async def test_api_processing():
 # Startup event with enhanced validation
 @app.on_event("startup")
 async def startup_event():
-    """Enhanced startup initialization"""
+    """Simplified startup initialization"""
     try:
-        logger.info("🚀 Ask InnovAI Enhanced starting up...")
-        logger.info(f"   Version: 2.2.0 with API processing rules")
+        logger.info("🚀 Ask InnovAI Simplified starting up...")
+        logger.info(f"   Version: 2.3.0 - Simplified with direct API calls")
         logger.info(f"   Python version: {sys.version}")
         logger.info(f"   PORT: {os.getenv('PORT', '8080')}")
         
-        # Validate enhanced system
+        # Validate simplified system
         if validate_system_on_startup():
-            logger.info("✅ Enhanced API processing system validated successfully")
+            logger.info("✅ Simplified API processing system validated successfully")
         else:
             logger.warning("⚠️ Some validation issues found - check logs")
         
@@ -1055,7 +993,7 @@ async def startup_event():
             except Exception as e:
                 logger.warning(f"⚠️ Embedding preload failed (will load on demand): {e}")
         
-        logger.info("🎉 Ask InnovAI Enhanced startup complete - ready with API processing rules!")
+        logger.info("🎉 Ask InnovAI Simplified startup complete - ready with direct API processing!")
         
     except Exception as e:
         logger.error(f"❌ Startup error: {e}")
@@ -1065,7 +1003,7 @@ if __name__ == "__main__":
     import uvicorn
     
     port = int(os.getenv("PORT", 8080))
-    logger.info(f"🚀 Starting Ask InnovAI Enhanced on port {port}")
+    logger.info(f"🚀 Starting Ask InnovAI Simplified on port {port}")
     
     uvicorn.run(
         app, 
