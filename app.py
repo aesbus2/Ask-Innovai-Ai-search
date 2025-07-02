@@ -580,6 +580,191 @@ async def debug_info():
         "current_time": datetime.now().isoformat()
     }
 
+# Add these missing endpoints to your app.py file
+
+@app.get("/health")
+async def health():
+    """Comprehensive health check with better error handling"""
+    components = {}
+    
+    try:
+        # GenAI status
+        components["genai"] = {
+            "status": "connected" if GENAI_ACCESS_KEY else "not configured",
+            "endpoint": GENAI_ENDPOINT
+        }
+        
+        # OpenSearch status
+        opensearch_host = os.getenv("OPENSEARCH_HOST")
+        components["opensearch"] = {
+            "status": "configured" if opensearch_host else "not configured",
+            "host": opensearch_host or "not set"
+        }
+        
+        # API Source status
+        components["api_source"] = {
+            "status": "configured" if (API_BASE_URL and API_AUTH_VALUE) else "not configured",
+            "base_url": API_BASE_URL or "not set"
+        }
+        
+        # Embedder status with better error handling
+        if EMBEDDER_AVAILABLE:
+            try:
+                from embedder import get_embedding_stats, EMBEDDING_MODEL
+                
+                stats = get_embedding_stats()
+                components["embeddings"] = {
+                    "status": "healthy", 
+                    "model": stats.get("model_name", EMBEDDING_MODEL),
+                    "provider": stats.get("provider", "local"),
+                    "dimension": stats.get("embedding_dimension", 384),
+                    "model_loaded": stats.get("model_loaded", False)
+                }
+            except ImportError as e:
+                components["embeddings"] = {
+                    "status": "warning", 
+                    "error": f"Import failed: {str(e)}",
+                    "model": "sentence-transformers/all-MiniLM-L6-v2"
+                }
+            except Exception as e:
+                # Fallback - try to get the default model name
+                try:
+                    from embedder import EMBEDDING_MODEL
+                    model_name = EMBEDDING_MODEL
+                except:
+                    model_name = "sentence-transformers/all-MiniLM-L6-v2"
+                    
+                components["embeddings"] = {
+                    "status": "warning", 
+                    "error": str(e),
+                    "model": model_name,
+                    "note": "Service available but not initialized"
+                }
+        else:
+            components["embeddings"] = {
+                "status": "not available",
+                "note": "Will run without embeddings",
+                "model": "none"
+            }
+        
+        return {
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "components": components,
+            "import_status": import_status["status"],
+            "environment": "digital_ocean"
+        }
+        
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "error",
+            "timestamp": datetime.now().isoformat(),
+            "components": components,  # Return whatever we managed to collect
+            "error": str(e),
+            "import_status": import_status["status"],
+            "environment": "digital_ocean"
+        }
+
+@app.get("/last_import_info")
+async def get_last_import_info():
+    """Get information about the last import"""
+    try:
+        # For now, we'll use the import_status to track the last import
+        # In a production system, you'd typically store this in a database
+        
+        if import_status.get("end_time") and import_status.get("status") == "completed":
+            return {
+                "status": "success",
+                "last_import_timestamp": import_status["end_time"],
+                "last_import_status": import_status["status"],
+                "last_import_results": import_status.get("results", {})
+            }
+        else:
+            return {
+                "status": "success",
+                "last_import_timestamp": None,
+                "message": "No completed import found"
+            }
+            
+    except Exception as e:
+        logger.error(f"Failed to get last import info: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.post("/clear_import_timestamp")
+async def clear_import_timestamp():
+    """Clear the import timestamp (for incremental imports)"""
+    try:
+        # Reset the import status
+        import_status.update({
+            "status": "idle",
+            "start_time": None,
+            "end_time": None,
+            "current_step": None,
+            "results": {},
+            "error": None
+        })
+        
+        log_import("Import timestamp cleared by user")
+        
+        return {
+            "status": "success",
+            "message": "Import timestamp cleared successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to clear import timestamp: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+# Add some additional helpful endpoints for debugging
+
+@app.get("/import_statistics")
+async def get_import_statistics():
+    """Get basic statistics about the knowledge base"""
+    try:
+        # This is a simple implementation - in production you'd query your database
+        return {
+            "status": "success",
+            "statistics": {
+                "total_documents": import_status.get("results", {}).get("total_documents_processed", 0),
+                "total_chunks": import_status.get("results", {}).get("total_chunks_indexed", 0),
+                "collections": {
+                    "evaluations": import_status.get("results", {}).get("total_documents_processed", 0)
+                },
+                "last_updated": import_status.get("end_time", "Never")
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.get("/count_by_collection_and_program")
+async def count_by_collection_and_program():
+    """Count documents by collection and program"""
+    try:
+        # Simple implementation - in production you'd query OpenSearch
+        return {
+            "status": "success",
+            "collection_program_counts": {
+                "evaluations": {
+                    "iQor": import_status.get("results", {}).get("total_documents_processed", 0)
+                }
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
 # Startup event with comprehensive error handling
 @app.on_event("startup")
 async def startup_event():

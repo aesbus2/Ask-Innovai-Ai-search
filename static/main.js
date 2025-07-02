@@ -288,6 +288,8 @@ function showResults(results) {
 // SYSTEM HEALTH AND MONITORING
 // ============================================================================
 
+// Replace your checkSystemHealth function with this safer version:
+
 async function checkSystemHealth() {
     const container = document.getElementById('healthStatus');
     if (!container) return;
@@ -296,11 +298,23 @@ async function checkSystemHealth() {
     
     try {
         const response = await fetch('/health');
+        
+        // Check if response is ok
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const health = await response.json();
+        
+        // Check if health data is valid
+        if (!health) {
+            throw new Error('Health endpoint returned null/empty response');
+        }
         
         let html = '';
         
-        if (health.components) {
+        // Safely check for components
+        if (health.components && typeof health.components === 'object') {
             Object.entries(health.components).forEach(([component, info]) => {
                 const status = info.status || 'unknown';
                 const isHealthy = status === 'connected' || status === 'healthy' || status === 'configured';
@@ -320,6 +334,25 @@ async function checkSystemHealth() {
                     </div>
                 `;
             });
+        } else {
+            // No components found - show basic info
+            html += `
+                <div class="health-item warning">
+                    <div class="health-label">⚠️ SYSTEM</div>
+                    <div class="health-value">Components data missing</div>
+                </div>
+            `;
+        }
+        
+        // Add overall status if available
+        if (health.status) {
+            const statusEmoji = health.status === 'ok' ? '✅' : '❌';
+            html += `
+                <div class="health-item">
+                    <div class="health-label">${statusEmoji} OVERALL</div>
+                    <div class="health-value">${health.status}</div>
+                </div>
+            `;
         }
         
         // Add last import info if available
@@ -348,6 +381,43 @@ async function checkSystemHealth() {
                 <div class="health-value">Error: ${error.message}</div>
             </div>
         `;
+    }
+}
+
+// Also update checkLastImportInfo to handle 404 errors:
+async function checkLastImportInfo() {
+    try {
+        const response = await fetch('/last_import_info');
+        
+        // Handle 404 - endpoint doesn't exist yet
+        if (response.status === 404) {
+            console.log("📅 Last import info endpoint not available");
+            return;
+        }
+        
+        if (!response.ok) {
+            console.error(`Last import info error: ${response.status}`);
+            return;
+        }
+        
+        const data = await response.json();
+        
+        if (data.status === 'success' && data.last_import_timestamp) {
+            const timestamp = new Date(data.last_import_timestamp).toLocaleString();
+            console.log(`📅 Last import: ${timestamp}`);
+            
+            // You could display this in the UI if there's a container for it
+            const infoContainer = document.getElementById("lastImportInfo");
+            if (infoContainer) {
+                infoContainer.innerHTML = `
+                    <div style="background: #e3f2fd; padding: 8px; border-radius: 4px; margin: 8px 0; font-size: 0.9em;">
+                        <strong>📅 Last Import:</strong> ${timestamp}
+                    </div>
+                `;
+            }
+        }
+    } catch (error) {
+        console.error("Failed to check last import info:", error);
     }
 }
 
