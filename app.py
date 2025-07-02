@@ -1,5 +1,5 @@
 # Enhanced app.py for Digital Ocean App Platform
-# Version: 2.2.0 - With proper API data processing rules
+# Version: 2.1.0 - With proper API data processing rules and cleaned variables
 
 import os
 import logging
@@ -79,14 +79,13 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Failed to mount static files: {e}")
 
-# Configuration with validation
+# Configuration with validation - CLEANED UP VARIABLES
 GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", "https://tcxn3difq23zdxlph2heigba.agents.do-ai.run")
 GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
-API_BASE_HOST = os.getenv("API_BASE_HOST", "")
+API_BASE_URL = os.getenv("API_BASE_URL")  # No hardcoded default
 API_DISCOVERY_ENDPOINT = os.getenv("API_DISCOVERY_ENDPOINT", "/api/content")
-API_BASE_URL = os.getenv("API_BASE_URL", "")
 API_AUTH_KEY = os.getenv("API_AUTH_KEY", "Authorization")
-API_AUTH_VALUE = os.getenv("API_AUTH_VALUE", "")
+API_AUTH_VALUE = os.getenv("API_AUTH_VALUE")  # No hardcoded default
 
 logger.info(f"🔧 Configuration loaded:")
 logger.info(f"   GENAI_ENDPOINT: {GENAI_ENDPOINT}")
@@ -304,7 +303,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             "evaluation_id": evaluation.get("evaluationId"),
             "internal_id": evaluation.get("internalId"),
             "template_id": evaluation.get("template_id"),
-            "template": evaluation.get("template_name"), 
+            "template": evaluation.get("template_name"),
             "program": evaluation.get("partner"),  # Maps to your 'partner' field
             "site": evaluation.get("site"),
             "lob": evaluation.get("lob"),
@@ -381,13 +380,13 @@ async def process_evaluation(evaluation: Dict) -> Dict:
         return {"status": "error", "error": str(e)}
 
 # ============================================================================
-# API DISCOVERY AND DATA FETCHING
+# API DISCOVERY AND DATA FETCHING - UPDATED TO USE API_BASE_URL
 # ============================================================================
 
 async def discover_api_endpoints():
     """Discover available API endpoints using the discovery endpoint"""
     try:
-        discovery_url = API_BASE_HOST.rstrip('/') + API_DISCOVERY_ENDPOINT
+        discovery_url = API_BASE_URL.rstrip('/') + API_DISCOVERY_ENDPOINT
         headers = {API_AUTH_KEY: API_AUTH_VALUE, "Content-Type": "application/json"}
         
         logger.info(f"🔍 Discovering API endpoints at: {discovery_url}")
@@ -442,7 +441,7 @@ async def get_evaluations_endpoint():
         
         # Convert relative URLs to absolute URLs
         if evaluations_endpoint.startswith('/'):
-            evaluations_endpoint = API_BASE_HOST.rstrip('/') + evaluations_endpoint
+            evaluations_endpoint = API_BASE_URL.rstrip('/') + evaluations_endpoint
         
         logger.info(f"✅ Found evaluations endpoint: {evaluations_endpoint}")
         return evaluations_endpoint
@@ -460,17 +459,17 @@ async def run_import(collection: str = "all", max_docs: int = None):
         if not API_AUTH_VALUE:
             raise Exception("API_AUTH_VALUE is required")
         
-        if not API_BASE_HOST:
-            raise Exception("API_BASE_HOST is required")
+        if not API_BASE_URL:
+            raise Exception("API_BASE_URL is required")
         
         # Discover the evaluations endpoint
         update_import_status("running", "Discovering API endpoints")
-        log_import(f"🔍 Discovering endpoints from: {API_BASE_HOST}{API_DISCOVERY_ENDPOINT}")
+        log_import(f"🔍 Discovering endpoints from: {API_BASE_URL}{API_DISCOVERY_ENDPOINT}")
         
         try:
             evaluations_endpoint = await get_evaluations_endpoint()
         except Exception as e:
-            raise Exception(f"API discovery failed: {str(e)}. Please check your API_BASE_HOST and API_DISCOVERY_ENDPOINT settings.")
+            raise Exception(f"API discovery failed: {str(e)}. Please check your API_BASE_URL and API_DISCOVERY_ENDPOINT settings.")
         
         log_import(f"✅ Using evaluations endpoint: {evaluations_endpoint}")
         
@@ -561,7 +560,7 @@ async def run_import(collection: str = "all", max_docs: int = None):
             "import_type": "full",
             "completed_at": datetime.now().isoformat(),
             "endpoint_used": evaluations_endpoint,
-            "discovery_endpoint": f"{API_BASE_HOST}{API_DISCOVERY_ENDPOINT}",
+            "discovery_endpoint": f"{API_BASE_URL}{API_DISCOVERY_ENDPOINT}",
             "api_rules_applied": [
                 "Keep Question and Answers together",
                 "Never split between speakers",
@@ -638,7 +637,7 @@ def validate_system_on_startup():
         return False
 
 # ============================================================================
-# FASTAPI ENDPOINTS (existing endpoints preserved)
+# FASTAPI ENDPOINTS
 # ============================================================================
 
 @app.get("/ping")
@@ -649,6 +648,35 @@ async def ping():
         "timestamp": datetime.now().isoformat(),
         "service": "ask-innovai-enhanced",
         "version": "2.2.0"
+    }
+
+@app.get("/debug/simple")
+async def debug_simple():
+    """Simple debug endpoint for basic connectivity testing"""
+    return {
+        "status": "ok",
+        "message": "Simple debug endpoint working",
+        "timestamp": datetime.now().isoformat(),
+        "service": "ask-innovai-enhanced"
+    }
+
+@app.get("/test-json")
+async def test_json():
+    """Test JSON response endpoint"""
+    return {
+        "test": "success",
+        "json_working": True,
+        "timestamp": datetime.now().isoformat(),
+        "data": {
+            "string": "Hello World",
+            "number": 12345,
+            "boolean": True,
+            "array": [1, 2, 3, "test"],
+            "nested": {
+                "key": "value",
+                "another": "data"
+            }
+        }
     }
 
 @app.get("/", response_class=HTMLResponse)
@@ -703,7 +731,7 @@ async def health():
             "host": opensearch_host or "not set"
         }
         
-        # API Source status
+        # API Source status - UPDATED TO USE API_BASE_URL
         components["api_source"] = {
             "status": "configured" if (API_BASE_URL and API_AUTH_VALUE) else "not configured",
             "base_url": API_BASE_URL or "not set",
@@ -761,7 +789,7 @@ async def health():
             "environment": "digital_ocean"
         }
 
-# Chat endpoint (preserved)
+# Chat endpoint
 @app.post("/chat")
 async def chat_handler(request: ChatRequest):
     """Enhanced chat functionality"""
@@ -820,7 +848,7 @@ async def chat_handler(request: ChatRequest):
         logger.error(f"Chat error: {e}")
         return {"reply": "Sorry, there was an unexpected error. Please try again."}
 
-# Search endpoint (preserved)
+# Search endpoint
 @app.get("/search")
 async def search(q: str):
     """Basic search with error handling"""
@@ -839,7 +867,7 @@ async def search(q: str):
                 "score": hit.get('_score', 0),
                 "collection": metadata.get('template', 'unknown'),
                 "metadata": metadata,
-                "content_type": source.get('content_type', 'unknown')  # Enhanced with content type
+                "content_type": source.get('content_type', 'unknown')
             })
         
         return {
@@ -855,7 +883,7 @@ async def search(q: str):
             "results": []
         }
 
-# Import management endpoints (preserved)
+# Import management endpoints
 @app.get("/status")
 async def get_import_status():
     """Get import status"""
@@ -886,7 +914,7 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
     background_tasks.add_task(run_import, request.collection, request.max_docs)
     return {"status": "success", "message": "Enhanced import started with API processing rules"}
 
-# Additional helpful endpoints (preserved with enhancements)
+# Additional helpful endpoints
 @app.get("/last_import_info")
 async def get_last_import_info():
     """Get information about the last import"""
@@ -940,13 +968,13 @@ async def clear_import_timestamp():
             "error": str(e)
         }
 
-# Debug endpoints (preserved with enhancements)
+# Debug endpoints - UPDATED TO USE API_BASE_URL
 @app.get("/debug/config")
 async def debug_config():
     """Debug configuration"""
     return {
         "api_base_url_set": bool(API_BASE_URL),
-        "api_base_host": API_BASE_HOST,
+        "api_base_url": API_BASE_URL or "NOT_SET",
         "api_discovery_endpoint": API_DISCOVERY_ENDPOINT,
         "api_auth_key": API_AUTH_KEY,
         "api_auth_value_set": bool(API_AUTH_VALUE),
