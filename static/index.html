@@ -739,6 +739,8 @@ This will fetch evaluation data from your API and index it for search and chat.`
         // SYSTEM HEALTH AND MONITORING
         // ============================================================================
 
+        // Replace your checkSystemHealth function with this bulletproof version:
+
         async function checkSystemHealth() {
             const container = document.getElementById('healthStatus');
             if (!container) return;
@@ -746,12 +748,41 @@ This will fetch evaluation data from your API and index it for search and chat.`
             container.innerHTML = '<div class="loading"><div class="spinner"></div>Checking system health...</div>';
             
             try {
+                console.log("🔍 Calling /health endpoint...");
                 const response = await fetch('/health');
-                const health = await response.json();
+                
+                console.log("📡 Health response status:", response.status);
+                console.log("📡 Health response headers:", response.headers.get('content-type'));
+                
+                // Check if response is ok
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                // Get response text first to debug
+                const responseText = await response.text();
+                console.log("📡 Raw health response:", responseText);
+                
+                // Try to parse as JSON
+                let health;
+                try {
+                    health = responseText ? JSON.parse(responseText) : null;
+                } catch (parseError) {
+                    console.error("❌ JSON parse error:", parseError);
+                    throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
+                }
+                
+                console.log("📊 Parsed health data:", health);
+                
+                // Handle null or empty response
+                if (!health) {
+                    throw new Error('Health endpoint returned null/empty response');
+                }
                 
                 let html = '';
                 
-                if (health.components) {
+                // Safely check for components
+                if (health.components && typeof health.components === 'object') {
                     Object.entries(health.components).forEach(([component, info]) => {
                         const status = info.status || 'unknown';
                         const isHealthy = status === 'connected' || status === 'healthy' || status === 'configured';
@@ -771,36 +802,112 @@ This will fetch evaluation data from your API and index it for search and chat.`
                             </div>
                         `;
                     });
+                } else {
+                    // No components found - show what we got
+                    console.warn("⚠️ No components in health response");
+                    html += `
+                        <div class="health-item warning">
+                            <div class="health-label">⚠️ COMPONENTS</div>
+                            <div class="health-value">Data missing or malformed</div>
+                        </div>
+                    `;
                 }
                 
-                // Add last import info if available
-                if (health.last_import && health.last_import.timestamp) {
-                    try {
-                        const timestamp = new Date(health.last_import.timestamp).toLocaleString();
-                        html += `
-                            <div class="health-item">
-                                <div class="health-label">📅 LAST IMPORT</div>
-                                <div class="health-value">${timestamp}</div>
-                            </div>
-                        `;
-                    } catch (e) {
-                        // Ignore timestamp formatting errors
-                    }
+                // Add overall status if available
+                if (health.status) {
+                    const statusEmoji = health.status === 'ok' ? '✅' : '❌';
+                    html += `
+                        <div class="health-item">
+                            <div class="health-label">${statusEmoji} OVERALL</div>
+                            <div class="health-value">${health.status}</div>
+                        </div>
+                    `;
                 }
+                
+                // Add debug info
+                html += `
+                    <div class="health-item">
+                        <div class="health-label">🐛 DEBUG</div>
+                        <div class="health-value">Response received: ${responseText.length} chars</div>
+                    </div>
+                `;
                 
                 container.innerHTML = html;
-                console.log("🏥 System health checked:", health);
+                console.log("✅ Health check completed successfully");
                 
             } catch (error) {
-                console.error("Health check failed:", error);
+                console.error("❌ Health check failed:", error);
+                
+                // Show detailed error information
+                const errorInfo = {
+                    message: error.message,
+                    timestamp: new Date().toLocaleString(),
+                    url: window.location.origin + '/health'
+                };
+                
                 container.innerHTML = `
                     <div class="health-item unhealthy">
-                        <div class="health-label">❌ SYSTEM</div>
-                        <div class="health-value">Error: ${error.message}</div>
+                        <div class="health-label">❌ HEALTH CHECK</div>
+                        <div class="health-value">Failed</div>
+                    </div>
+                    <div class="health-item unhealthy">
+                        <div class="health-label">🚨 ERROR</div>
+                        <div class="health-value" style="font-size: 0.8em; word-break: break-word;">${error.message}</div>
+                    </div>
+                    <div class="health-item">
+                        <div class="health-label">🔍 DEBUG</div>
+                        <div class="health-value" style="font-size: 0.8em;">Check browser console for details</div>
                     </div>
                 `;
             }
         }
+
+        // Also add a simple test function to check if your endpoints exist:
+        async function testBasicEndpoints() {
+            const endpoints = ['/ping', '/health', '/status', '/debug/config'];
+            const results = {};
+            
+            console.log("🧪 Testing basic endpoints...");
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(endpoint);
+                    results[endpoint] = {
+                        status: response.status,
+                        ok: response.ok,
+                        contentType: response.headers.get('content-type')
+                    };
+                    console.log(`✅ ${endpoint}: ${response.status}`);
+                } catch (error) {
+                    results[endpoint] = {
+                        error: error.message
+                    };
+                    console.log(`❌ ${endpoint}: ${error.message}`);
+                }
+            }
+            
+            console.log("📊 Endpoint test results:", results);
+            return results;
+        }
+
+        // Add this to your DOMContentLoaded event:
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("🚀 DOM loaded, initializing admin interface...");
+            
+            // Test basic endpoints first
+            testBasicEndpoints();
+            
+            // Then try other initialization
+            refreshStatus();
+            checkSystemHealth();
+            checkLastImportInfo();  // This might still fail with 404
+            
+            // Basic server ping to verify connectivity
+            fetch("/ping")
+                .then(r => r.json())
+                .then(data => console.log("✅ Server ping successful:", data))
+                .catch(error => console.error("❌ Server ping failed:", error));
+        });
 
         async function checkLastImportInfo() {
             try {
