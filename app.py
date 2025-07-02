@@ -182,70 +182,70 @@ async def get_chat():
         </body></html>
         """)
 
+# Replace your existing /health endpoint with this minimal working version:
+
 @app.get("/health")
 async def health():
-    """Comprehensive health check"""
-    components = {}
-    
-    # GenAI status
-    components["genai"] = {
-        "status": "connected" if GENAI_ACCESS_KEY else "not configured",
-        "endpoint": GENAI_ENDPOINT
-    }
-    
-    # OpenSearch status
-    opensearch_host = os.getenv("OPENSEARCH_HOST")
-    components["opensearch"] = {
-        "status": "configured" if opensearch_host else "not configured",
-        "host": opensearch_host or "not set"
-    }
-    
-    # API Source status
-    components["api_source"] = {
-        "status": "configured" if (API_BASE_URL and API_AUTH_VALUE) else "not configured",
-        "base_url": API_BASE_URL or "not set"
-    }
-    
-    # Embedder status
-    if EMBEDDER_AVAILABLE:
-        try:
-            # Import the module-level function
-            from embedder import get_embedding_stats, EMBEDDING_MODEL
-            
-            stats = get_embedding_stats()
-            components["embeddings"] = {
-                "status": "healthy", 
-                "model": stats.get("model_name", EMBEDDING_MODEL),  # Fallback to default
-                "provider": stats.get("provider", "local"),
-                "dimension": stats.get("embedding_dimension", 384),
-                "model_loaded": stats.get("model_loaded", False)
+    """Simple working health check"""
+    try:
+        # Basic health info that will always work
+        components = {
+            "api_source": {
+                "status": "configured" if (API_BASE_URL and API_AUTH_VALUE) else "not configured"
+            },
+            "genai": {
+                "status": "configured" if GENAI_ACCESS_KEY else "not configured"
+            },
+            "opensearch": {
+                "status": "configured" if os.getenv("OPENSEARCH_HOST") else "not configured"
+            },
+            "embeddings": {
+                "status": "available" if EMBEDDER_AVAILABLE else "not available"
             }
-        except ImportError as e:
-            components["embeddings"] = {
-                "status": "warning", 
-                "error": f"Import failed: {str(e)}",
-                "model": "sentence-transformers/all-MiniLM-L6-v2"  # Default fallback
-            }
-        except Exception as e:
-            # Fallback - try to get the default model name
-            try:
-                from embedder import EMBEDDING_MODEL
-                model_name = EMBEDDING_MODEL
-            except:
-                model_name = "sentence-transformers/all-MiniLM-L6-v2"
-                
-            components["embeddings"] = {
-                "status": "warning", 
-                "error": str(e),
-                "model": model_name,
-                "note": "Service available but not initialized"
-            }
-    else:
-        components["embeddings"] = {
-            "status": "not available",
-            "note": "Will run without embeddings",
-            "model": "none"
         }
+        
+        response_data = {
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "components": components,
+            "environment": "digital_ocean",
+            "debug": "health_endpoint_working"
+        }
+        
+        logger.info(f"Health check returning: {response_data}")
+        return response_data
+        
+    except Exception as e:
+        error_response = {
+            "status": "error",
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "debug": "health_endpoint_error"
+        }
+        logger.error(f"Health check error: {error_response}")
+        return error_response
+
+# Also add a super simple debug endpoint to test basic functionality:
+@app.get("/debug/simple")
+async def simple_debug():
+    """Super simple debug endpoint"""
+    return {
+        "message": "Debug endpoint working",
+        "timestamp": datetime.now().isoformat(),
+        "environment_vars_set": {
+            "API_BASE_URL": bool(API_BASE_URL),
+            "API_AUTH_VALUE": bool(API_AUTH_VALUE),
+            "OPENSEARCH_HOST": bool(os.getenv("OPENSEARCH_HOST")),
+            "GENAI_ACCESS_KEY": bool(GENAI_ACCESS_KEY)
+        }
+    }
+
+# Add this test endpoint to see if the issue is with your existing health endpoint
+@app.get("/test-json")
+async def test_json():
+    """Test if JSON responses work at all"""
+    return {"test": "success", "timestamp": datetime.now().isoformat()}
+
 @app.get("/debug/api-raw-response")
 async def debug_api_raw_response():
     """Debug what the API actually returns"""

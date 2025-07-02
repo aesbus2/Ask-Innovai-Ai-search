@@ -445,6 +445,9 @@
                     <button class="btn secondary" onclick="testSearch()">
                         <span class="emoji">🔍</span> Test Search
                     </button>
+                    <button class="btn secondary" onclick="debugAllEndpoints()">
+                        <span class="emoji"></span> Debug All Endpoints  
+                    </button>
                 </div>
                 
                 <div id="actionResults" class="status-container" style="margin-top: 20px;"></div>
@@ -477,6 +480,95 @@
                 .then(data => console.log("✅ Server ping successful:", data))
                 .catch(error => console.error("❌ Server ping failed:", error));
         });
+
+        // Add this test function to your index.html script section:
+
+async function debugAllEndpoints() {
+    console.log("🔍 Testing all endpoints...");
+    
+    const endpoints = [
+        '/ping',
+        '/health', 
+        '/status',
+        '/debug/simple',
+        '/test-json',
+        '/debug/config'
+    ];
+    
+    const results = {};
+    
+    for (const endpoint of endpoints) {
+        try {
+            console.log(`🧪 Testing ${endpoint}...`);
+            
+            const response = await fetch(endpoint);
+            const responseText = await response.text();
+            
+            results[endpoint] = {
+                status: response.status,
+                ok: response.ok,
+                contentType: response.headers.get('content-type'),
+                contentLength: responseText.length,
+                responsePreview: responseText.substring(0, 200),
+                isEmpty: responseText.trim() === '',
+                isJson: false,
+                parsedData: null
+            };
+            
+            // Try to parse as JSON
+            try {
+                if (responseText.trim()) {
+                    const jsonData = JSON.parse(responseText);
+                    results[endpoint].isJson = true;
+                    results[endpoint].parsedData = jsonData;
+                }
+            } catch (parseError) {
+                results[endpoint].parseError = parseError.message;
+            }
+            
+            console.log(`✅ ${endpoint}:`, results[endpoint]);
+            
+        } catch (error) {
+            results[endpoint] = {
+                error: error.message,
+                failed: true
+            };
+            console.log(`❌ ${endpoint}:`, error.message);
+        }
+    }
+    
+    console.log("📊 All endpoint results:", results);
+    
+    // Display results in the UI
+    const container = document.getElementById('actionResults');
+    if (container) {
+        let html = '<div class="result-card"><h4>🔍 Endpoint Debug Results</h4>';
+        
+        Object.entries(results).forEach(([endpoint, result]) => {
+            const status = result.failed ? '❌' : (result.ok ? '✅' : '⚠️');
+            const statusText = result.failed ? 'FAILED' : 
+                              result.ok ? 'OK' : 
+                              `HTTP ${result.status}`;
+            
+            html += `
+                <div style="margin: 8px 0; padding: 8px; border-left: 3px solid ${result.ok ? '#28a745' : '#dc3545'};">
+                    <strong>${status} ${endpoint}</strong> - ${statusText}<br>
+                    <small style="color: #666;">
+                        ${result.failed ? result.error : 
+                          result.isEmpty ? 'EMPTY RESPONSE' :
+                          result.isJson ? `JSON (${result.contentLength} chars)` :
+                          `Text (${result.contentLength} chars)`}
+                    </small>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+    }
+    
+    return results;
+}
 
         // ============================================================================
         // IMPORT MANAGEMENT FUNCTIONS
@@ -896,11 +988,13 @@ This will fetch evaluation data from your API and index it for search and chat.`
             
             // Test basic endpoints first
             testBasicEndpoints();
+            // Run the debug test first
+            debugAllEndpoints();
             
             // Then try other initialization
             refreshStatus();
             checkSystemHealth();
-            checkLastImportInfo();  // This might still fail with 404
+            //checkLastImportInfo();  // This might still fail with 404
             
             // Basic server ping to verify connectivity
             fetch("/ping")
