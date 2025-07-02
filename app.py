@@ -82,7 +82,7 @@ except Exception as e:
 # Configuration with validation
 GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", "https://tcxn3difq23zdxlph2heigba.agents.do-ai.run")
 GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
-API_BASE_HOST = os.getenv("API_BASE_HOST", "https://innovai-demo.metrocare-agent.com")
+API_BASE_HOST = os.getenv("API_BASE_HOST", "")
 API_DISCOVERY_ENDPOINT = os.getenv("API_DISCOVERY_ENDPOINT", "/api/content")
 API_BASE_URL = os.getenv("API_BASE_URL", "")
 API_AUTH_KEY = os.getenv("API_AUTH_KEY", "Authorization")
