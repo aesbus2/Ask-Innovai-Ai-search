@@ -320,6 +320,46 @@
                 <div id="healthStatus" class="health-status"></div>
             </div>
             
+            <!-- Connection Testing Section -->
+            <div class="section">
+                <h2><span class="emoji">🔌</span> Connection Testing & Debug</h2>
+                
+                <div class="control-group">
+                    <button class="btn success" onclick="testAllConnections()">
+                        <span class="emoji">🧪</span> Test All Connections
+                    </button>
+                    <button class="btn secondary" onclick="viewDebugConfig()">
+                        <span class="emoji">⚙️</span> View Configuration
+                    </button>
+                    <button class="btn secondary" onclick="clearTestResults()">
+                        <span class="emoji">🗑️</span> Clear Results
+                    </button>
+                </div>
+                
+                <div id="testResults" class="status-container" style="display: none;">
+                    <div id="testOverallStatus" class="status idle">
+                        <strong>Test Status:</strong> Ready to test
+                    </div>
+                    
+                    <div id="testGrid" class="results-grid" style="margin-top: 20px;"></div>
+                    
+                    <div id="testLogs" class="logs-container" style="margin-top: 20px; display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <strong style="color: #00ff00;">Debug Logs:</strong>
+                            <button onclick="toggleTestLogs()" style="background: none; border: 1px solid #00ff00; color: #00ff00; padding: 2px 8px; border-radius: 4px; cursor: pointer;">
+                                Hide Logs
+                            </button>
+                        </div>
+                        <div id="testLogsContent"></div>
+                    </div>
+                    
+                    <div id="testRecommendations" style="margin-top: 20px; display: none;">
+                        <h4 style="color: #dc3545; margin-bottom: 10px;">🔧 Recommendations:</h4>
+                        <div id="recommendationsList"></div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Import Configuration Section -->
             <div class="section">
                 <h2><span class="emoji">📥</span> Data Import Configuration</h2>
@@ -415,6 +455,8 @@
     <script>
         let pollInterval = null;
 
+        console.log("✅ Ask InnovAI Admin - Enhanced main.js loaded");
+
         // Auto-refresh status every 10 seconds if not actively importing
         setInterval(() => {
             if (!pollInterval) {
@@ -424,70 +466,107 @@
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
+            console.log("🚀 DOM loaded, initializing admin interface...");
             refreshStatus();
             checkSystemHealth();
             checkLastImportInfo();
+            
+            // Basic server ping to verify connectivity
+            fetch("/ping")
+                .then(r => r.json())
+                .then(data => console.log("✅ Server ping successful:", data))
+                .catch(error => console.error("❌ Server ping failed:", error));
         });
 
+        // ============================================================================
+        // IMPORT MANAGEMENT FUNCTIONS
+        // ============================================================================
+
         async function startImport() {
-            const collection = document.getElementById('collectionSelect').value;
-            const importType = document.getElementById('importTypeSelect').value;
-            const maxDocs = document.getElementById('maxDocsInput').value;
+            const collectionSelect = document.getElementById("collectionSelect");
+            const importTypeSelect = document.getElementById("importTypeSelect");
+            const maxDocsInput = document.getElementById("maxDocsInput");
             
-            const config = {
-                collection: collection,
+            const selectedCollection = collectionSelect ? collectionSelect.value : "all";
+            const importType = importTypeSelect ? importTypeSelect.value : "full";
+            const maxDocs = maxDocsInput ? parseInt(maxDocsInput.value) : undefined;
+
+            const config = { 
+                collection: selectedCollection, 
                 import_type: importType
             };
             
             if (maxDocs) {
-                config.max_docs = parseInt(maxDocs);
+                config.max_docs = maxDocs;
             }
             
+            const modeText = maxDocs ? `Limiting to ${maxDocs} documents` : "Processing all available documents";
+            const importTypeText = importType === "incremental" ? "Incremental (only updated documents)" : "Full (all documents)";
+
             const confirmMsg = `Start ${importType} import?
-Collection: ${collection}
-Max Documents: ${maxDocs || 'Unlimited'}
             
-This will process evaluation data from your API and index it for search and chat.`;
-            
+Collection: ${selectedCollection}
+Type: ${importTypeText}
+Scope: ${modeText}
+
+This will fetch evaluation data from your API and index it for search and chat.`;
+
             if (!confirm(confirmMsg)) return;
 
             try {
-                const response = await fetch('/import', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                const response = await fetch("/import", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(config)
                 });
 
-                const result = await response.json();
-                
+                const text = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    console.error("Non-JSON response:", text);
+                    alert("❌ Unexpected response from server. Check console for details.");
+                    return;
+                }
+
                 if (response.ok) {
                     alert(`✅ ${importType.charAt(0).toUpperCase() + importType.slice(1)} import started successfully!`);
                     startPolling();
                 } else {
-                    alert(`❌ Error: ${result.detail || result.message || 'Unknown error'}`);
+                    alert(`❌ Import failed: ${data.detail || data.message || "Unknown error"}`);
                 }
             } catch (error) {
-                alert(`❌ Request failed: ${error.message}`);
+                console.error("Import request failed:", error);
+                alert(`❌ Import request failed: ${error.message}`);
             }
         }
 
         function startPolling() {
             if (pollInterval) clearInterval(pollInterval);
 
+            console.log("🔄 Starting status polling...");
             pollInterval = setInterval(async () => {
                 await refreshStatus();
-                const response = await fetch('/status');
-                const status = await response.json();
+                
+                try {
+                    const response = await fetch('/status');
+                    const status = await response.json();
 
-                if (status.status !== 'running') {
-                    clearInterval(pollInterval);
-                    pollInterval = null;
-                    
-                    if (status.status === 'completed') {
-                        setTimeout(() => {
-                            checkLastImportInfo();
-                        }, 1000);
+                    if (status.status !== 'running') {
+                        console.log(`🏁 Import completed with status: ${status.status}`);
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                        
+                        // Refresh import info after completion
+                        if (status.status === 'completed') {
+                            setTimeout(() => {
+                                checkLastImportInfo();
+                            }, 1000);
+                        }
                     }
+                } catch (error) {
+                    console.error("Status polling error:", error);
                 }
             }, 2000);
         }
@@ -495,7 +574,13 @@ This will process evaluation data from your API and index it for search and chat
         async function refreshStatus() {
             try {
                 const response = await fetch('/status');
+                if (!response.ok) {
+                    console.error('Status error:', response.status, await response.text());
+                    return;
+                }
+
                 const status = await response.json();
+                console.log("📊 Status update:", status);
                 updateStatusDisplay(status);
             } catch (error) {
                 console.error('Failed to refresh status:', error);
@@ -504,8 +589,9 @@ This will process evaluation data from your API and index it for search and chat
 
         function updateStatusDisplay(data) {
             const container = document.getElementById('statusContainer');
-            const statusClass = data.status;
+            if (!container) return;
 
+            const statusClass = data.status;
             let html = `<div class="status ${statusClass}">`;
             html += `<strong>Status:</strong> ${data.status.toUpperCase()}`;
             
@@ -514,20 +600,47 @@ This will process evaluation data from your API and index it for search and chat
             }
             html += `</div>`;
 
-            // Show current step if running
+            // Handle current step display
             const currentStepDiv = document.getElementById('currentStep');
             const stepTextDiv = document.getElementById('stepText');
             
             if (data.current_step && data.status === 'running') {
-                currentStepDiv.classList.remove('hidden');
-                stepTextDiv.textContent = data.current_step;
-                
-                if (data.start_time) {
-                    const elapsed = Math.floor((new Date() - new Date(data.start_time)) / 1000);
-                    stepTextDiv.textContent += ` (${elapsed}s elapsed)`;
+                if (currentStepDiv) currentStepDiv.style.display = 'block';
+                if (stepTextDiv) {
+                    stepTextDiv.textContent = data.current_step;
+                    
+                    // Add elapsed time if available
+                    if (data.start_time) {
+                        try {
+                            const elapsed = Math.floor((new Date() - new Date(data.start_time)) / 1000);
+                            stepTextDiv.textContent += ` (${elapsed}s elapsed)`;
+                        } catch (e) {
+                            // Ignore time calculation errors
+                        }
+                    }
                 }
             } else {
-                currentStepDiv.classList.add('hidden');
+                if (currentStepDiv) currentStepDiv.style.display = 'none';
+            }
+
+            // Add timing information
+            if (data.status === 'running' && data.start_time) {
+                html += `<div style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                    Started: ${new Date(data.start_time).toLocaleString()}
+                </div>`;
+            } else if (data.status === 'completed' && data.end_time) {
+                html += `<div style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                    Completed: ${new Date(data.end_time).toLocaleString()}
+                </div>`;
+            } else if (data.status === 'failed') {
+                html += `<div style="margin-top: 10px; font-size: 0.9em; color: #dc3545;">
+                    Failed: ${data.end_time ? new Date(data.end_time).toLocaleString() : 'Unknown time'}
+                </div>`;
+                if (data.error) {
+                    html += `<div style="margin-top: 10px; padding: 10px; background: #f8d7da; border-radius: 4px; color: #721c24;">
+                        <strong>Error:</strong> ${data.error}
+                    </div>`;
+                }
             }
 
             container.innerHTML = html;
@@ -535,8 +648,6 @@ This will process evaluation data from your API and index it for search and chat
             // Show results if completed
             if (data.status === 'completed' && data.results) {
                 showResults(data.results);
-            } else if (data.status === 'failed' && data.error) {
-                container.innerHTML += `<div class="status failed"><strong>Error:</strong> ${data.error}</div>`;
             }
         }
 
@@ -544,28 +655,33 @@ This will process evaluation data from your API and index it for search and chat
             const section = document.getElementById('resultsSection');
             const grid = document.getElementById('resultsGrid');
             
+            if (!section || !grid) return;
+            
             section.classList.remove('hidden');
             
             let html = '';
             
-            // Key metrics
+            // Define key metrics to display
             const metrics = [
-                { key: 'total_documents_processed', label: 'Documents Processed', class: 'success' },
-                { key: 'total_chunks_indexed', label: 'Chunks Indexed', class: 'info' },
-                { key: 'empty_documents', label: 'Empty Documents', class: 'warning' },
-                { key: 'import_type', label: 'Import Type', class: 'info' }
+                { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: '📄' },
+                { key: 'total_chunks_indexed', label: 'Chunks Indexed', class: 'info', icon: '🧩' },
+                { key: 'empty_documents', label: 'Empty Documents', class: 'warning', icon: '📭' },
+                { key: 'import_type', label: 'Import Type', class: 'info', icon: '🔄' }
             ];
             
+            // Display key metrics
             metrics.forEach(metric => {
                 if (results.hasOwnProperty(metric.key)) {
                     let value = results[metric.key];
+                    
+                    // Format import type
                     if (metric.key === 'import_type') {
                         value = value.charAt(0).toUpperCase() + value.slice(1);
                     }
                     
                     html += `
                         <div class="result-card">
-                            <h4>${metric.label}</h4>
+                            <h4>${metric.icon} ${metric.label}</h4>
                             <div class="result-value ${metric.class}">${value}</div>
                         </div>
                     `;
@@ -576,7 +692,7 @@ This will process evaluation data from your API and index it for search and chat
             if (results.collections_processed && Array.isArray(results.collections_processed)) {
                 html += `
                     <div class="result-card">
-                        <h4>Collections Processed</h4>
+                        <h4>📁 Collections Processed</h4>
                         <div class="result-value info">${results.collections_processed.join(', ')}</div>
                     </div>
                 `;
@@ -584,20 +700,49 @@ This will process evaluation data from your API and index it for search and chat
             
             // Import timestamp
             if (results.new_import_timestamp) {
-                const timestamp = new Date(results.new_import_timestamp).toLocaleString();
-                html += `
-                    <div class="result-card">
-                        <h4>Completed At</h4>
-                        <div class="result-value" style="font-size: 1.2em; color: #666;">${timestamp}</div>
-                    </div>
-                `;
+                try {
+                    const timestamp = new Date(results.new_import_timestamp).toLocaleString();
+                    html += `
+                        <div class="result-card">
+                            <h4>⏰ Completed At</h4>
+                            <div class="result-value" style="font-size: 1.2em; color: #666;">${timestamp}</div>
+                        </div>
+                    `;
+                } catch (e) {
+                    // Ignore timestamp formatting errors
+                }
+            }
+            
+            // Handle empty documents by collection if it's an object
+            if (results.empty_documents_by_collection && typeof results.empty_documents_by_collection === 'object') {
+                const emptyDocs = results.empty_documents_by_collection;
+                if (Object.keys(emptyDocs).length > 0) {
+                    let emptyDocsText = Object.entries(emptyDocs)
+                        .map(([collection, count]) => `${collection}: ${count}`)
+                        .join(', ');
+                    
+                    html += `
+                        <div class="result-card">
+                            <h4>📭 Empty by Collection</h4>
+                            <div class="result-value warning" style="font-size: 1em;">${emptyDocsText}</div>
+                        </div>
+                    `;
+                }
             }
             
             grid.innerHTML = html;
+            
+            console.log("📈 Import results displayed:", results);
         }
+
+        // ============================================================================
+        // SYSTEM HEALTH AND MONITORING
+        // ============================================================================
 
         async function checkSystemHealth() {
             const container = document.getElementById('healthStatus');
+            if (!container) return;
+            
             container.innerHTML = '<div class="loading"><div class="spinner"></div>Checking system health...</div>';
             
             try {
@@ -610,67 +755,52 @@ This will process evaluation data from your API and index it for search and chat
                     Object.entries(health.components).forEach(([component, info]) => {
                         const status = info.status || 'unknown';
                         const isHealthy = status === 'connected' || status === 'healthy' || status === 'configured';
-                        const cssClass = isHealthy ? '' : (status === 'not configured' ? 'warning' : 'unhealthy');
+                        const isWarning = status === 'not configured';
+                        const cssClass = isHealthy ? '' : (isWarning ? 'warning' : 'unhealthy');
+                        
+                        // Add emoji indicators
+                        let emoji = '✅';
+                        if (!isHealthy) {
+                            emoji = isWarning ? '⚠️' : '❌';
+                        }
                         
                         html += `
                             <div class="health-item ${cssClass}">
-                                <div class="health-label">${component.toUpperCase()}</div>
+                                <div class="health-label">${emoji} ${component.toUpperCase()}</div>
                                 <div class="health-value">${status}</div>
                             </div>
                         `;
                     });
                 }
                 
+                // Add last import info if available
+                if (health.last_import && health.last_import.timestamp) {
+                    try {
+                        const timestamp = new Date(health.last_import.timestamp).toLocaleString();
+                        html += `
+                            <div class="health-item">
+                                <div class="health-label">📅 LAST IMPORT</div>
+                                <div class="health-value">${timestamp}</div>
+                            </div>
+                        `;
+                    } catch (e) {
+                        // Ignore timestamp formatting errors
+                    }
+                }
+                
                 container.innerHTML = html;
+                console.log("🏥 System health checked:", health);
                 
             } catch (error) {
-                container.innerHTML = `<div class="health-item unhealthy">
-                    <div class="health-label">SYSTEM</div>
-                    <div class="health-value">Error: ${error.message}</div>
-                </div>`;
+                console.error("Health check failed:", error);
+                container.innerHTML = `
+                    <div class="health-item unhealthy">
+                        <div class="health-label">❌ SYSTEM</div>
+                        <div class="health-value">Error: ${error.message}</div>
+                    </div>
+                `;
             }
         }
-
-        <!-- Connection Testing Section -->
-        <div class="section">
-            <h2><span class="emoji">🔌</span> Connection Testing & Debug</h2>
-            
-            <div class="control-group">
-                <button class="btn success" onclick="testAllConnections()">
-                    <span class="emoji">🧪</span> Test All Connections
-                </button>
-                <button class="btn secondary" onclick="viewDebugConfig()">
-                    <span class="emoji">⚙️</span> View Configuration
-                </button>
-                <button class="btn secondary" onclick="clearTestResults()">
-                    <span class="emoji">🗑️</span> Clear Results
-                </button>
-            </div>
-            
-            <div id="testResults" class="status-container" style="display: none;">
-                <div id="testOverallStatus" class="status idle">
-                    <strong>Test Status:</strong> Ready to test
-                </div>
-                
-                <div id="testGrid" class="results-grid" style="margin-top: 20px;"></div>
-                
-                <div id="testLogs" class="logs-container" style="margin-top: 20px; display: none;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <strong style="color: #00ff00;">Debug Logs:</strong>
-                        <button onclick="toggleTestLogs()" style="background: none; border: 1px solid #00ff00; color: #00ff00; padding: 2px 8px; border-radius: 4px; cursor: pointer;">
-                            Hide Logs
-                        </button>
-                    </div>
-                    <div id="testLogsContent"></div>
-                </div>
-                
-                <div id="testRecommendations" style="margin-top: 20px; display: none;">
-                    <h4 style="color: #dc3545; margin-bottom: 10px;">🔧 Recommendations:</h4>
-                    <div id="recommendationsList"></div>
-                </div>
-            </div>
-        </div>
-
 
         async function checkLastImportInfo() {
             try {
@@ -679,58 +809,271 @@ This will process evaluation data from your API and index it for search and chat
                 
                 if (data.status === 'success' && data.last_import_timestamp) {
                     const timestamp = new Date(data.last_import_timestamp).toLocaleString();
-                    // You could show this in the UI if desired
-                    console.log(`Last import: ${timestamp}`);
+                    console.log(`📅 Last import: ${timestamp}`);
+                    
+                    // You could display this in the UI if there's a container for it
+                    const infoContainer = document.getElementById("lastImportInfo");
+                    if (infoContainer) {
+                        infoContainer.innerHTML = `
+                            <div style="background: #e3f2fd; padding: 8px; border-radius: 4px; margin: 8px 0; font-size: 0.9em;">
+                                <strong>📅 Last Import:</strong> ${timestamp}
+                            </div>
+                        `;
+                    }
                 }
             } catch (error) {
-                console.error('Failed to get last import info:', error);
+                console.error("Failed to check last import info:", error);
             }
         }
 
         async function clearImportTimestamp() {
-            if (!confirm('Reset import timestamp? Next incremental import will process all documents.')) {
+            if (!confirm("Reset import timestamp? The next incremental import will process all documents. Continue?")) {
                 return;
             }
             
             try {
-                const response = await fetch('/clear_import_timestamp', {
+                const response = await fetch("/clear_import_timestamp", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                
+                const data = await response.json();
+                if (data.status === 'success') {
+                    alert("✅ Import timestamp reset successfully!");
+                    checkLastImportInfo(); // Refresh the display
+                } else {
+                    alert(`❌ Error: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`❌ Failed to reset timestamp: ${error.message}`);
+            }
+        }
+
+        // ============================================================================
+        // CONNECTION TESTING FUNCTIONS
+        // ============================================================================
+
+        async function testAllConnections() {
+            const resultsContainer = document.getElementById('testResults');
+            const overallStatus = document.getElementById('testOverallStatus');
+            const testGrid = document.getElementById('testGrid');
+            const testLogs = document.getElementById('testLogs');
+            const testLogsContent = document.getElementById('testLogsContent');
+            const recommendationsDiv = document.getElementById('testRecommendations');
+            
+            // Show results container and reset state
+            resultsContainer.style.display = 'block';
+            overallStatus.className = 'status running';
+            overallStatus.innerHTML = '<div class="spinner"></div><strong>Testing:</strong> Running comprehensive connection tests...';
+            testGrid.innerHTML = '';
+            testLogs.style.display = 'none';
+            recommendationsDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/debug/test-connections', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
                 
-                const result = await response.json();
-                if (result.status === 'success') {
-                    alert('✅ Import timestamp reset successfully!');
-                } else {
-                    alert(`❌ Error: ${result.error}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
+                
+                const results = await response.json();
+                displayTestResults(results);
+                
             } catch (error) {
-                alert(`❌ Failed: ${error.message}`);
+                console.error('Connection test failed:', error);
+                overallStatus.className = 'status failed';
+                overallStatus.innerHTML = `<strong>Test Failed:</strong> ${error.message}`;
+                
+                testGrid.innerHTML = `
+                    <div class="result-card">
+                        <h4>❌ Connection Test Error</h4>
+                        <div class="result-value danger">${error.message}</div>
+                    </div>
+                `;
             }
         }
+
+        function displayTestResults(results) {
+            const overallStatus = document.getElementById('testOverallStatus');
+            const testGrid = document.getElementById('testGrid');
+            const testLogs = document.getElementById('testLogs');
+            const testLogsContent = document.getElementById('testLogsContent');
+            const recommendationsDiv = document.getElementById('testRecommendations');
+            const recommendationsList = document.getElementById('recommendationsList');
+            
+            // Update overall status
+            const statusClass = results.overall_status === 'pass' ? 'completed' : 'failed';
+            const statusEmoji = results.overall_status === 'pass' ? '✅' : '❌';
+            overallStatus.className = `status ${statusClass}`;
+            overallStatus.innerHTML = `<strong>Overall Status:</strong> ${statusEmoji} ${results.overall_status.toUpperCase()}`;
+            
+            // Display individual test results
+            let html = '';
+            const testOrder = ['environment', 'api', 'opensearch', 'embeddings', 'genai'];
+            
+            testOrder.forEach(testName => {
+                if (results.tests[testName]) {
+                    const test = results.tests[testName];
+                    const statusEmoji = test.status === 'pass' ? '✅' : (test.status === 'fail' ? '❌' : '⚠️');
+                    const statusClass = test.status === 'pass' ? 'success' : (test.status === 'fail' ? 'danger' : 'warning');
+                    
+                    html += `
+                        <div class="result-card">
+                            <h4>${statusEmoji} ${testName.toUpperCase()}</h4>
+                            <div class="result-value ${statusClass}">${test.status.toUpperCase()}</div>
+                            ${test.error ? `<div style="margin-top: 8px; font-size: 0.8em; color: #dc3545;">${test.error}</div>` : ''}
+                            ${generateTestDetails(test.details)}
+                        </div>
+                    `;
+                }
+            });
+            
+            testGrid.innerHTML = html;
+            
+            // Display logs
+            if (results.logs && results.logs.length > 0) {
+                testLogsContent.innerHTML = results.logs.join('<br>');
+                testLogs.style.display = 'block';
+            }
+            
+            // Display recommendations
+            if (results.recommendations && results.recommendations.length > 0) {
+                let recommendationsHtml = '';
+                results.recommendations.forEach((rec, index) => {
+                    recommendationsHtml += `
+                        <div style="margin: 8px 0; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                            <strong>${index + 1}.</strong> ${rec}
+                        </div>
+                    `;
+                });
+                recommendationsList.innerHTML = recommendationsHtml;
+                recommendationsDiv.style.display = 'block';
+            }
+        }
+
+        function generateTestDetails(details) {
+            if (!details || Object.keys(details).length === 0) {
+                return '';
+            }
+            
+            let html = '<div style="margin-top: 8px; font-size: 0.8em; color: #666;">';
+            
+            Object.entries(details).forEach(([key, value]) => {
+                if (key === 'sample_values' && Array.isArray(value)) {
+                    value = value.map(v => typeof v === 'number' ? v.toFixed(4) : v).join(', ');
+                }
+                html += `<div><strong>${key.replace(/_/g, ' ')}:</strong> ${value}</div>`;
+            });
+            
+            html += '</div>';
+            return html;
+        }
+
+        async function viewDebugConfig() {
+            const container = document.getElementById('actionResults');
+            if (!container) return;
+            
+            container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading configuration...</div>';
+            
+            try {
+                const response = await fetch('/debug/config');
+                const config = await response.json();
+                
+                let html = '<div class="result-card"><h4>⚙️ System Configuration</h4>';
+                
+                // Critical settings
+                const criticalSettings = [
+                    'api_base_url_set',
+                    'api_auth_value_set', 
+                    'opensearch_host',
+                    'genai_key_set',
+                    'embedder_available'
+                ];
+                
+                criticalSettings.forEach(setting => {
+                    if (config.hasOwnProperty(setting)) {
+                        const value = config[setting];
+                        const isGood = (typeof value === 'boolean' && value) || 
+                                      (typeof value === 'string' && value !== 'NOT_SET');
+                        const emoji = isGood ? '✅' : '❌';
+                        const color = isGood ? '#28a745' : '#dc3545';
+                        
+                        html += `<div style="margin: 4px 0;"><span style="color: ${color};">${emoji}</span> 
+                                 <strong>${setting.replace(/_/g, ' ')}:</strong> ${value}</div>`;
+                    }
+                });
+                
+                // Environment variables
+                if (config.environment_vars) {
+                    html += '<hr style="margin: 15px 0;"><strong>Environment Variables:</strong>';
+                    Object.entries(config.environment_vars).forEach(([key, value]) => {
+                        html += `<div style="margin: 4px 0;"><strong>${key}:</strong> ${value}</div>`;
+                    });
+                }
+                
+                html += '</div>';
+                container.innerHTML = html;
+                
+            } catch (error) {
+                container.innerHTML = `<div class="status failed">❌ Failed to load config: ${error.message}</div>`;
+            }
+        }
+
+        function clearTestResults() {
+            const resultsContainer = document.getElementById('testResults');
+            resultsContainer.style.display = 'none';
+        }
+
+        function toggleTestLogs() {
+            const testLogs = document.getElementById('testLogs');
+            const button = testLogs.querySelector('button');
+            
+            if (testLogs.style.display === 'none') {
+                testLogs.style.display = 'block';
+                button.textContent = 'Hide Logs';
+            } else {
+                testLogs.style.display = 'none';
+                button.textContent = 'Show Logs';
+            }
+        }
+
+        // ============================================================================
+        // UTILITY FUNCTIONS
+        // ============================================================================
 
         async function toggleLogs() {
             const container = document.getElementById('logsContainer');
             const content = document.getElementById('logsContent');
+            
+            if (!container || !content) return;
 
             if (container.classList.contains('hidden')) {
                 try {
+                    content.textContent = 'Loading logs...';
+                    container.classList.remove('hidden');
+                    
                     const response = await fetch('/logs');
                     const data = await response.json();
                     const logs = data.logs || [];
+                    
+                    // Show last 50 log entries
                     content.textContent = logs.slice(-50).join('\n') || 'No logs available';
-                    container.classList.remove('hidden');
                 } catch (error) {
                     content.textContent = `Error loading logs: ${error.message}`;
-                    container.classList.remove('hidden');
                 }
             } else {
                 container.classList.add('hidden');
             }
         }
 
+        // Quick action functions that can be called from the UI
         async function getImportStatistics() {
-            const container = document.getElementById('actionResults');
+            const container = document.getElementById("actionResults");
+            if (!container) return;
+            
             container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading statistics...</div>';
             
             try {
@@ -749,15 +1092,17 @@ This will process evaluation data from your API and index it for search and chat
                     `;
                     container.innerHTML = html;
                 } else {
-                    container.innerHTML = `<div class="status failed">Error: ${data.error}</div>`;
+                    container.innerHTML = `<div class="status failed">❌ Error: ${data.error}</div>`;
                 }
             } catch (error) {
-                container.innerHTML = `<div class="status failed">Failed: ${error.message}</div>`;
+                container.innerHTML = `<div class="status failed">❌ Failed: ${error.message}</div>`;
             }
         }
 
         async function countDocsByCollectionAndProgram() {
-            const container = document.getElementById('actionResults');
+            const container = document.getElementById("actionResults");
+            if (!container) return;
+            
             container.innerHTML = '<div class="loading"><div class="spinner"></div>Counting documents...</div>';
             
             try {
@@ -769,29 +1114,40 @@ This will process evaluation data from your API and index it for search and chat
                     
                     const counts = data.collection_program_counts;
                     if (Object.keys(counts).length === 0) {
-                        html += '<p>No documents found.</p>';
+                        html += '<p>No documents found in any collection.</p>';
                     } else {
                         for (const [collection, programs] of Object.entries(counts)) {
-                            html += `<p><strong>${collection}:</strong> `;
-                            const programCounts = Object.entries(programs).map(([prog, count]) => `${prog}: ${count}`);
-                            html += programCounts.join(', ') + '</p>';
+                            html += `<div style="margin-bottom: 10px;"><strong>${collection}:</strong><ul style="margin-left: 20px;">`;
+                            
+                            if (Object.keys(programs).length === 0) {
+                                html += '<li>No documents found</li>';
+                            } else {
+                                for (const [program, count] of Object.entries(programs)) {
+                                    const programDisplay = (!program || program === 'all') ? 
+                                        '<em>All Programs</em>' : program;
+                                    html += `<li>${programDisplay}: <strong>${count}</strong> documents</li>`;
+                                }
+                            }
+                            html += '</ul></div>';
                         }
                     }
                     html += '</div>';
                     container.innerHTML = html;
                 } else {
-                    container.innerHTML = `<div class="status failed">Error: ${data.error}</div>`;
+                    container.innerHTML = `<div class="status failed">❌ Error: ${data.error}</div>`;
                 }
             } catch (error) {
-                container.innerHTML = `<div class="status failed">Failed: ${error.message}</div>`;
+                container.innerHTML = `<div class="status failed">❌ Failed: ${error.message}</div>`;
             }
         }
 
         async function testSearch() {
-            const query = prompt('Enter search query:', 'customer service');
+            const query = prompt('🔍 Enter search query to test:', 'customer service');
             if (!query) return;
             
-            const container = document.getElementById('actionResults');
+            const container = document.getElementById("actionResults");
+            if (!container) return;
+            
             container.innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
             
             try {
@@ -807,25 +1163,40 @@ This will process evaluation data from your API and index it for search and chat
                     `;
                     
                     if (resultCount > 0) {
-                        html += '<div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">';
-                        data.results.slice(0, 3).forEach(result => {
-                            html += `<div style="margin: 10px 0; padding: 10px; background: #f9f9f9; border-radius: 4px;">
-                                <strong>${result.title}</strong><br>
-                                <small>${result.text.substring(0, 100)}...</small>
-                            </div>`;
+                        html += '<div style="max-height: 200px; overflow-y: auto; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">';
+                        data.results.slice(0, 3).forEach((result, index) => {
+                            html += `
+                                <div style="margin: 10px 0; padding: 10px; background: #f9f9f9; border-radius: 4px; border-left: 3px solid #6e32a0;">
+                                    <div style="font-weight: bold; color: #6e32a0; margin-bottom: 5px;">
+                                        ${index + 1}. ${result.title || 'Untitled'}
+                                    </div>
+                                    <div style="font-size: 0.9em; color: #666;">
+                                        ${(result.text || '').substring(0, 150)}${result.text && result.text.length > 150 ? '...' : ''}
+                                    </div>
+                                    ${result.score ? `<div style="font-size: 0.8em; color: #999; margin-top: 5px;">Score: ${Math.round(result.score * 100) / 100}</div>` : ''}
+                                </div>
+                            `;
                         });
                         html += '</div>';
+                        
+                        if (resultCount > 3) {
+                            html += `<div style="margin-top: 10px; font-size: 0.9em; color: #666; text-align: center;">
+                                ... and ${resultCount - 3} more results
+                            </div>`;
+                        }
                     }
                     
                     html += '</div>';
                     container.innerHTML = html;
                 } else {
-                    container.innerHTML = `<div class="status failed">Search failed: ${data.error}</div>`;
+                    container.innerHTML = `<div class="status failed">❌ Search failed: ${data.error}</div>`;
                 }
             } catch (error) {
-                container.innerHTML = `<div class="status failed">Search failed: ${error.message}</div>`;
+                container.innerHTML = `<div class="status failed">❌ Search failed: ${error.message}</div>`;
             }
         }
+
+        console.log("✅ Ask InnovAI Admin main.js loaded successfully - all functions available");
     </script>
 </body>
 </html>

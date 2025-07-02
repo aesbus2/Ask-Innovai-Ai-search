@@ -405,13 +405,13 @@ async def process_evaluation(evaluation: Dict) -> Dict:
         soup = BeautifulSoup(transcript, "html.parser")
         raw_text = soup.get_text(" ", strip=True)
         
-        if len(raw_text.strip()) < 50:
+        if len(raw_text.strip()) < 10:
             return {"status": "skipped", "reason": "too_short"}
         
         # Split into chunks
         chunks = split_into_chunks(raw_text)
         
-        # Metadata
+        # Metadata from Endpoint API
         meta = {
             "evaluation_id": evaluation.get("evaluationId"),
             "template": evaluation.get("template_name"),
