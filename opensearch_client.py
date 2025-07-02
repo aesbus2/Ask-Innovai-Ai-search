@@ -523,8 +523,6 @@ def health_check() -> Dict[str, Any]:
             "index_name": OPENSEARCH_INDEX
         }
 
-# Initialize index on module import
-try:
-    ensure_index_exists()
-except Exception as e:
-    logger.warning(f"Could not initialize index on startup: {e}")
+# Don't initialize index on module import - do it lazily when needed
+# This prevents startup delays if OpenSearch is not immediately available
+logger.info("OpenSearch client initialized - will connect when needed")
