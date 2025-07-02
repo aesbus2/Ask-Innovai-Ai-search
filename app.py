@@ -246,6 +246,49 @@ async def health():
             "note": "Will run without embeddings",
             "model": "none"
         }
+@app.get("/debug/api-raw-response")
+async def debug_api_raw_response():
+    """Debug what the API actually returns"""
+    if not API_BASE_URL or not API_AUTH_VALUE:
+        return {"error": "API not configured"}
+    
+    try:
+        headers = {API_AUTH_KEY: API_AUTH_VALUE, "Content-Type": "application/json"}
+        params = {"limit": 1}
+        
+        logger.info(f"🔍 DEBUG: Calling API at {API_BASE_URL}")
+        logger.info(f"🔍 DEBUG: Headers: {API_AUTH_KEY}: [HIDDEN]")
+        logger.info(f"🔍 DEBUG: Params: {params}")
+        
+        response = requests.get(API_BASE_URL, headers=headers, params=params, timeout=15)
+        
+        debug_info = {
+            "status_code": response.status_code,
+            "headers": dict(response.headers),
+            "content_length": len(response.content),
+            "content_type": response.headers.get("content-type", "unknown"),
+            "raw_content_preview": response.text[:500],  # First 500 characters
+            "is_json": False,
+            "parsed_data": None,
+            "error": None
+        }
+        
+        # Try to parse as JSON
+        try:
+            if response.text.strip():  # Check if not empty
+                data = response.json()
+                debug_info["is_json"] = True
+                debug_info["parsed_data"] = str(data)[:300]  # Preview of parsed data
+            else:
+                debug_info["error"] = "Response body is empty"
+        except json.JSONDecodeError as e:
+            debug_info["error"] = f"JSON decode failed: {str(e)}"
+            debug_info["is_json"] = False
+        
+        return debug_info
+        
+    except Exception as e:
+        return {"error": f"Request failed: {str(e)}"}
 
 @app.get("/status")
 async def get_import_status():
