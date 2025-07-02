@@ -209,29 +209,43 @@ async def health():
     # Embedder status
     if EMBEDDER_AVAILABLE:
         try:
+            # Import the module-level function
+            from embedder import get_embedding_stats, EMBEDDING_MODEL
+            
             stats = get_embedding_stats()
             components["embeddings"] = {
                 "status": "healthy", 
-                "model": stats.get("model_name", "unknown")
+                "model": stats.get("model_name", EMBEDDING_MODEL),  # Fallback to default
+                "provider": stats.get("provider", "local"),
+                "dimension": stats.get("embedding_dimension", 384),
+                "model_loaded": stats.get("model_loaded", False)
             }
-        except Exception as e:
+        except ImportError as e:
             components["embeddings"] = {
                 "status": "warning", 
-                "error": str(e)
+                "error": f"Import failed: {str(e)}",
+                "model": "sentence-transformers/all-MiniLM-L6-v2"  # Default fallback
+            }
+        except Exception as e:
+            # Fallback - try to get the default model name
+            try:
+                from embedder import EMBEDDING_MODEL
+                model_name = EMBEDDING_MODEL
+            except:
+                model_name = "sentence-transformers/all-MiniLM-L6-v2"
+                
+            components["embeddings"] = {
+                "status": "warning", 
+                "error": str(e),
+                "model": model_name,
+                "note": "Service available but not initialized"
             }
     else:
         components["embeddings"] = {
             "status": "not available",
-            "note": "Will run without embeddings"
+            "note": "Will run without embeddings",
+            "model": "none"
         }
-    
-    return {
-        "status": "ok",
-        "timestamp": datetime.now().isoformat(),
-        "components": components,
-        "import_status": import_status["status"],
-        "environment": "digital_ocean"
-    }
 
 @app.get("/status")
 async def get_import_status():
@@ -554,6 +568,309 @@ async def startup_event():
     except Exception as e:
         logger.error(f"❌ Startup error: {e}")
         # Don't exit - let the app start anyway
+
+@app.get("/debug/config")
+async def debug_config():
+    """Debug configuration without exposing sensitive values"""
+    return {
+        "api_base_url_set": bool(API_BASE_URL),
+        "api_base_url_preview": API_BASE_URL[:50] + "..." if API_BASE_URL else "NOT_SET",
+        "api_auth_key": API_AUTH_KEY,
+        "api_auth_value_set": bool(API_AUTH_VALUE),
+        "opensearch_host": os.getenv("OPENSEARCH_HOST", "NOT_SET"),
+        "opensearch_user": os.getenv("OPENSEARCH_USER", "admin"),
+        "opensearch_pass_set": bool(os.getenv("OPENSEARCH_PASS")),
+        "genai_endpoint": GENAI_ENDPOINT,
+        "genai_key_set": bool(GENAI_ACCESS_KEY),
+        "embedder_available": EMBEDDER_AVAILABLE,
+        "environment_vars": {
+            "PORT": os.getenv("PORT", "not set"), 
+            "EMBEDDING_MODEL": os.getenv("EMBEDDING_MODEL", "default"),
+            "EMBEDDING_PROVIDER": os.getenv("EMBEDDING_PROVIDER", "local")
+        }
+    }
+
+@app.post("/debug/test-connections")
+async def test_all_connections():
+    """Comprehensive connection testing with detailed logs"""
+    test_results = {
+        "timestamp": datetime.now().isoformat(),
+        "overall_status": "testing",
+        "tests": {},
+        "logs": [],
+        "recommendations": []
+    }
+    
+    def add_log(message, level="INFO"):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        test_results["logs"].append(f"[{timestamp}] {level}: {message}")
+        logger.info(f"TEST: {message}")
+    
+    add_log("Starting comprehensive connection tests...")
+    
+    # Test 1: Environment Variables
+    add_log("Testing environment variables...")
+    env_test = {
+        "status": "pass",
+        "details": {},
+        "issues": []
+    }
+    
+    required_vars = {
+        "API_BASE_URL": API_BASE_URL,
+        "API_AUTH_VALUE": API_AUTH_VALUE,
+        "OPENSEARCH_HOST": os.getenv("OPENSEARCH_HOST"),
+        "GENAI_ACCESS_KEY": GENAI_ACCESS_KEY
+    }
+    
+    for var_name, var_value in required_vars.items():
+        if not var_value:
+            env_test["issues"].append(f"{var_name} is not set")
+            env_test["status"] = "fail"
+        else:
+            preview = var_value[:20] + "..." if len(var_value) > 20 else var_value
+            env_test["details"][var_name] = f"Set ({preview})"
+    
+    test_results["tests"]["environment"] = env_test
+    
+    if env_test["status"] == "fail":
+        test_results["recommendations"].append("Set missing environment variables in Digital Ocean App Platform settings")
+        add_log(f"Environment test FAILED: {', '.join(env_test['issues'])}", "ERROR")
+    else:
+        add_log("Environment variables test PASSED")
+    
+    # Test 2: API Connection
+    add_log("Testing API connection...")
+    api_test = {
+        "status": "unknown",
+        "details": {},
+        "response_preview": None,
+        "error": None
+    }
+    
+    if not API_BASE_URL or not API_AUTH_VALUE:
+        api_test["status"] = "fail"
+        api_test["error"] = "API_BASE_URL or API_AUTH_VALUE not configured"
+        add_log("API test SKIPPED: Missing configuration", "ERROR")
+    else:
+        try:
+            add_log(f"Attempting to connect to: {API_BASE_URL}")
+            headers = {
+                API_AUTH_KEY: API_AUTH_VALUE,
+                "Content-Type": "application/json",
+                "User-Agent": "AskInnovAI-TestClient/1.0"
+            }
+            add_log(f"Using auth header: {API_AUTH_KEY}")
+            
+            response = requests.get(
+                API_BASE_URL,
+                headers=headers,
+                params={"limit": 1},
+                timeout=15
+            )
+            
+            api_test["details"]["status_code"] = response.status_code
+            api_test["details"]["response_size"] = len(response.text)
+            api_test["details"]["content_type"] = response.headers.get("content-type", "unknown")
+            
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    evaluations = data.get("evaluations", [])
+                    api_test["details"]["evaluations_count"] = len(evaluations)
+                    api_test["response_preview"] = str(data)[:200] + "..." if len(str(data)) > 200 else str(data)
+                    api_test["status"] = "pass"
+                    add_log(f"API test PASSED: {len(evaluations)} evaluations available")
+                except json.JSONDecodeError as e:
+                    api_test["status"] = "fail"
+                    api_test["error"] = f"Invalid JSON response: {e}"
+                    api_test["response_preview"] = response.text[:200]
+                    add_log(f"API test FAILED: Invalid JSON response", "ERROR")
+            else:
+                api_test["status"] = "fail"
+                api_test["error"] = f"HTTP {response.status_code}: {response.text[:200]}"
+                add_log(f"API test FAILED: HTTP {response.status_code}", "ERROR")
+                
+                if response.status_code == 401:
+                    test_results["recommendations"].append("Check API_AUTH_VALUE - authentication failed")
+                elif response.status_code == 403:
+                    test_results["recommendations"].append("Check API permissions - access forbidden")
+                elif response.status_code == 404:
+                    test_results["recommendations"].append("Check API_BASE_URL - endpoint not found")
+                    
+        except requests.exceptions.Timeout:
+            api_test["status"] = "fail"
+            api_test["error"] = "Connection timeout (15s)"
+            add_log("API test FAILED: Connection timeout", "ERROR")
+            test_results["recommendations"].append("Check if API endpoint is accessible from Digital Ocean")
+        except requests.exceptions.ConnectionError as e:
+            api_test["status"] = "fail"
+            api_test["error"] = f"Connection error: {str(e)}"
+            add_log(f"API test FAILED: Connection error", "ERROR")
+            test_results["recommendations"].append("Check API_BASE_URL format and network connectivity")
+        except Exception as e:
+            api_test["status"] = "fail"
+            api_test["error"] = f"Unexpected error: {str(e)}"
+            add_log(f"API test FAILED: {str(e)}", "ERROR")
+    
+    test_results["tests"]["api"] = api_test
+    
+    # Test 3: OpenSearch Connection
+    add_log("Testing OpenSearch connection...")
+    opensearch_test = {
+        "status": "unknown",
+        "details": {},
+        "error": None
+    }
+    
+    opensearch_host = os.getenv("OPENSEARCH_HOST")
+    if not opensearch_host:
+        opensearch_test["status"] = "fail"
+        opensearch_test["error"] = "OPENSEARCH_HOST not configured"
+        add_log("OpenSearch test SKIPPED: Missing configuration", "ERROR")
+        test_results["recommendations"].append("Set OPENSEARCH_HOST environment variable")
+    else:
+        try:
+            from opensearch_client import client
+            add_log(f"Attempting to connect to OpenSearch: {opensearch_host}")
+            
+            info = client.info()
+            opensearch_test["details"]["version"] = info.get("version", {}).get("number", "unknown")
+            opensearch_test["details"]["cluster_name"] = info.get("cluster_name", "unknown")
+            opensearch_test["status"] = "pass"
+            add_log(f"OpenSearch test PASSED: Version {opensearch_test['details']['version']}")
+            
+            try:
+                indices = client.cat.indices(format="json")
+                opensearch_test["details"]["indices_count"] = len(indices) if indices else 0
+                add_log(f"Found {opensearch_test['details']['indices_count']} indices")
+            except Exception as e:
+                add_log(f"Could not list indices: {e}", "WARN")
+                
+        except ImportError as e:
+            opensearch_test["status"] = "fail"
+            opensearch_test["error"] = f"opensearch-py not installed: {e}"
+            add_log("OpenSearch test FAILED: Library not installed", "ERROR")
+        except Exception as e:
+            opensearch_test["status"] = "fail"
+            opensearch_test["error"] = str(e)
+            add_log(f"OpenSearch test FAILED: {str(e)}", "ERROR")
+            test_results["recommendations"].append("Check OpenSearch credentials and network connectivity")
+    
+    test_results["tests"]["opensearch"] = opensearch_test
+    
+    # Test 4: Embeddings Service
+    add_log("Testing embeddings service...")
+    embeddings_test = {
+        "status": "unknown",
+        "details": {},
+        "error": None
+    }
+    
+    if not EMBEDDER_AVAILABLE:
+        embeddings_test["status"] = "fail"
+        embeddings_test["error"] = "Embedder module not available"
+        add_log("Embeddings test FAILED: Module not available", "ERROR")
+        test_results["recommendations"].append("Check if sentence-transformers is installed correctly")
+    else:
+        try:
+            from embedder import embed_text, get_embedding_stats
+            add_log("Testing embedding generation...")
+            
+            test_text = "This is a test embedding for connection validation."
+            embedding = embed_text(test_text)
+            
+            embeddings_test["details"]["embedding_dimension"] = len(embedding)
+            embeddings_test["details"]["sample_values"] = embedding[:3] if len(embedding) >= 3 else embedding
+            embeddings_test["status"] = "pass"
+            add_log(f"Embeddings test PASSED: {len(embedding)} dimensions")
+            
+            try:
+                stats = get_embedding_stats()
+                embeddings_test["details"]["model"] = stats.get("model_name", "unknown")
+                embeddings_test["details"]["provider"] = stats.get("provider", "unknown")
+                add_log(f"Using model: {embeddings_test['details']['model']}")
+            except Exception as e:
+                add_log(f"Could not get embedding stats: {e}", "WARN")
+                
+        except Exception as e:
+            embeddings_test["status"] = "fail"
+            embeddings_test["error"] = str(e)
+            add_log(f"Embeddings test FAILED: {str(e)}", "ERROR")
+            
+            if "memory" in str(e).lower() or "out of memory" in str(e).lower():
+                test_results["recommendations"].append("Consider increasing memory or using a smaller embedding model")
+            elif "model" in str(e).lower():
+                test_results["recommendations"].append("Check if embedding model can be downloaded/loaded")
+    
+    test_results["tests"]["embeddings"] = embeddings_test
+    
+    # Test 5: Digital Ocean AI
+    add_log("Testing Digital Ocean AI connection...")
+    genai_test = {
+        "status": "unknown",
+        "details": {},
+        "error": None
+    }
+    
+    if not GENAI_ACCESS_KEY:
+        genai_test["status"] = "fail"
+        genai_test["error"] = "GENAI_ACCESS_KEY not configured"
+        add_log("GenAI test SKIPPED: Missing configuration", "ERROR")
+        test_results["recommendations"].append("Set GENAI_ACCESS_KEY for Digital Ocean AI")
+    else:
+        try:
+            add_log(f"Testing Digital Ocean AI endpoint: {GENAI_ENDPOINT}")
+            
+            test_payload = {
+                "model": GENAI_ACCESS_KEY,
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 10
+            }
+            
+            response = requests.post(
+                GENAI_ENDPOINT,
+                headers={
+                    "Authorization": f"Bearer {GENAI_ACCESS_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json=test_payload,
+                timeout=10
+            )
+            
+            genai_test["details"]["status_code"] = response.status_code
+            genai_test["details"]["response_size"] = len(response.text)
+            
+            if response.status_code == 200:
+                genai_test["status"] = "pass"
+                add_log("GenAI test PASSED")
+            else:
+                genai_test["status"] = "fail"
+                genai_test["error"] = f"HTTP {response.status_code}: {response.text[:100]}"
+                add_log(f"GenAI test FAILED: HTTP {response.status_code}", "ERROR")
+                
+        except Exception as e:
+            genai_test["status"] = "fail"
+            genai_test["error"] = str(e)
+            add_log(f"GenAI test FAILED: {str(e)}", "ERROR")
+    
+    test_results["tests"]["genai"] = genai_test
+    
+    # Overall assessment
+    all_tests = [test["status"] for test in test_results["tests"].values()]
+    failed_tests = [name for name, test in test_results["tests"].items() if test["status"] == "fail"]
+    
+    if "fail" in all_tests:
+        test_results["overall_status"] = "fail"
+        add_log(f"OVERALL: FAILED - {len(failed_tests)} test(s) failed: {', '.join(failed_tests)}", "ERROR")
+    else:
+        test_results["overall_status"] = "pass"
+        add_log("OVERALL: ALL TESTS PASSED", "SUCCESS")
+    
+    add_log("Test suite completed")
+    
+    return test_results
+
 
 # For Digital Ocean App Platform - Enhanced port binding
 if __name__ == "__main__":

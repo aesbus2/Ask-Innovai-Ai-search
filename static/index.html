@@ -631,6 +631,47 @@ This will process evaluation data from your API and index it for search and chat
             }
         }
 
+        <!-- Connection Testing Section -->
+        <div class="section">
+            <h2><span class="emoji">🔌</span> Connection Testing & Debug</h2>
+            
+            <div class="control-group">
+                <button class="btn success" onclick="testAllConnections()">
+                    <span class="emoji">🧪</span> Test All Connections
+                </button>
+                <button class="btn secondary" onclick="viewDebugConfig()">
+                    <span class="emoji">⚙️</span> View Configuration
+                </button>
+                <button class="btn secondary" onclick="clearTestResults()">
+                    <span class="emoji">🗑️</span> Clear Results
+                </button>
+            </div>
+            
+            <div id="testResults" class="status-container" style="display: none;">
+                <div id="testOverallStatus" class="status idle">
+                    <strong>Test Status:</strong> Ready to test
+                </div>
+                
+                <div id="testGrid" class="results-grid" style="margin-top: 20px;"></div>
+                
+                <div id="testLogs" class="logs-container" style="margin-top: 20px; display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <strong style="color: #00ff00;">Debug Logs:</strong>
+                        <button onclick="toggleTestLogs()" style="background: none; border: 1px solid #00ff00; color: #00ff00; padding: 2px 8px; border-radius: 4px; cursor: pointer;">
+                            Hide Logs
+                        </button>
+                    </div>
+                    <div id="testLogsContent"></div>
+                </div>
+                
+                <div id="testRecommendations" style="margin-top: 20px; display: none;">
+                    <h4 style="color: #dc3545; margin-bottom: 10px;">🔧 Recommendations:</h4>
+                    <div id="recommendationsList"></div>
+                </div>
+            </div>
+        </div>
+
+
         async function checkLastImportInfo() {
             try {
                 const response = await fetch('/last_import_info');
