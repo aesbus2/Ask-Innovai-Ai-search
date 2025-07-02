@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from uuid import uuid4
 
-from sentence_splitter import split_into_sentences, split_into_chunks
+from sentence_splitter import split_into_chunks
 from opensearch_client import search_opensearch, index_document
 
 load_dotenv()
