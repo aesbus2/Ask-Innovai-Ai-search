@@ -1,6 +1,6 @@
-# Fixed Compression App.py - Resolves gzip decompression issue
-# Version: 2.7.0 - Fixes binary/compressed response handling
-# The issue was Accept-Encoding causing compressed responses that weren't decompressing
+# Endpoint-Specific Debug App.py
+# Version: 2.8.0 - Debug specifically for innovai-6abj.onrender.com/api/content
+# Helps identify why we're getting HTML instead of JSON from the correct endpoint
 
 import os
 import logging
@@ -9,8 +9,6 @@ import asyncio
 import json
 import sys
 import re
-import gzip
-import io
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
@@ -61,9 +59,9 @@ except ImportError as e:
 
 # Create FastAPI app
 app = FastAPI(
-    title="Ask InnovAI",
-    description="AI-Powered Knowledge Assistant - Fixed Compression Issue",
-    version="2.7.0"
+    title="Ask InnovAI Endpoint Debug",
+    description="Debug specifically for innovai-6abj.onrender.com/api/content",
+    version="2.8.0"
 )
 
 # Enable CORS
@@ -85,26 +83,17 @@ except Exception as e:
 # Configuration
 GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", "https://tcxn3difq23zdxlph2heigba.agents.do-ai.run")
 GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
-API_BASE_URL = os.getenv("API_BASE_URL")  
+API_BASE_URL = os.getenv("API_BASE_URL", "https://innovai-6abj.onrender.com/api/content")  # Default to your endpoint
 API_AUTH_KEY = os.getenv("API_AUTH_KEY", "Authorization")
 API_AUTH_VALUE = os.getenv("API_AUTH_VALUE")
 
-logger.info(f"🔧 Fixed Compression Configuration:")
+logger.info(f"🔧 Endpoint Debug Configuration:")
 logger.info(f"   API_BASE_URL: {API_BASE_URL}")
 logger.info(f"   API_AUTH_KEY: {API_AUTH_KEY}")
-logger.info(f"   API_AUTH_VALUE: {'✅ Set' if API_AUTH_VALUE else '❌ Missing'}")
+logger.info(f"   API_AUTH_VALUE: {'✅ Set (' + str(len(API_AUTH_VALUE)) + ' chars)' if API_AUTH_VALUE else '❌ Missing'}")
 
-# Create a session with FIXED headers (no compression issues)
+# Create a session for consistent testing
 session = requests.Session()
-
-# FIXED: Remove problematic compression headers and use safe defaults
-session.headers.update({
-    'User-Agent': 'Ask-InnovAI/2.7.0 (Data Import Service)',
-    'Accept': 'application/json',
-    'Connection': 'keep-alive',
-    'Cache-Control': 'no-cache'
-    # REMOVED: 'Accept-Encoding': 'gzip, deflate, br' - This was causing the compression issue!
-})
 
 # Simple import status tracking
 import_status = {
@@ -116,17 +105,17 @@ import_status = {
     "error": None
 }
 
-# In-memory logs
-import_logs = []
+# Enhanced logging for debugging
+debug_logs = []
 
-def log_import(message: str):
-    """Add message to import logs"""
+def log_debug(message: str):
+    """Add message to debug logs"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_entry = f"[{timestamp}] {message}"
-    import_logs.append(log_entry)
+    debug_logs.append(log_entry)
     logger.info(message)
-    if len(import_logs) > 500:
-        import_logs.pop(0)
+    if len(debug_logs) > 300:
+        debug_logs.pop(0)
 
 def update_import_status(status: str, step: str = None, results: dict = None, error: str = None):
     """Update import status"""
@@ -153,483 +142,405 @@ class ImportRequest(BaseModel):
     import_type: str = "full"
 
 # ============================================================================
-# FIXED COMPRESSION HANDLING FUNCTIONS
+# COMPREHENSIVE ENDPOINT DEBUGGING FUNCTIONS
 # ============================================================================
 
-def detect_and_handle_compression(response) -> str:
-    """Detect if response is compressed and handle appropriately"""
+def test_endpoint_with_method(url: str, method: str, headers: dict, params: dict = None, timeout: int = 30) -> dict:
+    """Test endpoint with specific method and comprehensive logging"""
     
-    # Get content encoding
-    content_encoding = response.headers.get('content-encoding', '').lower()
-    content_type = response.headers.get('content-type', '').lower()
+    log_debug(f"🧪 TESTING: {method} {url}")
+    log_debug(f"   Headers: {json.dumps(headers, indent=2)}")
+    log_debug(f"   Params: {params}")
+    log_debug(f"   Timeout: {timeout}s")
     
-    log_import(f"🔍 Response analysis:")
-    log_import(f"   Content-Encoding: {content_encoding or 'none'}")
-    log_import(f"   Content-Type: {content_type}")
-    log_import(f"   Content-Length: {response.headers.get('content-length', 'unknown')}")
-    log_import(f"   Raw content size: {len(response.content)} bytes")
-    
-    # Check if content looks like binary/compressed data
     try:
-        # Try to decode as text first
-        if response.encoding:
-            text = response.content.decode(response.encoding)
+        # Make the request
+        if method.upper() == "GET":
+            response = requests.get(url, headers=headers, params=params, timeout=timeout, allow_redirects=False)
+        elif method.upper() == "POST":
+            response = requests.post(url, headers=headers, params=params, json={}, timeout=timeout, allow_redirects=False)
         else:
-            text = response.content.decode('utf-8')
+            return {"success": False, "error": f"Unsupported method: {method}"}
+        
+        # Log response details
+        log_debug(f"📊 RESPONSE:")
+        log_debug(f"   Status: {response.status_code} {response.reason}")
+        log_debug(f"   Headers: {dict(response.headers)}")
+        log_debug(f"   Content-Length: {len(response.content)} bytes")
+        log_debug(f"   Content-Type: {response.headers.get('content-type', 'Not set')}")
+        log_debug(f"   Location: {response.headers.get('location', 'Not set')}")
+        
+        # Handle redirects manually to see what's happening
+        if response.status_code in [301, 302, 303, 307, 308]:
+            redirect_url = response.headers.get('location', 'No location header')
+            log_debug(f"🔄 REDIRECT DETECTED: {response.status_code} -> {redirect_url}")
             
-        # Check if text contains binary characters (indicates compression issue)
-        if any(ord(char) < 32 and char not in '\r\n\t' for char in text[:100]):
-            log_import("⚠️ DETECTED: Binary characters in response (likely compression issue)")
-            
-            # Try manual gzip decompression
-            if content_encoding == 'gzip' or text.startswith('\x1f\x8b'):
-                log_import("🔧 Attempting manual gzip decompression...")
-                try:
-                    with gzip.GzipFile(fileobj=io.BytesIO(response.content)) as gz:
-                        decompressed = gz.read().decode('utf-8')
-                    log_import("✅ Manual gzip decompression successful!")
-                    return decompressed
-                except Exception as gz_error:
-                    log_import(f"❌ Manual gzip decompression failed: {gz_error}")
-            
-            # If we can't decompress, this is likely a server issue
-            raise Exception(f"Response contains binary data that couldn't be decompressed. Content-Encoding: {content_encoding}")
-        
-        # Text looks normal
-        log_import("✅ Response appears to be uncompressed text")
-        return text
-        
-    except UnicodeDecodeError as decode_error:
-        log_import(f"❌ Unicode decode error: {decode_error}")
-        
-        # Try different encodings
-        for encoding in ['latin-1', 'windows-1252', 'iso-8859-1']:
-            try:
-                text = response.content.decode(encoding)
-                log_import(f"✅ Successfully decoded with {encoding}")
-                return text
-            except:
-                continue
-        
-        raise Exception(f"Could not decode response with any encoding. Content appears to be binary.")
-
-# ============================================================================
-# API PROCESSING FUNCTIONS (Same as before)
-# ============================================================================
-
-def extract_qa_pairs(evaluation_text: str) -> List[str]:
-    """Extract Question and Answer pairs from evaluation text, keeping them together."""
-    if not evaluation_text:
-        return []
-    
-    # Clean HTML
-    soup = BeautifulSoup(evaluation_text, "html.parser")
-    clean_text = soup.get_text(" ", strip=True)
-    
-    qa_chunks = []
-    
-    # Split by sections first (Section: XXXX)
-    sections = re.split(r'Section:\s*([^<\n]+?)(?=Section:|$)', clean_text, flags=re.IGNORECASE)
-    
-    for i in range(1, len(sections), 2):
-        if i + 1 < len(sections):
-            section_name = sections[i].strip()
-            section_content = sections[i + 1].strip()
-            
-            # Extract Q&A pairs from this section
-            qa_pattern = r'Question:\s*([^?]+\??)\s*Answer:\s*([^.]+\.?)'
-            matches = re.finditer(qa_pattern, section_content, re.IGNORECASE | re.DOTALL)
-            
-            for match in matches:
-                question = match.group(1).strip()
-                answer = match.group(2).strip()
-                qa_chunk = f"Section: {section_name}\nQuestion: {question}\nAnswer: {answer}"
-                qa_chunks.append(qa_chunk)
-    
-    # Fallback: if no sections, try direct Q&A extraction
-    if not qa_chunks:
-        qa_pattern = r'Question:\s*([^?]+\??)\s*Answer:\s*([^.]+\.?)'
-        matches = re.finditer(qa_pattern, clean_text, re.IGNORECASE | re.DOTALL)
-        
-        for match in matches:
-            question = match.group(1).strip()
-            answer = match.group(2).strip()
-            qa_chunk = f"Question: {question}\nAnswer: {answer}"
-            qa_chunks.append(qa_chunk)
-    
-    return qa_chunks
-
-def split_transcript_by_speakers(transcript: str) -> List[str]:
-    """Split transcript while preserving speaker boundaries."""
-    if not transcript:
-        return []
-    
-    # Clean HTML
-    soup = BeautifulSoup(transcript, "html.parser")
-    clean_transcript = soup.get_text(" ", strip=True)
-    
-    # Split by speaker patterns (Speaker A/B with timestamps)
-    speaker_pattern = r'(Speaker [AB] \(\d{2}:\d{2}:\d{2}\):)'
-    parts = re.split(speaker_pattern, clean_transcript)
-    
-    if len(parts) < 3:
-        # No speaker patterns found, use regular chunking
-        chunks = split_into_chunks(clean_transcript, max_chars=1100, overlap=100)
-        return [chunk["text"] for chunk in chunks]
-    
-    # Group speaker turns into chunks
-    speaker_turns = []
-    for i in range(1, len(parts), 2):
-        if i + 1 < len(parts):
-            speaker = parts[i].strip()
-            content = parts[i + 1].strip()
-            if content:
-                speaker_turn = f"{speaker} {content}"
-                speaker_turns.append(speaker_turn)
-    
-    # Combine turns into appropriately sized chunks without breaking speaker boundaries
-    chunks = []
-    current_chunk = ""
-    max_size = 1100
-    
-    for turn in speaker_turns:
-        if current_chunk and len(current_chunk + "\n" + turn) > max_size:
-            chunks.append(current_chunk.strip())
-            current_chunk = turn
-        else:
-            current_chunk = current_chunk + "\n" + turn if current_chunk else turn
-    
-    if current_chunk.strip():
-        chunks.append(current_chunk.strip())
-    
-    return chunks
-
-async def process_evaluation(evaluation: Dict) -> Dict:
-    """Process evaluation with complete metadata extraction"""
-    try:
-        evaluation_text = evaluation.get("evaluation", "")
-        transcript_text = evaluation.get("transcript", "")
-        
-        if not evaluation_text and not transcript_text:
-            return {"status": "skipped", "reason": "no_content"}
-        
-        all_chunks = []
-        
-        # Process evaluation Q&A
-        if evaluation_text:
-            qa_chunks = extract_qa_pairs(evaluation_text)
-            for qa_text in qa_chunks:
-                if len(qa_text.strip()) >= 20:
-                    all_chunks.append({
-                        "text": qa_text,
-                        "content_type": "evaluation_qa",
-                        "offset": 0,
-                        "length": len(qa_text),
-                        "chunk_index": len(all_chunks)
-                    })
-        
-        # Process transcript
-        if transcript_text:
-            transcript_chunks = split_transcript_by_speakers(transcript_text)
-            for transcript_chunk in transcript_chunks:
-                if len(transcript_chunk.strip()) >= 20:
-                    all_chunks.append({
-                        "text": transcript_chunk,
-                        "content_type": "transcript",
-                        "offset": 0,
-                        "length": len(transcript_chunk),
-                        "chunk_index": len(all_chunks)
-                    })
-        
-        if not all_chunks:
-            return {"status": "skipped", "reason": "no_meaningful_content"}
-        
-        # Complete metadata extraction
-        meta = {
-            "evaluation_id": evaluation.get("evaluationId"),
-            "internal_id": evaluation.get("internalId"),
-            "template_id": evaluation.get("template_id"),
-            "template": evaluation.get("template_name"),
-            "program": evaluation.get("partner"),
-            "site": evaluation.get("site"),
-            "lob": evaluation.get("lob"),
-            "agent": evaluation.get("agentName"),
-            "disposition": evaluation.get("disposition"),
-            "sub_disposition": evaluation.get("subDisposition"),
-            "language": evaluation.get("language"),
-            "call_date": evaluation.get("call_date"),
-            "call_duration": evaluation.get("call_duration"),
-            "created_on": evaluation.get("created_on")
-        }
-        
-        # Use internalId as document ID
-        doc_id = str(evaluation.get("internalId", uuid4()))
-        collection = evaluation.get("template_name", "evaluations")
-        
-        # Index chunks with embeddings
-        indexed_chunks = 0
-        for i, chunk in enumerate(all_chunks):
-            try:
-                # Generate embedding
-                embedding = None
-                if EMBEDDER_AVAILABLE:
-                    try:
-                        embedding = embed_text(chunk["text"])
-                    except Exception as embed_error:
-                        logger.warning(f"Embedding failed for chunk {i}: {embed_error}")
+            # Follow redirect manually to see what we get
+            if redirect_url and redirect_url.startswith('http'):
+                log_debug(f"🔄 Following redirect to: {redirect_url}")
+                redirect_response = requests.get(redirect_url, headers=headers, timeout=timeout)
+                log_debug(f"🔄 Redirect response: {redirect_response.status_code}")
+                log_debug(f"🔄 Redirect content preview: {redirect_response.text[:200]}")
                 
-                doc_body = {
-                    "document_id": doc_id,
-                    "chunk_index": i,
-                    "text": chunk["text"],
-                    "content_type": chunk["content_type"],
-                    "metadata": meta,
-                    "source": "evaluation_api",
-                    "indexed_at": datetime.now().isoformat(),
-                    "chunk_length": chunk["length"]
+                return {
+                    "success": False,
+                    "status_code": response.status_code,
+                    "redirect_url": redirect_url,
+                    "redirect_status": redirect_response.status_code,
+                    "redirect_content_preview": redirect_response.text[:500],
+                    "error": f"Request redirected to {redirect_url}"
                 }
-                
-                if embedding:
-                    doc_body["embedding"] = embedding
-                
-                chunk_id = f"{doc_id}-{chunk['content_type']}-{i}"
-                index_document(chunk_id, doc_body, index_override=collection)
-                indexed_chunks += 1
-                
-            except Exception as e:
-                logger.warning(f"Failed to index chunk {i}: {e}")
-                continue
         
-        return {
-            "status": "success",
-            "document_id": doc_id,
-            "chunks_indexed": indexed_chunks,
-            "collection": collection,
-            "evaluation_chunks": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
-            "transcript_chunks": len([c for c in all_chunks if c["content_type"] == "transcript"]),
-            "total_content_length": sum(chunk["length"] for chunk in all_chunks)
-        }
+        # Analyze response content
+        response_text = response.text
         
-    except Exception as e:
-        error_msg = f"Failed to process evaluation {evaluation.get('evaluationId')}: {e}"
-        logger.error(error_msg)
-        return {"status": "error", "error": str(e)}
-
-# ============================================================================
-# FIXED API FETCHING WITH COMPRESSION HANDLING
-# ============================================================================
-
-async def fetch_evaluations(max_docs: int = None):
-    """FIXED: Fetch evaluations with proper compression handling"""
-    try:
-        if not API_BASE_URL:
-            raise Exception("API_BASE_URL is not configured")
-        
-        if not API_AUTH_VALUE:
-            raise Exception("API_AUTH_VALUE is not configured")
-        
-        log_import(f"📡 FIXED: Fetching evaluations from: {API_BASE_URL}")
-        
-        # FIXED: Minimal, safe headers (no compression issues)
-        headers = {
-            API_AUTH_KEY: API_AUTH_VALUE,
-            'Accept': 'application/json',
-            'User-Agent': 'Ask-InnovAI/2.7.0',
-            'Cache-Control': 'no-cache'
-            # REMOVED all compression-related headers that were causing issues
-        }
-        
-        # Request parameters
-        params = {}
-        if max_docs:
-            params["limit"] = max_docs
-        
-        log_import(f"🔑 FIXED: Using safe headers: {list(headers.keys())}")
-        log_import(f"📋 Request params: {params}")
-        
-        # Make request with FIXED handling
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                log_import(f"🔄 FIXED: Attempt {attempt + 1}/{max_retries}")
-                
-                response = session.get(
-                    API_BASE_URL, 
-                    headers=headers, 
-                    params=params, 
-                    timeout=60,
-                    verify=True,
-                    allow_redirects=True
-                )
-                
-                # Log response details
-                log_import(f"📊 FIXED: Response status: {response.status_code}")
-                log_import(f"📄 FIXED: Response content-type: {response.headers.get('content-type', 'unknown')}")
-                log_import(f"📏 FIXED: Response content length: {len(response.content)}")
-                
-                if response.status_code == 200:
-                    break
-                elif response.status_code in [502, 503, 504] and attempt < max_retries - 1:
-                    log_import(f"⚠️ FIXED: Server error {response.status_code}, retrying...")
-                    await asyncio.sleep(2 ** attempt)
-                    continue
-                else:
-                    raise Exception(f"API returned HTTP {response.status_code}: {response.text[:200]}")
-                    
-            except requests.exceptions.RequestException as e:
-                if attempt < max_retries - 1:
-                    log_import(f"⚠️ FIXED: Request failed, retrying: {e}")
-                    await asyncio.sleep(2 ** attempt)
-                    continue
-                else:
-                    raise Exception(f"Request failed after {max_retries} attempts: {e}")
-        
-        # FIXED: Handle compression properly
-        try:
-            response_text = detect_and_handle_compression(response)
-        except Exception as compression_error:
-            log_import(f"❌ Compression handling failed: {compression_error}")
-            # Fallback: try to get text directly
-            try:
-                response_text = response.text
-                if not response_text.strip():
-                    raise Exception("Response is empty after compression handling")
-            except Exception as fallback_error:
-                raise Exception(f"Could not extract text from response: {fallback_error}")
-        
-        # Validate response content
+        # Check if empty
         if not response_text.strip():
-            raise Exception("API returned empty response")
+            log_debug(f"❌ EMPTY RESPONSE")
+            return {
+                "success": False,
+                "status_code": response.status_code,
+                "error": "Empty response",
+                "headers": dict(response.headers)
+            }
         
-        # Check for HTML response
+        # Log response preview
+        log_debug(f"📄 RESPONSE PREVIEW (first 300 chars):")
+        log_debug(f"   {response_text[:300]}")
+        
+        # Detect response type
         if response_text.strip().startswith("<!DOCTYPE") or response_text.strip().startswith("<html"):
-            log_import("❌ FIXED: Received HTML instead of JSON")
+            log_debug(f"🌐 DETECTED: HTML Response")
+            
+            # Extract useful info from HTML
             soup = BeautifulSoup(response_text, "html.parser")
             title = soup.find("title")
-            title_text = title.get_text() if title else "Unknown"
-            raise Exception(f"API returned HTML page '{title_text}' instead of JSON. Check API endpoint URL.")
-        
-        # Parse JSON with enhanced error handling
-        try:
-            data = json.loads(response_text)
-            log_import("✅ FIXED: JSON parsing successful")
-        except json.JSONDecodeError as e:
-            log_import(f"❌ FIXED: JSON parsing failed: {str(e)}")
-            log_import(f"Raw response preview: {response_text[:500]}")
-            raise Exception(f"API returned invalid JSON: {str(e)}")
-        
-        # Extract evaluations from response
-        evaluations = data.get("evaluations", [])
-        log_import(f"📋 FIXED: Found {len(evaluations)} evaluations")
-        
-        if not evaluations and isinstance(data, list):
-            evaluations = data
-            log_import(f"📋 FIXED: Data is array format: {len(evaluations)} items")
-        
-        if not evaluations:
-            log_import(f"⚠️ FIXED: No evaluations found. Response keys: {list(data.keys()) if isinstance(data, dict) else 'Array response'}")
-        
-        return evaluations
-        
-    except Exception as e:
-        logger.error(f"❌ FIXED: Failed to fetch evaluations: {e}")
-        raise Exception(f"API request failed: {str(e)}")
-
-async def run_import(collection: str = "all", max_docs: int = None):
-    """FIXED: Import process with compression handling"""
-    try:
-        update_import_status("running", "Starting FIXED import with proper compression handling")
-        log_import("🚀 FIXED: Starting import with compression handling")
-        
-        if not API_AUTH_VALUE:
-            raise Exception("API_AUTH_VALUE environment variable is required")
-        
-        if not API_BASE_URL:
-            raise Exception("API_BASE_URL environment variable is required")
-        
-        # Fetch evaluations with fixed handling
-        update_import_status("running", "Fetching evaluation data with FIXED compression handling")
-        
-        evaluations = await fetch_evaluations(max_docs)
-        
-        if not evaluations:
-            log_import(f"⚠️ FIXED: No evaluations found")
-            results = {"total_documents_processed": 0, "total_chunks_indexed": 0, "import_type": "full"}
-            update_import_status("completed", results=results)
-            return
-        
-        # Process evaluations
-        update_import_status("running", f"Processing {len(evaluations)} evaluations")
-        log_import(f"🔄 FIXED: Processing {len(evaluations)} evaluations")
-        
-        total_processed = 0
-        total_chunks = 0
-        total_qa_chunks = 0
-        total_transcript_chunks = 0
-        errors = 0
-        
-        for i, evaluation in enumerate(evaluations):
-            if i % 10 == 0:
-                update_import_status("running", f"Processing evaluation {i+1}/{len(evaluations)}")
+            title_text = title.get_text() if title else "No title"
             
-            result = await process_evaluation(evaluation)
-            if result["status"] == "success":
-                total_processed += 1
-                total_chunks += result["chunks_indexed"]
-                total_qa_chunks += result.get("evaluation_chunks", 0)
-                total_transcript_chunks += result.get("transcript_chunks", 0)
-            elif result["status"] == "error":
-                errors += 1
+            # Look for error messages
+            error_msgs = []
+            for tag in soup.find_all(text=True):
+                text = tag.strip().lower()
+                if any(keyword in text for keyword in ['error', 'unauthorized', 'forbidden', 'not found', 'invalid']):
+                    error_msgs.append(tag.strip()[:100])
             
-            # Small delay to prevent overwhelming
-            if i % 20 == 0:
-                await asyncio.sleep(0.1)
+            # Look for login forms
+            forms = soup.find_all("form")
+            login_indicators = soup.find_all(text=lambda text: text and 'login' in text.lower())
+            
+            return {
+                "success": False,
+                "status_code": response.status_code,
+                "response_type": "html",
+                "html_title": title_text,
+                "error_messages": error_msgs[:3],  # First 3 error messages
+                "has_login_form": len(forms) > 0,
+                "login_indicators": len(login_indicators) > 0,
+                "content_preview": response_text[:800],
+                "error": f"Received HTML page '{title_text}' instead of JSON"
+            }
         
-        # Complete with results
-        results = {
-            "total_documents_processed": total_processed,
-            "total_chunks_indexed": total_chunks,
-            "total_qa_chunks": total_qa_chunks,
-            "total_transcript_chunks": total_transcript_chunks,
-            "errors": errors,
-            "import_type": "full",
-            "completed_at": datetime.now().isoformat(),
-            "api_endpoint": API_BASE_URL,
-            "compression_fixed": True,
-            "api_rules_applied": [
-                "Keep Question and Answers together",
-                "Never split between speakers",
-                "Complete metadata extraction",
-                "Fixed compression handling"
-            ]
-        }
+        elif response_text.strip().startswith("{") or response_text.strip().startswith("["):
+            log_debug(f"✅ DETECTED: JSON Response")
+            
+            try:
+                json_data = json.loads(response_text)
+                
+                # Analyze JSON structure
+                analysis = {"json_valid": True}
+                
+                if isinstance(json_data, dict):
+                    analysis["type"] = "object"
+                    analysis["keys"] = list(json_data.keys())
+                    
+                    if "evaluations" in json_data:
+                        evaluations = json_data["evaluations"]
+                        analysis["evaluations_count"] = len(evaluations) if isinstance(evaluations, list) else "Not a list"
+                        
+                        if isinstance(evaluations, list) and len(evaluations) > 0:
+                            sample = evaluations[0]
+                            analysis["sample_evaluation"] = {
+                                "has_internalId": "internalId" in sample,
+                                "has_evaluationId": "evaluationId" in sample,
+                                "has_evaluation": "evaluation" in sample,
+                                "has_transcript": "transcript" in sample,
+                                "keys": list(sample.keys()) if isinstance(sample, dict) else "Not an object"
+                            }
+                
+                elif isinstance(json_data, list):
+                    analysis["type"] = "array"
+                    analysis["length"] = len(json_data)
+                    
+                    if len(json_data) > 0:
+                        sample = json_data[0]
+                        analysis["sample_item"] = {
+                            "type": type(sample).__name__,
+                            "keys": list(sample.keys()) if isinstance(sample, dict) else "Not an object"
+                        }
+                
+                return {
+                    "success": True,
+                    "status_code": response.status_code,
+                    "response_type": "json",
+                    "json_analysis": analysis,
+                    "json_data": json_data
+                }
+                
+            except json.JSONDecodeError as e:
+                log_debug(f"❌ JSON PARSE ERROR: {e}")
+                return {
+                    "success": False,
+                    "status_code": response.status_code,
+                    "response_type": "invalid_json",
+                    "json_error": str(e),
+                    "content_preview": response_text[:500],
+                    "error": f"Invalid JSON: {e}"
+                }
         
-        log_import(f"🎉 FIXED: Import completed successfully!")
-        log_import(f"   📄 Documents processed: {total_processed}")
-        log_import(f"   🧩 Total chunks: {total_chunks}")
-        log_import(f"   📋 Q&A chunks: {total_qa_chunks}")
-        log_import(f"   🎙️ Transcript chunks: {total_transcript_chunks}")
-        log_import(f"   ❌ Errors: {errors}")
-        
-        update_import_status("completed", results=results)
-        
+        else:
+            log_debug(f"❓ UNKNOWN RESPONSE TYPE")
+            return {
+                "success": False,
+                "status_code": response.status_code,
+                "response_type": "unknown",
+                "content_preview": response_text[:500],
+                "error": "Unknown response format"
+            }
+            
+    except requests.exceptions.ConnectionError as e:
+        log_debug(f"❌ CONNECTION ERROR: {e}")
+        return {"success": False, "error": f"Connection failed: {e}"}
+    
+    except requests.exceptions.Timeout as e:
+        log_debug(f"⏰ TIMEOUT ERROR: {e}")
+        return {"success": False, "error": f"Request timeout: {e}"}
+    
     except Exception as e:
-        error_msg = f"FIXED import failed: {str(e)}"
-        log_import(f"❌ {error_msg}")
-        update_import_status("failed", error=error_msg)
+        log_debug(f"❌ UNEXPECTED ERROR: {e}")
+        return {"success": False, "error": f"Unexpected error: {e}"}
 
 # ============================================================================
-# FASTAPI ENDPOINTS
+# SPECIALIZED DEBUG ENDPOINTS
+# ============================================================================
+
+@app.get("/debug/test-your-endpoint")
+async def test_your_endpoint():
+    """Test your specific endpoint with multiple authentication methods"""
+    
+    log_debug("🎯 TESTING YOUR SPECIFIC ENDPOINT")
+    log_debug(f"   URL: {API_BASE_URL}")
+    
+    if not API_AUTH_VALUE:
+        return {
+            "status": "error",
+            "error": "API_AUTH_VALUE not configured",
+            "your_endpoint": API_BASE_URL
+        }
+    
+    results = {
+        "endpoint": API_BASE_URL,
+        "timestamp": datetime.now().isoformat(),
+        "tests": {}
+    }
+    
+    # Test different authentication methods with your endpoint
+    auth_methods = [
+        ("current", {API_AUTH_KEY: API_AUTH_VALUE}),
+        ("bearer", {"Authorization": f"Bearer {API_AUTH_VALUE}"}),
+        ("api_key", {"X-API-Key": API_AUTH_VALUE}),
+        ("basic", {"Authorization": f"Basic {API_AUTH_VALUE}"}),
+        ("token", {"X-Auth-Token": API_AUTH_VALUE}),
+        ("no_auth", {})
+    ]
+    
+    successful_method = None
+    
+    for method_name, auth_headers in auth_methods:
+        log_debug(f"🧪 Testing {method_name} authentication...")
+        
+        # Base headers
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "Ask-InnovAI/2.8.0",
+            "Cache-Control": "no-cache"
+        }
+        headers.update(auth_headers)
+        
+        # Test with GET
+        result = test_endpoint_with_method(API_BASE_URL, "GET", headers)
+        results["tests"][f"{method_name}_get"] = result
+        
+        if result.get("success"):
+            successful_method = (method_name, headers, "GET")
+            log_debug(f"✅ SUCCESS: {method_name} GET worked!")
+            break
+        
+        # If GET failed, try POST
+        result_post = test_endpoint_with_method(API_BASE_URL, "POST", headers)
+        results["tests"][f"{method_name}_post"] = result_post
+        
+        if result_post.get("success"):
+            successful_method = (method_name, headers, "POST")
+            log_debug(f"✅ SUCCESS: {method_name} POST worked!")
+            break
+    
+    # Summary
+    if successful_method:
+        method_name, headers, http_method = successful_method
+        results["recommendation"] = {
+            "use_method": method_name,
+            "use_headers": headers,
+            "use_http_method": http_method,
+            "message": f"Use {method_name} authentication with {http_method} method"
+        }
+    else:
+        results["recommendation"] = {
+            "message": "No authentication method worked",
+            "possible_issues": [
+                "API endpoint URL is incorrect",
+                "API requires different authentication",
+                "API is blocking requests from this server",
+                "API expects different headers or parameters"
+            ]
+        }
+    
+    return results
+
+@app.get("/debug/compare-browsers")
+async def compare_with_browser():
+    """Compare our request with what a browser would send"""
+    
+    if not API_AUTH_VALUE:
+        return {"error": "API_AUTH_VALUE not configured"}
+    
+    log_debug("🌐 COMPARING WITH BROWSER REQUEST")
+    
+    # Test 1: Our current method
+    current_headers = {
+        API_AUTH_KEY: API_AUTH_VALUE,
+        "Accept": "application/json",
+        "User-Agent": "Ask-InnovAI/2.8.0"
+    }
+    
+    current_result = test_endpoint_with_method(API_BASE_URL, "GET", current_headers)
+    
+    # Test 2: Full browser headers
+    browser_headers = {
+        API_AUTH_KEY: API_AUTH_VALUE,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+        "Cache-Control": "max-age=0"
+    }
+    
+    browser_result = test_endpoint_with_method(API_BASE_URL, "GET", browser_headers)
+    
+    # Test 3: Minimal headers
+    minimal_headers = {
+        API_AUTH_KEY: API_AUTH_VALUE
+    }
+    
+    minimal_result = test_endpoint_with_method(API_BASE_URL, "GET", minimal_headers)
+    
+    return {
+        "endpoint": API_BASE_URL,
+        "comparison": {
+            "current_method": {
+                "headers": current_headers,
+                "result": current_result
+            },
+            "browser_style": {
+                "headers": browser_headers,
+                "result": browser_result
+            },
+            "minimal": {
+                "headers": minimal_headers,
+                "result": minimal_result
+            }
+        },
+        "analysis": {
+            "current_works": current_result.get("success", False),
+            "browser_works": browser_result.get("success", False),
+            "minimal_works": minimal_result.get("success", False)
+        }
+    }
+
+@app.get("/debug/test-url-variations")
+async def test_url_variations():
+    """Test variations of your endpoint URL"""
+    
+    if not API_AUTH_VALUE:
+        return {"error": "API_AUTH_VALUE not configured"}
+    
+    base_url = "https://innovai-6abj.onrender.com"
+    
+    # Different endpoint variations to test
+    url_variations = [
+        f"{base_url}/api/content",  # Your current URL
+        f"{base_url}/api/evaluations",
+        f"{base_url}/api/v1/content",
+        f"{base_url}/api/v1/evaluations",
+        f"{base_url}/content",
+        f"{base_url}/evaluations",
+        f"{base_url}/api/content/",  # With trailing slash
+        f"{base_url}/api/content?format=json",  # With format parameter
+    ]
+    
+    headers = {
+        API_AUTH_KEY: API_AUTH_VALUE,
+        "Accept": "application/json",
+        "User-Agent": "Ask-InnovAI/2.8.0"
+    }
+    
+    results = {}
+    
+    for url in url_variations:
+        log_debug(f"🧪 Testing URL: {url}")
+        result = test_endpoint_with_method(url, "GET", headers)
+        results[url] = {
+            "success": result.get("success", False),
+            "status_code": result.get("status_code"),
+            "response_type": result.get("response_type"),
+            "error": result.get("error")
+        }
+        
+        if result.get("success"):
+            results[url]["evaluations_found"] = "Yes" if result.get("json_analysis", {}).get("evaluations_count", 0) else "No"
+    
+    return {
+        "base_url": base_url,
+        "your_current_url": API_BASE_URL,
+        "url_test_results": results,
+        "working_urls": [url for url, result in results.items() if result["success"]]
+    }
+
+@app.get("/debug/logs")
+async def get_debug_logs():
+    """Get detailed debug logs"""
+    return {
+        "logs": debug_logs,
+        "log_count": len(debug_logs),
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.post("/debug/clear-logs")
+async def clear_debug_logs():
+    """Clear debug logs"""
+    global debug_logs
+    debug_logs = []
+    return {"status": "success", "message": "Debug logs cleared"}
+
+# ============================================================================
+# BASIC ENDPOINTS
 # ============================================================================
 
 @app.get("/ping")
 async def ping():
-    return {
-        "status": "ok", 
-        "timestamp": datetime.now().isoformat(),
-        "service": "ask-innovai-compression-fixed",
-        "version": "2.7.0"
-    }
+    return {"status": "ok", "timestamp": datetime.now().isoformat(), "version": "2.8.0_endpoint_debug"}
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
@@ -637,236 +548,127 @@ async def get_index():
         with open("static/index.html", "r") as f:
             return HTMLResponse(content=f.read())
     except FileNotFoundError:
-        return HTMLResponse(content="""
+        return HTMLResponse(content=f"""
         <html><body>
-        <h1>🤖 Ask InnovAI Admin - COMPRESSION FIXED</h1>
-        <p>Fixed compression issue that was causing binary response data.</p>
-        <p>This version properly handles gzip/compressed API responses.</p>
+        <h1>🤖 Ask InnovAI Endpoint Debug</h1>
+        <p>Debug interface for your specific endpoint: <code>{API_BASE_URL}</code></p>
+        <h2>Debug Endpoints:</h2>
         <ul>
-        <li><a href="/ping">/ping</a> - Health check</li>
-        <li><a href="/health">/health</a> - System health</li>
-        <li><a href="/debug/test-compression-fix">/debug/test-compression-fix</a> - Test compression fix</li>
-        <li><a href="/chat">/chat</a> - Chat interface</li>
+        <li><a href="/debug/test-your-endpoint">/debug/test-your-endpoint</a> - Test your specific endpoint with all auth methods</li>
+        <li><a href="/debug/compare-browsers">/debug/compare-browsers</a> - Compare with browser requests</li>
+        <li><a href="/debug/test-url-variations">/debug/test-url-variations</a> - Test different URL variations</li>
+        <li><a href="/debug/logs">/debug/logs</a> - View detailed debug logs</li>
         </ul>
+        <h2>Instructions:</h2>
+        <ol>
+        <li>Run <strong>/debug/test-your-endpoint</strong> first</li>
+        <li>Check results to see which authentication method works</li>
+        <li>If none work, try <strong>/debug/test-url-variations</strong></li>
+        <li>Check <strong>/debug/logs</strong> for detailed request/response info</li>
+        </ol>
+        <p><strong>Your current endpoint:</strong> {API_BASE_URL}</p>
         </body></html>
         """)
 
-@app.get("/debug/test-compression-fix")
-async def test_compression_fix():
-    """Test the compression fix"""
-    try:
-        if not API_BASE_URL or not API_AUTH_VALUE:
-            return {
-                "status": "error",
-                "error": "API_BASE_URL or API_AUTH_VALUE not configured"
-            }
-        
-        log_import("🧪 Testing COMPRESSION FIX...")
-        
-        # Test the fixed fetch function
-        test_evaluations = await fetch_evaluations(1)  # Get just 1 for testing
-        
-        return {
-            "status": "success",
-            "compression_fix_test": "passed",
-            "evaluations_found": len(test_evaluations) if test_evaluations else 0,
-            "sample_evaluation": {
-                "internal_id": test_evaluations[0].get("internalId") if test_evaluations else None,
-                "evaluation_id": test_evaluations[0].get("evaluationId") if test_evaluations else None,
-                "agent": test_evaluations[0].get("agentName") if test_evaluations else None,
-                "has_evaluation": bool(test_evaluations[0].get("evaluation")) if test_evaluations else False,
-                "has_transcript": bool(test_evaluations[0].get("transcript")) if test_evaluations else False
-            } if test_evaluations else None,
-            "compression_fixes": [
-                "✅ Removed Accept-Encoding header",
-                "✅ Added compression detection",
-                "✅ Manual gzip decompression fallback",
-                "✅ Enhanced response validation",
-                "✅ Binary data detection"
-            ],
-            "message": "COMPRESSION FIX is working correctly!"
-        }
-        
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "message": "Compression fix test failed - check logs for details"
-        }
-
-@app.get("/health")
-async def health():
-    """Enhanced health check"""
-    try:
-        components = {}
-        
-        # GenAI status
-        components["genai"] = {
-            "status": "connected" if GENAI_ACCESS_KEY else "not configured",
-            "endpoint": GENAI_ENDPOINT
-        }
-        
-        # OpenSearch status
-        opensearch_host = os.getenv("OPENSEARCH_HOST")
-        components["opensearch"] = {
-            "status": "configured" if opensearch_host else "not configured",
-            "host": opensearch_host or "not set"
-        }
-        
-        # API Source status
-        components["api_source"] = {
-            "status": "configured" if (API_BASE_URL and API_AUTH_VALUE) else "not configured",
-            "endpoint": API_BASE_URL or "not set",
-            "compression_fixed": True
-        }
-        
-        # Embedder status
-        if EMBEDDER_AVAILABLE:
-            try:
-                stats = get_embedding_stats()
-                components["embeddings"] = {
-                    "status": "healthy", 
-                    "model": stats.get("model_name", "unknown"),
-                    "provider": stats.get("provider", "local"),
-                    "dimension": stats.get("embedding_dimension", 384),
-                    "model_loaded": stats.get("model_loaded", False)
-                }
-            except Exception as e:
-                components["embeddings"] = {
-                    "status": "warning", 
-                    "error": str(e)
-                }
-        else:
-            components["embeddings"] = {
-                "status": "not available",
-                "note": "Will run without embeddings"
-            }
-        
-        return {
-            "status": "ok",
-            "timestamp": datetime.now().isoformat(),
-            "components": components,
-            "import_status": import_status["status"],
-            "environment": "digital_ocean",
-            "version": "2.7.0_compression_fixed",
-            "fixes_applied": [
-                "Removed Accept-Encoding header causing compression issues",
-                "Added compression detection and handling",
-                "Manual gzip decompression fallback",
-                "Binary data detection and error handling"
-            ]
-        }
-        
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return {
-            "status": "error",
-            "timestamp": datetime.now().isoformat(),
-            "error": str(e)
-        }
-
-# Chat endpoint (unchanged)
-@app.post("/chat")
-async def chat_handler(request: ChatRequest):
-    """Chat functionality"""
-    try:
-        if not GENAI_ACCESS_KEY:
-            return {"reply": "Chat service not configured. Please set GENAI_ACCESS_KEY in environment variables."}
-        
-        # Simple search for context
-        context = ""
-        try:
-            search_results = search_opensearch(request.message)
-            if search_results:
-                first_result = search_results[0].get('_source', {})
-                context = first_result.get('text', '')[:500]
-        except Exception as search_error:
-            logger.warning(f"Search failed: {search_error}")
-        
-        # Build messages
-        system_msg = "You are MetroAI, an intelligent assistant for Metro by T-Mobile customer service operations."
-        if context:
-            system_msg += f" Here's relevant context from the knowledge base: {context}"
-        
-        messages = [{"role": "system", "content": system_msg}]
-        messages.extend([{"role": m["role"], "content": m["content"]} for m in request.history])
-        messages.append({"role": "user", "content": request.message})
-        
-        # Call Digital Ocean AI
-        payload = {"model": GENAI_ACCESS_KEY, "messages": messages}
-        
-        response = requests.post(
-            GENAI_ENDPOINT,
-            headers={
-                "Authorization": f"Bearer {GENAI_ACCESS_KEY}",
-                "Content-Type": "application/json"
-            },
-            json=payload,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            reply = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            return {
-                "reply": reply.strip() if reply else "Sorry, I couldn't generate a response.",
-                "context_used": bool(context)
-            }
-        else:
-            logger.error(f"AI service error: {response.status_code} - {response.text}")
-            return {"reply": f"AI service temporarily unavailable (status: {response.status_code})"}
-            
-    except Exception as e:
-        logger.error(f"Chat error: {e}")
-        return {"reply": "Sorry, there was an unexpected error. Please try again."}
-
-# Search endpoint (unchanged)
-@app.get("/search")
-async def search(q: str):
-    """Basic search with error handling"""
-    try:
-        results = search_opensearch(q)
-        formatted_results = []
-        
-        for hit in results:
-            source = hit.get('_source', {})
-            metadata = source.get('metadata', {})
-            
-            formatted_results.append({
-                "id": hit.get('_id'),
-                "title": f"{metadata.get('agent', 'Agent')} - {metadata.get('disposition', 'Call')}",
-                "text": source.get('text', ''),
-                "score": hit.get('_score', 0),
-                "collection": metadata.get('template', 'unknown'),
-                "metadata": metadata,
-                "content_type": source.get('content_type', 'unknown')
-            })
-        
-        return {
-            "status": "success", 
-            "results": formatted_results,
-            "total_hits": len(formatted_results)
-        }
-    except Exception as e:
-        logger.error(f"Search error: {e}")
-        return {
-            "status": "error", 
-            "error": str(e),
-            "results": []
-        }
-
-# Import management endpoints
 @app.get("/status")
 async def get_import_status():
     return import_status
 
-@app.get("/logs")
-async def get_logs():
-    return {"logs": import_logs[-50:]}
+# Simplified import for testing
+async def run_import_debug(collection: str = "all", max_docs: int = None):
+    """Debug import using the working authentication method"""
+    try:
+        update_import_status("running", "Starting endpoint-specific debug import")
+        log_debug("🚀 STARTING ENDPOINT DEBUG IMPORT")
+        
+        # First, find working authentication method
+        log_debug("🔍 Finding working authentication method...")
+        
+        auth_methods = [
+            ("current", {API_AUTH_KEY: API_AUTH_VALUE}),
+            ("bearer", {"Authorization": f"Bearer {API_AUTH_VALUE}"}),
+            ("api_key", {"X-API-Key": API_AUTH_VALUE})
+        ]
+        
+        working_method = None
+        
+        for method_name, auth_headers in auth_methods:
+            headers = {
+                "Accept": "application/json",
+                "User-Agent": "Ask-InnovAI/2.8.0"
+            }
+            headers.update(auth_headers)
+            
+            result = test_endpoint_with_method(API_BASE_URL, "GET", headers, {"limit": 1} if max_docs else None)
+            
+            if result.get("success") and result.get("json_data"):
+                working_method = (method_name, headers)
+                log_debug(f"✅ Found working method: {method_name}")
+                break
+        
+        if not working_method:
+            error_msg = "No authentication method worked for your endpoint"
+            log_debug(f"❌ {error_msg}")
+            update_import_status("failed", error=error_msg)
+            return
+        
+        method_name, headers = working_method
+        
+        # Use working method to fetch data
+        log_debug(f"📡 Fetching data using {method_name} method...")
+        params = {"limit": max_docs} if max_docs else {}
+        
+        result = test_endpoint_with_method(API_BASE_URL, "GET", headers, params)
+        
+        if not result.get("success"):
+            error_msg = f"Data fetch failed: {result.get('error', 'Unknown error')}"
+            log_debug(f"❌ {error_msg}")
+            update_import_status("failed", error=error_msg)
+            return
+        
+        json_data = result.get("json_data", {})
+        evaluations = json_data.get("evaluations", [])
+        
+        if isinstance(json_data, list):
+            evaluations = json_data
+        
+        log_debug(f"📊 Successfully retrieved {len(evaluations)} evaluations")
+        
+        # Process a few for testing
+        test_count = min(2, len(evaluations))
+        log_debug(f"🧪 Processing {test_count} evaluations for testing")
+        
+        for i, evaluation in enumerate(evaluations[:test_count]):
+            log_debug(f"📄 Evaluation {i+1}:")
+            log_debug(f"   Internal ID: {evaluation.get('internalId', 'missing')}")
+            log_debug(f"   Evaluation ID: {evaluation.get('evaluationId', 'missing')}")
+            log_debug(f"   Agent: {evaluation.get('agentName', 'missing')}")
+            log_debug(f"   Has evaluation text: {bool(evaluation.get('evaluation'))}")
+            log_debug(f"   Has transcript: {bool(evaluation.get('transcript'))}")
+        
+        results = {
+            "total_available": len(evaluations),
+            "authentication_method": method_name,
+            "endpoint_working": True,
+            "sample_data": evaluations[0] if evaluations else None,
+            "debug_mode": True,
+            "completed_at": datetime.now().isoformat()
+        }
+        
+        log_debug(f"🎉 Endpoint debug completed successfully!")
+        log_debug(f"   Working auth method: {method_name}")
+        log_debug(f"   Evaluations available: {len(evaluations)}")
+        
+        update_import_status("completed", results=results)
+        
+    except Exception as e:
+        error_msg = f"Endpoint debug failed: {str(e)}"
+        log_debug(f"❌ {error_msg}")
+        update_import_status("failed", error=error_msg)
 
 @app.post("/import")
 async def start_import(request: ImportRequest, background_tasks: BackgroundTasks):
-    """Start FIXED import process"""
+    """Start endpoint debug import"""
     if import_status["status"] == "running":
         raise HTTPException(status_code=400, detail="Import already running")
     
@@ -880,47 +682,16 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
         "error": None
     })
     
-    # Start fixed import
-    background_tasks.add_task(run_import, request.collection, request.max_docs)
-    return {"status": "success", "message": "COMPRESSION FIXED import started"}
-
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Fixed startup initialization"""
-    try:
-        logger.info("🚀 Ask InnovAI COMPRESSION FIXED starting up...")
-        logger.info(f"   Version: 2.7.0 - FIXED compression handling")
-        logger.info(f"   Python version: {sys.version}")
-        logger.info(f"   PORT: {os.getenv('PORT', '8080')}")
-        
-        # Log compression fixes
-        logger.info("✅ COMPRESSION FIXES applied:")
-        logger.info("   • Removed Accept-Encoding header causing compression issues")
-        logger.info("   • Added compression detection and handling")
-        logger.info("   • Manual gzip decompression fallback")
-        logger.info("   • Binary data detection and error handling")
-        
-        # Try to preload embedder if available
-        if EMBEDDER_AVAILABLE:
-            try:
-                preload_embedding_model()
-                logger.info("✅ Embedding model preloaded successfully")
-            except Exception as e:
-                logger.warning(f"⚠️ Embedding preload failed (will load on demand): {e}")
-        
-        logger.info("🎉 Ask InnovAI COMPRESSION FIXED startup complete!")
-        logger.info("📋 Test endpoint: /debug/test-compression-fix")
-        
-    except Exception as e:
-        logger.error(f"❌ Startup error: {e}")
+    # Start debug import
+    background_tasks.add_task(run_import_debug, request.collection, request.max_docs)
+    return {"status": "success", "message": "Endpoint debug import started"}
 
 # For Digital Ocean App Platform
 if __name__ == "__main__":
     import uvicorn
     
     port = int(os.getenv("PORT", 8080))
-    logger.info(f"🚀 Starting Ask InnovAI COMPRESSION FIXED on port {port}")
+    logger.info(f"🚀 Starting Ask InnovAI Endpoint Debug on port {port}")
     
     uvicorn.run(
         app, 
