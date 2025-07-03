@@ -225,12 +225,16 @@ def split_transcript_by_speakers(transcript: str) -> List[str]:
 
 async def process_evaluation(evaluation: Dict) -> Dict:
     """Process evaluation with production rules"""
+    
+
     try:
         evaluation_text = evaluation.get("evaluation", "")
         transcript_text = evaluation.get("transcript", "")
         
         if not evaluation_text and not transcript_text:
             return {"status": "skipped", "reason": "no_content"}
+        
+        
         
         all_chunks = []
         
