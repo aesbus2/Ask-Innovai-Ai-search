@@ -666,7 +666,7 @@
                     Object.entries(health.components).forEach(([component, info]) => {
                         const status = info.status || 'unknown';
                         const isHealthy = status === 'connected' || status === 'healthy' || status === 'configured';
-                        const isWarning = status === 'not configured' || status === 'warning';
+                        const isWarning = status === 'not configured' || status === 'warning' || status === 'connection_failed';
                         const cssClass = isHealthy ? '' : (isWarning ? 'warning' : 'unhealthy');
                         
                         let emoji = '✅';
@@ -674,17 +674,23 @@
                             emoji = isWarning ? '⚠️' : '❌';
                         }
                         
+                        let errorInfo = '';
+                        if (info.error) {
+                            errorInfo = `<br><small style="color: #dc3545;">${info.error}</small>`;
+                        }
+                        
                         html += `
                             <div class="health-item ${cssClass}">
                                 <div class="health-label">${emoji} ${component.toUpperCase()}</div>
-                                <div class="health-value">${status}</div>
+                                <div class="health-value">${status}${errorInfo}</div>
                             </div>
                         `;
                     });
                 }
                 
                 if (health.status) {
-                    const statusEmoji = health.status === 'ok' ? '✅' : '❌';
+                    const statusEmoji = health.status === 'ok' ? '✅' : 
+                                      health.status === 'degraded' ? '⚠️' : '❌';
                     html += `
                         <div class="health-item">
                             <div class="health-label">${statusEmoji} OVERALL</div>
@@ -692,6 +698,14 @@
                         </div>
                     `;
                 }
+                
+                // Add app status
+                html += `
+                    <div class="health-item">
+                        <div class="health-label">🚀 APPLICATION</div>
+                        <div class="health-value">Running (v${health.version || 'unknown'})</div>
+                    </div>
+                `;
                 
                 container.innerHTML = html;
                 
@@ -701,6 +715,10 @@
                     <div class="health-item unhealthy">
                         <div class="health-label">❌ SYSTEM</div>
                         <div class="health-value">Error: ${error.message}</div>
+                    </div>
+                    <div class="health-item">
+                        <div class="health-label">🔧 SUGGESTION</div>
+                        <div class="health-value">Check server logs for details</div>
                     </div>
                 `;
             }
@@ -843,12 +861,21 @@
                         }
                     }
                     
+                    let warningInfo = '';
+                    if (data.warning) {
+                        warningInfo = `<p style="color: #856404; margin-top: 10px;"><strong>Warning:</strong> ${data.warning}</p>`;
+                    }
+                    
                     container.innerHTML = `
                         <div class="result-card">
                             <h4>✅ OpenSearch Connection Test</h4>
                             <p><strong>Status:</strong> Connected successfully</p>
                             <p><strong>Host:</strong> ${data.host}</p>
+                            <p><strong>Port:</strong> ${data.port}</p>
+                            <p><strong>URL:</strong> ${data.url}</p>
+                            <p><strong>SSL:</strong> ${data.ssl_enabled ? 'Enabled' : 'Disabled'}</p>
                             ${indicesInfo}
+                            ${warningInfo}
                             <p style="color: #28a745; margin-top: 10px;">Ready for import!</p>
                             <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
                                 Your data will be indexed as: <strong>"Ai Corporate SPTR - TEST"</strong>
@@ -856,14 +883,39 @@
                         </div>
                     `;
                 } else {
+                    // Handle both 500 and 503 errors
+                    const isServiceUnavailable = response.status === 503;
+                    const statusText = isServiceUnavailable ? "Service Unavailable" : "Connection Failed";
+                    
+                    let debugInfo = '';
+                    if (data.details) {
+                        debugInfo = `
+                            <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; font-size: 0.9em;">
+                                <strong>Debug Info:</strong><br>
+                                Connection Working: ${data.details.connection_working ? 'Yes' : 'No'}<br>
+                                Last Test: ${data.details.last_test ? new Date(data.details.last_test * 1000).toLocaleString() : 'Never'}<br>
+                                ${data.details.error ? `Error: ${data.details.error}` : ''}
+                            </div>
+                        `;
+                    }
+                    
                     container.innerHTML = `
                         <div class="result-card">
                             <h4>❌ OpenSearch Connection Test</h4>
-                            <p><strong>Status:</strong> Connection failed</p>
+                            <p><strong>Status:</strong> ${statusText}</p>
                             <p><strong>Host:</strong> ${data.host}</p>
+                            <p><strong>Port:</strong> ${data.port}</p>
+                            <p><strong>URL:</strong> ${data.url}</p>
+                            <p><strong>SSL:</strong> ${data.ssl_enabled ? 'Enabled' : 'Disabled'}</p>
                             <p style="color: #dc3545; margin-top: 10px;"><strong>Error:</strong> ${data.message}</p>
+                            ${debugInfo}
                             <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
-                                Please check your OpenSearch configuration and ensure the service is running.
+                                <strong>🔧 Troubleshooting:</strong><br>
+                                1. Check if OpenSearch service is running<br>
+                                2. Verify host: <code>${data.host}</code><br>
+                                3. Verify port: <code>${data.port}</code><br>
+                                4. Check credentials (OPENSEARCH_USER/OPENSEARCH_PASS)<br>
+                                5. Ensure network access to port ${data.port}
                             </p>
                         </div>
                     `;
@@ -872,8 +924,11 @@
                 container.innerHTML = `
                     <div class="result-card">
                         <h4>❌ OpenSearch Connection Test</h4>
-                        <p><strong>Status:</strong> Test failed</p>
+                        <p><strong>Status:</strong> Request failed</p>
                         <p style="color: #dc3545;"><strong>Error:</strong> ${error.message}</p>
+                        <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                            This could indicate a network issue or that the server is not responding.
+                        </p>
                     </div>
                 `;
             }

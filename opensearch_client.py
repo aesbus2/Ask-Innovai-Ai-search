@@ -1,5 +1,5 @@
-# opensearch_client.py - Simplified without Environment Variable
-# Version: 1.6.0
+# opensearch_client.py - Fixed with Proper Port Handling
+# Version: 1.8.0
 
 from opensearchpy import OpenSearch
 import os
@@ -12,29 +12,97 @@ logger = logging.getLogger(__name__)
 # Default index name for generic functions (your data will use template_name)
 DEFAULT_INDEX = "innovai-search-default"
 
-# Create OpenSearch client instance with better timeout settings
+# Build OpenSearch URL properly with separate host and port
+def build_opensearch_url():
+    """Build OpenSearch URL from host and port environment variables"""
+    host = os.getenv("OPENSEARCH_HOST", "localhost")
+    
+    # TEMPORARY HARDCODED PORT - Until environment variables are updated
+    # Remove this hardcoding once OPENSEARCH_PORT=25060 is set in environment
+    port = int(os.getenv("OPENSEARCH_PORT", "25060"))
+    
+    # Log the port being used
+    logger.info(f"🔧 Using OpenSearch port: {port}")
+    if port == 25060:
+        logger.info("   (Using correct port 25060 for Digital Ocean)")
+    
+    # Remove protocol if included in host
+    if host.startswith("http://"):
+        host = host.replace("http://", "")
+        protocol = "http"
+    elif host.startswith("https://"):
+        host = host.replace("https://", "")
+        protocol = "https"
+    else:
+        # Default to http for local/development, https for cloud
+        protocol = "https" if "cloud" in host.lower() or "digitalocean" in host.lower() else "http"
+    
+    url = f"{protocol}://{host}:{port}"
+    logger.info(f"🔌 OpenSearch URL: {url}")
+    return url
+
+# Create OpenSearch client instance with proper URL construction
+opensearch_url = build_opensearch_url()
+
 client = OpenSearch(
-    hosts=[os.getenv("OPENSEARCH_HOST", "http://localhost:9200")],
+    hosts=[opensearch_url],
     http_auth=(
         os.getenv("OPENSEARCH_USER", "admin"),
         os.getenv("OPENSEARCH_PASS", "admin")
     ),
-    use_ssl=False,
-    verify_certs=False,
-    timeout=30,  # Request timeout
-    max_retries=3,  # Retry attempts
+    use_ssl=opensearch_url.startswith("https"),
+    verify_certs=False,  # Often needed for cloud services
+    timeout=15,
+    max_retries=2,
     retry_on_timeout=True
 )
 
+# Connection status tracking
+_connection_status = {
+    "tested": False,
+    "connected": False,
+    "last_error": None,
+    "last_test": None
+}
+
 def test_connection():
-    """Test OpenSearch connection"""
+    """Test OpenSearch connection with caching"""
+    global _connection_status
+    
+    # Don't test too frequently
+    if _connection_status["tested"]:
+        return _connection_status["connected"]
+    
     try:
         result = client.ping()
-        logger.info(f"OpenSearch connection test: {'SUCCESS' if result else 'FAILED'}")
+        _connection_status.update({
+            "tested": True,
+            "connected": result,
+            "last_error": None,
+            "last_test": time.time()
+        })
+        
+        if result:
+            logger.info("✅ OpenSearch connection successful")
+        else:
+            logger.warning("⚠️ OpenSearch ping returned False")
+            
         return result
+        
     except Exception as e:
-        logger.error(f"OpenSearch connection test failed: {e}")
-        raise
+        _connection_status.update({
+            "tested": True,
+            "connected": False,
+            "last_error": str(e),
+            "last_test": time.time()
+        })
+        
+        logger.warning(f"⚠️ OpenSearch connection failed: {e}")
+        return False
+
+def get_connection_status():
+    """Get current connection status"""
+    return _connection_status.copy()
 
 def index_document(doc_id, body, index_override=None, retry_count=0):
     """
@@ -49,6 +117,10 @@ def index_document(doc_id, body, index_override=None, retry_count=0):
     if not index_override:
         raise ValueError("index_override is required. Specify the target index name.")
     
+    # Check connection first
+    if not _connection_status["connected"] and not test_connection():
+        raise Exception(f"OpenSearch not available: {_connection_status['last_error']}")
+    
     max_retries = 3
     
     try:
@@ -56,7 +128,7 @@ def index_document(doc_id, body, index_override=None, retry_count=0):
             index=index_override,
             id=doc_id,
             body=body,
-            timeout='30s'
+            timeout='15s'  # Reduced timeout
         )
         logger.debug(f"Document indexed successfully: {doc_id} -> {index_override}")
         return result
@@ -66,6 +138,10 @@ def index_document(doc_id, body, index_override=None, retry_count=0):
         
         # Check if it's a timeout or connection error
         if any(keyword in error_msg.lower() for keyword in ['timeout', 'connection', 'unreachable']):
+            # Mark connection as failed
+            _connection_status["connected"] = False
+            _connection_status["last_error"] = error_msg
+            
             if retry_count < max_retries:
                 logger.warning(f"OpenSearch timeout, retrying ({retry_count + 1}/{max_retries}): {doc_id}")
                 time.sleep(2 ** retry_count)  # Exponential backoff
@@ -86,6 +162,11 @@ def search_opensearch(query, index_override=None):
         index_override: Specific index name (use your template_name)
     """
     index = index_override or DEFAULT_INDEX
+    
+    # Check connection first
+    if not _connection_status["connected"] and not test_connection():
+        logger.warning("OpenSearch not available for search")
+        return []
     
     try:
         body = {
@@ -108,7 +189,9 @@ def search_opensearch(query, index_override=None):
         
     except Exception as e:
         logger.error(f"OpenSearch search error: {e}")
-        # Return empty results instead of crashing
+        # Mark connection as potentially failed
+        _connection_status["connected"] = False
+        _connection_status["last_error"] = str(e)
         return []
 
 def search_documents_advanced(query, k=5, filters=None, index_override=None):
@@ -122,6 +205,11 @@ def search_documents_advanced(query, k=5, filters=None, index_override=None):
         index_override: Specific index name (use your template_name)
     """
     index = index_override or DEFAULT_INDEX
+    
+    # Check connection first
+    if not _connection_status["connected"] and not test_connection():
+        logger.warning("OpenSearch not available for advanced search")
+        return []
     
     try:
         must_clauses = [{"multi_match": {"query": query, "fields": ["text"]}}]
@@ -150,6 +238,8 @@ def search_documents_advanced(query, k=5, filters=None, index_override=None):
         
     except Exception as e:
         logger.error(f"OpenSearch advanced search error: {e}")
+        _connection_status["connected"] = False
+        _connection_status["last_error"] = str(e)
         return []
 
 def search_vector(embedding, k=5, filters=None, index_override=None):
@@ -163,6 +253,11 @@ def search_vector(embedding, k=5, filters=None, index_override=None):
         index_override: Specific index name (use your template_name)
     """
     index = index_override or DEFAULT_INDEX
+    
+    # Check connection first
+    if not _connection_status["connected"] and not test_connection():
+        logger.warning("OpenSearch not available for vector search")
+        return []
     
     try:
         must = []
@@ -200,6 +295,8 @@ def search_vector(embedding, k=5, filters=None, index_override=None):
         
     except Exception as e:
         logger.error(f"OpenSearch vector search error: {e}")
+        _connection_status["connected"] = False
+        _connection_status["last_error"] = str(e)
         return []
 
 def search_vector_with_fallback(query, embedding, k=5, filters=None, index_override=None):
@@ -231,6 +328,13 @@ def get_index_health(index_override=None):
     """
     index = index_override or DEFAULT_INDEX
     
+    # Check connection first
+    if not _connection_status["connected"] and not test_connection():
+        return {
+            "status": "connection_failed",
+            "message": f"OpenSearch not available: {_connection_status['last_error']}"
+        }
+    
     try:
         # Check if index exists
         exists = client.indices.exists(index=index)
@@ -253,23 +357,56 @@ def get_index_health(index_override=None):
         
     except Exception as e:
         logger.error(f"OpenSearch health check error: {e}")
+        _connection_status["connected"] = False
+        _connection_status["last_error"] = str(e)
         return {
             "status": "error",
             "message": str(e)
         }
 
-# Test connection on import
+# NON-BLOCKING STARTUP - App can start even if OpenSearch is down
 try:
-    if test_connection():
-        logger.info("✅ OpenSearch client initialized successfully")
-        logger.info(f"   Default index for generic functions: {DEFAULT_INDEX}")
-        logger.info(f"   Your data will use template_name as index (e.g., 'Ai Corporate SPTR - TEST')")
-    else:
-        logger.warning("⚠️ OpenSearch connection test failed")
+    opensearch_host = os.getenv("OPENSEARCH_HOST", "not_configured")
+    opensearch_port = os.getenv("OPENSEARCH_PORT", "25060")
+    opensearch_user = os.getenv("OPENSEARCH_USER", "admin")
+    
+    logger.info(f"🔌 OpenSearch client initialized (non-blocking)")
+    logger.info(f"   Host: {opensearch_host}")
+    logger.info(f"   Port: {opensearch_port}")
+    logger.info(f"   User: {opensearch_user}")
+    logger.info(f"   Full URL: {opensearch_url}")
+    logger.info(f"   Default index: {DEFAULT_INDEX}")
+    logger.info(f"   Data will use template_name as index (e.g., 'Ai Corporate SPTR - TEST')")
+    logger.info(f"   Connection will be tested on first use")
+    
+    # Optional: Test connection in background (non-blocking)
+    # This gives us early feedback without blocking startup
+    import threading
+    def background_test():
+        try:
+            time.sleep(2)  # Give app time to start
+            test_connection()
+        except:
+            pass  # Don't crash if background test fails
+    
+    threading.Thread(target=background_test, daemon=True).start()
+    
 except Exception as e:
     logger.error(f"❌ OpenSearch initialization error: {e}")
 
-# Helper function to get main data index name
+# Helper functions for environment info
+def get_opensearch_config():
+    """Get OpenSearch configuration details"""
+    return {
+        "host": os.getenv("OPENSEARCH_HOST", "not_configured"),
+        "port": int(os.getenv("OPENSEARCH_PORT", "25060")),
+        "user": os.getenv("OPENSEARCH_USER", "admin"),
+        "url": opensearch_url,
+        "ssl_enabled": opensearch_url.startswith("https"),
+        "default_index": DEFAULT_INDEX,
+        "main_data_index": "Ai Corporate SPTR - TEST"
+    }
+
 def get_main_data_index():
     """
     Returns the expected main data index name based on your template.

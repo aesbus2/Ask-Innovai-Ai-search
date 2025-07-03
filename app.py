@@ -406,12 +406,19 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
         # Check OpenSearch connectivity first
         update_import_status("running", "Checking OpenSearch connectivity")
         try:
-            from opensearch_client import client
+            from opensearch_client import test_connection
+            
             # Test OpenSearch connection
-            client.ping()
-            log_import("✅ OpenSearch connection verified")
+            if test_connection():
+                log_import("✅ OpenSearch connection verified")
+            else:
+                error_msg = "OpenSearch connection failed - database may be unavailable"
+                log_import(f"❌ {error_msg}")
+                update_import_status("failed", error=error_msg)
+                return
+                
         except Exception as e:
-            error_msg = f"OpenSearch connection failed: {str(e)}"
+            error_msg = f"OpenSearch connection check failed: {str(e)}"
             log_import(f"❌ {error_msg}")
             update_import_status("failed", error=error_msg)
             return
@@ -529,25 +536,56 @@ async def health():
         }
         
         # OpenSearch status with actual connectivity test
-        opensearch_host = os.getenv("OPENSEARCH_HOST")
-        if opensearch_host:
-            try:
-                from opensearch_client import client
-                # Test actual connection
-                client.ping()
+        try:
+            from opensearch_client import get_connection_status, test_connection, get_opensearch_config
+            
+            config = get_opensearch_config()
+            
+            # Get current connection status
+            conn_status = get_connection_status()
+            
+            if config["host"] == "not_configured":
+                components["opensearch"] = {
+                    "status": "not configured",
+                    "message": "OPENSEARCH_HOST not set"
+                }
+            elif conn_status["connected"]:
                 components["opensearch"] = {
                     "status": "connected",
-                    "host": opensearch_host
+                    "host": config["host"],
+                    "port": config["port"],
+                    "url": config["url"]
                 }
-            except Exception as e:
+            elif conn_status["tested"]:
                 components["opensearch"] = {
                     "status": "connection_failed",
-                    "host": opensearch_host,
-                    "error": str(e)[:100]  # Truncate long errors
+                    "host": config["host"],
+                    "port": config["port"],
+                    "url": config["url"],
+                    "error": conn_status["last_error"][:100] if conn_status["last_error"] else "Unknown error"
                 }
-        else:
+            else:
+                # Try to test connection now
+                if test_connection():
+                    components["opensearch"] = {
+                        "status": "connected",
+                        "host": config["host"],
+                        "port": config["port"],
+                        "url": config["url"]
+                    }
+                else:
+                    components["opensearch"] = {
+                        "status": "connection_failed",
+                        "host": config["host"],
+                        "port": config["port"],
+                        "url": config["url"],
+                        "error": "Connection test failed"
+                    }
+                    
+        except Exception as e:
             components["opensearch"] = {
-                "status": "not configured"
+                "status": "error",
+                "error": str(e)[:100]
             }
         
         # API Source status
@@ -605,11 +643,17 @@ async def chat_handler(request: ChatRequest):
         # Search for context
         context = ""
         try:
-            search_results = search_opensearch(request.message)
-            if search_results:
-                first_result = search_results[0].get('_source', {})
-                context = first_result.get('text', '')[:500]
-        except Exception:
+            # Search in your main data index
+            from opensearch_client import get_connection_status
+            conn_status = get_connection_status()
+            
+            if conn_status.get("connected", False):
+                search_results = search_opensearch(request.message, index_override="Ai Corporate SPTR - TEST")
+                if search_results:
+                    first_result = search_results[0].get('_source', {})
+                    context = first_result.get('text', '')[:500]
+        except Exception as e:
+            logger.warning(f"Search context failed: {e}")
             pass
         
         # Build messages
@@ -649,7 +693,8 @@ async def chat_handler(request: ChatRequest):
 async def search(q: str):
     """Production search"""
     try:
-        results = search_opensearch(q)
+        # Search in your main data index
+        results = search_opensearch(q, index_override="Ai Corporate SPTR - TEST")
         formatted_results = []
         
         for hit in results:
@@ -750,53 +795,133 @@ async def get_import_statistics():
 async def test_opensearch_connection():
     """Test OpenSearch connectivity and list indices"""
     try:
-        from opensearch_client import client
+        from opensearch_client import test_connection, get_connection_status, get_opensearch_config, client
+        
+        config = get_opensearch_config()
         
         # Test connection
-        client.ping()
+        connection_ok = test_connection()
+        conn_status = get_connection_status()
+        
+        if not connection_ok:
+            return JSONResponse(
+                status_code=503,  # Service Unavailable
+                content={
+                    "status": "error",
+                    "message": f"OpenSearch connection failed: {conn_status.get('last_error', 'Unknown error')}",
+                    "host": config["host"],
+                    "port": config["port"],
+                    "url": config["url"],
+                    "ssl_enabled": config["ssl_enabled"],
+                    "details": {
+                        "tested": conn_status.get("tested", False),
+                        "last_test": conn_status.get("last_test"),
+                        "connection_working": False
+                    }
+                }
+            )
         
         # Get list of indices
-        indices = client.indices.get_alias(index="*")
-        index_names = list(indices.keys())
-        
-        # Filter out system indices (those starting with .)
-        user_indices = [name for name in index_names if not name.startswith('.')]
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "success",
-                "message": "OpenSearch connection successful",
-                "host": os.getenv("OPENSEARCH_HOST", "unknown"),
-                "indices": {
-                    "total_count": len(index_names),
-                    "user_indices": user_indices,
-                    "system_indices_count": len(index_names) - len(user_indices)
+        try:
+            indices = client.indices.get_alias(index="*")
+            index_names = list(indices.keys())
+            
+            # Filter out system indices (those starting with .)
+            user_indices = [name for name in index_names if not name.startswith('.')]
+            
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "success",
+                    "message": "OpenSearch connection successful",
+                    "host": config["host"],
+                    "port": config["port"],
+                    "url": config["url"],
+                    "ssl_enabled": config["ssl_enabled"],
+                    "indices": {
+                        "total_count": len(index_names),
+                        "user_indices": user_indices,
+                        "system_indices_count": len(index_names) - len(user_indices)
+                    },
+                    "details": {
+                        "tested": conn_status.get("tested", False),
+                        "last_test": conn_status.get("last_test"),
+                        "connection_working": True
+                    }
                 }
-            }
-        )
+            )
+            
+        except Exception as e:
+            # Connection works but can't list indices
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "success",
+                    "message": "OpenSearch connection successful (indices list unavailable)",
+                    "host": config["host"],
+                    "port": config["port"],
+                    "url": config["url"],
+                    "ssl_enabled": config["ssl_enabled"],
+                    "warning": f"Could not list indices: {str(e)[:100]}",
+                    "details": {
+                        "tested": conn_status.get("tested", False),
+                        "last_test": conn_status.get("last_test"),
+                        "connection_working": True
+                    }
+                }
+            )
         
     except Exception as e:
         logger.error(f"OpenSearch test failed: {e}")
+        
+        # Try to get config even if test fails
+        try:
+            from opensearch_client import get_opensearch_config
+            config = get_opensearch_config()
+        except:
+            config = {
+                "host": "unknown",
+                "port": "unknown", 
+                "url": "unknown",
+                "ssl_enabled": False
+            }
+        
         return JSONResponse(
             status_code=500,
             content={
                 "status": "error",
-                "message": f"OpenSearch connection failed: {str(e)}",
-                "host": os.getenv("OPENSEARCH_HOST", "unknown")
+                "message": f"OpenSearch test failed: {str(e)}",
+                "host": config["host"],
+                "port": config["port"],
+                "url": config["url"],
+                "ssl_enabled": config["ssl_enabled"],
+                "details": {
+                    "tested": False,
+                    "connection_working": False,
+                    "error": str(e)[:200]
+                }
             }
         )
 
 # Startup event
 @app.on_event("startup")
 async def startup_event():
-    """Production startup"""
+    """Non-blocking startup - app starts even if OpenSearch is down"""
     try:
         logger.info("🚀 Ask InnovAI Production starting...")
         logger.info(f"   Version: 3.1.0")
         logger.info(f"   Port: {os.getenv('PORT', '8080')}")
         
-        # Preload embedder if available
+        # Check configuration without blocking
+        api_configured = bool(API_AUTH_VALUE)
+        genai_configured = bool(GENAI_ACCESS_KEY)
+        opensearch_configured = bool(os.getenv("OPENSEARCH_HOST"))
+        
+        logger.info(f"   API Source: {'✅ Configured' if api_configured else '❌ Missing'}")
+        logger.info(f"   GenAI: {'✅ Configured' if genai_configured else '❌ Missing'}")
+        logger.info(f"   OpenSearch: {'✅ Configured' if opensearch_configured else '❌ Missing'}")
+        
+        # Preload embedder if available (non-blocking)
         if EMBEDDER_AVAILABLE:
             try:
                 preload_embedding_model()
@@ -804,10 +929,40 @@ async def startup_event():
             except Exception as e:
                 logger.warning(f"⚠️ Embedding preload failed: {e}")
         
-        logger.info("🎉 Production startup complete")
+        # Test OpenSearch in background (non-blocking)
+        if opensearch_configured:
+            def background_opensearch_test():
+                try:
+                    import time
+                    time.sleep(3)  # Give app time to fully start
+                    from opensearch_client import test_connection
+                    if test_connection():
+                        logger.info("✅ OpenSearch connection verified in background")
+                    else:
+                        logger.warning("⚠️ OpenSearch connection failed in background test")
+                except Exception as e:
+                    logger.warning(f"⚠️ Background OpenSearch test failed: {e}")
+            
+            # Run in background thread
+            import threading
+            threading.Thread(target=background_opensearch_test, daemon=True).start()
         
+        logger.info("🎉 Production startup complete (non-blocking)")
+        
+        # Log readiness status
+        ready_components = sum([api_configured, genai_configured, opensearch_configured])
+        logger.info(f"📊 Ready components: {ready_components}/3")
+        
+        if ready_components == 3:
+            logger.info("🟢 All components configured - ready for production")
+        elif ready_components >= 2:
+            logger.info("🟡 Most components configured - check missing components")
+        else:
+            logger.warning("🔴 Many components missing - check configuration")
+            
     except Exception as e:
         logger.error(f"❌ Startup error: {e}")
+        # Don't re-raise - let app start anyway
 
 # For Digital Ocean App Platform
 if __name__ == "__main__":
