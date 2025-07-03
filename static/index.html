@@ -2,7 +2,7 @@
 <html lang="en" xmlns:mso="urn:schemas-microsoft-com:office:office" xmlns:msdt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882">
 <head>
     <meta charset="UTF-8">
-    <title>Ask InnovAI Admin - Import Management</title>
+    <title>Ask InnovAI Admin - Production</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -309,55 +309,15 @@
     <div class="container">
         <div class="header">
             <h1><span class="emoji">🤖</span> Ask InnovAI Admin</h1>
-            <p>AI-Powered Knowledge Base Management & Data Import System</p>
+            <p>Production Knowledge Base Management System</p>
         </div>
         
         <div class="main-content">
             <!-- System Health Section -->
             <div class="section">
                 <h2><span class="emoji">🏥</span> System Health</h2>
-                <button class="btn secondary" onclick="checkSystemHealth()">Check Health</button>
+                <button class="btn secondary" onclick="checkSystemHealth()">Check Health Status</button>
                 <div id="healthStatus" class="health-status"></div>
-            </div>
-            
-            <!-- Connection Testing Section -->
-            <div class="section">
-                <h2><span class="emoji">🔌</span> Connection Testing & Debug</h2>
-                
-                <div class="control-group">
-                    <button class="btn success" onclick="testAllConnections()">
-                        <span class="emoji">🧪</span> Test All Connections
-                    </button>
-                    <button class="btn secondary" onclick="viewDebugConfig()">
-                        <span class="emoji">⚙️</span> View Configuration
-                    </button>
-                    <button class="btn secondary" onclick="clearTestResults()">
-                        <span class="emoji">🗑️</span> Clear Results
-                    </button>
-                </div>
-                
-                <div id="testResults" class="status-container" style="display: none;">
-                    <div id="testOverallStatus" class="status idle">
-                        <strong>Test Status:</strong> Ready to test
-                    </div>
-                    
-                    <div id="testGrid" class="results-grid" style="margin-top: 20px;"></div>
-                    
-                    <div id="testLogs" class="logs-container" style="margin-top: 20px; display: none;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <strong style="color: #00ff00;">Debug Logs:</strong>
-                            <button onclick="toggleTestLogs()" style="background: none; border: 1px solid #00ff00; color: #00ff00; padding: 2px 8px; border-radius: 4px; cursor: pointer;">
-                                Hide Logs
-                            </button>
-                        </div>
-                        <div id="testLogsContent"></div>
-                    </div>
-                    
-                    <div id="testRecommendations" style="margin-top: 20px; display: none;">
-                        <h4 style="color: #dc3545; margin-bottom: 10px;">🔧 Recommendations:</h4>
-                        <div id="recommendationsList"></div>
-                    </div>
-                </div>
             </div>
             
             <!-- Import Configuration Section -->
@@ -388,11 +348,8 @@
                     <button class="btn" onclick="startImport()">
                         <span class="emoji">🚀</span> Start Import
                     </button>
-                    <button class="btn secondary" onclick="checkLastImportInfo()">
-                        <span class="emoji">📅</span> Last Import Info
-                    </button>
-                    <button class="btn danger" onclick="clearImportTimestamp()">
-                        <span class="emoji">🔄</span> Reset Timestamp
+                    <button class="btn secondary" onclick="getImportStatistics()">
+                        <span class="emoji">📊</span> View Statistics
                     </button>
                 </div>
             </div>
@@ -433,17 +390,11 @@
                 <h2><span class="emoji">🛠️</span> Quick Actions</h2>
                 
                 <div class="control-group">
-                    <button class="btn success" onclick="getImportStatistics()">
-                        <span class="emoji">📊</span> View Statistics
-                    </button>
-                    <button class="btn secondary" onclick="countDocsByCollectionAndProgram()">
-                        <span class="emoji">📋</span> Document Counts
-                    </button>
-                    <button class="btn secondary" onclick="testSearch()">
+                    <button class="btn success" onclick="testSearch()">
                         <span class="emoji">🔍</span> Test Search
                     </button>
-                    <button class="btn secondary" onclick="debugAllEndpoints()">
-                        <span class="emoji"></span> Debug All Endpoints  
+                    <button class="btn secondary" onclick="openChatInterface()">
+                        <span class="emoji">💬</span> Open Chat
                     </button>
                 </div>
                 
@@ -455,117 +406,25 @@
     <script>
         let pollInterval = null;
 
-        console.log("✅ Ask InnovAI Admin - Enhanced main.js loaded");
-
-        // Auto-refresh status every 10 seconds if not actively importing
-        setInterval(() => {
-            if (!pollInterval) {
-                refreshStatus();
-            }
-        }, 10000);
-
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
-            console.log("🚀 DOM loaded, initializing admin interface...");
+            console.log("🚀 Ask InnovAI Admin - Production");
             refreshStatus();
             checkSystemHealth();
-            checkLastImportInfo();
             
-            // Basic server ping to verify connectivity
+            // Basic server ping
             fetch("/ping")
                 .then(r => r.json())
                 .then(data => console.log("✅ Server ping successful:", data))
                 .catch(error => console.error("❌ Server ping failed:", error));
         });
 
-        // Add this test function to your index.html script section:
-
-async function debugAllEndpoints() {
-    console.log("🔍 Testing all endpoints...");
-    
-    const endpoints = [
-        '/ping',
-        '/health', 
-        '/status',
-        '/debug/simple',
-        '/test-json',
-        '/debug/config'
-    ];
-    
-    const results = {};
-    
-    for (const endpoint of endpoints) {
-        try {
-            console.log(`🧪 Testing ${endpoint}...`);
-            
-            const response = await fetch(endpoint);
-            const responseText = await response.text();
-            
-            results[endpoint] = {
-                status: response.status,
-                ok: response.ok,
-                contentType: response.headers.get('content-type'),
-                contentLength: responseText.length,
-                responsePreview: responseText.substring(0, 200),
-                isEmpty: responseText.trim() === '',
-                isJson: false,
-                parsedData: null
-            };
-            
-            // Try to parse as JSON
-            try {
-                if (responseText.trim()) {
-                    const jsonData = JSON.parse(responseText);
-                    results[endpoint].isJson = true;
-                    results[endpoint].parsedData = jsonData;
-                }
-            } catch (parseError) {
-                results[endpoint].parseError = parseError.message;
+        // Auto-refresh status every 30 seconds
+        setInterval(() => {
+            if (!pollInterval) {
+                refreshStatus();
             }
-            
-            console.log(`✅ ${endpoint}:`, results[endpoint]);
-            
-        } catch (error) {
-            results[endpoint] = {
-                error: error.message,
-                failed: true
-            };
-            console.log(`❌ ${endpoint}:`, error.message);
-        }
-    }
-    
-    console.log("📊 All endpoint results:", results);
-    
-    // Display results in the UI
-    const container = document.getElementById('actionResults');
-    if (container) {
-        let html = '<div class="result-card"><h4>🔍 Endpoint Debug Results</h4>';
-        
-        Object.entries(results).forEach(([endpoint, result]) => {
-            const status = result.failed ? '❌' : (result.ok ? '✅' : '⚠️');
-            const statusText = result.failed ? 'FAILED' : 
-                              result.ok ? 'OK' : 
-                              `HTTP ${result.status}`;
-            
-            html += `
-                <div style="margin: 8px 0; padding: 8px; border-left: 3px solid ${result.ok ? '#28a745' : '#dc3545'};">
-                    <strong>${status} ${endpoint}</strong> - ${statusText}<br>
-                    <small style="color: #666;">
-                        ${result.failed ? result.error : 
-                          result.isEmpty ? 'EMPTY RESPONSE' :
-                          result.isJson ? `JSON (${result.contentLength} chars)` :
-                          `Text (${result.contentLength} chars)`}
-                    </small>
-                </div>
-            `;
-        });
-        
-        html += '</div>';
-        container.innerHTML = html;
-    }
-    
-    return results;
-}
+        }, 30000);
 
         // ============================================================================
         // IMPORT MANAGEMENT FUNCTIONS
@@ -592,13 +451,7 @@ async function debugAllEndpoints() {
             const modeText = maxDocs ? `Limiting to ${maxDocs} documents` : "Processing all available documents";
             const importTypeText = importType === "incremental" ? "Incremental (only updated documents)" : "Full (all documents)";
 
-            const confirmMsg = `Start ${importType} import?
-            
-Collection: ${selectedCollection}
-Type: ${importTypeText}
-Scope: ${modeText}
-
-This will fetch evaluation data from your API and index it for search and chat.`;
+            const confirmMsg = `Start ${importType} import?\n\nCollection: ${selectedCollection}\nType: ${importTypeText}\nScope: ${modeText}`;
 
             if (!confirm(confirmMsg)) return;
 
@@ -609,18 +462,10 @@ This will fetch evaluation data from your API and index it for search and chat.`
                     body: JSON.stringify(config)
                 });
 
-                const text = await response.text();
-                let data;
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    console.error("Non-JSON response:", text);
-                    alert("❌ Unexpected response from server. Check console for details.");
-                    return;
-                }
+                const data = await response.json();
 
                 if (response.ok) {
-                    alert(`✅ ${importType.charAt(0).toUpperCase() + importType.slice(1)} import started successfully!`);
+                    alert(`✅ Import started successfully!`);
                     startPolling();
                 } else {
                     alert(`❌ Import failed: ${data.detail || data.message || "Unknown error"}`);
@@ -634,7 +479,6 @@ This will fetch evaluation data from your API and index it for search and chat.`
         function startPolling() {
             if (pollInterval) clearInterval(pollInterval);
 
-            console.log("🔄 Starting status polling...");
             pollInterval = setInterval(async () => {
                 await refreshStatus();
                 
@@ -643,16 +487,8 @@ This will fetch evaluation data from your API and index it for search and chat.`
                     const status = await response.json();
 
                     if (status.status !== 'running') {
-                        console.log(`🏁 Import completed with status: ${status.status}`);
                         clearInterval(pollInterval);
                         pollInterval = null;
-                        
-                        // Refresh import info after completion
-                        if (status.status === 'completed') {
-                            setTimeout(() => {
-                                checkLastImportInfo();
-                            }, 1000);
-                        }
                     }
                 } catch (error) {
                     console.error("Status polling error:", error);
@@ -664,12 +500,11 @@ This will fetch evaluation data from your API and index it for search and chat.`
             try {
                 const response = await fetch('/status');
                 if (!response.ok) {
-                    console.error('Status error:', response.status, await response.text());
+                    console.error('Status error:', response.status);
                     return;
                 }
 
                 const status = await response.json();
-                console.log("📊 Status update:", status);
                 updateStatusDisplay(status);
             } catch (error) {
                 console.error('Failed to refresh status:', error);
@@ -698,7 +533,6 @@ This will fetch evaluation data from your API and index it for search and chat.`
                 if (stepTextDiv) {
                     stepTextDiv.textContent = data.current_step;
                     
-                    // Add elapsed time if available
                     if (data.start_time) {
                         try {
                             const elapsed = Math.floor((new Date() - new Date(data.start_time)) / 1000);
@@ -750,20 +584,17 @@ This will fetch evaluation data from your API and index it for search and chat.`
             
             let html = '';
             
-            // Define key metrics to display
             const metrics = [
                 { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: '📄' },
                 { key: 'total_chunks_indexed', label: 'Chunks Indexed', class: 'info', icon: '🧩' },
-                { key: 'empty_documents', label: 'Empty Documents', class: 'warning', icon: '📭' },
+                { key: 'errors', label: 'Errors', class: 'warning', icon: '❌' },
                 { key: 'import_type', label: 'Import Type', class: 'info', icon: '🔄' }
             ];
             
-            // Display key metrics
             metrics.forEach(metric => {
                 if (results.hasOwnProperty(metric.key)) {
                     let value = results[metric.key];
                     
-                    // Format import type
                     if (metric.key === 'import_type') {
                         value = value.charAt(0).toUpperCase() + value.slice(1);
                     }
@@ -777,20 +608,9 @@ This will fetch evaluation data from your API and index it for search and chat.`
                 }
             });
             
-            // Collections processed
-            if (results.collections_processed && Array.isArray(results.collections_processed)) {
-                html += `
-                    <div class="result-card">
-                        <h4>📁 Collections Processed</h4>
-                        <div class="result-value info">${results.collections_processed.join(', ')}</div>
-                    </div>
-                `;
-            }
-            
-            // Import timestamp
-            if (results.new_import_timestamp) {
+            if (results.completed_at) {
                 try {
-                    const timestamp = new Date(results.new_import_timestamp).toLocaleString();
+                    const timestamp = new Date(results.completed_at).toLocaleString();
                     html += `
                         <div class="result-card">
                             <h4>⏰ Completed At</h4>
@@ -802,33 +622,12 @@ This will fetch evaluation data from your API and index it for search and chat.`
                 }
             }
             
-            // Handle empty documents by collection if it's an object
-            if (results.empty_documents_by_collection && typeof results.empty_documents_by_collection === 'object') {
-                const emptyDocs = results.empty_documents_by_collection;
-                if (Object.keys(emptyDocs).length > 0) {
-                    let emptyDocsText = Object.entries(emptyDocs)
-                        .map(([collection, count]) => `${collection}: ${count}`)
-                        .join(', ');
-                    
-                    html += `
-                        <div class="result-card">
-                            <h4>📭 Empty by Collection</h4>
-                            <div class="result-value warning" style="font-size: 1em;">${emptyDocsText}</div>
-                        </div>
-                    `;
-                }
-            }
-            
             grid.innerHTML = html;
-            
-            console.log("📈 Import results displayed:", results);
         }
 
         // ============================================================================
-        // SYSTEM HEALTH AND MONITORING
+        // SYSTEM HEALTH FUNCTIONS
         // ============================================================================
-
-        // Replace your checkSystemHealth function with this bulletproof version:
 
         async function checkSystemHealth() {
             const container = document.getElementById('healthStatus');
@@ -837,48 +636,27 @@ This will fetch evaluation data from your API and index it for search and chat.`
             container.innerHTML = '<div class="loading"><div class="spinner"></div>Checking system health...</div>';
             
             try {
-                console.log("🔍 Calling /health endpoint...");
                 const response = await fetch('/health');
                 
-                console.log("📡 Health response status:", response.status);
-                console.log("📡 Health response headers:", response.headers.get('content-type'));
-                
-                // Check if response is ok
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
-                // Get response text first to debug
-                const responseText = await response.text();
-                console.log("📡 Raw health response:", responseText);
+                const health = await response.json();
                 
-                // Try to parse as JSON
-                let health;
-                try {
-                    health = responseText ? JSON.parse(responseText) : null;
-                } catch (parseError) {
-                    console.error("❌ JSON parse error:", parseError);
-                    throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
-                }
-                
-                console.log("📊 Parsed health data:", health);
-                
-                // Handle null or empty response
                 if (!health) {
-                    throw new Error('Health endpoint returned null/empty response');
+                    throw new Error('Health endpoint returned no data');
                 }
                 
                 let html = '';
                 
-                // Safely check for components
                 if (health.components && typeof health.components === 'object') {
                     Object.entries(health.components).forEach(([component, info]) => {
                         const status = info.status || 'unknown';
                         const isHealthy = status === 'connected' || status === 'healthy' || status === 'configured';
-                        const isWarning = status === 'not configured';
+                        const isWarning = status === 'not configured' || status === 'warning';
                         const cssClass = isHealthy ? '' : (isWarning ? 'warning' : 'unhealthy');
                         
-                        // Add emoji indicators
                         let emoji = '✅';
                         if (!isHealthy) {
                             emoji = isWarning ? '⚠️' : '❌';
@@ -891,18 +669,8 @@ This will fetch evaluation data from your API and index it for search and chat.`
                             </div>
                         `;
                     });
-                } else {
-                    // No components found - show what we got
-                    console.warn("⚠️ No components in health response");
-                    html += `
-                        <div class="health-item warning">
-                            <div class="health-label">⚠️ COMPONENTS</div>
-                            <div class="health-value">Data missing or malformed</div>
-                        </div>
-                    `;
                 }
                 
-                // Add overall status if available
                 if (health.status) {
                     const statusEmoji = health.status === 'ok' ? '✅' : '❌';
                     html += `
@@ -913,328 +681,16 @@ This will fetch evaluation data from your API and index it for search and chat.`
                     `;
                 }
                 
-                // Add debug info
-                html += `
-                    <div class="health-item">
-                        <div class="health-label">🐛 DEBUG</div>
-                        <div class="health-value">Response received: ${responseText.length} chars</div>
-                    </div>
-                `;
-                
                 container.innerHTML = html;
-                console.log("✅ Health check completed successfully");
                 
             } catch (error) {
-                console.error("❌ Health check failed:", error);
-                
-                // Show detailed error information
-                const errorInfo = {
-                    message: error.message,
-                    timestamp: new Date().toLocaleString(),
-                    url: window.location.origin + '/health'
-                };
-                
+                console.error("Health check failed:", error);
                 container.innerHTML = `
                     <div class="health-item unhealthy">
-                        <div class="health-label">❌ HEALTH CHECK</div>
-                        <div class="health-value">Failed</div>
-                    </div>
-                    <div class="health-item unhealthy">
-                        <div class="health-label">🚨 ERROR</div>
-                        <div class="health-value" style="font-size: 0.8em; word-break: break-word;">${error.message}</div>
-                    </div>
-                    <div class="health-item">
-                        <div class="health-label">🔍 DEBUG</div>
-                        <div class="health-value" style="font-size: 0.8em;">Check browser console for details</div>
+                        <div class="health-label">❌ SYSTEM</div>
+                        <div class="health-value">Error: ${error.message}</div>
                     </div>
                 `;
-            }
-        }
-
-        // Also add a simple test function to check if your endpoints exist:
-        async function testBasicEndpoints() {
-            const endpoints = ['/ping', '/health', '/status', '/debug/config'];
-            const results = {};
-            
-            console.log("🧪 Testing basic endpoints...");
-            
-            for (const endpoint of endpoints) {
-                try {
-                    const response = await fetch(endpoint);
-                    results[endpoint] = {
-                        status: response.status,
-                        ok: response.ok,
-                        contentType: response.headers.get('content-type')
-                    };
-                    console.log(`✅ ${endpoint}: ${response.status}`);
-                } catch (error) {
-                    results[endpoint] = {
-                        error: error.message
-                    };
-                    console.log(`❌ ${endpoint}: ${error.message}`);
-                }
-            }
-            
-            console.log("📊 Endpoint test results:", results);
-            return results;
-        }
-
-        // Add this to your DOMContentLoaded event:
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log("🚀 DOM loaded, initializing admin interface...");
-            
-            // Test basic endpoints first
-            testBasicEndpoints();
-            // Run the debug test first
-            debugAllEndpoints();
-            
-            // Then try other initialization
-            refreshStatus();
-            checkSystemHealth();
-            //checkLastImportInfo();  // This might still fail with 404
-            
-            // Basic server ping to verify connectivity
-            fetch("/ping")
-                .then(r => r.json())
-                .then(data => console.log("✅ Server ping successful:", data))
-                .catch(error => console.error("❌ Server ping failed:", error));
-        });
-
-        async function checkLastImportInfo() {
-            try {
-                const response = await fetch('/last_import_info');
-                const data = await response.json();
-                
-                if (data.status === 'success' && data.last_import_timestamp) {
-                    const timestamp = new Date(data.last_import_timestamp).toLocaleString();
-                    console.log(`📅 Last import: ${timestamp}`);
-                    
-                    // You could display this in the UI if there's a container for it
-                    const infoContainer = document.getElementById("lastImportInfo");
-                    if (infoContainer) {
-                        infoContainer.innerHTML = `
-                            <div style="background: #e3f2fd; padding: 8px; border-radius: 4px; margin: 8px 0; font-size: 0.9em;">
-                                <strong>📅 Last Import:</strong> ${timestamp}
-                            </div>
-                        `;
-                    }
-                }
-            } catch (error) {
-                console.error("Failed to check last import info:", error);
-            }
-        }
-
-        async function clearImportTimestamp() {
-            if (!confirm("Reset import timestamp? The next incremental import will process all documents. Continue?")) {
-                return;
-            }
-            
-            try {
-                const response = await fetch("/clear_import_timestamp", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" }
-                });
-                
-                const data = await response.json();
-                if (data.status === 'success') {
-                    alert("✅ Import timestamp reset successfully!");
-                    checkLastImportInfo(); // Refresh the display
-                } else {
-                    alert(`❌ Error: ${data.error}`);
-                }
-            } catch (error) {
-                alert(`❌ Failed to reset timestamp: ${error.message}`);
-            }
-        }
-
-        // ============================================================================
-        // CONNECTION TESTING FUNCTIONS
-        // ============================================================================
-
-        async function testAllConnections() {
-            const resultsContainer = document.getElementById('testResults');
-            const overallStatus = document.getElementById('testOverallStatus');
-            const testGrid = document.getElementById('testGrid');
-            const testLogs = document.getElementById('testLogs');
-            const testLogsContent = document.getElementById('testLogsContent');
-            const recommendationsDiv = document.getElementById('testRecommendations');
-            
-            // Show results container and reset state
-            resultsContainer.style.display = 'block';
-            overallStatus.className = 'status running';
-            overallStatus.innerHTML = '<div class="spinner"></div><strong>Testing:</strong> Running comprehensive connection tests...';
-            testGrid.innerHTML = '';
-            testLogs.style.display = 'none';
-            recommendationsDiv.style.display = 'none';
-            
-            try {
-                const response = await fetch('/debug/test-connections', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const results = await response.json();
-                displayTestResults(results);
-                
-            } catch (error) {
-                console.error('Connection test failed:', error);
-                overallStatus.className = 'status failed';
-                overallStatus.innerHTML = `<strong>Test Failed:</strong> ${error.message}`;
-                
-                testGrid.innerHTML = `
-                    <div class="result-card">
-                        <h4>❌ Connection Test Error</h4>
-                        <div class="result-value danger">${error.message}</div>
-                    </div>
-                `;
-            }
-        }
-
-        function displayTestResults(results) {
-            const overallStatus = document.getElementById('testOverallStatus');
-            const testGrid = document.getElementById('testGrid');
-            const testLogs = document.getElementById('testLogs');
-            const testLogsContent = document.getElementById('testLogsContent');
-            const recommendationsDiv = document.getElementById('testRecommendations');
-            const recommendationsList = document.getElementById('recommendationsList');
-            
-            // Update overall status
-            const statusClass = results.overall_status === 'pass' ? 'completed' : 'failed';
-            const statusEmoji = results.overall_status === 'pass' ? '✅' : '❌';
-            overallStatus.className = `status ${statusClass}`;
-            overallStatus.innerHTML = `<strong>Overall Status:</strong> ${statusEmoji} ${results.overall_status.toUpperCase()}`;
-            
-            // Display individual test results
-            let html = '';
-            const testOrder = ['environment', 'api', 'opensearch', 'embeddings', 'genai'];
-            
-            testOrder.forEach(testName => {
-                if (results.tests[testName]) {
-                    const test = results.tests[testName];
-                    const statusEmoji = test.status === 'pass' ? '✅' : (test.status === 'fail' ? '❌' : '⚠️');
-                    const statusClass = test.status === 'pass' ? 'success' : (test.status === 'fail' ? 'danger' : 'warning');
-                    
-                    html += `
-                        <div class="result-card">
-                            <h4>${statusEmoji} ${testName.toUpperCase()}</h4>
-                            <div class="result-value ${statusClass}">${test.status.toUpperCase()}</div>
-                            ${test.error ? `<div style="margin-top: 8px; font-size: 0.8em; color: #dc3545;">${test.error}</div>` : ''}
-                            ${generateTestDetails(test.details)}
-                        </div>
-                    `;
-                }
-            });
-            
-            testGrid.innerHTML = html;
-            
-            // Display logs
-            if (results.logs && results.logs.length > 0) {
-                testLogsContent.innerHTML = results.logs.join('<br>');
-                testLogs.style.display = 'block';
-            }
-            
-            // Display recommendations
-            if (results.recommendations && results.recommendations.length > 0) {
-                let recommendationsHtml = '';
-                results.recommendations.forEach((rec, index) => {
-                    recommendationsHtml += `
-                        <div style="margin: 8px 0; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
-                            <strong>${index + 1}.</strong> ${rec}
-                        </div>
-                    `;
-                });
-                recommendationsList.innerHTML = recommendationsHtml;
-                recommendationsDiv.style.display = 'block';
-            }
-        }
-
-        function generateTestDetails(details) {
-            if (!details || Object.keys(details).length === 0) {
-                return '';
-            }
-            
-            let html = '<div style="margin-top: 8px; font-size: 0.8em; color: #666;">';
-            
-            Object.entries(details).forEach(([key, value]) => {
-                if (key === 'sample_values' && Array.isArray(value)) {
-                    value = value.map(v => typeof v === 'number' ? v.toFixed(4) : v).join(', ');
-                }
-                html += `<div><strong>${key.replace(/_/g, ' ')}:</strong> ${value}</div>`;
-            });
-            
-            html += '</div>';
-            return html;
-        }
-
-        async function viewDebugConfig() {
-            const container = document.getElementById('actionResults');
-            if (!container) return;
-            
-            container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading configuration...</div>';
-            
-            try {
-                const response = await fetch('/debug/config');
-                const config = await response.json();
-                
-                let html = '<div class="result-card"><h4>⚙️ System Configuration</h4>';
-                
-                // Critical settings
-                const criticalSettings = [
-                    'api_base_url_set',
-                    'api_auth_value_set', 
-                    'opensearch_host',
-                    'genai_key_set',
-                    'embedder_available'
-                ];
-                
-                criticalSettings.forEach(setting => {
-                    if (config.hasOwnProperty(setting)) {
-                        const value = config[setting];
-                        const isGood = (typeof value === 'boolean' && value) || 
-                                      (typeof value === 'string' && value !== 'NOT_SET');
-                        const emoji = isGood ? '✅' : '❌';
-                        const color = isGood ? '#28a745' : '#dc3545';
-                        
-                        html += `<div style="margin: 4px 0;"><span style="color: ${color};">${emoji}</span> 
-                                 <strong>${setting.replace(/_/g, ' ')}:</strong> ${value}</div>`;
-                    }
-                });
-                
-                // Environment variables
-                if (config.environment_vars) {
-                    html += '<hr style="margin: 15px 0;"><strong>Environment Variables:</strong>';
-                    Object.entries(config.environment_vars).forEach(([key, value]) => {
-                        html += `<div style="margin: 4px 0;"><strong>${key}:</strong> ${value}</div>`;
-                    });
-                }
-                
-                html += '</div>';
-                container.innerHTML = html;
-                
-            } catch (error) {
-                container.innerHTML = `<div class="status failed">❌ Failed to load config: ${error.message}</div>`;
-            }
-        }
-
-        function clearTestResults() {
-            const resultsContainer = document.getElementById('testResults');
-            resultsContainer.style.display = 'none';
-        }
-
-        function toggleTestLogs() {
-            const testLogs = document.getElementById('testLogs');
-            const button = testLogs.querySelector('button');
-            
-            if (testLogs.style.display === 'none') {
-                testLogs.style.display = 'block';
-                button.textContent = 'Hide Logs';
-            } else {
-                testLogs.style.display = 'none';
-                button.textContent = 'Show Logs';
             }
         }
 
@@ -1257,7 +713,6 @@ This will fetch evaluation data from your API and index it for search and chat.`
                     const data = await response.json();
                     const logs = data.logs || [];
                     
-                    // Show last 50 log entries
                     content.textContent = logs.slice(-50).join('\n') || 'No logs available';
                 } catch (error) {
                     content.textContent = `Error loading logs: ${error.message}`;
@@ -1267,7 +722,6 @@ This will fetch evaluation data from your API and index it for search and chat.`
             }
         }
 
-        // Quick action functions that can be called from the UI
         async function getImportStatistics() {
             const container = document.getElementById("actionResults");
             if (!container) return;
@@ -1285,51 +739,9 @@ This will fetch evaluation data from your API and index it for search and chat.`
                             <h4>📊 Knowledge Base Statistics</h4>
                             <p><strong>Total Documents:</strong> ${stats.total_documents || 0}</p>
                             <p><strong>Total Chunks:</strong> ${stats.total_chunks || 0}</p>
-                            <p><strong>Collections:</strong> ${Object.keys(stats.collections || {}).length}</p>
+                            <p><strong>Last Import:</strong> ${stats.last_import ? new Date(stats.last_import).toLocaleString() : 'Never'}</p>
                         </div>
                     `;
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = `<div class="status failed">❌ Error: ${data.error}</div>`;
-                }
-            } catch (error) {
-                container.innerHTML = `<div class="status failed">❌ Failed: ${error.message}</div>`;
-            }
-        }
-
-        async function countDocsByCollectionAndProgram() {
-            const container = document.getElementById("actionResults");
-            if (!container) return;
-            
-            container.innerHTML = '<div class="loading"><div class="spinner"></div>Counting documents...</div>';
-            
-            try {
-                const response = await fetch('/count_by_collection_and_program');
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    let html = '<div class="result-card"><h4>📋 Document Counts</h4>';
-                    
-                    const counts = data.collection_program_counts;
-                    if (Object.keys(counts).length === 0) {
-                        html += '<p>No documents found in any collection.</p>';
-                    } else {
-                        for (const [collection, programs] of Object.entries(counts)) {
-                            html += `<div style="margin-bottom: 10px;"><strong>${collection}:</strong><ul style="margin-left: 20px;">`;
-                            
-                            if (Object.keys(programs).length === 0) {
-                                html += '<li>No documents found</li>';
-                            } else {
-                                for (const [program, count] of Object.entries(programs)) {
-                                    const programDisplay = (!program || program === 'all') ? 
-                                        '<em>All Programs</em>' : program;
-                                    html += `<li>${programDisplay}: <strong>${count}</strong> documents</li>`;
-                                }
-                            }
-                            html += '</ul></div>';
-                        }
-                    }
-                    html += '</div>';
                     container.innerHTML = html;
                 } else {
                     container.innerHTML = `<div class="status failed">❌ Error: ${data.error}</div>`;
@@ -1371,7 +783,6 @@ This will fetch evaluation data from your API and index it for search and chat.`
                                     <div style="font-size: 0.9em; color: #666;">
                                         ${(result.text || '').substring(0, 150)}${result.text && result.text.length > 150 ? '...' : ''}
                                     </div>
-                                    ${result.score ? `<div style="font-size: 0.8em; color: #999; margin-top: 5px;">Score: ${Math.round(result.score * 100) / 100}</div>` : ''}
                                 </div>
                             `;
                         });
@@ -1394,7 +805,11 @@ This will fetch evaluation data from your API and index it for search and chat.`
             }
         }
 
-        console.log("✅ Ask InnovAI Admin main.js loaded successfully - all functions available");
+        function openChatInterface() {
+            window.open('/chat', '_blank');
+        }
+
+        console.log("✅ Ask InnovAI Admin - Production Ready");
     </script>
 </body>
 </html>

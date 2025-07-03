@@ -1,6 +1,5 @@
-# Final Production App.py - Ready for Full Import
-# Version: 3.0.0 - Production ready with working authentication
-# Uses confirmed working auth: auth header with your token
+# Production App.py - Clean & Ready for Production
+# Version: 3.1.0 - Production Clean
 
 import os
 import logging
@@ -20,7 +19,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from uuid import uuid4
 
-# Enhanced logging setup
+# Production logging setup
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -33,7 +32,7 @@ logger = logging.getLogger("ask-innovai")
 # Load environment variables
 load_dotenv()
 
-# Import your modules with error handling
+# Import modules
 try:
     from sentence_splitter import split_into_chunks
     logger.info("✅ sentence_splitter imported successfully")
@@ -61,7 +60,7 @@ except ImportError as e:
 app = FastAPI(
     title="Ask InnovAI Production",
     description="AI-Powered Knowledge Assistant - Production Ready",
-    version="3.0.0"
+    version="3.1.0"
 )
 
 # Enable CORS
@@ -73,25 +72,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files with error handling
+# Mount static files
 try:
     app.mount("/static", StaticFiles(directory="static"), name="static")
-    logger.info("✅ Static files mounted")
 except Exception as e:
     logger.warning(f"⚠️ Failed to mount static files: {e}")
 
-# Configuration - Using your confirmed working settings
+# Production Configuration
 GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", "https://tcxn3difq23zdxlph2heigba.agents.do-ai.run")
 GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
 API_BASE_URL = os.getenv("API_BASE_URL", "https://innovai-6abj.onrender.com/api/content")
-API_AUTH_KEY = os.getenv("API_AUTH_KEY", "auth")  # Your confirmed working auth header
+API_AUTH_KEY = os.getenv("API_AUTH_KEY", "auth")
 API_AUTH_VALUE = os.getenv("API_AUTH_VALUE", "")
-
-logger.info(f"🚀 Production Configuration:")
-logger.info(f"   API_BASE_URL: {API_BASE_URL}")
-logger.info(f"   API_AUTH_KEY: {API_AUTH_KEY}")
-logger.info(f"   API_AUTH_VALUE: {'✅ Set (' + str(len(API_AUTH_VALUE)) + ' chars)' if API_AUTH_VALUE else '❌ Missing'}")
-logger.info(f"   EMBEDDER_AVAILABLE: {EMBEDDER_AVAILABLE}")
 
 # Production import status tracking
 import_status = {
@@ -104,7 +96,7 @@ import_status = {
     "import_type": "full"
 }
 
-# In-memory logs
+# In-memory logs (last 100 entries)
 import_logs = []
 
 def log_import(message: str):
@@ -113,7 +105,7 @@ def log_import(message: str):
     log_entry = f"[{timestamp}] {message}"
     import_logs.append(log_entry)
     logger.info(message)
-    if len(import_logs) > 500:
+    if len(import_logs) > 100:
         import_logs.pop(0)
 
 def update_import_status(status: str, step: str = None, results: dict = None, error: str = None):
@@ -141,14 +133,11 @@ class ImportRequest(BaseModel):
     import_type: str = "full"
 
 # ============================================================================
-# PRODUCTION API DATA PROCESSING FUNCTIONS
+# PRODUCTION DATA PROCESSING FUNCTIONS
 # ============================================================================
 
 def extract_qa_pairs(evaluation_text: str) -> List[str]:
-    """
-    Extract Question and Answer pairs from evaluation text, keeping them together.
-    Rule: "Keep Question and Answers in the same chunk"
-    """
+    """Extract Question and Answer pairs from evaluation text"""
     if not evaluation_text:
         return []
     
@@ -158,7 +147,7 @@ def extract_qa_pairs(evaluation_text: str) -> List[str]:
     
     qa_chunks = []
     
-    # Split by sections first (Section: XXXX)
+    # Split by sections first
     sections = re.split(r'Section:\s*([^<\n]+?)(?=Section:|$)', clean_text, flags=re.IGNORECASE)
     
     for i in range(1, len(sections), 2):
@@ -175,7 +164,6 @@ def extract_qa_pairs(evaluation_text: str) -> List[str]:
                 answer = match.group(2).strip()
                 qa_chunk = f"Section: {section_name}\nQuestion: {question}\nAnswer: {answer}"
                 qa_chunks.append(qa_chunk)
-                log_import(f"✅ Extracted Q&A pair from {section_name}: {len(qa_chunk)} chars")
     
     # Fallback: if no sections, try direct Q&A extraction
     if not qa_chunks:
@@ -187,15 +175,11 @@ def extract_qa_pairs(evaluation_text: str) -> List[str]:
             answer = match.group(2).strip()
             qa_chunk = f"Question: {question}\nAnswer: {answer}"
             qa_chunks.append(qa_chunk)
-            log_import(f"✅ Extracted direct Q&A pair: {len(qa_chunk)} chars")
     
     return qa_chunks
 
 def split_transcript_by_speakers(transcript: str) -> List[str]:
-    """
-    Split transcript while preserving speaker boundaries.
-    Rule: "Never chunk or split the sentence between speakers"
-    """
+    """Split transcript while preserving speaker boundaries"""
     if not transcript:
         return []
     
@@ -203,13 +187,12 @@ def split_transcript_by_speakers(transcript: str) -> List[str]:
     soup = BeautifulSoup(transcript, "html.parser")
     clean_transcript = soup.get_text(" ", strip=True)
     
-    # Split by speaker patterns (Speaker A/B with timestamps)
+    # Split by speaker patterns
     speaker_pattern = r'(Speaker [AB] \(\d{2}:\d{2}:\d{2}\):)'
     parts = re.split(speaker_pattern, clean_transcript)
     
     if len(parts) < 3:
-        # No speaker patterns found, use regular chunking but log warning
-        log_import("⚠️ No speaker patterns found in transcript, using regular chunking")
+        # No speaker patterns found, use regular chunking
         chunks = split_into_chunks(clean_transcript, max_chars=1100, overlap=100)
         return [chunk["text"] for chunk in chunks]
     
@@ -223,36 +206,25 @@ def split_transcript_by_speakers(transcript: str) -> List[str]:
                 speaker_turn = f"{speaker} {content}"
                 speaker_turns.append(speaker_turn)
     
-    log_import(f"🎙️ Found {len(speaker_turns)} speaker turns in transcript")
-    
-    # Combine turns into appropriately sized chunks without breaking speaker boundaries
+    # Combine turns into appropriately sized chunks
     chunks = []
     current_chunk = ""
     max_size = 1100
     
     for turn in speaker_turns:
-        # If adding this turn would exceed max size and we have content, start new chunk
         if current_chunk and len(current_chunk + "\n" + turn) > max_size:
             chunks.append(current_chunk.strip())
-            log_import(f"📝 Created transcript chunk: {len(current_chunk)} chars")
             current_chunk = turn
         else:
             current_chunk = current_chunk + "\n" + turn if current_chunk else turn
     
-    # Add the last chunk if it has content
     if current_chunk.strip():
         chunks.append(current_chunk.strip())
-        log_import(f"📝 Created final transcript chunk: {len(current_chunk)} chars")
     
     return chunks
 
 async def process_evaluation(evaluation: Dict) -> Dict:
-    """
-    Production evaluation processing following confirmed API data rules:
-    1. Keep Question and Answers together (evaluation field)
-    2. Never split between speakers (transcript field)  
-    3. Link everything together with internalId for complete reconstruction
-    """
+    """Process evaluation with production rules"""
     try:
         evaluation_text = evaluation.get("evaluation", "")
         transcript_text = evaluation.get("transcript", "")
@@ -260,17 +232,13 @@ async def process_evaluation(evaluation: Dict) -> Dict:
         if not evaluation_text and not transcript_text:
             return {"status": "skipped", "reason": "no_content"}
         
-        log_import(f"🔄 Processing evaluation {evaluation.get('evaluationId')} for agent {evaluation.get('agentName')}")
-        
         all_chunks = []
         
-        # Process evaluation Q&A (keep Q&A together)
+        # Process evaluation Q&A
         if evaluation_text:
-            log_import(f"📋 Processing evaluation Q&A for evaluation {evaluation.get('evaluationId')}")
             qa_chunks = extract_qa_pairs(evaluation_text)
-            
             for qa_text in qa_chunks:
-                if len(qa_text.strip()) >= 20:  # Minimum meaningful content
+                if len(qa_text.strip()) >= 20:
                     all_chunks.append({
                         "text": qa_text,
                         "content_type": "evaluation_qa",
@@ -279,13 +247,11 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                         "chunk_index": len(all_chunks)
                     })
         
-        # Process transcript (never split between speakers)
+        # Process transcript
         if transcript_text:
-            log_import(f"🎙️ Processing transcript for evaluation {evaluation.get('evaluationId')}")
             transcript_chunks = split_transcript_by_speakers(transcript_text)
-            
             for transcript_chunk in transcript_chunks:
-                if len(transcript_chunk.strip()) >= 20:  # Minimum meaningful content
+                if len(transcript_chunk.strip()) >= 20:
                     all_chunks.append({
                         "text": transcript_chunk,
                         "content_type": "transcript",
@@ -297,13 +263,13 @@ async def process_evaluation(evaluation: Dict) -> Dict:
         if not all_chunks:
             return {"status": "skipped", "reason": "no_meaningful_content"}
         
-        # Complete metadata extraction from confirmed API structure
+        # Complete metadata extraction
         meta = {
             "evaluation_id": evaluation.get("evaluationId"),
             "internal_id": evaluation.get("internalId"),
             "template_id": evaluation.get("template_id"),
             "template": evaluation.get("template_name"),
-            "program": evaluation.get("partner"),  # Maps to your 'partner' field
+            "program": evaluation.get("partner"),
             "site": evaluation.get("site"),
             "lob": evaluation.get("lob"),
             "agent": evaluation.get("agentName"),
@@ -315,24 +281,20 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             "created_on": evaluation.get("created_on")
         }
         
-        # Use internalId as document ID for complete reconstruction
         doc_id = str(evaluation.get("internalId", uuid4()))
         collection = evaluation.get("template_name", "evaluations")
         
-        log_import(f"📄 Document ID: {doc_id}, Collection: {collection}")
-        
-        # Index chunks with embeddings
+        # Index chunks
         indexed_chunks = 0
         for i, chunk in enumerate(all_chunks):
             try:
-                # Generate embedding using embedder.py
+                # Generate embedding
                 embedding = None
                 if EMBEDDER_AVAILABLE:
                     try:
                         embedding = embed_text(chunk["text"])
-                        log_import(f"🧠 Generated embedding for chunk {i}: {len(embedding)} dimensions")
-                    except Exception as embed_error:
-                        logger.warning(f"Embedding failed for chunk {i}: {embed_error}")
+                    except Exception:
+                        pass
                 
                 doc_body = {
                     "document_id": doc_id,
@@ -348,18 +310,15 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 if embedding:
                     doc_body["embedding"] = embedding
                 
-                # Use compound ID for complete reconstruction capability
                 chunk_id = f"{doc_id}-{chunk['content_type']}-{i}"
                 index_document(chunk_id, doc_body, index_override=collection)
                 indexed_chunks += 1
-                
-                log_import(f"✅ Indexed chunk {i} ({chunk['content_type']}): {len(chunk['text'])} chars")
                 
             except Exception as e:
                 logger.warning(f"Failed to index chunk {i}: {e}")
                 continue
         
-        result = {
+        return {
             "status": "success",
             "document_id": doc_id,
             "chunks_indexed": indexed_chunks,
@@ -369,52 +328,34 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             "total_content_length": sum(chunk["length"] for chunk in all_chunks)
         }
         
-        log_import(f"🎉 Successfully processed evaluation {evaluation.get('evaluationId')}: {indexed_chunks} chunks indexed")
-        return result
-        
     except Exception as e:
-        error_msg = f"Failed to process evaluation {evaluation.get('evaluationId')}: {e}"
-        logger.error(error_msg)
-        log_import(f"❌ {error_msg}")
+        logger.error(f"Failed to process evaluation: {e}")
         return {"status": "error", "error": str(e)}
 
 # ============================================================================
-# PRODUCTION API FETCHING WITH CONFIRMED WORKING AUTH
+# PRODUCTION API FETCHING
 # ============================================================================
 
 async def fetch_evaluations(max_docs: int = None):
-    """Production: Fetch evaluations using confirmed working authentication"""
+    """Fetch evaluations from API"""
     try:
-        if not API_BASE_URL:
-            raise Exception("API_BASE_URL is not configured")
+        if not API_BASE_URL or not API_AUTH_VALUE:
+            raise Exception("API configuration missing")
         
-        if not API_AUTH_VALUE:
-            raise Exception("API_AUTH_VALUE is not configured")
-        
-        log_import(f"📡 PRODUCTION: Fetching evaluations from: {API_BASE_URL}")
-        
-        # CONFIRMED WORKING: Your exact auth format from successful test
         headers = {
-            API_AUTH_KEY: API_AUTH_VALUE,  # "auth": "your_token"
+            API_AUTH_KEY: API_AUTH_VALUE,
             'Accept': 'application/json',
-            'User-Agent': 'Ask-InnovAI-Production/3.0.0',
-            'Cache-Control': 'no-cache'
+            'User-Agent': 'Ask-InnovAI-Production/3.1.0'
         }
         
-        # Request parameters
         params = {}
         if max_docs:
             params["limit"] = max_docs
         
-        log_import(f"🔑 PRODUCTION: Using confirmed working headers")
-        log_import(f"📋 Request params: {params}")
-        
-        # Make request with confirmed working configuration
+        # Make request with retry logic
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                log_import(f"🔄 PRODUCTION: Attempt {attempt + 1}/{max_retries}")
-                
                 response = requests.get(
                     API_BASE_URL, 
                     headers=headers, 
@@ -422,87 +363,54 @@ async def fetch_evaluations(max_docs: int = None):
                     timeout=60
                 )
                 
-                # Log response details
-                log_import(f"📊 PRODUCTION: Response status: {response.status_code}")
-                log_import(f"📄 PRODUCTION: Response content-type: {response.headers.get('content-type', 'unknown')}")
-                log_import(f"📏 PRODUCTION: Response content length: {len(response.content)}")
-                
                 if response.status_code == 200:
                     break
                 elif response.status_code in [502, 503, 504] and attempt < max_retries - 1:
-                    log_import(f"⚠️ PRODUCTION: Server error {response.status_code}, retrying...")
                     await asyncio.sleep(2 ** attempt)
                     continue
                 else:
-                    raise Exception(f"API returned HTTP {response.status_code}: {response.text[:200]}")
+                    raise Exception(f"API returned HTTP {response.status_code}")
                     
             except requests.exceptions.RequestException as e:
                 if attempt < max_retries - 1:
-                    log_import(f"⚠️ PRODUCTION: Request failed, retrying: {e}")
                     await asyncio.sleep(2 ** attempt)
                     continue
                 else:
                     raise Exception(f"Request failed after {max_retries} attempts: {e}")
         
-        # Parse JSON response
-        try:
-            data = response.json()
-            log_import("✅ PRODUCTION: JSON parsing successful")
-        except json.JSONDecodeError as e:
-            log_import(f"❌ PRODUCTION: JSON parsing failed: {str(e)}")
-            raise Exception(f"API returned invalid JSON: {str(e)}")
-        
-        # Extract evaluations from confirmed API structure
+        # Parse response
+        data = response.json()
         evaluations = data.get("evaluations", [])
-        log_import(f"📋 PRODUCTION: Found {len(evaluations)} evaluations")
         
         if not evaluations and isinstance(data, list):
             evaluations = data
-            log_import(f"📋 PRODUCTION: Data is array format: {len(evaluations)} items")
-        
-        if not evaluations:
-            log_import(f"⚠️ PRODUCTION: No evaluations found. Response keys: {list(data.keys()) if isinstance(data, dict) else 'Array response'}")
         
         return evaluations
         
     except Exception as e:
-        logger.error(f"❌ PRODUCTION: Failed to fetch evaluations: {e}")
-        raise Exception(f"API request failed: {str(e)}")
+        logger.error(f"Failed to fetch evaluations: {e}")
+        raise
 
 async def run_production_import(collection: str = "all", max_docs: int = None):
-    """Production import process with confirmed working configuration"""
+    """Production import process"""
     try:
-        update_import_status("running", "Starting production import with confirmed working auth")
-        log_import("🚀 PRODUCTION: Starting import with confirmed working configuration")
+        update_import_status("running", "Starting import")
+        log_import("🚀 Starting production import")
         
-        if not API_AUTH_VALUE:
-            raise Exception("API_AUTH_VALUE environment variable is required")
-        
-        if not API_BASE_URL:
-            raise Exception("API_BASE_URL environment variable is required")
-        
-        # Fetch evaluations with confirmed working method
-        update_import_status("running", "Fetching evaluation data with confirmed auth method")
-        
+        # Fetch evaluations
+        update_import_status("running", "Fetching evaluation data")
         evaluations = await fetch_evaluations(max_docs)
         
         if not evaluations:
-            log_import(f"⚠️ PRODUCTION: No evaluations found")
             results = {"total_documents_processed": 0, "total_chunks_indexed": 0, "import_type": "full"}
             update_import_status("completed", results=results)
             return
         
-        # Process evaluations with production rules
-        update_import_status("running", f"Processing {len(evaluations)} evaluations with production rules")
-        log_import(f"🔄 PRODUCTION: Processing {len(evaluations)} evaluations")
-        log_import(f"   ✓ Keep Question and Answers together")
-        log_import(f"   ✓ Never split between speakers")
-        log_import(f"   ✓ Complete metadata extraction")
+        # Process evaluations
+        update_import_status("running", f"Processing {len(evaluations)} evaluations")
         
         total_processed = 0
         total_chunks = 0
-        total_qa_chunks = 0
-        total_transcript_chunks = 0
         errors = 0
         
         for i, evaluation in enumerate(evaluations):
@@ -513,51 +421,31 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
             if result["status"] == "success":
                 total_processed += 1
                 total_chunks += result["chunks_indexed"]
-                total_qa_chunks += result.get("evaluation_chunks", 0)
-                total_transcript_chunks += result.get("transcript_chunks", 0)
             elif result["status"] == "error":
                 errors += 1
             
-            # Small delay to prevent overwhelming the system
             if i % 20 == 0:
                 await asyncio.sleep(0.1)
         
-        # Complete with production statistics
+        # Complete
         results = {
             "total_documents_processed": total_processed,
             "total_chunks_indexed": total_chunks,
-            "total_qa_chunks": total_qa_chunks,
-            "total_transcript_chunks": total_transcript_chunks,
             "errors": errors,
             "import_type": "full",
-            "completed_at": datetime.now().isoformat(),
-            "api_endpoint": API_BASE_URL,
-            "auth_method": "confirmed_working",
-            "production_ready": True,
-            "api_rules_applied": [
-                "Keep Question and Answers together",
-                "Never split between speakers",
-                "Complete metadata extraction",
-                "Confirmed working authentication"
-            ]
+            "completed_at": datetime.now().isoformat()
         }
         
-        log_import(f"🎉 PRODUCTION: Import completed successfully!")
-        log_import(f"   📄 Documents processed: {total_processed}")
-        log_import(f"   🧩 Total chunks: {total_chunks}")
-        log_import(f"   📋 Q&A chunks: {total_qa_chunks}")
-        log_import(f"   🎙️ Transcript chunks: {total_transcript_chunks}")
-        log_import(f"   ❌ Errors: {errors}")
-        
+        log_import(f"🎉 Import completed: {total_processed} documents, {total_chunks} chunks")
         update_import_status("completed", results=results)
         
     except Exception as e:
-        error_msg = f"Production import failed: {str(e)}"
+        error_msg = f"Import failed: {str(e)}"
         log_import(f"❌ {error_msg}")
         update_import_status("failed", error=error_msg)
 
 # ============================================================================
-# FASTAPI ENDPOINTS - Production Ready
+# FASTAPI ENDPOINTS
 # ============================================================================
 
 @app.get("/ping")
@@ -566,7 +454,7 @@ async def ping():
         "status": "ok", 
         "timestamp": datetime.now().isoformat(),
         "service": "ask-innovai-production",
-        "version": "3.0.0"
+        "version": "3.1.0"
     }
 
 @app.get("/", response_class=HTMLResponse)
@@ -575,26 +463,12 @@ async def get_index():
         with open("static/index.html", "r") as f:
             return HTMLResponse(content=f.read())
     except FileNotFoundError:
-        return HTMLResponse(content=f"""
+        return HTMLResponse(content="""
         <html><body>
         <h1>🤖 Ask InnovAI Production</h1>
         <p><strong>Status:</strong> Production Ready ✅</p>
-        <p><strong>API Endpoint:</strong> {API_BASE_URL}</p>
-        <p><strong>Evaluations Available:</strong> 239 confirmed</p>
-        <p><strong>Authentication:</strong> Working ✅</p>
-        
-        <h2>Production Features:</h2>
-        <ul>
-        <li>✅ Confirmed working API authentication</li>
-        <li>✅ Q&A pairs kept together</li>
-        <li>✅ Speaker boundaries preserved</li>
-        <li>✅ Complete metadata extraction</li>
-        <li>✅ Embedding generation</li>
-        <li>✅ OpenSearch indexing</li>
-        </ul>
-        
-        <h2>Ready to Import:</h2>
-        <p>Your system is ready for production data import!</p>
+        <p><strong>Version:</strong> 3.1.0</p>
+        <p>Admin interface file not found. Please ensure static/index.html exists.</p>
         </body></html>
         """)
 
@@ -606,8 +480,8 @@ async def get_chat():
     except FileNotFoundError:
         return HTMLResponse(content="""
         <html><body>
-        <h1>🤖 Ask InnovAI Chat - Production</h1>
-        <p>Production chat interface with confirmed working data.</p>
+        <h1>🤖 Ask InnovAI Chat</h1>
+        <p>Chat interface file not found. Please ensure static/chat.html exists.</p>
         <p><a href="/">← Back to Admin</a></p>
         </body></html>
         """)
@@ -620,23 +494,18 @@ async def health():
         
         # GenAI status
         components["genai"] = {
-            "status": "connected" if GENAI_ACCESS_KEY else "not configured",
-            "endpoint": GENAI_ENDPOINT
+            "status": "configured" if GENAI_ACCESS_KEY else "not configured"
         }
         
         # OpenSearch status
         opensearch_host = os.getenv("OPENSEARCH_HOST")
         components["opensearch"] = {
-            "status": "configured" if opensearch_host else "not configured",
-            "host": opensearch_host or "not set"
+            "status": "configured" if opensearch_host else "not configured"
         }
         
-        # API Source status - confirmed working
+        # API Source status
         components["api_source"] = {
-            "status": "confirmed_working",
-            "endpoint": API_BASE_URL,
-            "auth_method": "working",
-            "evaluations_available": 239
+            "status": "configured" if API_AUTH_VALUE else "not configured"
         }
         
         # Embedder status
@@ -645,36 +514,19 @@ async def health():
                 stats = get_embedding_stats()
                 components["embeddings"] = {
                     "status": "healthy", 
-                    "model": stats.get("model_name", "unknown"),
-                    "provider": stats.get("provider", "local"),
-                    "dimension": stats.get("embedding_dimension", 384),
                     "model_loaded": stats.get("model_loaded", False)
                 }
-            except Exception as e:
-                components["embeddings"] = {
-                    "status": "warning", 
-                    "error": str(e)
-                }
+            except Exception:
+                components["embeddings"] = {"status": "warning"}
         else:
-            components["embeddings"] = {
-                "status": "not available",
-                "note": "Will run without embeddings"
-            }
+            components["embeddings"] = {"status": "not available"}
         
         return {
             "status": "ok",
             "timestamp": datetime.now().isoformat(),
             "components": components,
             "import_status": import_status["status"],
-            "environment": "digital_ocean",
-            "version": "3.0.0_production_ready",
-            "production_features": [
-                "Confirmed working API authentication",
-                "239 evaluations available for processing",
-                "Q&A and transcript processing rules implemented",
-                "Complete metadata extraction",
-                "Embedding generation ready"
-            ]
+            "version": "3.1.0"
         }
         
     except Exception as e:
@@ -685,34 +537,33 @@ async def health():
             "error": str(e)
         }
 
-# Chat endpoint (production ready)
 @app.post("/chat")
 async def chat_handler(request: ChatRequest):
     """Production chat functionality"""
     try:
         if not GENAI_ACCESS_KEY:
-            return {"reply": "Chat service not configured. Please set GENAI_ACCESS_KEY in environment variables."}
+            return {"reply": "Chat service not configured. Please set GENAI_ACCESS_KEY."}
         
-        # Enhanced search for context using indexed data
+        # Search for context
         context = ""
         try:
             search_results = search_opensearch(request.message)
             if search_results:
                 first_result = search_results[0].get('_source', {})
                 context = first_result.get('text', '')[:500]
-        except Exception as search_error:
-            logger.warning(f"Search failed: {search_error}")
+        except Exception:
+            pass
         
-        # Build messages with context
+        # Build messages
         system_msg = "You are MetroAI, an intelligent assistant for Metro by T-Mobile customer service operations."
         if context:
-            system_msg += f" Here's relevant context from the knowledge base: {context}"
+            system_msg += f" Context: {context}"
         
         messages = [{"role": "system", "content": system_msg}]
         messages.extend([{"role": m["role"], "content": m["content"]} for m in request.history])
         messages.append({"role": "user", "content": request.message})
         
-        # Call Digital Ocean AI
+        # Call AI service
         payload = {"model": GENAI_ACCESS_KEY, "messages": messages}
         
         response = requests.post(
@@ -728,22 +579,17 @@ async def chat_handler(request: ChatRequest):
         if response.status_code == 200:
             data = response.json()
             reply = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            return {
-                "reply": reply.strip() if reply else "Sorry, I couldn't generate a response.",
-                "context_used": bool(context)
-            }
+            return {"reply": reply.strip() if reply else "Sorry, I couldn't generate a response."}
         else:
-            logger.error(f"AI service error: {response.status_code} - {response.text}")
-            return {"reply": f"AI service temporarily unavailable (status: {response.status_code})"}
+            return {"reply": "AI service temporarily unavailable"}
             
     except Exception as e:
         logger.error(f"Chat error: {e}")
-        return {"reply": "Sorry, there was an unexpected error. Please try again."}
+        return {"reply": "Sorry, there was an error. Please try again."}
 
-# Search endpoint (production ready)
 @app.get("/search")
 async def search(q: str):
-    """Production search with enhanced formatting"""
+    """Production search"""
     try:
         results = search_opensearch(q)
         formatted_results = []
@@ -757,9 +603,7 @@ async def search(q: str):
                 "title": f"{metadata.get('agent', 'Agent')} - {metadata.get('disposition', 'Call')}",
                 "text": source.get('text', ''),
                 "score": hit.get('_score', 0),
-                "collection": metadata.get('template', 'unknown'),
-                "metadata": metadata,
-                "content_type": source.get('content_type', 'unknown')
+                "metadata": metadata
             })
         
         return {
@@ -769,24 +613,21 @@ async def search(q: str):
         }
     except Exception as e:
         logger.error(f"Search error: {e}")
-        return {
-            "status": "error", 
-            "error": str(e),
-            "results": []
-        }
+        return {"status": "error", "error": str(e), "results": []}
 
-# Import management endpoints (production ready)
 @app.get("/status")
 async def get_import_status():
+    """Get import status"""
     return import_status
 
 @app.get("/logs")
 async def get_logs():
+    """Get recent logs"""
     return {"logs": import_logs[-50:]}
 
 @app.post("/import")
 async def start_import(request: ImportRequest, background_tasks: BackgroundTasks):
-    """Start production import process"""
+    """Start import process"""
     if import_status["status"] == "running":
         raise HTTPException(status_code=400, detail="Import already running")
     
@@ -801,93 +642,55 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
         "import_type": request.import_type
     })
     
-    # Start production import
+    # Start import
     background_tasks.add_task(run_production_import, request.collection, request.max_docs)
-    return {"status": "success", "message": "Production import started with confirmed working authentication"}
+    return {"status": "success", "message": "Import started"}
 
-# Additional helpful endpoints
-@app.get("/last_import_info")
-async def get_last_import_info():
-    """Get information about the last import"""
+@app.get("/import_statistics")
+async def get_import_statistics():
+    """Get import statistics"""
     try:
-        if import_status.get("end_time") and import_status.get("status") == "completed":
+        # This would typically query your database
+        # For now, return basic stats from last import
+        if import_status.get("results"):
             return {
                 "status": "success",
-                "last_import_timestamp": import_status["end_time"],
-                "last_import_status": import_status["status"],
-                "last_import_results": import_status.get("results", {}),
-                "production_ready": True
+                "statistics": {
+                    "total_documents": import_status["results"].get("total_documents_processed", 0),
+                    "total_chunks": import_status["results"].get("total_chunks_indexed", 0),
+                    "last_import": import_status.get("end_time")
+                }
             }
         else:
             return {
                 "status": "success",
-                "last_import_timestamp": None,
-                "message": "No completed import found"
+                "statistics": {
+                    "total_documents": 0,
+                    "total_chunks": 0,
+                    "last_import": None
+                }
             }
-            
     except Exception as e:
-        logger.error(f"Failed to get last import info: {e}")
-        return {
-            "status": "error",
-            "error": str(e)
-        }
-
-@app.post("/clear_import_timestamp")
-async def clear_import_timestamp():
-    """Clear the import timestamp"""
-    try:
-        import_status.update({
-            "status": "idle",
-            "start_time": None,
-            "end_time": None,
-            "current_step": None,
-            "results": {},
-            "error": None
-        })
-        
-        log_import("🔄 Import timestamp cleared by user")
-        
-        return {
-            "status": "success",
-            "message": "Import timestamp cleared successfully"
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to clear import timestamp: {e}")
-        return {
-            "status": "error",
-            "error": str(e)
-        }
+        return {"status": "error", "error": str(e)}
 
 # Startup event
 @app.on_event("startup")
 async def startup_event():
-    """Production startup initialization"""
+    """Production startup"""
     try:
-        logger.info("🚀 Ask InnovAI PRODUCTION starting up...")
-        logger.info(f"   Version: 3.0.0 - Production Ready")
-        logger.info(f"   Python version: {sys.version}")
-        logger.info(f"   PORT: {os.getenv('PORT', '8080')}")
+        logger.info("🚀 Ask InnovAI Production starting...")
+        logger.info(f"   Version: 3.1.0")
+        logger.info(f"   Port: {os.getenv('PORT', '8080')}")
         
-        # Log production readiness
-        logger.info("✅ PRODUCTION READY:")
-        logger.info("   • Confirmed working API authentication")
-        logger.info("   • 239 evaluations available for processing")
-        logger.info("   • Q&A processing (keeps questions and answers together)")
-        logger.info("   • Transcript processing (preserves speaker boundaries)")
-        logger.info("   • Complete metadata extraction")
-        logger.info("   • Embedding generation available")
-        
-        # Try to preload embedder if available
+        # Preload embedder if available
         if EMBEDDER_AVAILABLE:
             try:
                 preload_embedding_model()
-                logger.info("✅ Embedding model preloaded successfully")
+                logger.info("✅ Embedding model preloaded")
             except Exception as e:
-                logger.warning(f"⚠️ Embedding preload failed (will load on demand): {e}")
+                logger.warning(f"⚠️ Embedding preload failed: {e}")
         
-        logger.info("🎉 Ask InnovAI PRODUCTION startup complete!")
-        logger.info("📋 Ready for full production import!")
+        logger.info("🎉 Production startup complete")
         
     except Exception as e:
         logger.error(f"❌ Startup error: {e}")
@@ -897,12 +700,11 @@ if __name__ == "__main__":
     import uvicorn
     
     port = int(os.getenv("PORT", 8080))
-    logger.info(f"🚀 Starting Ask InnovAI PRODUCTION on port {port}")
+    logger.info(f"🚀 Starting Ask InnovAI Production on port {port}")
     
     uvicorn.run(
         app, 
         host="0.0.0.0", 
         port=port,
-        log_level="info",
-        access_log=True
+        log_level="info"
     )
