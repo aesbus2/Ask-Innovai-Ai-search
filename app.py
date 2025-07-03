@@ -1,5 +1,5 @@
-# Production App.py - Clean & Ready for Production
-# Version: 3.1.0 - Production Clean
+# Production App.py - Clean & Ready for Production with Enhanced Import Process
+# Version: 3.2.0 - Production Clean with Resilient Import
 
 import os
 import logging
@@ -8,6 +8,7 @@ import asyncio
 import json
 import sys
 import re
+import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
@@ -60,7 +61,7 @@ except ImportError as e:
 app = FastAPI(
     title="Ask InnovAI Production",
     description="AI-Powered Knowledge Assistant - Production Ready",
-    version="3.1.0"
+    version="3.2.0"
 )
 
 # Enable CORS
@@ -225,16 +226,12 @@ def split_transcript_by_speakers(transcript: str) -> List[str]:
 
 async def process_evaluation(evaluation: Dict) -> Dict:
     """Process evaluation with production rules"""
-    
-
     try:
         evaluation_text = evaluation.get("evaluation", "")
         transcript_text = evaluation.get("transcript", "")
         
         if not evaluation_text and not transcript_text:
             return {"status": "skipped", "reason": "no_content"}
-        
-        
         
         all_chunks = []
         
@@ -297,8 +294,8 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 if EMBEDDER_AVAILABLE:
                     try:
                         embedding = embed_text(chunk["text"])
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log_import(f"⚠️ Embedding failed for chunk {i}: {str(e)[:50]}")
                 
                 doc_body = {
                     "document_id": doc_id,
@@ -315,17 +312,32 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                     doc_body["embedding"] = embedding
                 
                 chunk_id = f"{doc_id}-{chunk['content_type']}-{i}"
-                index_document(chunk_id, doc_body, index_override=collection)
-                indexed_chunks += 1
+                
+                # Try to index with retries
+                max_retries = 3
+                for retry in range(max_retries):
+                    try:
+                        index_document(chunk_id, doc_body, index_override=collection)
+                        indexed_chunks += 1
+                        break  # Success, exit retry loop
+                    except Exception as index_error:
+                        if retry < max_retries - 1:
+                            delay = (retry + 1) * 2  # 2, 4, 6 seconds
+                            log_import(f"⚠️ Indexing retry {retry + 1}/{max_retries} for chunk {i} in {delay}s: {str(index_error)[:50]}")
+                            time.sleep(delay)  # Use sync sleep since we're not in an async context here
+                        else:
+                            # Final retry failed
+                            raise index_error
                 
             except Exception as e:
                 error_msg = f"Failed to index chunk {i}: {str(e)}"
-                logger.warning(error_msg)
+                log_import(f"❌ {error_msg}")
                 
                 # Check if it's an OpenSearch connectivity issue
-                if "timeout" in str(e).lower() or "connection" in str(e).lower():
+                if any(keyword in str(e).lower() for keyword in ["timeout", "connection", "unreachable", "opensearch"]):
                     raise Exception(f"OpenSearch connection error: {str(e)}")
                 
+                # Non-OpenSearch errors are logged but don't stop processing
                 continue
         
         return {
@@ -355,7 +367,7 @@ async def fetch_evaluations(max_docs: int = None):
         headers = {
             API_AUTH_KEY: API_AUTH_VALUE,
             'Accept': 'application/json',
-            'User-Agent': 'Ask-InnovAI-Production/3.1.0'
+            'User-Agent': 'Ask-InnovAI-Production/3.2.0'
         }
         
         params = {}
@@ -402,10 +414,10 @@ async def fetch_evaluations(max_docs: int = None):
         raise
 
 async def run_production_import(collection: str = "all", max_docs: int = None):
-    """Production import process with better error handling"""
+    """Production import process with enhanced error handling and backpressure"""
     try:
         update_import_status("running", "Starting import")
-        log_import("🚀 Starting production import")
+        log_import("🚀 Starting production import with enhanced error handling")
         
         # Check OpenSearch connectivity first
         update_import_status("running", "Checking OpenSearch connectivity")
@@ -436,37 +448,90 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
             update_import_status("completed", results=results)
             return
         
-        # Process evaluations
+        # Process evaluations with better error handling and backpressure
         update_import_status("running", f"Processing {len(evaluations)} evaluations")
         
         total_processed = 0
         total_chunks = 0
         errors = 0
         opensearch_errors = 0
+        consecutive_opensearch_errors = 0
         
-        for i, evaluation in enumerate(evaluations):
-            if i % 10 == 0:
-                update_import_status("running", f"Processing evaluation {i+1}/{len(evaluations)}")
+        # Process in smaller batches to reduce load
+        BATCH_SIZE = 5
+        DELAY_BETWEEN_BATCHES = 2  # seconds
+        DELAY_BETWEEN_DOCS = 0.5   # seconds
+        
+        for batch_start in range(0, len(evaluations), BATCH_SIZE):
+            batch_end = min(batch_start + BATCH_SIZE, len(evaluations))
+            batch = evaluations[batch_start:batch_end]
             
-            result = await process_evaluation(evaluation)
-            if result["status"] == "success":
-                total_processed += 1
-                total_chunks += result["chunks_indexed"]
-            elif result["status"] == "error":
-                errors += 1
-                # Check if it's an OpenSearch error
-                if "opensearch" in str(result.get("error", "")).lower() or "timeout" in str(result.get("error", "")).lower():
-                    opensearch_errors += 1
+            log_import(f"Processing batch {batch_start//BATCH_SIZE + 1}/{(len(evaluations) + BATCH_SIZE - 1)//BATCH_SIZE}")
+            update_import_status("running", f"Processing batch {batch_start + 1}-{batch_end}/{len(evaluations)}")
             
-            # If too many OpenSearch errors, stop the import
-            if opensearch_errors > 5:
-                error_msg = f"Too many OpenSearch connection errors ({opensearch_errors}). Stopping import."
-                log_import(f"❌ {error_msg}")
-                update_import_status("failed", error=error_msg)
-                return
+            batch_opensearch_errors = 0
             
-            if i % 20 == 0:
-                await asyncio.sleep(0.1)
+            for i, evaluation in enumerate(batch):
+                actual_index = batch_start + i
+                
+                try:
+                    result = await process_evaluation(evaluation)
+                    
+                    if result["status"] == "success":
+                        total_processed += 1
+                        total_chunks += result["chunks_indexed"]
+                        consecutive_opensearch_errors = 0  # Reset counter on success
+                        
+                    elif result["status"] == "error":
+                        errors += 1
+                        error_msg = str(result.get("error", ""))
+                        
+                        # Check if it's an OpenSearch error
+                        if any(keyword in error_msg.lower() for keyword in ["opensearch", "timeout", "connection", "unreachable"]):
+                            opensearch_errors += 1
+                            consecutive_opensearch_errors += 1
+                            batch_opensearch_errors += 1
+                            
+                            log_import(f"⚠️ OpenSearch error {opensearch_errors} (consecutive: {consecutive_opensearch_errors}): {error_msg[:100]}")
+                            
+                            # If too many consecutive errors, increase delays
+                            if consecutive_opensearch_errors >= 3:
+                                delay = min(consecutive_opensearch_errors * 2, 10)
+                                log_import(f"🔄 Increasing delay to {delay}s due to consecutive errors")
+                                await asyncio.sleep(delay)
+                        else:
+                            log_import(f"⚠️ Non-OpenSearch error: {error_msg[:100]}")
+                    
+                    # If too many OpenSearch errors total, stop the import
+                    if opensearch_errors > 15:  # Increased threshold
+                        error_msg = f"Too many OpenSearch connection errors ({opensearch_errors}). Stopping import."
+                        log_import(f"❌ {error_msg}")
+                        update_import_status("failed", error=error_msg)
+                        return
+                    
+                    # If too many consecutive errors, stop the import
+                    if consecutive_opensearch_errors >= 8:
+                        error_msg = f"Too many consecutive OpenSearch errors ({consecutive_opensearch_errors}). Cluster may be unavailable."
+                        log_import(f"❌ {error_msg}")
+                        update_import_status("failed", error=error_msg)
+                        return
+                    
+                    # Add delay between documents
+                    if actual_index < len(evaluations) - 1:  # Don't delay after last document
+                        await asyncio.sleep(DELAY_BETWEEN_DOCS)
+                
+                except Exception as e:
+                    errors += 1
+                    log_import(f"❌ Unexpected error processing evaluation {actual_index}: {str(e)[:100]}")
+            
+            # If this batch had many OpenSearch errors, increase delay
+            if batch_opensearch_errors >= 2:
+                extended_delay = DELAY_BETWEEN_BATCHES + (batch_opensearch_errors * 2)
+                log_import(f"🔄 Batch had {batch_opensearch_errors} OpenSearch errors, extending delay to {extended_delay}s")
+                await asyncio.sleep(extended_delay)
+            else:
+                # Normal delay between batches
+                await asyncio.sleep(DELAY_BETWEEN_BATCHES)
         
         # Complete
         results = {
@@ -475,15 +540,34 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
             "errors": errors,
             "opensearch_errors": opensearch_errors,
             "import_type": "full",
-            "completed_at": datetime.now().isoformat()
+            "completed_at": datetime.now().isoformat(),
+            "success_rate": f"{(total_processed / len(evaluations) * 100):.1f}%" if evaluations else "0%"
         }
         
-        log_import(f"🎉 Import completed: {total_processed} documents, {total_chunks} chunks, {errors} errors")
+        log_import(f"🎉 Import completed:")
+        log_import(f"   📄 Documents processed: {total_processed}/{len(evaluations)}")
+        log_import(f"   🧩 Chunks indexed: {total_chunks}")
+        log_import(f"   ❌ Total errors: {errors}")
+        log_import(f"   🔌 OpenSearch errors: {opensearch_errors}")
+        log_import(f"   📊 Success rate: {results['success_rate']}")
+        
         update_import_status("completed", results=results)
         
     except Exception as e:
         error_msg = f"Import failed: {str(e)}"
-        log_import(f"❌ {error_msg}")
+        
+        # Check if it's an OpenSearch-related error
+        if any(keyword in str(e).lower() for keyword in ["opensearch", "connection", "timeout", "unreachable"]):
+            error_msg = f"OpenSearch connection issue: {str(e)}"
+            log_import(f"❌ {error_msg}")
+            log_import("💡 Suggestions:")
+            log_import("   - Check if OpenSearch cluster is healthy")
+            log_import("   - Verify network connectivity")
+            log_import("   - Consider scaling up the cluster")
+            log_import("   - Try reducing import batch size")
+        else:
+            log_import(f"❌ {error_msg}")
+        
         update_import_status("failed", error=error_msg)
 
 # ============================================================================
@@ -496,7 +580,7 @@ async def ping():
         "status": "ok", 
         "timestamp": datetime.now().isoformat(),
         "service": "ask-innovai-production",
-        "version": "3.1.0"
+        "version": "3.2.0"
     }
 
 @app.get("/", response_class=HTMLResponse)
@@ -509,7 +593,7 @@ async def get_index():
         <html><body>
         <h1>🤖 Ask InnovAI Production</h1>
         <p><strong>Status:</strong> Production Ready ✅</p>
-        <p><strong>Version:</strong> 3.1.0</p>
+        <p><strong>Version:</strong> 3.2.0</p>
         <p>Admin interface file not found. Please ensure static/index.html exists.</p>
         </body></html>
         """)
@@ -622,7 +706,7 @@ async def health():
                 "timestamp": datetime.now().isoformat(),
                 "components": components,
                 "import_status": import_status["status"],
-                "version": "3.1.0"
+                "version": "3.2.0"
             }
         )
         
@@ -913,7 +997,7 @@ async def startup_event():
     """Non-blocking startup - app starts even if OpenSearch is down"""
     try:
         logger.info("🚀 Ask InnovAI Production starting...")
-        logger.info(f"   Version: 3.1.0")
+        logger.info(f"   Version: 3.2.0")
         logger.info(f"   Port: {os.getenv('PORT', '8080')}")
         
         # Check configuration without blocking
@@ -937,7 +1021,6 @@ async def startup_event():
         if opensearch_configured:
             def background_opensearch_test():
                 try:
-                    import time
                     time.sleep(3)  # Give app time to fully start
                     from opensearch_client import test_connection
                     if test_connection():
