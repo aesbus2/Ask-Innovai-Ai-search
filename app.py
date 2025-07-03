@@ -132,6 +132,58 @@ class ImportRequest(BaseModel):
     collection: str = "all"
     max_docs: Optional[int] = None
     import_type: str = "full"
+    batch_size: Optional[int] = None
+
+# ============================================================================
+# MEMORY MANAGEMENT FUNCTIONS
+# ============================================================================
+
+async def cleanup_memory_after_batch():
+    """Comprehensive memory cleanup after processing a batch"""
+    import gc
+    
+    try:
+        # Clear embedding cache if available
+        if EMBEDDER_AVAILABLE:
+            try:
+                from embedder import get_embedding_service
+                service = get_embedding_service()
+                # Clear LRU cache
+                if hasattr(service, '_cached_embed_single'):
+                    cache_info = service._cached_embed_single.cache_info()
+                    if cache_info.currsize > 100:  # Only clear if cache is getting large
+                        service._cached_embed_single.cache_clear()
+                        log_import(f"🧹 Cleared embedding LRU cache ({cache_info.currsize} entries)")
+            except Exception as e:
+                log_import(f"⚠️ Could not clear embedding cache: {str(e)[:50]}")
+        
+        # Clear OpenSearch connection pool stats (but keep connections)
+        try:
+            from opensearch_client import get_opensearch_manager
+            manager = get_opensearch_manager()
+            # Don't reset all stats, just clear any large cached data
+            if hasattr(manager, '_performance_stats'):
+                # Reset detailed logs but keep important counters
+                if manager._performance_stats.get('total_requests', 0) > 1000:
+                    log_import("🧹 Resetting OpenSearch performance stats")
+                    manager._performance_stats['total_response_time'] = 0.0
+                    manager._performance_stats['avg_response_time'] = 0.0
+        except Exception as e:
+            log_import(f"⚠️ Could not clear OpenSearch cache: {str(e)[:50]}")
+        
+        # Force garbage collection
+        collected = gc.collect()
+        if collected > 0:
+            log_import(f"🧹 Garbage collected {collected} objects")
+        
+        # Clear any large local variables that might be lingering
+        locals().clear()
+        
+        # Small delay to let cleanup complete
+        await asyncio.sleep(0.1)
+        
+    except Exception as e:
+        log_import(f"⚠️ Memory cleanup error: {str(e)[:100]}")
 
 # ============================================================================
 # PRODUCTION DATA PROCESSING FUNCTIONS
@@ -413,11 +465,35 @@ async def fetch_evaluations(max_docs: int = None):
         logger.error(f"Failed to fetch evaluations: {e}")
         raise
 
-async def run_production_import(collection: str = "all", max_docs: int = None):
-    """Production import process with enhanced error handling and backpressure"""
+async def run_production_import(collection: str = "all", max_docs: int = None, batch_size: int = None):
+    """Production import process with enhanced error handling, backpressure, and memory management"""
+    import gc
+    import psutil
+    import os
+    
     try:
         update_import_status("running", "Starting import")
-        log_import("🚀 Starting production import with enhanced error handling")
+        log_import("🚀 Starting production import with enhanced error handling and memory management")
+        
+        # Memory management settings
+        BATCH_SIZE = batch_size or int(os.getenv("IMPORT_BATCH_SIZE", "5"))
+        DELAY_BETWEEN_BATCHES = float(os.getenv("DELAY_BETWEEN_BATCHES", "2.0"))
+        DELAY_BETWEEN_DOCS = float(os.getenv("DELAY_BETWEEN_DOCS", "0.5"))
+        MEMORY_CLEANUP_INTERVAL = int(os.getenv("MEMORY_CLEANUP_INTERVAL", "1"))  # Every N batches
+        
+        log_import(f"📊 Import configuration:")
+        log_import(f"   Batch size: {BATCH_SIZE}")
+        log_import(f"   Delay between batches: {DELAY_BETWEEN_BATCHES}s")
+        log_import(f"   Delay between docs: {DELAY_BETWEEN_DOCS}s")
+        log_import(f"   Memory cleanup interval: {MEMORY_CLEANUP_INTERVAL} batches")
+        
+        # Get initial memory usage
+        try:
+            process = psutil.Process(os.getpid())
+            initial_memory = process.memory_info().rss / 1024 / 1024  # MB
+            log_import(f"💾 Initial memory usage: {initial_memory:.1f} MB")
+        except Exception:
+            initial_memory = None
         
         # Check OpenSearch connectivity first
         update_import_status("running", "Checking OpenSearch connectivity")
@@ -448,29 +524,36 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
             update_import_status("completed", results=results)
             return
         
-        # Process evaluations with better error handling and backpressure
-        update_import_status("running", f"Processing {len(evaluations)} evaluations")
+        # Process evaluations with better error handling, backpressure, and memory management
+        update_import_status("running", f"Processing {len(evaluations)} evaluations in batches of {BATCH_SIZE}")
         
         total_processed = 0
         total_chunks = 0
         errors = 0
         opensearch_errors = 0
         consecutive_opensearch_errors = 0
-        
-        # Process in smaller batches to reduce load
-        BATCH_SIZE = 5
-        DELAY_BETWEEN_BATCHES = 2  # seconds
-        DELAY_BETWEEN_DOCS = 0.5   # seconds
+        batch_count = 0
         
         for batch_start in range(0, len(evaluations), BATCH_SIZE):
             batch_end = min(batch_start + BATCH_SIZE, len(evaluations))
             batch = evaluations[batch_start:batch_end]
+            batch_count += 1
             
-            log_import(f"Processing batch {batch_start//BATCH_SIZE + 1}/{(len(evaluations) + BATCH_SIZE - 1)//BATCH_SIZE}")
-            update_import_status("running", f"Processing batch {batch_start + 1}-{batch_end}/{len(evaluations)}")
+            log_import(f"📦 Processing batch {batch_count}/{(len(evaluations) + BATCH_SIZE - 1)//BATCH_SIZE} ({len(batch)} documents)")
+            update_import_status("running", f"Processing batch {batch_count}: documents {batch_start + 1}-{batch_end}/{len(evaluations)}")
+            
+            # Memory check before batch
+            try:
+                current_memory = process.memory_info().rss / 1024 / 1024  # MB
+                log_import(f"💾 Memory before batch {batch_count}: {current_memory:.1f} MB")
+            except Exception:
+                current_memory = None
             
             batch_opensearch_errors = 0
+            batch_processed = 0
+            batch_chunks = 0
             
+            # Process documents in current batch
             for i, evaluation in enumerate(batch):
                 actual_index = batch_start + i
                 
@@ -478,8 +561,8 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
                     result = await process_evaluation(evaluation)
                     
                     if result["status"] == "success":
-                        total_processed += 1
-                        total_chunks += result["chunks_indexed"]
+                        batch_processed += 1
+                        batch_chunks += result["chunks_indexed"]
                         consecutive_opensearch_errors = 0  # Reset counter on success
                         
                     elif result["status"] == "error":
@@ -524,6 +607,25 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
                     errors += 1
                     log_import(f"❌ Unexpected error processing evaluation {actual_index}: {str(e)[:100]}")
             
+            # Update totals after batch
+            total_processed += batch_processed
+            total_chunks += batch_chunks
+            
+            log_import(f"📊 Batch {batch_count} completed: {batch_processed}/{len(batch)} documents, {batch_chunks} chunks")
+            
+            # Memory cleanup after batch
+            if batch_count % MEMORY_CLEANUP_INTERVAL == 0:
+                log_import(f"🧹 Performing memory cleanup after batch {batch_count}")
+                await cleanup_memory_after_batch()
+                
+                # Check memory after cleanup
+                try:
+                    memory_after_cleanup = process.memory_info().rss / 1024 / 1024  # MB
+                    memory_saved = current_memory - memory_after_cleanup if current_memory else 0
+                    log_import(f"💾 Memory after cleanup: {memory_after_cleanup:.1f} MB (saved: {memory_saved:.1f} MB)")
+                except Exception:
+                    pass
+            
             # If this batch had many OpenSearch errors, increase delay
             if batch_opensearch_errors >= 2:
                 extended_delay = DELAY_BETWEEN_BATCHES + (batch_opensearch_errors * 2)
@@ -532,8 +634,24 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
             else:
                 # Normal delay between batches
                 await asyncio.sleep(DELAY_BETWEEN_BATCHES)
+            
+            # Clear batch references to help garbage collection
+            batch.clear()
+            del batch
         
-        # Complete
+        # Complete with final memory cleanup
+        log_import("🧹 Performing final memory cleanup")
+        await cleanup_memory_after_batch()
+        
+        # Final memory check
+        try:
+            final_memory = process.memory_info().rss / 1024 / 1024  # MB
+            memory_change = final_memory - initial_memory if initial_memory else 0
+            log_import(f"💾 Final memory usage: {final_memory:.1f} MB (change: {memory_change:+.1f} MB)")
+        except Exception:
+            final_memory = None
+            memory_change = 0
+        
         results = {
             "total_documents_processed": total_processed,
             "total_chunks_indexed": total_chunks,
@@ -541,7 +659,14 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
             "opensearch_errors": opensearch_errors,
             "import_type": "full",
             "completed_at": datetime.now().isoformat(),
-            "success_rate": f"{(total_processed / len(evaluations) * 100):.1f}%" if evaluations else "0%"
+            "success_rate": f"{(total_processed / len(evaluations) * 100):.1f}%" if evaluations else "0%",
+            "batch_size": BATCH_SIZE,
+            "total_batches": batch_count,
+            "memory_stats": {
+                "initial_memory_mb": initial_memory,
+                "final_memory_mb": final_memory,
+                "memory_change_mb": memory_change
+            }
         }
         
         log_import(f"🎉 Import completed:")
@@ -550,6 +675,8 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
         log_import(f"   ❌ Total errors: {errors}")
         log_import(f"   🔌 OpenSearch errors: {opensearch_errors}")
         log_import(f"   📊 Success rate: {results['success_rate']}")
+        log_import(f"   📦 Batches processed: {batch_count}")
+        log_import(f"   💾 Memory change: {memory_change:+.1f} MB")
         
         update_import_status("completed", results=results)
         
@@ -838,7 +965,7 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
         })
         
         # Start import
-        background_tasks.add_task(run_production_import, request.collection, request.max_docs)
+        background_tasks.add_task(run_production_import, request.collection, request.max_docs, request.batch_size)
         
         return JSONResponse(
             status_code=200,
@@ -852,30 +979,130 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
             content={"status": "error", "message": f"Failed to start import: {str(e)}"}
         )
 
+@app.get("/memory_stats")
+async def get_memory_stats():
+    """Get current memory usage statistics"""
+    try:
+        import psutil
+        import gc
+        
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        
+        # Get embedding service stats if available
+        embedding_cache_size = 0
+        embedding_cache_hits = 0
+        if EMBEDDER_AVAILABLE:
+            try:
+                from embedder import get_embedding_stats
+                stats = get_embedding_stats()
+                embedding_cache_size = stats.get('lru_cache_info', {}).get('size', 0)
+                embedding_cache_hits = stats.get('lru_cache_hits', 0)
+            except:
+                pass
+        
+        # Get OpenSearch stats
+        opensearch_stats = {}
+        try:
+            from opensearch_client import get_opensearch_stats
+            opensearch_stats = get_opensearch_stats()
+        except:
+            pass
+        
+        return {
+            "status": "success",
+            "memory_usage": {
+                "rss_mb": memory_info.rss / 1024 / 1024,
+                "vms_mb": memory_info.vms / 1024 / 1024,
+                "percent": process.memory_percent(),
+                "available_mb": psutil.virtual_memory().available / 1024 / 1024,
+                "total_mb": psutil.virtual_memory().total / 1024 / 1024
+            },
+            "cache_stats": {
+                "embedding_cache_size": embedding_cache_size,
+                "embedding_cache_hits": embedding_cache_hits,
+                "opensearch_operations": opensearch_stats.get('total_operations', 0),
+                "opensearch_success_rate": opensearch_stats.get('success_rate', '0%')
+            },
+            "garbage_collection": {
+                "generation_0": gc.get_count()[0],
+                "generation_1": gc.get_count()[1],
+                "generation_2": gc.get_count()[2]
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+@app.post("/clear_cache")
+async def clear_cache():
+    """Manually clear caches and perform garbage collection"""
+    try:
+        await cleanup_memory_after_batch()
+        return {"status": "success", "message": "Cache cleared and garbage collection performed"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+@app.get("/import_configuration")
+async def get_import_configuration():
+    """Get current import configuration settings"""
+    return {
+        "status": "success",
+        "configuration": {
+            "default_batch_size": int(os.getenv("IMPORT_BATCH_SIZE", "5")),
+            "delay_between_batches": float(os.getenv("DELAY_BETWEEN_BATCHES", "2.0")),
+            "delay_between_docs": float(os.getenv("DELAY_BETWEEN_DOCS", "0.5")),
+            "memory_cleanup_interval": int(os.getenv("MEMORY_CLEANUP_INTERVAL", "1")),
+            "max_opensearch_errors": 15,
+            "max_consecutive_errors": 8,
+            "environment_variables": {
+                "IMPORT_BATCH_SIZE": os.getenv("IMPORT_BATCH_SIZE", "5"),
+                "DELAY_BETWEEN_BATCHES": os.getenv("DELAY_BETWEEN_BATCHES", "2.0"),
+                "DELAY_BETWEEN_DOCS": os.getenv("DELAY_BETWEEN_DOCS", "0.5"),
+                "MEMORY_CLEANUP_INTERVAL": os.getenv("MEMORY_CLEANUP_INTERVAL", "1")
+            }
+        }
+    }
+
 @app.get("/import_statistics")
 async def get_import_statistics():
-    """Get import statistics"""
+    """Get import statistics with memory information"""
     try:
-        # This would typically query your database
-        # For now, return basic stats from last import
+        # Get basic import stats
+        basic_stats = {
+            "total_documents": 0,
+            "total_chunks": 0,
+            "last_import": None,
+            "success_rate": "0%",
+            "batch_size": None,
+            "total_batches": None,
+            "memory_stats": None
+        }
+        
         if import_status.get("results"):
-            return {
-                "status": "success",
-                "statistics": {
-                    "total_documents": import_status["results"].get("total_documents_processed", 0),
-                    "total_chunks": import_status["results"].get("total_chunks_indexed", 0),
-                    "last_import": import_status.get("end_time")
-                }
-            }
-        else:
-            return {
-                "status": "success",
-                "statistics": {
-                    "total_documents": 0,
-                    "total_chunks": 0,
-                    "last_import": None
-                }
-            }
+            results = import_status["results"]
+            basic_stats.update({
+                "total_documents": results.get("total_documents_processed", 0),
+                "total_chunks": results.get("total_chunks_indexed", 0),
+                "last_import": import_status.get("end_time"),
+                "success_rate": results.get("success_rate", "0%"),
+                "batch_size": results.get("batch_size"),
+                "total_batches": results.get("total_batches"),
+                "memory_stats": results.get("memory_stats")
+            })
+        
+        # Get current memory stats
+        try:
+            import psutil
+            process = psutil.Process(os.getpid())
+            current_memory = process.memory_info().rss / 1024 / 1024
+            basic_stats["current_memory_mb"] = current_memory
+        except:
+            pass
+        
+        return {
+            "status": "success",
+            "statistics": basic_stats
+        }
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
@@ -1035,6 +1262,18 @@ async def startup_event():
             threading.Thread(target=background_opensearch_test, daemon=True).start()
         
         logger.info("🎉 Production startup complete (non-blocking)")
+        
+        # Log memory management features
+        try:
+            import psutil
+            process = psutil.Process(os.getpid())
+            initial_memory = process.memory_info().rss / 1024 / 1024
+            logger.info(f"💾 Initial memory usage: {initial_memory:.1f} MB")
+            logger.info("🧹 Memory management features enabled")
+        except ImportError:
+            logger.warning("⚠️ psutil not available - memory monitoring disabled")
+        except Exception as e:
+            logger.warning(f"⚠️ Memory monitoring setup failed: {e}")
         
         # Log readiness status
         ready_components = sum([api_configured, genai_configured, opensearch_configured])

@@ -1,5 +1,5 @@
 # opensearch_client.py - Enhanced Production Ready Version
-# Version: 2.1.0 - Production Ready with Advanced Error Handling
+# Version: 2.1.0 - Production Ready with Advanced Error Handling new
 
 from opensearchpy import OpenSearch, exceptions
 import os
