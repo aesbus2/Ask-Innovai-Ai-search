@@ -1,5 +1,5 @@
 # opensearch_client.py - Enhanced Production Ready Version
-# Version: 2.1.1 - Production Ready with Advanced Error Handling - TIMEOUT FIX
+# Version: 2.1.1 - Production Ready with SSL Fix and Timeout Fix
 
 from opensearchpy import OpenSearch, exceptions
 import os
@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_INDEX = "innovai-search-default"
 
 # Connection pool settings
-MAX_RETRIES = 5
+MAX_RETRIES = 3
 INITIAL_RETRY_DELAY = 1
 MAX_RETRY_DELAY = 30
-TIMEOUT_SECONDS = 30
+TIMEOUT_SECONDS = 60  # Increased from 30 to 60 seconds
 CONNECTION_POOL_SIZE = 25
 CIRCUIT_BREAKER_THRESHOLD = 10
 
@@ -83,36 +83,38 @@ class OpenSearchManager:
                 ssl_assert_hostname=False,
                 ssl_show_warn=False,
                 
-                # Timeout settings
+                # Timeout settings - FIXED
                 timeout=TIMEOUT_SECONDS,
                 request_timeout=TIMEOUT_SECONDS,
+                
+                # Connection settings
+                connection_class=None,  # Use default
+                pool_connections=CONNECTION_POOL_SIZE,
+                pool_maxsize=CONNECTION_POOL_SIZE,
+                pool_block=True,
                 
                 # Retry settings
                 max_retries=MAX_RETRIES,
                 retry_on_timeout=True,
                 retry_on_status={429, 502, 503, 504},  # Retry on these HTTP status codes
                 
-                # Connection pool settings
-                maxsize=CONNECTION_POOL_SIZE,
-                block=True,  # Block if no connections available
-                
                 # Performance settings
                 http_compress=True,
-                connections_per_node=10,
                 
                 # Circuit breaker settings
                 sniff_on_start=False,
                 sniff_on_connection_fail=False,
-                sniffer_timeout=10,
+                sniffer_timeout=30,
                 
                 # Headers
-                headers={"User-Agent": "InnovAI-OpenSearch-Client/2.1.0"}
+                headers={"User-Agent": "InnovAI-OpenSearch-Client/2.1.1"}
             )
             
             logger.info(f"✅ OpenSearch client initialized: {config['url']}")
             logger.info(f"   Connection pool size: {CONNECTION_POOL_SIZE}")
             logger.info(f"   Timeout: {TIMEOUT_SECONDS}s")
             logger.info(f"   Max retries: {MAX_RETRIES}")
+            logger.info(f"   SSL/TLS: {'Enabled' if config['use_ssl'] else 'Disabled'}")
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize OpenSearch client: {e}")
@@ -128,18 +130,35 @@ class OpenSearchManager:
         # Clean host - remove any protocol prefixes
         clean_host = host.replace("http://", "").replace("https://", "")
         
-        # Determine protocol intelligently
-        if host.startswith("https://"):
+        # SSL/TLS Configuration - Allow manual override
+        ssl_override = os.getenv("OPENSEARCH_SSL", "").lower()
+        
+        if ssl_override in ["true", "1", "yes", "on"]:
+            # Force SSL on
             protocol = "https"
-        elif host.startswith("http://"):
+            use_ssl = True
+        elif ssl_override in ["false", "0", "no", "off"]:
+            # Force SSL off
             protocol = "http"
+            use_ssl = False
         else:
-            # Auto-detect based on host patterns and port
-            cloud_patterns = ["cloud", "digitalocean", "aws", "azure", "elasticsearch", "opensearch"]
-            is_cloud = any(pattern in clean_host.lower() for pattern in cloud_patterns)
-            is_ssl_port = port in [443, 9243, 25060]  # Common SSL ports
-            
-            protocol = "https" if (is_cloud or is_ssl_port) else "http"
+            # Auto-detect based on URL prefix first
+            if host.startswith("https://"):
+                protocol = "https"
+                use_ssl = True
+            elif host.startswith("http://"):
+                protocol = "http"
+                use_ssl = False
+            else:
+                # Conservative auto-detection - default to HTTP unless we're sure
+                # Only use HTTPS for explicit SSL ports or if explicitly configured
+                if port == 443 or port == 9243:
+                    protocol = "https"
+                    use_ssl = True
+                else:
+                    # Default to HTTP for safety - user can override with OPENSEARCH_SSL=true
+                    protocol = "http"
+                    use_ssl = False
         
         url = f"{protocol}://{clean_host}:{port}"
         
@@ -150,7 +169,8 @@ class OpenSearchManager:
             "password": password,
             "protocol": protocol,
             "url": url,
-            "use_ssl": protocol == "https"
+            "use_ssl": use_ssl,
+            "ssl_enabled": use_ssl  # Add for backward compatibility
         }
     
     def _validate_config(self, config: Dict[str, Any]) -> bool:
@@ -168,6 +188,13 @@ class OpenSearchManager:
         
         if config["password"] == "admin" and "digitalocean" in config["host"].lower():
             logger.warning("⚠️ Using default password 'admin' with Digital Ocean - check your credentials")
+        
+        # SSL Configuration guidance
+        ssl_override = os.getenv("OPENSEARCH_SSL", "").lower()
+        if ssl_override:
+            logger.info(f"🔒 SSL manually set to: {config['use_ssl']} (OPENSEARCH_SSL={ssl_override})")
+        else:
+            logger.info(f"🔒 SSL auto-detected as: {config['use_ssl']} (override with OPENSEARCH_SSL=true/false)")
         
         return True
     
@@ -702,12 +729,32 @@ def get_main_data_index() -> str:
     """Get the main data index name"""
     return "Ai Corporate SPTR - TEST"
 
+# Global client access
+def get_opensearch_client():
+    """Get the OpenSearch client instance"""
+    manager = get_opensearch_manager()
+    return manager.client
+
+# Expose client for backward compatibility
+client = None
+
+def _initialize_module_client():
+    """Initialize the module-level client variable"""
+    global client
+    manager = get_opensearch_manager()
+    client = manager.client
+
 # Initialize on import (non-blocking)
 try:
     config = get_opensearch_manager().get_config()
-    logger.info("🔌 Enhanced OpenSearch client v2.1.0 initialized")
+    logger.info("🔌 Enhanced OpenSearch client v2.1.1 initialized")
     logger.info(f"   Target: {config['url']}")
+    logger.info(f"   SSL/TLS: {'Enabled' if config['ssl_enabled'] else 'Disabled'}")
     logger.info(f"   Features: Connection pooling, Circuit breaker, Advanced retry logic")
     logger.info(f"   Connection will be tested on first use")
+    
+    # Initialize the module client
+    _initialize_module_client()
+    
 except Exception as e:
     logger.error(f"❌ OpenSearch client initialization warning: {e}")
