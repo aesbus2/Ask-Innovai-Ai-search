@@ -1,5 +1,5 @@
 # Enhanced requirements.txt for Ask InnovAI with Memory Management
-# Version: 3.2.0 - Enhanced with Memory Management Support
+# Version: 3.3.0 - Enhanced with Memory Management Support and psutil
 
 # Core web framework (required)
 fastapi>=0.110.0
@@ -21,7 +21,7 @@ opensearch-py>=2.4.0
 # HTML parsing and text processing (required)
 beautifulsoup4>=4.12.0
 
-# System monitoring and memory management (required for enhanced features)
+# System monitoring and memory management (REQUIRED for enhanced features)
 psutil>=5.9.0
 
 # Data processing utilities
@@ -29,3 +29,6 @@ pydantic>=2.0.0
 
 # Additional dependencies for production stability
 asyncio-throttle>=1.0.0  # For rate limiting (optional)
+
+# Note: Install with: pip install -r requirements.txt
+# psutil is required for memory monitoring in app.py
