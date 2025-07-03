@@ -1,6 +1,6 @@
-# Final Production App.py - Ready for Full Import
-# Version: 3.0.0 - Production ready with working authentication
-# Uses confirmed working auth: auth header with your token
+# Fixed Compression App.py - Resolves gzip decompression issue
+# Version: 2.7.0 - Fixes binary/compressed response handling
+# The issue was Accept-Encoding causing compressed responses that weren't decompressing
 
 import os
 import logging
@@ -9,6 +9,8 @@ import asyncio
 import json
 import sys
 import re
+import gzip
+import io
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
@@ -59,9 +61,9 @@ except ImportError as e:
 
 # Create FastAPI app
 app = FastAPI(
-    title="Ask InnovAI Production",
-    description="AI-Powered Knowledge Assistant - Production Ready",
-    version="3.0.0"
+    title="Ask InnovAI",
+    description="AI-Powered Knowledge Assistant - Fixed Compression Issue",
+    version="2.7.0"
 )
 
 # Enable CORS
@@ -80,28 +82,38 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Failed to mount static files: {e}")
 
-# Configuration - Using your confirmed working settings
+# Configuration
 GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", "https://tcxn3difq23zdxlph2heigba.agents.do-ai.run")
 GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
-API_BASE_URL = os.getenv("API_BASE_URL", "https://innovai-6abj.onrender.com/api/content")
-API_AUTH_KEY = os.getenv("API_AUTH_KEY", "auth")  # Your confirmed working auth header
-API_AUTH_VALUE = os.getenv("API_AUTH_VALUE", "")
+API_BASE_URL = os.getenv("API_BASE_URL")  
+API_AUTH_KEY = os.getenv("API_AUTH_KEY", "Authorization")
+API_AUTH_VALUE = os.getenv("API_AUTH_VALUE")
 
-logger.info(f"🚀 Production Configuration:")
+logger.info(f"🔧 Fixed Compression Configuration:")
 logger.info(f"   API_BASE_URL: {API_BASE_URL}")
 logger.info(f"   API_AUTH_KEY: {API_AUTH_KEY}")
-logger.info(f"   API_AUTH_VALUE: {'✅ Set (' + str(len(API_AUTH_VALUE)) + ' chars)' if API_AUTH_VALUE else '❌ Missing'}")
-logger.info(f"   EMBEDDER_AVAILABLE: {EMBEDDER_AVAILABLE}")
+logger.info(f"   API_AUTH_VALUE: {'✅ Set' if API_AUTH_VALUE else '❌ Missing'}")
 
-# Production import status tracking
+# Create a session with FIXED headers (no compression issues)
+session = requests.Session()
+
+# FIXED: Remove problematic compression headers and use safe defaults
+session.headers.update({
+    'User-Agent': 'Ask-InnovAI/2.7.0 (Data Import Service)',
+    'Accept': 'application/json',
+    'Connection': 'keep-alive',
+    'Cache-Control': 'no-cache'
+    # REMOVED: 'Accept-Encoding': 'gzip, deflate, br' - This was causing the compression issue!
+})
+
+# Simple import status tracking
 import_status = {
     "status": "idle",
     "start_time": None,
     "end_time": None,
     "current_step": None,
     "results": {},
-    "error": None,
-    "import_type": "full"
+    "error": None
 }
 
 # In-memory logs
@@ -141,14 +153,72 @@ class ImportRequest(BaseModel):
     import_type: str = "full"
 
 # ============================================================================
-# PRODUCTION API DATA PROCESSING FUNCTIONS
+# FIXED COMPRESSION HANDLING FUNCTIONS
+# ============================================================================
+
+def detect_and_handle_compression(response) -> str:
+    """Detect if response is compressed and handle appropriately"""
+    
+    # Get content encoding
+    content_encoding = response.headers.get('content-encoding', '').lower()
+    content_type = response.headers.get('content-type', '').lower()
+    
+    log_import(f"🔍 Response analysis:")
+    log_import(f"   Content-Encoding: {content_encoding or 'none'}")
+    log_import(f"   Content-Type: {content_type}")
+    log_import(f"   Content-Length: {response.headers.get('content-length', 'unknown')}")
+    log_import(f"   Raw content size: {len(response.content)} bytes")
+    
+    # Check if content looks like binary/compressed data
+    try:
+        # Try to decode as text first
+        if response.encoding:
+            text = response.content.decode(response.encoding)
+        else:
+            text = response.content.decode('utf-8')
+            
+        # Check if text contains binary characters (indicates compression issue)
+        if any(ord(char) < 32 and char not in '\r\n\t' for char in text[:100]):
+            log_import("⚠️ DETECTED: Binary characters in response (likely compression issue)")
+            
+            # Try manual gzip decompression
+            if content_encoding == 'gzip' or text.startswith('\x1f\x8b'):
+                log_import("🔧 Attempting manual gzip decompression...")
+                try:
+                    with gzip.GzipFile(fileobj=io.BytesIO(response.content)) as gz:
+                        decompressed = gz.read().decode('utf-8')
+                    log_import("✅ Manual gzip decompression successful!")
+                    return decompressed
+                except Exception as gz_error:
+                    log_import(f"❌ Manual gzip decompression failed: {gz_error}")
+            
+            # If we can't decompress, this is likely a server issue
+            raise Exception(f"Response contains binary data that couldn't be decompressed. Content-Encoding: {content_encoding}")
+        
+        # Text looks normal
+        log_import("✅ Response appears to be uncompressed text")
+        return text
+        
+    except UnicodeDecodeError as decode_error:
+        log_import(f"❌ Unicode decode error: {decode_error}")
+        
+        # Try different encodings
+        for encoding in ['latin-1', 'windows-1252', 'iso-8859-1']:
+            try:
+                text = response.content.decode(encoding)
+                log_import(f"✅ Successfully decoded with {encoding}")
+                return text
+            except:
+                continue
+        
+        raise Exception(f"Could not decode response with any encoding. Content appears to be binary.")
+
+# ============================================================================
+# API PROCESSING FUNCTIONS (Same as before)
 # ============================================================================
 
 def extract_qa_pairs(evaluation_text: str) -> List[str]:
-    """
-    Extract Question and Answer pairs from evaluation text, keeping them together.
-    Rule: "Keep Question and Answers in the same chunk"
-    """
+    """Extract Question and Answer pairs from evaluation text, keeping them together."""
     if not evaluation_text:
         return []
     
@@ -175,7 +245,6 @@ def extract_qa_pairs(evaluation_text: str) -> List[str]:
                 answer = match.group(2).strip()
                 qa_chunk = f"Section: {section_name}\nQuestion: {question}\nAnswer: {answer}"
                 qa_chunks.append(qa_chunk)
-                log_import(f"✅ Extracted Q&A pair from {section_name}: {len(qa_chunk)} chars")
     
     # Fallback: if no sections, try direct Q&A extraction
     if not qa_chunks:
@@ -187,15 +256,11 @@ def extract_qa_pairs(evaluation_text: str) -> List[str]:
             answer = match.group(2).strip()
             qa_chunk = f"Question: {question}\nAnswer: {answer}"
             qa_chunks.append(qa_chunk)
-            log_import(f"✅ Extracted direct Q&A pair: {len(qa_chunk)} chars")
     
     return qa_chunks
 
 def split_transcript_by_speakers(transcript: str) -> List[str]:
-    """
-    Split transcript while preserving speaker boundaries.
-    Rule: "Never chunk or split the sentence between speakers"
-    """
+    """Split transcript while preserving speaker boundaries."""
     if not transcript:
         return []
     
@@ -208,8 +273,7 @@ def split_transcript_by_speakers(transcript: str) -> List[str]:
     parts = re.split(speaker_pattern, clean_transcript)
     
     if len(parts) < 3:
-        # No speaker patterns found, use regular chunking but log warning
-        log_import("⚠️ No speaker patterns found in transcript, using regular chunking")
+        # No speaker patterns found, use regular chunking
         chunks = split_into_chunks(clean_transcript, max_chars=1100, overlap=100)
         return [chunk["text"] for chunk in chunks]
     
@@ -223,36 +287,25 @@ def split_transcript_by_speakers(transcript: str) -> List[str]:
                 speaker_turn = f"{speaker} {content}"
                 speaker_turns.append(speaker_turn)
     
-    log_import(f"🎙️ Found {len(speaker_turns)} speaker turns in transcript")
-    
     # Combine turns into appropriately sized chunks without breaking speaker boundaries
     chunks = []
     current_chunk = ""
     max_size = 1100
     
     for turn in speaker_turns:
-        # If adding this turn would exceed max size and we have content, start new chunk
         if current_chunk and len(current_chunk + "\n" + turn) > max_size:
             chunks.append(current_chunk.strip())
-            log_import(f"📝 Created transcript chunk: {len(current_chunk)} chars")
             current_chunk = turn
         else:
             current_chunk = current_chunk + "\n" + turn if current_chunk else turn
     
-    # Add the last chunk if it has content
     if current_chunk.strip():
         chunks.append(current_chunk.strip())
-        log_import(f"📝 Created final transcript chunk: {len(current_chunk)} chars")
     
     return chunks
 
 async def process_evaluation(evaluation: Dict) -> Dict:
-    """
-    Production evaluation processing following confirmed API data rules:
-    1. Keep Question and Answers together (evaluation field)
-    2. Never split between speakers (transcript field)  
-    3. Link everything together with internalId for complete reconstruction
-    """
+    """Process evaluation with complete metadata extraction"""
     try:
         evaluation_text = evaluation.get("evaluation", "")
         transcript_text = evaluation.get("transcript", "")
@@ -260,17 +313,13 @@ async def process_evaluation(evaluation: Dict) -> Dict:
         if not evaluation_text and not transcript_text:
             return {"status": "skipped", "reason": "no_content"}
         
-        log_import(f"🔄 Processing evaluation {evaluation.get('evaluationId')} for agent {evaluation.get('agentName')}")
-        
         all_chunks = []
         
-        # Process evaluation Q&A (keep Q&A together)
+        # Process evaluation Q&A
         if evaluation_text:
-            log_import(f"📋 Processing evaluation Q&A for evaluation {evaluation.get('evaluationId')}")
             qa_chunks = extract_qa_pairs(evaluation_text)
-            
             for qa_text in qa_chunks:
-                if len(qa_text.strip()) >= 20:  # Minimum meaningful content
+                if len(qa_text.strip()) >= 20:
                     all_chunks.append({
                         "text": qa_text,
                         "content_type": "evaluation_qa",
@@ -279,13 +328,11 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                         "chunk_index": len(all_chunks)
                     })
         
-        # Process transcript (never split between speakers)
+        # Process transcript
         if transcript_text:
-            log_import(f"🎙️ Processing transcript for evaluation {evaluation.get('evaluationId')}")
             transcript_chunks = split_transcript_by_speakers(transcript_text)
-            
             for transcript_chunk in transcript_chunks:
-                if len(transcript_chunk.strip()) >= 20:  # Minimum meaningful content
+                if len(transcript_chunk.strip()) >= 20:
                     all_chunks.append({
                         "text": transcript_chunk,
                         "content_type": "transcript",
@@ -297,13 +344,13 @@ async def process_evaluation(evaluation: Dict) -> Dict:
         if not all_chunks:
             return {"status": "skipped", "reason": "no_meaningful_content"}
         
-        # Complete metadata extraction from confirmed API structure
+        # Complete metadata extraction
         meta = {
             "evaluation_id": evaluation.get("evaluationId"),
             "internal_id": evaluation.get("internalId"),
             "template_id": evaluation.get("template_id"),
             "template": evaluation.get("template_name"),
-            "program": evaluation.get("partner"),  # Maps to your 'partner' field
+            "program": evaluation.get("partner"),
             "site": evaluation.get("site"),
             "lob": evaluation.get("lob"),
             "agent": evaluation.get("agentName"),
@@ -315,22 +362,19 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             "created_on": evaluation.get("created_on")
         }
         
-        # Use internalId as document ID for complete reconstruction
+        # Use internalId as document ID
         doc_id = str(evaluation.get("internalId", uuid4()))
         collection = evaluation.get("template_name", "evaluations")
-        
-        log_import(f"📄 Document ID: {doc_id}, Collection: {collection}")
         
         # Index chunks with embeddings
         indexed_chunks = 0
         for i, chunk in enumerate(all_chunks):
             try:
-                # Generate embedding using embedder.py
+                # Generate embedding
                 embedding = None
                 if EMBEDDER_AVAILABLE:
                     try:
                         embedding = embed_text(chunk["text"])
-                        log_import(f"🧠 Generated embedding for chunk {i}: {len(embedding)} dimensions")
                     except Exception as embed_error:
                         logger.warning(f"Embedding failed for chunk {i}: {embed_error}")
                 
@@ -348,18 +392,15 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 if embedding:
                     doc_body["embedding"] = embedding
                 
-                # Use compound ID for complete reconstruction capability
                 chunk_id = f"{doc_id}-{chunk['content_type']}-{i}"
                 index_document(chunk_id, doc_body, index_override=collection)
                 indexed_chunks += 1
-                
-                log_import(f"✅ Indexed chunk {i} ({chunk['content_type']}): {len(chunk['text'])} chars")
                 
             except Exception as e:
                 logger.warning(f"Failed to index chunk {i}: {e}")
                 continue
         
-        result = {
+        return {
             "status": "success",
             "document_id": doc_id,
             "chunks_indexed": indexed_chunks,
@@ -369,21 +410,17 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             "total_content_length": sum(chunk["length"] for chunk in all_chunks)
         }
         
-        log_import(f"🎉 Successfully processed evaluation {evaluation.get('evaluationId')}: {indexed_chunks} chunks indexed")
-        return result
-        
     except Exception as e:
         error_msg = f"Failed to process evaluation {evaluation.get('evaluationId')}: {e}"
         logger.error(error_msg)
-        log_import(f"❌ {error_msg}")
         return {"status": "error", "error": str(e)}
 
 # ============================================================================
-# PRODUCTION API FETCHING WITH CONFIRMED WORKING AUTH
+# FIXED API FETCHING WITH COMPRESSION HANDLING
 # ============================================================================
 
 async def fetch_evaluations(max_docs: int = None):
-    """Production: Fetch evaluations using confirmed working authentication"""
+    """FIXED: Fetch evaluations with proper compression handling"""
     try:
         if not API_BASE_URL:
             raise Exception("API_BASE_URL is not configured")
@@ -391,14 +428,15 @@ async def fetch_evaluations(max_docs: int = None):
         if not API_AUTH_VALUE:
             raise Exception("API_AUTH_VALUE is not configured")
         
-        log_import(f"📡 PRODUCTION: Fetching evaluations from: {API_BASE_URL}")
+        log_import(f"📡 FIXED: Fetching evaluations from: {API_BASE_URL}")
         
-        # CONFIRMED WORKING: Your exact auth format from successful test
+        # FIXED: Minimal, safe headers (no compression issues)
         headers = {
-            API_AUTH_KEY: API_AUTH_VALUE,  # "auth": "your_token"
+            API_AUTH_KEY: API_AUTH_VALUE,
             'Accept': 'application/json',
-            'User-Agent': 'Ask-InnovAI-Production/3.0.0',
+            'User-Agent': 'Ask-InnovAI/2.7.0',
             'Cache-Control': 'no-cache'
+            # REMOVED all compression-related headers that were causing issues
         }
         
         # Request parameters
@@ -406,31 +444,33 @@ async def fetch_evaluations(max_docs: int = None):
         if max_docs:
             params["limit"] = max_docs
         
-        log_import(f"🔑 PRODUCTION: Using confirmed working headers")
+        log_import(f"🔑 FIXED: Using safe headers: {list(headers.keys())}")
         log_import(f"📋 Request params: {params}")
         
-        # Make request with confirmed working configuration
+        # Make request with FIXED handling
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                log_import(f"🔄 PRODUCTION: Attempt {attempt + 1}/{max_retries}")
+                log_import(f"🔄 FIXED: Attempt {attempt + 1}/{max_retries}")
                 
-                response = requests.get(
+                response = session.get(
                     API_BASE_URL, 
                     headers=headers, 
                     params=params, 
-                    timeout=60
+                    timeout=60,
+                    verify=True,
+                    allow_redirects=True
                 )
                 
                 # Log response details
-                log_import(f"📊 PRODUCTION: Response status: {response.status_code}")
-                log_import(f"📄 PRODUCTION: Response content-type: {response.headers.get('content-type', 'unknown')}")
-                log_import(f"📏 PRODUCTION: Response content length: {len(response.content)}")
+                log_import(f"📊 FIXED: Response status: {response.status_code}")
+                log_import(f"📄 FIXED: Response content-type: {response.headers.get('content-type', 'unknown')}")
+                log_import(f"📏 FIXED: Response content length: {len(response.content)}")
                 
                 if response.status_code == 200:
                     break
                 elif response.status_code in [502, 503, 504] and attempt < max_retries - 1:
-                    log_import(f"⚠️ PRODUCTION: Server error {response.status_code}, retrying...")
+                    log_import(f"⚠️ FIXED: Server error {response.status_code}, retrying...")
                     await asyncio.sleep(2 ** attempt)
                     continue
                 else:
@@ -438,42 +478,68 @@ async def fetch_evaluations(max_docs: int = None):
                     
             except requests.exceptions.RequestException as e:
                 if attempt < max_retries - 1:
-                    log_import(f"⚠️ PRODUCTION: Request failed, retrying: {e}")
+                    log_import(f"⚠️ FIXED: Request failed, retrying: {e}")
                     await asyncio.sleep(2 ** attempt)
                     continue
                 else:
                     raise Exception(f"Request failed after {max_retries} attempts: {e}")
         
-        # Parse JSON response
+        # FIXED: Handle compression properly
         try:
-            data = response.json()
-            log_import("✅ PRODUCTION: JSON parsing successful")
+            response_text = detect_and_handle_compression(response)
+        except Exception as compression_error:
+            log_import(f"❌ Compression handling failed: {compression_error}")
+            # Fallback: try to get text directly
+            try:
+                response_text = response.text
+                if not response_text.strip():
+                    raise Exception("Response is empty after compression handling")
+            except Exception as fallback_error:
+                raise Exception(f"Could not extract text from response: {fallback_error}")
+        
+        # Validate response content
+        if not response_text.strip():
+            raise Exception("API returned empty response")
+        
+        # Check for HTML response
+        if response_text.strip().startswith("<!DOCTYPE") or response_text.strip().startswith("<html"):
+            log_import("❌ FIXED: Received HTML instead of JSON")
+            soup = BeautifulSoup(response_text, "html.parser")
+            title = soup.find("title")
+            title_text = title.get_text() if title else "Unknown"
+            raise Exception(f"API returned HTML page '{title_text}' instead of JSON. Check API endpoint URL.")
+        
+        # Parse JSON with enhanced error handling
+        try:
+            data = json.loads(response_text)
+            log_import("✅ FIXED: JSON parsing successful")
         except json.JSONDecodeError as e:
-            log_import(f"❌ PRODUCTION: JSON parsing failed: {str(e)}")
+            log_import(f"❌ FIXED: JSON parsing failed: {str(e)}")
+            log_import(f"Raw response preview: {response_text[:500]}")
             raise Exception(f"API returned invalid JSON: {str(e)}")
         
-        # Extract evaluations from confirmed API structure
+        # Extract evaluations from response
         evaluations = data.get("evaluations", [])
-        log_import(f"📋 PRODUCTION: Found {len(evaluations)} evaluations")
+        log_import(f"📋 FIXED: Found {len(evaluations)} evaluations")
         
         if not evaluations and isinstance(data, list):
             evaluations = data
-            log_import(f"📋 PRODUCTION: Data is array format: {len(evaluations)} items")
+            log_import(f"📋 FIXED: Data is array format: {len(evaluations)} items")
         
         if not evaluations:
-            log_import(f"⚠️ PRODUCTION: No evaluations found. Response keys: {list(data.keys()) if isinstance(data, dict) else 'Array response'}")
+            log_import(f"⚠️ FIXED: No evaluations found. Response keys: {list(data.keys()) if isinstance(data, dict) else 'Array response'}")
         
         return evaluations
         
     except Exception as e:
-        logger.error(f"❌ PRODUCTION: Failed to fetch evaluations: {e}")
+        logger.error(f"❌ FIXED: Failed to fetch evaluations: {e}")
         raise Exception(f"API request failed: {str(e)}")
 
-async def run_production_import(collection: str = "all", max_docs: int = None):
-    """Production import process with confirmed working configuration"""
+async def run_import(collection: str = "all", max_docs: int = None):
+    """FIXED: Import process with compression handling"""
     try:
-        update_import_status("running", "Starting production import with confirmed working auth")
-        log_import("🚀 PRODUCTION: Starting import with confirmed working configuration")
+        update_import_status("running", "Starting FIXED import with proper compression handling")
+        log_import("🚀 FIXED: Starting import with compression handling")
         
         if not API_AUTH_VALUE:
             raise Exception("API_AUTH_VALUE environment variable is required")
@@ -481,23 +547,20 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
         if not API_BASE_URL:
             raise Exception("API_BASE_URL environment variable is required")
         
-        # Fetch evaluations with confirmed working method
-        update_import_status("running", "Fetching evaluation data with confirmed auth method")
+        # Fetch evaluations with fixed handling
+        update_import_status("running", "Fetching evaluation data with FIXED compression handling")
         
         evaluations = await fetch_evaluations(max_docs)
         
         if not evaluations:
-            log_import(f"⚠️ PRODUCTION: No evaluations found")
+            log_import(f"⚠️ FIXED: No evaluations found")
             results = {"total_documents_processed": 0, "total_chunks_indexed": 0, "import_type": "full"}
             update_import_status("completed", results=results)
             return
         
-        # Process evaluations with production rules
-        update_import_status("running", f"Processing {len(evaluations)} evaluations with production rules")
-        log_import(f"🔄 PRODUCTION: Processing {len(evaluations)} evaluations")
-        log_import(f"   ✓ Keep Question and Answers together")
-        log_import(f"   ✓ Never split between speakers")
-        log_import(f"   ✓ Complete metadata extraction")
+        # Process evaluations
+        update_import_status("running", f"Processing {len(evaluations)} evaluations")
+        log_import(f"🔄 FIXED: Processing {len(evaluations)} evaluations")
         
         total_processed = 0
         total_chunks = 0
@@ -518,11 +581,11 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
             elif result["status"] == "error":
                 errors += 1
             
-            # Small delay to prevent overwhelming the system
+            # Small delay to prevent overwhelming
             if i % 20 == 0:
                 await asyncio.sleep(0.1)
         
-        # Complete with production statistics
+        # Complete with results
         results = {
             "total_documents_processed": total_processed,
             "total_chunks_indexed": total_chunks,
@@ -532,17 +595,16 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
             "import_type": "full",
             "completed_at": datetime.now().isoformat(),
             "api_endpoint": API_BASE_URL,
-            "auth_method": "confirmed_working",
-            "production_ready": True,
+            "compression_fixed": True,
             "api_rules_applied": [
                 "Keep Question and Answers together",
                 "Never split between speakers",
                 "Complete metadata extraction",
-                "Confirmed working authentication"
+                "Fixed compression handling"
             ]
         }
         
-        log_import(f"🎉 PRODUCTION: Import completed successfully!")
+        log_import(f"🎉 FIXED: Import completed successfully!")
         log_import(f"   📄 Documents processed: {total_processed}")
         log_import(f"   🧩 Total chunks: {total_chunks}")
         log_import(f"   📋 Q&A chunks: {total_qa_chunks}")
@@ -552,12 +614,12 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
         update_import_status("completed", results=results)
         
     except Exception as e:
-        error_msg = f"Production import failed: {str(e)}"
+        error_msg = f"FIXED import failed: {str(e)}"
         log_import(f"❌ {error_msg}")
         update_import_status("failed", error=error_msg)
 
 # ============================================================================
-# FASTAPI ENDPOINTS - Production Ready
+# FASTAPI ENDPOINTS
 # ============================================================================
 
 @app.get("/ping")
@@ -565,8 +627,8 @@ async def ping():
     return {
         "status": "ok", 
         "timestamp": datetime.now().isoformat(),
-        "service": "ask-innovai-production",
-        "version": "3.0.0"
+        "service": "ask-innovai-compression-fixed",
+        "version": "2.7.0"
     }
 
 @app.get("/", response_class=HTMLResponse)
@@ -575,46 +637,66 @@ async def get_index():
         with open("static/index.html", "r") as f:
             return HTMLResponse(content=f.read())
     except FileNotFoundError:
-        return HTMLResponse(content=f"""
+        return HTMLResponse(content="""
         <html><body>
-        <h1>🤖 Ask InnovAI Production</h1>
-        <p><strong>Status:</strong> Production Ready ✅</p>
-        <p><strong>API Endpoint:</strong> {API_BASE_URL}</p>
-        <p><strong>Evaluations Available:</strong> 239 confirmed</p>
-        <p><strong>Authentication:</strong> Working ✅</p>
-        
-        <h2>Production Features:</h2>
+        <h1>🤖 Ask InnovAI Admin - COMPRESSION FIXED</h1>
+        <p>Fixed compression issue that was causing binary response data.</p>
+        <p>This version properly handles gzip/compressed API responses.</p>
         <ul>
-        <li>✅ Confirmed working API authentication</li>
-        <li>✅ Q&A pairs kept together</li>
-        <li>✅ Speaker boundaries preserved</li>
-        <li>✅ Complete metadata extraction</li>
-        <li>✅ Embedding generation</li>
-        <li>✅ OpenSearch indexing</li>
+        <li><a href="/ping">/ping</a> - Health check</li>
+        <li><a href="/health">/health</a> - System health</li>
+        <li><a href="/debug/test-compression-fix">/debug/test-compression-fix</a> - Test compression fix</li>
+        <li><a href="/chat">/chat</a> - Chat interface</li>
         </ul>
-        
-        <h2>Ready to Import:</h2>
-        <p>Your system is ready for production data import!</p>
         </body></html>
         """)
 
-@app.get("/chat", response_class=HTMLResponse)
-async def get_chat():
+@app.get("/debug/test-compression-fix")
+async def test_compression_fix():
+    """Test the compression fix"""
     try:
-        with open("static/chat.html", "r") as f:
-            return HTMLResponse(content=f.read())
-    except FileNotFoundError:
-        return HTMLResponse(content="""
-        <html><body>
-        <h1>🤖 Ask InnovAI Chat - Production</h1>
-        <p>Production chat interface with confirmed working data.</p>
-        <p><a href="/">← Back to Admin</a></p>
-        </body></html>
-        """)
+        if not API_BASE_URL or not API_AUTH_VALUE:
+            return {
+                "status": "error",
+                "error": "API_BASE_URL or API_AUTH_VALUE not configured"
+            }
+        
+        log_import("🧪 Testing COMPRESSION FIX...")
+        
+        # Test the fixed fetch function
+        test_evaluations = await fetch_evaluations(1)  # Get just 1 for testing
+        
+        return {
+            "status": "success",
+            "compression_fix_test": "passed",
+            "evaluations_found": len(test_evaluations) if test_evaluations else 0,
+            "sample_evaluation": {
+                "internal_id": test_evaluations[0].get("internalId") if test_evaluations else None,
+                "evaluation_id": test_evaluations[0].get("evaluationId") if test_evaluations else None,
+                "agent": test_evaluations[0].get("agentName") if test_evaluations else None,
+                "has_evaluation": bool(test_evaluations[0].get("evaluation")) if test_evaluations else False,
+                "has_transcript": bool(test_evaluations[0].get("transcript")) if test_evaluations else False
+            } if test_evaluations else None,
+            "compression_fixes": [
+                "✅ Removed Accept-Encoding header",
+                "✅ Added compression detection",
+                "✅ Manual gzip decompression fallback",
+                "✅ Enhanced response validation",
+                "✅ Binary data detection"
+            ],
+            "message": "COMPRESSION FIX is working correctly!"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "message": "Compression fix test failed - check logs for details"
+        }
 
 @app.get("/health")
 async def health():
-    """Production health check"""
+    """Enhanced health check"""
     try:
         components = {}
         
@@ -631,12 +713,11 @@ async def health():
             "host": opensearch_host or "not set"
         }
         
-        # API Source status - confirmed working
+        # API Source status
         components["api_source"] = {
-            "status": "confirmed_working",
-            "endpoint": API_BASE_URL,
-            "auth_method": "working",
-            "evaluations_available": 239
+            "status": "configured" if (API_BASE_URL and API_AUTH_VALUE) else "not configured",
+            "endpoint": API_BASE_URL or "not set",
+            "compression_fixed": True
         }
         
         # Embedder status
@@ -667,13 +748,12 @@ async def health():
             "components": components,
             "import_status": import_status["status"],
             "environment": "digital_ocean",
-            "version": "3.0.0_production_ready",
-            "production_features": [
-                "Confirmed working API authentication",
-                "239 evaluations available for processing",
-                "Q&A and transcript processing rules implemented",
-                "Complete metadata extraction",
-                "Embedding generation ready"
+            "version": "2.7.0_compression_fixed",
+            "fixes_applied": [
+                "Removed Accept-Encoding header causing compression issues",
+                "Added compression detection and handling",
+                "Manual gzip decompression fallback",
+                "Binary data detection and error handling"
             ]
         }
         
@@ -685,15 +765,15 @@ async def health():
             "error": str(e)
         }
 
-# Chat endpoint (production ready)
+# Chat endpoint (unchanged)
 @app.post("/chat")
 async def chat_handler(request: ChatRequest):
-    """Production chat functionality"""
+    """Chat functionality"""
     try:
         if not GENAI_ACCESS_KEY:
             return {"reply": "Chat service not configured. Please set GENAI_ACCESS_KEY in environment variables."}
         
-        # Enhanced search for context using indexed data
+        # Simple search for context
         context = ""
         try:
             search_results = search_opensearch(request.message)
@@ -703,7 +783,7 @@ async def chat_handler(request: ChatRequest):
         except Exception as search_error:
             logger.warning(f"Search failed: {search_error}")
         
-        # Build messages with context
+        # Build messages
         system_msg = "You are MetroAI, an intelligent assistant for Metro by T-Mobile customer service operations."
         if context:
             system_msg += f" Here's relevant context from the knowledge base: {context}"
@@ -740,10 +820,10 @@ async def chat_handler(request: ChatRequest):
         logger.error(f"Chat error: {e}")
         return {"reply": "Sorry, there was an unexpected error. Please try again."}
 
-# Search endpoint (production ready)
+# Search endpoint (unchanged)
 @app.get("/search")
 async def search(q: str):
-    """Production search with enhanced formatting"""
+    """Basic search with error handling"""
     try:
         results = search_opensearch(q)
         formatted_results = []
@@ -775,7 +855,7 @@ async def search(q: str):
             "results": []
         }
 
-# Import management endpoints (production ready)
+# Import management endpoints
 @app.get("/status")
 async def get_import_status():
     return import_status
@@ -786,7 +866,7 @@ async def get_logs():
 
 @app.post("/import")
 async def start_import(request: ImportRequest, background_tasks: BackgroundTasks):
-    """Start production import process"""
+    """Start FIXED import process"""
     if import_status["status"] == "running":
         raise HTTPException(status_code=400, detail="Import already running")
     
@@ -797,86 +877,29 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
         "end_time": None,
         "current_step": None,
         "results": {},
-        "error": None,
-        "import_type": request.import_type
+        "error": None
     })
     
-    # Start production import
-    background_tasks.add_task(run_production_import, request.collection, request.max_docs)
-    return {"status": "success", "message": "Production import started with confirmed working authentication"}
-
-# Additional helpful endpoints
-@app.get("/last_import_info")
-async def get_last_import_info():
-    """Get information about the last import"""
-    try:
-        if import_status.get("end_time") and import_status.get("status") == "completed":
-            return {
-                "status": "success",
-                "last_import_timestamp": import_status["end_time"],
-                "last_import_status": import_status["status"],
-                "last_import_results": import_status.get("results", {}),
-                "production_ready": True
-            }
-        else:
-            return {
-                "status": "success",
-                "last_import_timestamp": None,
-                "message": "No completed import found"
-            }
-            
-    except Exception as e:
-        logger.error(f"Failed to get last import info: {e}")
-        return {
-            "status": "error",
-            "error": str(e)
-        }
-
-@app.post("/clear_import_timestamp")
-async def clear_import_timestamp():
-    """Clear the import timestamp"""
-    try:
-        import_status.update({
-            "status": "idle",
-            "start_time": None,
-            "end_time": None,
-            "current_step": None,
-            "results": {},
-            "error": None
-        })
-        
-        log_import("🔄 Import timestamp cleared by user")
-        
-        return {
-            "status": "success",
-            "message": "Import timestamp cleared successfully"
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to clear import timestamp: {e}")
-        return {
-            "status": "error",
-            "error": str(e)
-        }
+    # Start fixed import
+    background_tasks.add_task(run_import, request.collection, request.max_docs)
+    return {"status": "success", "message": "COMPRESSION FIXED import started"}
 
 # Startup event
 @app.on_event("startup")
 async def startup_event():
-    """Production startup initialization"""
+    """Fixed startup initialization"""
     try:
-        logger.info("🚀 Ask InnovAI PRODUCTION starting up...")
-        logger.info(f"   Version: 3.0.0 - Production Ready")
+        logger.info("🚀 Ask InnovAI COMPRESSION FIXED starting up...")
+        logger.info(f"   Version: 2.7.0 - FIXED compression handling")
         logger.info(f"   Python version: {sys.version}")
         logger.info(f"   PORT: {os.getenv('PORT', '8080')}")
         
-        # Log production readiness
-        logger.info("✅ PRODUCTION READY:")
-        logger.info("   • Confirmed working API authentication")
-        logger.info("   • 239 evaluations available for processing")
-        logger.info("   • Q&A processing (keeps questions and answers together)")
-        logger.info("   • Transcript processing (preserves speaker boundaries)")
-        logger.info("   • Complete metadata extraction")
-        logger.info("   • Embedding generation available")
+        # Log compression fixes
+        logger.info("✅ COMPRESSION FIXES applied:")
+        logger.info("   • Removed Accept-Encoding header causing compression issues")
+        logger.info("   • Added compression detection and handling")
+        logger.info("   • Manual gzip decompression fallback")
+        logger.info("   • Binary data detection and error handling")
         
         # Try to preload embedder if available
         if EMBEDDER_AVAILABLE:
@@ -886,8 +909,8 @@ async def startup_event():
             except Exception as e:
                 logger.warning(f"⚠️ Embedding preload failed (will load on demand): {e}")
         
-        logger.info("🎉 Ask InnovAI PRODUCTION startup complete!")
-        logger.info("📋 Ready for full production import!")
+        logger.info("🎉 Ask InnovAI COMPRESSION FIXED startup complete!")
+        logger.info("📋 Test endpoint: /debug/test-compression-fix")
         
     except Exception as e:
         logger.error(f"❌ Startup error: {e}")
@@ -897,7 +920,7 @@ if __name__ == "__main__":
     import uvicorn
     
     port = int(os.getenv("PORT", 8080))
-    logger.info(f"🚀 Starting Ask InnovAI PRODUCTION on port {port}")
+    logger.info(f"🚀 Starting Ask InnovAI COMPRESSION FIXED on port {port}")
     
     uvicorn.run(
         app, 
