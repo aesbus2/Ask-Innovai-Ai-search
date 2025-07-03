@@ -348,6 +348,9 @@
                     <button class="btn" onclick="startImport()">
                         <span class="emoji">🚀</span> Start Import
                     </button>
+                    <button class="btn secondary" onclick="testOpenSearchConnection()">
+                        <span class="emoji">🔌</span> Test OpenSearch
+                    </button>
                     <button class="btn secondary" onclick="getImportStatistics()">
                         <span class="emoji">📊</span> View Statistics
                     </button>
@@ -462,13 +465,21 @@
                     body: JSON.stringify(config)
                 });
 
-                const data = await response.json();
+                let data;
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    const responseText = await response.text();
+                    console.error("Failed to parse response as JSON:", responseText);
+                    throw new Error(`Server returned invalid response. Status: ${response.status}`);
+                }
 
-                if (response.ok) {
+                if (response.ok && data.status === 'success') {
                     alert(`✅ Import started successfully!`);
                     startPolling();
                 } else {
-                    alert(`❌ Import failed: ${data.detail || data.message || "Unknown error"}`);
+                    const errorMsg = data.message || data.detail || data.error || "Unknown error";
+                    alert(`❌ Import failed: ${errorMsg}`);
                 }
             } catch (error) {
                 console.error("Import request failed:", error);
@@ -588,6 +599,7 @@
                 { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: '📄' },
                 { key: 'total_chunks_indexed', label: 'Chunks Indexed', class: 'info', icon: '🧩' },
                 { key: 'errors', label: 'Errors', class: 'warning', icon: '❌' },
+                { key: 'opensearch_errors', label: 'OpenSearch Errors', class: 'danger', icon: '🔥' },
                 { key: 'import_type', label: 'Import Type', class: 'info', icon: '🔄' }
             ];
             
@@ -802,6 +814,68 @@
                 }
             } catch (error) {
                 container.innerHTML = `<div class="status failed">❌ Search failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testOpenSearchConnection() {
+            const container = document.getElementById("actionResults");
+            if (!container) return;
+            
+            container.innerHTML = '<div class="loading"><div class="spinner"></div>Testing OpenSearch connection...</div>';
+            
+            try {
+                const response = await fetch('/test_opensearch');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    let indicesInfo = '';
+                    if (data.indices && data.indices.user_indices) {
+                        const userIndices = data.indices.user_indices;
+                        if (userIndices.length > 0) {
+                            indicesInfo = `
+                                <p><strong>Existing Indices:</strong></p>
+                                <ul style="margin-left: 20px;">
+                                    ${userIndices.map(index => `<li>${index}</li>`).join('')}
+                                </ul>
+                            `;
+                        } else {
+                            indicesInfo = '<p><strong>Existing Indices:</strong> None (first import will create them)</p>';
+                        }
+                    }
+                    
+                    container.innerHTML = `
+                        <div class="result-card">
+                            <h4>✅ OpenSearch Connection Test</h4>
+                            <p><strong>Status:</strong> Connected successfully</p>
+                            <p><strong>Host:</strong> ${data.host}</p>
+                            ${indicesInfo}
+                            <p style="color: #28a745; margin-top: 10px;">Ready for import!</p>
+                            <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                                Your data will be indexed as: <strong>"Ai Corporate SPTR - TEST"</strong>
+                            </p>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `
+                        <div class="result-card">
+                            <h4>❌ OpenSearch Connection Test</h4>
+                            <p><strong>Status:</strong> Connection failed</p>
+                            <p><strong>Host:</strong> ${data.host}</p>
+                            <p style="color: #dc3545; margin-top: 10px;"><strong>Error:</strong> ${data.message}</p>
+                            <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                                Please check your OpenSearch configuration and ensure the service is running.
+                            </p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="result-card">
+                        <h4>❌ OpenSearch Connection Test</h4>
+                        <p><strong>Status:</strong> Test failed</p>
+                        <p style="color: #dc3545;"><strong>Error:</strong> ${error.message}</p>
+                    </div>
+                `;
             }
         }
 

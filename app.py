@@ -315,7 +315,13 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 indexed_chunks += 1
                 
             except Exception as e:
-                logger.warning(f"Failed to index chunk {i}: {e}")
+                error_msg = f"Failed to index chunk {i}: {str(e)}"
+                logger.warning(error_msg)
+                
+                # Check if it's an OpenSearch connectivity issue
+                if "timeout" in str(e).lower() or "connection" in str(e).lower():
+                    raise Exception(f"OpenSearch connection error: {str(e)}")
+                
                 continue
         
         return {
@@ -392,10 +398,23 @@ async def fetch_evaluations(max_docs: int = None):
         raise
 
 async def run_production_import(collection: str = "all", max_docs: int = None):
-    """Production import process"""
+    """Production import process with better error handling"""
     try:
         update_import_status("running", "Starting import")
         log_import("🚀 Starting production import")
+        
+        # Check OpenSearch connectivity first
+        update_import_status("running", "Checking OpenSearch connectivity")
+        try:
+            from opensearch_client import client
+            # Test OpenSearch connection
+            client.ping()
+            log_import("✅ OpenSearch connection verified")
+        except Exception as e:
+            error_msg = f"OpenSearch connection failed: {str(e)}"
+            log_import(f"❌ {error_msg}")
+            update_import_status("failed", error=error_msg)
+            return
         
         # Fetch evaluations
         update_import_status("running", "Fetching evaluation data")
@@ -412,6 +431,7 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
         total_processed = 0
         total_chunks = 0
         errors = 0
+        opensearch_errors = 0
         
         for i, evaluation in enumerate(evaluations):
             if i % 10 == 0:
@@ -423,6 +443,16 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
                 total_chunks += result["chunks_indexed"]
             elif result["status"] == "error":
                 errors += 1
+                # Check if it's an OpenSearch error
+                if "opensearch" in str(result.get("error", "")).lower() or "timeout" in str(result.get("error", "")).lower():
+                    opensearch_errors += 1
+            
+            # If too many OpenSearch errors, stop the import
+            if opensearch_errors > 5:
+                error_msg = f"Too many OpenSearch connection errors ({opensearch_errors}). Stopping import."
+                log_import(f"❌ {error_msg}")
+                update_import_status("failed", error=error_msg)
+                return
             
             if i % 20 == 0:
                 await asyncio.sleep(0.1)
@@ -432,11 +462,12 @@ async def run_production_import(collection: str = "all", max_docs: int = None):
             "total_documents_processed": total_processed,
             "total_chunks_indexed": total_chunks,
             "errors": errors,
+            "opensearch_errors": opensearch_errors,
             "import_type": "full",
             "completed_at": datetime.now().isoformat()
         }
         
-        log_import(f"🎉 Import completed: {total_processed} documents, {total_chunks} chunks")
+        log_import(f"🎉 Import completed: {total_processed} documents, {total_chunks} chunks, {errors} errors")
         update_import_status("completed", results=results)
         
     except Exception as e:
@@ -488,7 +519,7 @@ async def get_chat():
 
 @app.get("/health")
 async def health():
-    """Production health check"""
+    """Production health check with OpenSearch connectivity"""
     try:
         components = {}
         
@@ -497,11 +528,27 @@ async def health():
             "status": "configured" if GENAI_ACCESS_KEY else "not configured"
         }
         
-        # OpenSearch status
+        # OpenSearch status with actual connectivity test
         opensearch_host = os.getenv("OPENSEARCH_HOST")
-        components["opensearch"] = {
-            "status": "configured" if opensearch_host else "not configured"
-        }
+        if opensearch_host:
+            try:
+                from opensearch_client import client
+                # Test actual connection
+                client.ping()
+                components["opensearch"] = {
+                    "status": "connected",
+                    "host": opensearch_host
+                }
+            except Exception as e:
+                components["opensearch"] = {
+                    "status": "connection_failed",
+                    "host": opensearch_host,
+                    "error": str(e)[:100]  # Truncate long errors
+                }
+        else:
+            components["opensearch"] = {
+                "status": "not configured"
+            }
         
         # API Source status
         components["api_source"] = {
@@ -521,21 +568,32 @@ async def health():
         else:
             components["embeddings"] = {"status": "not available"}
         
-        return {
-            "status": "ok",
-            "timestamp": datetime.now().isoformat(),
-            "components": components,
-            "import_status": import_status["status"],
-            "version": "3.1.0"
-        }
+        # Overall status
+        overall_status = "ok"
+        if components["opensearch"]["status"] == "connection_failed":
+            overall_status = "degraded"
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": overall_status,
+                "timestamp": datetime.now().isoformat(),
+                "components": components,
+                "import_status": import_status["status"],
+                "version": "3.1.0"
+            }
+        )
         
     except Exception as e:
         logger.error(f"Health check failed: {e}")
-        return {
-            "status": "error",
-            "timestamp": datetime.now().isoformat(),
-            "error": str(e)
-        }
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e)
+            }
+        )
 
 @app.post("/chat")
 async def chat_handler(request: ChatRequest):
@@ -627,24 +685,39 @@ async def get_logs():
 
 @app.post("/import")
 async def start_import(request: ImportRequest, background_tasks: BackgroundTasks):
-    """Start import process"""
-    if import_status["status"] == "running":
-        raise HTTPException(status_code=400, detail="Import already running")
-    
-    # Reset status
-    import_status.update({
-        "status": "idle",
-        "start_time": None,
-        "end_time": None,
-        "current_step": None,
-        "results": {},
-        "error": None,
-        "import_type": request.import_type
-    })
-    
-    # Start import
-    background_tasks.add_task(run_production_import, request.collection, request.max_docs)
-    return {"status": "success", "message": "Import started"}
+    """Start import process with proper error handling"""
+    try:
+        if import_status["status"] == "running":
+            return JSONResponse(
+                status_code=400, 
+                content={"status": "error", "message": "Import already running"}
+            )
+        
+        # Reset status
+        import_status.update({
+            "status": "idle",
+            "start_time": None,
+            "end_time": None,
+            "current_step": None,
+            "results": {},
+            "error": None,
+            "import_type": request.import_type
+        })
+        
+        # Start import
+        background_tasks.add_task(run_production_import, request.collection, request.max_docs)
+        
+        return JSONResponse(
+            status_code=200,
+            content={"status": "success", "message": "Import started"}
+        )
+        
+    except Exception as e:
+        logger.error(f"Import endpoint error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"Failed to start import: {str(e)}"}
+        )
 
 @app.get("/import_statistics")
 async def get_import_statistics():
@@ -672,6 +745,47 @@ async def get_import_statistics():
             }
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+@app.get("/test_opensearch")
+async def test_opensearch_connection():
+    """Test OpenSearch connectivity and list indices"""
+    try:
+        from opensearch_client import client
+        
+        # Test connection
+        client.ping()
+        
+        # Get list of indices
+        indices = client.indices.get_alias(index="*")
+        index_names = list(indices.keys())
+        
+        # Filter out system indices (those starting with .)
+        user_indices = [name for name in index_names if not name.startswith('.')]
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "message": "OpenSearch connection successful",
+                "host": os.getenv("OPENSEARCH_HOST", "unknown"),
+                "indices": {
+                    "total_count": len(index_names),
+                    "user_indices": user_indices,
+                    "system_indices_count": len(index_names) - len(user_indices)
+                }
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"OpenSearch test failed: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"OpenSearch connection failed: {str(e)}",
+                "host": os.getenv("OPENSEARCH_HOST", "unknown")
+            }
+        )
 
 # Startup event
 @app.on_event("startup")
