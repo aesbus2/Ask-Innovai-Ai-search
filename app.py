@@ -1110,7 +1110,7 @@ async def get_import_statistics():
 async def test_opensearch_connection():
     """Test OpenSearch connectivity and list indices"""
     try:
-        from opensearch_client import test_connection, get_connection_status, get_opensearch_config, client
+        from opensearch_client import test_connection, get_connection_status, get_opensearch_config, get_opensearch_client
         
         config = get_opensearch_config()
         
@@ -1138,33 +1138,85 @@ async def test_opensearch_connection():
         
         # Get list of indices
         try:
-            indices = client.indices.get_alias(index="*")
-            index_names = list(indices.keys())
+            client = get_opensearch_client()
             
-            # Filter out system indices (those starting with .)
-            user_indices = [name for name in index_names if not name.startswith('.')]
-            
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "status": "success",
-                    "message": "OpenSearch connection successful",
-                    "host": config["host"],
-                    "port": config["port"],
-                    "url": config["url"],
-                    "ssl_enabled": config["ssl_enabled"],
-                    "indices": {
-                        "total_count": len(index_names),
-                        "user_indices": user_indices,
-                        "system_indices_count": len(index_names) - len(user_indices)
-                    },
-                    "details": {
-                        "tested": conn_status.get("tested", False),
-                        "last_test": conn_status.get("last_test"),
-                        "connection_working": True
+            if client:
+                indices = client.indices.get_alias(index="*")
+                index_names = list(indices.keys())
+                
+                # Filter out system indices (those starting with .)
+                user_indices = [name for name in index_names if not name.startswith('.')]
+                
+                # Test document indexing
+                try:
+                    test_doc_id = f"test-{int(time.time())}"
+                    test_doc = {
+                        "test": True,
+                        "message": "Connection test document",
+                        "timestamp": datetime.now().isoformat()
                     }
-                }
-            )
+                    
+                    # Try to index a test document
+                    result = client.index(
+                        index="connection-test",
+                        id=test_doc_id,
+                        body=test_doc,
+                        timeout=30
+                    )
+                    
+                    # Clean up test document
+                    try:
+                        client.delete(index="connection-test", id=test_doc_id)
+                    except:
+                        pass  # Ignore cleanup errors
+                    
+                    indexing_test = "✅ Success"
+                    
+                except Exception as e:
+                    indexing_test = f"❌ Failed: {str(e)[:100]}"
+                
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success",
+                        "message": "OpenSearch connection successful",
+                        "host": config["host"],
+                        "port": config["port"],
+                        "url": config["url"],
+                        "ssl_enabled": config["ssl_enabled"],
+                        "indices": {
+                            "total_count": len(index_names),
+                            "user_indices": user_indices,
+                            "system_indices_count": len(index_names) - len(user_indices)
+                        },
+                        "tests": {
+                            "connection": "✅ Success",
+                            "indexing": indexing_test
+                        },
+                        "details": {
+                            "tested": conn_status.get("tested", False),
+                            "last_test": conn_status.get("last_test"),
+                            "connection_working": True
+                        }
+                    }
+                )
+            else:
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "status": "error",
+                        "message": "OpenSearch client not available",
+                        "host": config["host"],
+                        "port": config["port"],
+                        "url": config["url"],
+                        "ssl_enabled": config["ssl_enabled"],
+                        "details": {
+                            "tested": conn_status.get("tested", False),
+                            "last_test": conn_status.get("last_test"),
+                            "connection_working": False
+                        }
+                    }
+                )
             
         except Exception as e:
             # Connection works but can't list indices
