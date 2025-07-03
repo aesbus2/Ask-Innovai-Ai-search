@@ -1,5 +1,5 @@
 # opensearch_client.py - Enhanced Production Ready Version
-# Version: 2.1.0 - Production Ready with Advanced Error Handling new
+# Version: 2.1.1 - Production Ready with Advanced Error Handling - TIMEOUT FIX
 
 from opensearchpy import OpenSearch, exceptions
 import os
@@ -375,7 +375,7 @@ class OpenSearchManager:
                 index=index_name,
                 id=doc_id,
                 body=body,
-                timeout=f'{TIMEOUT_SECONDS}s',
+                timeout=TIMEOUT_SECONDS,  # FIXED: Was f'{TIMEOUT_SECONDS}s'
                 refresh=False  # Don't force refresh for better performance
             )
             
@@ -472,7 +472,7 @@ class OpenSearchManager:
             response = self.client.search(
                 index=index,
                 body=body,
-                timeout=f'{TIMEOUT_SECONDS}s',
+                timeout=TIMEOUT_SECONDS,  # FIXED: Was f'{TIMEOUT_SECONDS}s'
                 **kwargs
             )
             
@@ -535,7 +535,7 @@ class OpenSearchManager:
             response = self.client.search(
                 index=index,
                 body=body,
-                timeout=f'{TIMEOUT_SECONDS}s'
+                timeout=TIMEOUT_SECONDS  # FIXED: Was f'{TIMEOUT_SECONDS}s'
             )
             
             hits = response.get("hits", {}).get("hits", [])
