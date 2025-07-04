@@ -30,9 +30,13 @@ let hierarchyCache = {
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Metro AI Call Center Analytics v4.0 initializing...');
-    initializePage();
-    loadDynamicFilterOptions();
-    updateStats();
+    try {
+        initializePage();
+        loadDynamicFilterOptions();
+        updateStats();
+    } catch (error) {
+        console.error('❌ Initialization error:', error);
+    }
 });
 
 // =============================================================================
@@ -72,8 +76,15 @@ function initializePage() {
 
 function setupEventListeners() {
     // Handle date changes
-    document.getElementById('startCallDate')?.addEventListener('change', updateDateRangeDisplay);
-    document.getElementById('endCallDate')?.addEventListener('change', updateDateRangeDisplay);
+    const startCallDate = document.getElementById('startCallDate');
+    const endCallDate = document.getElementById('endCallDate');
+    
+    if (startCallDate) {
+        startCallDate.addEventListener('change', updateDateRangeDisplay);
+    }
+    if (endCallDate) {
+        endCallDate.addEventListener('change', updateDateRangeDisplay);
+    }
 
     // Handle ID field validation
     setupIdFieldValidation();
@@ -111,10 +122,11 @@ function setupIdFieldValidation() {
 
 function setupAgentNameAutocomplete() {
     const agentNameInput = document.getElementById('agentNameFilter');
-    if (agentNameInput) {
+    const datalist = document.getElementById('agentNamesList');
+    
+    if (agentNameInput && datalist) {
         agentNameInput.addEventListener('input', function(e) {
             const value = this.value.toLowerCase();
-            const datalist = document.getElementById('agentNamesList');
             
             // Filter agent names based on input
             const filteredAgents = filterOptions.agentNames.filter(name => 
@@ -1031,7 +1043,7 @@ function exportChat() {
 }
 
 // =============================================================================
-// GLOBAL FUNCTION EXPOSURE
+// GLOBAL FUNCTION EXPOSURE - MUST BE AT END
 // =============================================================================
 
 // Expose functions to global scope for HTML event handlers
@@ -1054,6 +1066,15 @@ window.chatDebug = {
     getFilterOptions: () => filterOptions,
     getHierarchyCache: () => hierarchyCache,
     isLoading: () => isLoading,
+    testFunctions: () => {
+        const functions = ['toggleSidebar', 'applyFilters', 'clearFilters', 'askQuestion', 'sendMessage'];
+        const results = {};
+        functions.forEach(func => {
+            results[func] = typeof window[func] === 'function' ? '✅ Available' : '❌ Missing';
+        });
+        console.log('🔧 Function availability:', results);
+        return results;
+    },
     showFilterStats: () => {
         console.log('📊 Filter Statistics (v4.0):');
         console.log('Current Filters:', currentFilters);
@@ -1092,3 +1113,10 @@ console.log('✅ Metro AI Call Center Analytics Chat v4.0 loaded successfully');
 console.log('🔧 Enhanced debugging tools available at window.chatDebug');
 console.log('📊 Metadata-aligned filtering and hierarchical organization ready');
 console.log('📋 Call detail structure: Phone, Contact ID, UCID, Dispositions, Duration, Language, etc.');
+
+// Test function availability on load
+setTimeout(() => {
+    if (window.chatDebug && window.chatDebug.testFunctions) {
+        window.chatDebug.testFunctions();
+    }
+}, 1000);
