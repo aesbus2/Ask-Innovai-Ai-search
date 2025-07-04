@@ -1,26 +1,37 @@
 // Enhanced Metro AI Call Center Analytics Chat
-// Version: 3.0.0 - Comprehensive Metadata Support
+// Version: 4.0.0 - Aligned with Call Detail Metadata Structure
 
 // Global state management
 let currentFilters = {};
 let chatHistory = [];
 let isLoading = false;
 let filterOptions = {
-    agents: [],
-    dispositions: [],
-    subDispositions: [],
+    programs: [],
     partners: [],
     sites: [],
     lobs: [],
+    callDispositions: [],
+    callSubDispositions: [],
+    agentDispositions: [],
+    agentSubDispositions: [],
+    agentNames: [],
     languages: [],
-    templates: []
+    callTypes: []
+};
+
+// Hierarchical filter cache
+let hierarchyCache = {
+    program_partners: {},
+    partner_sites: {},
+    site_lobs: {},
+    disposition_subdispositions: {}
 };
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Metro AI Call Center Analytics initializing...');
+    console.log('🚀 Metro AI Call Center Analytics v4.0 initializing...');
     initializePage();
-    loadFilterOptions();
+    loadDynamicFilterOptions();
     updateStats();
 });
 
@@ -29,7 +40,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // =============================================================================
 
 function initializePage() {
-    console.log('📋 Initializing page components...');
+    console.log('📋 Initializing page with aligned metadata structure...');
     
     // Set default date range to last 30 days
     const today = new Date();
@@ -50,54 +61,74 @@ function initializePage() {
         });
     }
 
-    // Initialize event listeners
+    // Initialize event listeners for new filter structure
     setupEventListeners();
     
     // Update date range display
     updateDateRangeDisplay();
     
-    console.log('✅ Page initialization complete');
+    console.log('✅ Page initialization complete with metadata alignment');
 }
 
 function setupEventListeners() {
-    // Handle checkbox group behavior
-    document.addEventListener('change', function(event) {
-        if (event.target.type === 'checkbox') {
-            handleCheckboxGroupChange(event);
-        }
-    });
-
-    // Handle partner/site relationship
-    document.getElementById('partnerFilter')?.addEventListener('change', function(event) {
-        updateSiteOptions(event.target.value);
-    });
-
     // Handle date changes
     document.getElementById('startCallDate')?.addEventListener('change', updateDateRangeDisplay);
     document.getElementById('endCallDate')?.addEventListener('change', updateDateRangeDisplay);
+
+    // Handle ID field validation
+    setupIdFieldValidation();
+    
+    // Handle agent name autocomplete
+    setupAgentNameAutocomplete();
 }
 
-function handleCheckboxGroupChange(event) {
-    const group = event.target.closest('.checkbox-group');
-    if (!group) return;
-    
-    const allCheckbox = group.querySelector('input[value="all"]');
-    const otherCheckboxes = group.querySelectorAll('input[type="checkbox"]:not([value="all"])');
-    
-    if (event.target.value === 'all') {
-        if (event.target.checked) {
-            otherCheckboxes.forEach(cb => cb.checked = false);
-        }
-    } else {
-        if (event.target.checked) {
-            if (allCheckbox) allCheckbox.checked = false;
-        } else {
-            // If no other checkboxes are selected, check "all"
-            const anySelected = Array.from(otherCheckboxes).some(cb => cb.checked);
-            if (!anySelected && allCheckbox) {
-                allCheckbox.checked = true;
-            }
-        }
+function setupIdFieldValidation() {
+    // Phone number validation
+    const phoneInput = document.getElementById('phoneNumberFilter');
+    if (phoneInput) {
+        phoneInput.addEventListener('input', function(e) {
+            // Allow only numbers and common phone formats
+            this.value = this.value.replace(/[^\d\-\(\)\+\s]/g, '');
+        });
+    }
+
+    // Contact ID validation (numeric)
+    const contactIdInput = document.getElementById('contactIdFilter');
+    if (contactIdInput) {
+        contactIdInput.addEventListener('input', function(e) {
+            this.value = this.value.replace(/[^\d]/g, '');
+        });
+    }
+
+    // UCID validation (alphanumeric)
+    const ucidInput = document.getElementById('ucidFilter');
+    if (ucidInput) {
+        ucidInput.addEventListener('input', function(e) {
+            this.value = this.value.replace(/[^a-zA-Z0-9]/g, '');
+        });
+    }
+}
+
+function setupAgentNameAutocomplete() {
+    const agentNameInput = document.getElementById('agentNameFilter');
+    if (agentNameInput) {
+        agentNameInput.addEventListener('input', function(e) {
+            const value = this.value.toLowerCase();
+            const datalist = document.getElementById('agentNamesList');
+            
+            // Filter agent names based on input
+            const filteredAgents = filterOptions.agentNames.filter(name => 
+                name.toLowerCase().includes(value)
+            );
+            
+            // Update datalist options
+            datalist.innerHTML = '';
+            filteredAgents.slice(0, 10).forEach(agent => {
+                const option = document.createElement('option');
+                option.value = agent;
+                datalist.appendChild(option);
+            });
+        });
     }
 }
 
@@ -122,105 +153,135 @@ function updateDateRangeDisplay() {
 }
 
 // =============================================================================
-// FILTER MANAGEMENT
+// DYNAMIC FILTER LOADING
 // =============================================================================
 
-async function loadFilterOptions() {
-    console.log('📊 Loading comprehensive filter options...');
+async function loadDynamicFilterOptions() {
+    console.log('📊 Loading dynamic filter options from metadata...');
     
     try {
-        const response = await fetch('/filter_options');
+        // Show loading indicators
+        showFilterLoadingState();
+        
+        // Load filter options from API endpoint
+        const response = await fetch('/filter_options_metadata');
         if (response.ok) {
             const data = await response.json();
             filterOptions = data;
-            console.log('✅ Filter options loaded from API:', filterOptions);
+            hierarchyCache = data.hierarchy || {};
+            console.log('✅ Dynamic filter options loaded:', filterOptions);
         } else {
             throw new Error('API not available');
         }
     } catch (error) {
         console.warn('⚠️ Could not load filter options from API, using sample data:', error);
         
-        // Comprehensive fallback data
+        // Enhanced fallback data based on call details structure
         filterOptions = {
-            agents: [
-                'Rey Mendoza', 'Maria Garcia', 'John Smith', 'Sarah Johnson', 
-                'Ana Rodriguez', 'David Chen', 'Lisa Wang', 'Carlos Martinez',
-                'Jennifer Taylor', 'Michael Brown', 'Ashley Davis', 'Robert Wilson'
+            programs: [
+                'Ai Corporate SPTR - TEST',
+                'Customer Service Quality',
+                'Technical Support QA',
+                'Billing Specialist Review'
             ],
-            dispositions: [
-                'Account', 'Technical Support', 'Billing', 'Port Out', 
-                'Service Inquiry', 'Complaint', 'New Service', 'Upgrade Request',
-                'Cancellation', 'Payment Issue', 'Device Support', 'Network Issue'
+            partners: [
+                'iQor', 'Teleperformance', 'Concentrix', 'Alorica', 'Sitel'
             ],
-            subDispositions: [
-                'Port Out - Questions/pin/acct #', 'Account - Profile Update',
-                'Billing - Payment Plan', 'Technical - Device Setup', 'Service - Plan Change',
-                'Complaint - Service Quality', 'New Service - Activation', 'Upgrade - Device',
-                'Cancellation - Retention', 'Payment - Past Due', 'Device - Replacement',
-                'Network - Coverage Issue', 'Account - Security', 'Billing - Dispute'
-            ],
-            partners: ['iQor', 'Teleperformance', 'Concentrix', 'Alorica', 'Sitel'],
             sites: [
                 'Dasma', 'Manila', 'Cebu', 'Davao', 'Iloilo', 'Bacolod',
-                'Quezon City', 'Makati', 'Taguig', 'Pasig', 'Calamba'
+                'Quezon City', 'Makati', 'Taguig', 'Pasig'
             ],
-            lobs: ['WNP', 'Prepaid', 'Postpaid', 'Business', 'Enterprise', 'Government'],
-            languages: ['english', 'spanish', 'tagalog', 'cebuano'],
-            templates: [
-                'Ai Corporate SPTR - TEST', 'Customer Service Quality', 'Technical Support QA',
-                'Billing Specialist Review', 'Retention Specialist Evaluation', 'Sales Performance'
+            lobs: [
+                'WNP', 'Prepaid', 'Postpaid', 'Business', 'Enterprise'
+            ],
+            callDispositions: [
+                'Account', 'Technical Support', 'Billing', 'Port Out',
+                'Service Inquiry', 'Complaint', 'Equipment', 'Rate Plan'
+            ],
+            callSubDispositions: [
+                'Rate Plan Or Plan Fit Analysis',
+                'Port Out - Questions/pin/acct #',
+                'Account - Profile Update',
+                'Billing - Payment Plan',
+                'Technical - Device Setup',
+                'Equipment - Troubleshooting'
+            ],
+            agentDispositions: [
+                'Equipment', 'Account Management', 'Technical Support',
+                'Customer Service', 'Billing Support'
+            ],
+            agentSubDispositions: [
+                'NA', 'Resolved', 'Escalated', 'Follow-up Required', 'Transferred'
+            ],
+            agentNames: [
+                'Rey Mendoza', 'Maria Garcia', 'John Smith', 'Sarah Johnson',
+                'Ana Rodriguez', 'David Chen', 'Lisa Wang', 'Carlos Martinez'
+            ],
+            languages: [
+                'English', 'Spanish', 'Tagalog', 'Cebuano'
+            ],
+            callTypes: [
+                'Direct Connect', 'Transfer', 'Inbound', 'Outbound'
             ]
         };
     }
     
     populateFilterOptions(filterOptions);
+    hideFilterLoadingState();
+}
+
+function showFilterLoadingState() {
+    // Show loading in program dropdown
+    const programLoading = document.getElementById('programLoading');
+    const dispositionLoading = document.getElementById('dispositionLoading');
+    
+    if (programLoading) programLoading.style.display = 'block';
+    if (dispositionLoading) dispositionLoading.style.display = 'block';
+}
+
+function hideFilterLoadingState() {
+    const programLoading = document.getElementById('programLoading');
+    const dispositionLoading = document.getElementById('dispositionLoading');
+    
+    if (programLoading) programLoading.style.display = 'none';
+    if (dispositionLoading) dispositionLoading.style.display = 'none';
 }
 
 function populateFilterOptions(data) {
-    console.log('🔧 Populating comprehensive filter UI elements...');
+    console.log('🔧 Populating filter UI with metadata structure...');
     
     try {
-        // Populate agent filters
-        populateCheckboxGroup('agentFilters', data.agents, 'agent');
-        
-        // Populate disposition filters
-        populateCheckboxGroup('dispositionFilters', data.dispositions, 'disp');
-        
-        // Populate sub-disposition filters
-        populateCheckboxGroup('subDispositionFilters', data.subDispositions, 'subdisp');
-        
-        // Populate dropdown options
+        // Populate hierarchical dropdowns
+        populateSelectOptions('programFilter', data.programs);
         populateSelectOptions('partnerFilter', data.partners);
         populateSelectOptions('siteFilter', data.sites);
         populateSelectOptions('lobFilter', data.lobs);
-        populateSelectOptions('languageFilter', data.languages);
-        populateSelectOptions('templateFilter', data.templates);
         
-        console.log('✅ All filter options populated successfully');
+        // Populate call classification dropdowns
+        populateSelectOptions('callDispositionFilter', data.callDispositions);
+        populateSelectOptions('callSubDispositionFilter', data.callSubDispositions);
+        populateSelectOptions('agentDispositionFilter', data.agentDispositions);
+        populateSelectOptions('agentSubDispositionFilter', data.agentSubDispositions);
+        populateSelectOptions('callTypeFilter', data.callTypes);
+        populateSelectOptions('languageFilter', data.languages);
+        
+        // Populate agent names datalist
+        populateDatalistOptions('agentNamesList', data.agentNames);
+        
+        console.log('✅ All filter options populated with metadata alignment');
     } catch (error) {
         console.error('❌ Error populating filter options:', error);
     }
 }
 
-function populateCheckboxGroup(containerId, options, prefix) {
-    const container = document.getElementById(containerId);
-    if (!container || !options) return;
-    
-    options.forEach(option => {
-        const div = document.createElement('div');
-        div.className = 'checkbox-item';
-        const safeId = `${prefix}-${option.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '_')}`;
-        div.innerHTML = `
-            <input type="checkbox" id="${safeId}" value="${option}">
-            <label for="${safeId}">${option}</label>
-        `;
-        container.appendChild(div);
-    });
-}
-
 function populateSelectOptions(selectId, options) {
     const select = document.getElementById(selectId);
     if (!select || !options) return;
+    
+    // Clear existing options (except the first "All" option)
+    const firstOption = select.firstElementChild;
+    select.innerHTML = '';
+    if (firstOption) select.appendChild(firstOption);
     
     options.forEach(option => {
         const optionElement = document.createElement('option');
@@ -230,28 +291,150 @@ function populateSelectOptions(selectId, options) {
     });
 }
 
-function updateSiteOptions(selectedPartner) {
-    // This could be enhanced to filter sites based on partner
-    // For now, it's a placeholder for future enhancement
-    console.log('🏢 Partner selected:', selectedPartner);
+function populateDatalistOptions(datalistId, options) {
+    const datalist = document.getElementById(datalistId);
+    if (!datalist || !options) return;
+    
+    datalist.innerHTML = '';
+    options.forEach(option => {
+        const optionElement = document.createElement('option');
+        optionElement.value = option;
+        datalist.appendChild(optionElement);
+    });
 }
 
-function applyFilters() {
-    console.log('🔍 Applying comprehensive filters...');
+// =============================================================================
+// HIERARCHICAL FILTERING
+// =============================================================================
+
+function updateHierarchyFilters(changedLevel) {
+    console.log(`🔄 Updating hierarchy filters from level: ${changedLevel}`);
     
-    currentFilters = collectFilters();
-    updateActiveFilters();
-    updateStats();
+    const program = document.getElementById('programFilter')?.value;
+    const partner = document.getElementById('partnerFilter')?.value;
+    const site = document.getElementById('siteFilter')?.value;
     
-    console.log('📊 Active filters:', currentFilters);
-    
-    // If there are messages, refresh the analysis
-    if (chatHistory.length > 0) {
-        addMessage('system', '🔄 Filters updated. Your analysis will now use the new filter criteria for more targeted insights.');
+    try {
+        switch (changedLevel) {
+            case 'program':
+                updatePartnerOptions(program);
+                clearDownstreamFilters(['partner', 'site', 'lob']);
+                break;
+            case 'partner':
+                updateSiteOptions(program, partner);
+                clearDownstreamFilters(['site', 'lob']);
+                break;
+            case 'site':
+                updateLobOptions(program, partner, site);
+                clearDownstreamFilters(['lob']);
+                break;
+        }
+    } catch (error) {
+        console.error('❌ Error updating hierarchy filters:', error);
     }
 }
 
-function collectFilters() {
+function updatePartnerOptions(selectedProgram) {
+    const partnerSelect = document.getElementById('partnerFilter');
+    if (!partnerSelect) return;
+    
+    // If hierarchy cache exists, use it; otherwise show all partners
+    let availablePartners = filterOptions.partners;
+    
+    if (hierarchyCache.program_partners && selectedProgram) {
+        availablePartners = hierarchyCache.program_partners[selectedProgram] || filterOptions.partners;
+    }
+    
+    populateSelectOptions('partnerFilter', availablePartners);
+    console.log(`🔗 Updated partners for program: ${selectedProgram}`);
+}
+
+function updateSiteOptions(selectedProgram, selectedPartner) {
+    const siteSelect = document.getElementById('siteFilter');
+    if (!siteSelect) return;
+    
+    let availableSites = filterOptions.sites;
+    
+    if (hierarchyCache.partner_sites && selectedPartner) {
+        availableSites = hierarchyCache.partner_sites[selectedPartner] || filterOptions.sites;
+    }
+    
+    populateSelectOptions('siteFilter', availableSites);
+    console.log(`🔗 Updated sites for partner: ${selectedPartner}`);
+}
+
+function updateLobOptions(selectedProgram, selectedPartner, selectedSite) {
+    const lobSelect = document.getElementById('lobFilter');
+    if (!lobSelect) return;
+    
+    let availableLobs = filterOptions.lobs;
+    
+    if (hierarchyCache.site_lobs && selectedSite) {
+        availableLobs = hierarchyCache.site_lobs[selectedSite] || filterOptions.lobs;
+    }
+    
+    populateSelectOptions('lobFilter', availableLobs);
+    console.log(`🔗 Updated LOBs for site: ${selectedSite}`);
+}
+
+function updateSubDispositions() {
+    const disposition = document.getElementById('callDispositionFilter')?.value;
+    const subDispositionSelect = document.getElementById('callSubDispositionFilter');
+    
+    if (!subDispositionSelect) return;
+    
+    let availableSubDispositions = filterOptions.callSubDispositions;
+    
+    if (hierarchyCache.disposition_subdispositions && disposition) {
+        availableSubDispositions = hierarchyCache.disposition_subdispositions[disposition] || filterOptions.callSubDispositions;
+    }
+    
+    populateSelectOptions('callSubDispositionFilter', availableSubDispositions);
+    console.log(`🔗 Updated sub-dispositions for disposition: ${disposition}`);
+}
+
+function clearDownstreamFilters(levels) {
+    levels.forEach(level => {
+        let selectId;
+        switch (level) {
+            case 'partner':
+                selectId = 'partnerFilter';
+                break;
+            case 'site':
+                selectId = 'siteFilter';
+                break;
+            case 'lob':
+                selectId = 'lobFilter';
+                break;
+        }
+        
+        const select = document.getElementById(selectId);
+        if (select) {
+            select.value = '';
+        }
+    });
+}
+
+// =============================================================================
+// FILTER MANAGEMENT
+// =============================================================================
+
+function applyFilters() {
+    console.log('🔍 Applying aligned metadata filters...');
+    
+    currentFilters = collectAlignedFilters();
+    updateActiveFilters();
+    updateStats();
+    
+    console.log('📊 Active filters with metadata alignment:', currentFilters);
+    
+    // If there are messages, refresh the analysis
+    if (chatHistory.length > 0) {
+        addMessage('system', '🔄 Filters updated. Your analysis will now use the aligned filter criteria for more targeted insights.');
+    }
+}
+
+function collectAlignedFilters() {
     const filters = {};
 
     try {
@@ -261,50 +444,70 @@ function collectFilters() {
         const startCreatedDate = document.getElementById('startCreatedDate')?.value;
         const endCreatedDate = document.getElementById('endCreatedDate')?.value;
         
-        if (startCallDate) filters.startCallDate = startCallDate;
-        if (endCallDate) filters.endCallDate = endCallDate;
-        if (startCreatedDate) filters.startCreatedDate = startCreatedDate;
-        if (endCreatedDate) filters.endCreatedDate = endCreatedDate;
+        if (startCallDate) filters.call_date_start = startCallDate;
+        if (endCallDate) filters.call_date_end = endCallDate;
+        if (startCreatedDate) filters.created_date_start = startCreatedDate;
+        if (endCreatedDate) filters.created_date_end = endCreatedDate;
 
-        // Agent filters
-        const selectedAgents = Array.from(document.querySelectorAll('#agentFilters input[type="checkbox"]:checked:not([value="all"])'))
-            .map(checkbox => checkbox.value);
-        if (selectedAgents.length > 0) filters.agents = selectedAgents;
-
-        // Disposition filters
-        const selectedDispositions = Array.from(document.querySelectorAll('#dispositionFilters input[type="checkbox"]:checked:not([value="all"])'))
-            .map(checkbox => checkbox.value);
-        if (selectedDispositions.length > 0) filters.dispositions = selectedDispositions;
-
-        // Sub-disposition filters
-        const selectedSubDispositions = Array.from(document.querySelectorAll('#subDispositionFilters input[type="checkbox"]:checked:not([value="all"])'))
-            .map(checkbox => checkbox.value);
-        if (selectedSubDispositions.length > 0) filters.subDispositions = selectedSubDispositions;
-
-        // Organization filters
+        // Organizational hierarchy filters
+        const program = document.getElementById('programFilter')?.value;
         const partner = document.getElementById('partnerFilter')?.value;
         const site = document.getElementById('siteFilter')?.value;
         const lob = document.getElementById('lobFilter')?.value;
         
+        if (program) filters.program = program;
         if (partner) filters.partner = partner;
         if (site) filters.site = site;
         if (lob) filters.lob = lob;
+
+        // Call identifier filters
+        const phoneNumber = document.getElementById('phoneNumberFilter')?.value?.trim();
+        const contactId = document.getElementById('contactIdFilter')?.value?.trim();
+        const ucid = document.getElementById('ucidFilter')?.value?.trim();
+        const userId = document.getElementById('userIdFilter')?.value?.trim();
+        
+        if (phoneNumber) filters.phone_number = phoneNumber;
+        if (contactId) filters.contact_id = contactId;
+        if (ucid) filters.ucid = ucid;
+        if (userId) filters.user_id = userId;
+
+        // Call classification filters
+        const callDisposition = document.getElementById('callDispositionFilter')?.value;
+        const callSubDisposition = document.getElementById('callSubDispositionFilter')?.value;
+        const agentDisposition = document.getElementById('agentDispositionFilter')?.value;
+        const agentSubDisposition = document.getElementById('agentSubDispositionFilter')?.value;
+        const callType = document.getElementById('callTypeFilter')?.value;
+        
+        if (callDisposition) filters.call_disposition = callDisposition;
+        if (callSubDisposition) filters.call_sub_disposition = callSubDisposition;
+        if (agentDisposition) filters.agent_disposition = agentDisposition;
+        if (agentSubDisposition) filters.agent_sub_disposition = agentSubDisposition;
+        if (callType) filters.call_type = callType;
+
+        // Agent performance filters
+        const agentName = document.getElementById('agentNameFilter')?.value?.trim();
+        if (agentName) filters.agent_name = agentName;
 
         // Call characteristics
         const minDuration = document.getElementById('minDuration')?.value;
         const maxDuration = document.getElementById('maxDuration')?.value;
         const language = document.getElementById('languageFilter')?.value;
         
-        if (minDuration) filters.minDuration = parseInt(minDuration);
-        if (maxDuration) filters.maxDuration = parseInt(maxDuration);
-        if (language) filters.language = language;
+        if (minDuration) filters.min_duration = parseInt(minDuration);
+        if (maxDuration) filters.max_duration = parseInt(maxDuration);
+        if (language) filters.call_language = language;
 
-        // Template filter
-        const template = document.getElementById('templateFilter')?.value;
-        if (template) filters.template = template;
+        // Evaluation metadata filters
+        const evaluationId = document.getElementById('evaluationIdFilter')?.value?.trim();
+        const internalId = document.getElementById('internalIdFilter')?.value?.trim();
+        const templateId = document.getElementById('templateIdFilter')?.value?.trim();
+        
+        if (evaluationId) filters.evaluation_id = evaluationId;
+        if (internalId) filters.internal_id = internalId;
+        if (templateId) filters.template_id = templateId;
 
     } catch (error) {
-        console.error('❌ Error collecting filters:', error);
+        console.error('❌ Error collecting aligned filters:', error);
     }
 
     return filters;
@@ -329,31 +532,39 @@ function updateActiveFilters() {
         let displayValue = value;
         let displayKey = key;
         
-        // Format display names
+        // Format display names for metadata alignment
         const keyMap = {
-            'startCallDate': 'Call From',
-            'endCallDate': 'Call To',
-            'startCreatedDate': 'Created From',
-            'endCreatedDate': 'Created To',
-            'agents': 'Agents',
-            'dispositions': 'Dispositions',
-            'subDispositions': 'Sub-Dispositions',
+            'call_date_start': 'Call From',
+            'call_date_end': 'Call To',
+            'created_date_start': 'Created From',
+            'created_date_end': 'Created To',
+            'program': 'Program',
             'partner': 'Partner',
             'site': 'Site',
             'lob': 'LOB',
-            'minDuration': 'Min Duration',
-            'maxDuration': 'Max Duration',
-            'language': 'Language',
-            'template': 'Template'
+            'phone_number': 'Phone',
+            'contact_id': 'Contact ID',
+            'ucid': 'UCID',
+            'user_id': 'User ID',
+            'call_disposition': 'Call Disposition',
+            'call_sub_disposition': 'Call Sub-Disposition',
+            'agent_disposition': 'Agent Disposition',
+            'agent_sub_disposition': 'Agent Sub-Disposition',
+            'call_type': 'Call Type',
+            'agent_name': 'Agent',
+            'min_duration': 'Min Duration',
+            'max_duration': 'Max Duration',
+            'call_language': 'Language',
+            'evaluation_id': 'Eval ID',
+            'internal_id': 'Internal ID',
+            'template_id': 'Template ID'
         };
         
         displayKey = keyMap[key] || key;
         
-        if (Array.isArray(value)) {
-            displayValue = value.length > 2 ? `${value.length} selected` : value.join(', ');
-        } else if (key.includes('Date')) {
+        if (key.includes('date')) {
             displayValue = new Date(value).toLocaleDateString();
-        } else if (key.includes('Duration')) {
+        } else if (key.includes('duration')) {
             displayValue = `${value}s`;
         }
         
@@ -368,13 +579,50 @@ function updateActiveFilters() {
 function removeFilter(filterKey) {
     console.log(`🗑️ Removing filter: ${filterKey}`);
     delete currentFilters[filterKey];
+    
+    // Clear the corresponding UI element
+    const fieldMap = {
+        'call_date_start': 'startCallDate',
+        'call_date_end': 'endCallDate',
+        'created_date_start': 'startCreatedDate',
+        'created_date_end': 'endCreatedDate',
+        'program': 'programFilter',
+        'partner': 'partnerFilter',
+        'site': 'siteFilter',
+        'lob': 'lobFilter',
+        'phone_number': 'phoneNumberFilter',
+        'contact_id': 'contactIdFilter',
+        'ucid': 'ucidFilter',
+        'user_id': 'userIdFilter',
+        'call_disposition': 'callDispositionFilter',
+        'call_sub_disposition': 'callSubDispositionFilter',
+        'agent_disposition': 'agentDispositionFilter',
+        'agent_sub_disposition': 'agentSubDispositionFilter',
+        'call_type': 'callTypeFilter',
+        'agent_name': 'agentNameFilter',
+        'min_duration': 'minDuration',
+        'max_duration': 'maxDuration',
+        'call_language': 'languageFilter',
+        'evaluation_id': 'evaluationIdFilter',
+        'internal_id': 'internalIdFilter',
+        'template_id': 'templateIdFilter'
+    };
+    
+    const fieldId = fieldMap[filterKey];
+    if (fieldId) {
+        const element = document.getElementById(fieldId);
+        if (element) {
+            element.value = '';
+        }
+    }
+    
     updateActiveFilters();
     updateStats();
     updateDateRangeDisplay();
 }
 
 function clearFilters() {
-    console.log('🧹 Clearing all filters...');
+    console.log('🧹 Clearing all aligned filters...');
     
     currentFilters = {};
     updateActiveFilters();
@@ -384,8 +632,12 @@ function clearFilters() {
     // Reset all form elements
     const elementsToReset = [
         'startCallDate', 'endCallDate', 'startCreatedDate', 'endCreatedDate',
-        'partnerFilter', 'siteFilter', 'lobFilter', 'languageFilter', 'templateFilter',
-        'minDuration', 'maxDuration'
+        'programFilter', 'partnerFilter', 'siteFilter', 'lobFilter',
+        'phoneNumberFilter', 'contactIdFilter', 'ucidFilter', 'userIdFilter',
+        'callDispositionFilter', 'callSubDispositionFilter', 'agentDispositionFilter',
+        'agentSubDispositionFilter', 'callTypeFilter', 'agentNameFilter',
+        'minDuration', 'maxDuration', 'languageFilter',
+        'evaluationIdFilter', 'internalIdFilter', 'templateIdFilter'
     ];
     
     elementsToReset.forEach(id => {
@@ -393,18 +645,7 @@ function clearFilters() {
         if (element) element.value = '';
     });
     
-    // Reset checkbox groups
-    const checkboxGroups = ['agentFilters', 'dispositionFilters', 'subDispositionFilters'];
-    checkboxGroups.forEach(groupId => {
-        const group = document.getElementById(groupId);
-        if (group) {
-            group.querySelectorAll('input[type="checkbox"]:not([value="all"])').forEach(cb => cb.checked = false);
-            const allCheckbox = group.querySelector('input[value="all"]');
-            if (allCheckbox) allCheckbox.checked = true;
-        }
-    });
-    
-    console.log('✅ All filters cleared');
+    console.log('✅ All aligned filters cleared');
 }
 
 // =============================================================================
@@ -412,7 +653,7 @@ function clearFilters() {
 // =============================================================================
 
 async function updateStats() {
-    console.log('📊 Updating statistics with current filters...');
+    console.log('📊 Updating statistics with aligned filters...');
     
     try {
         const response = await fetch('/analytics/stats', {
@@ -421,7 +662,8 @@ async function updateStats() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                filters: currentFilters
+                filters: currentFilters,
+                filter_version: '4.0'
             })
         });
         
@@ -431,7 +673,7 @@ async function updateStats() {
             if (totalRecords) {
                 totalRecords.textContent = `${data.totalRecords || 0} evaluations`;
             }
-            console.log('✅ Statistics updated:', data);
+            console.log('✅ Statistics updated with aligned filters:', data);
         } else {
             throw new Error('Stats API not available');
         }
@@ -448,7 +690,7 @@ async function updateStats() {
 }
 
 // =============================================================================
-// CHAT FUNCTIONALITY
+// CHAT FUNCTIONALITY (Enhanced for metadata alignment)
 // =============================================================================
 
 function toggleSidebar() {
@@ -484,8 +726,8 @@ async function sendMessage() {
     input.value = '';
     input.style.height = 'auto';
     
-    console.log('💬 Sending analytics message:', message);
-    console.log('🔍 With comprehensive filters:', currentFilters);
+    console.log('💬 Sending analytics message with aligned metadata:', message);
+    console.log('🔍 With aligned filters:', currentFilters);
     
     // Hide welcome screen, show chat
     const welcomeScreen = document.getElementById('welcomeScreen');
@@ -503,7 +745,7 @@ async function sendMessage() {
     addLoadingMessage();
     
     try {
-        // Make API call with comprehensive filters and metadata
+        // Make API call with aligned metadata and filters
         const response = await fetch('/chat', {
             method: 'POST',
             headers: {
@@ -514,11 +756,13 @@ async function sendMessage() {
                 history: chatHistory,
                 filters: currentFilters,
                 analytics: true,
+                filter_version: '4.0',
                 metadata_focus: [
-                    'internalId', 'evaluationId', 'template_id', 'template_name',
-                    'partner', 'site', 'lob', 'agentName', 'agentId',
-                    'disposition', 'subDisposition', 'call_date', 'created_on',
-                    'call_duration', 'language', 'url'
+                    'evaluationId', 'internalId', 'template_id', 'template_name',
+                    'partner', 'site', 'lob', 'agentName', 'call_date',
+                    'call_disposition', 'call_sub_disposition', 'agent_disposition',
+                    'agent_sub_disposition', 'call_duration', 'call_language',
+                    'call_type', 'phone_number', 'contact_id', 'ucid'
                 ]
             })
         });
@@ -541,7 +785,7 @@ async function sendMessage() {
             addSourcesMessage(data.sources);
         }
         
-        console.log('✅ Analytics message sent successfully');
+        console.log('✅ Analytics message sent successfully with metadata alignment');
         
     } catch (error) {
         console.error('❌ Error sending message:', error);
@@ -607,12 +851,12 @@ function addSourcesMessage(sources) {
     const sourceDiv = document.createElement('div');
     sourceDiv.className = 'message assistant';
     
-    let sourcesHtml = '<div class="sources-container"><h4>📚 Related Evaluations:</h4>';
+    let sourcesHtml = '<div class="sources-container"><h4>📚 Related Call Evaluations:</h4>';
     
     sources.forEach((source, index) => {
         const metadata = source.metadata || {};
-        const evaluationId = metadata.evaluationId || 'Unknown';
-        const internalId = metadata.internalId || 'Unknown';
+        const evaluationId = metadata.evaluationId || metadata.evaluation_id || 'Unknown';
+        const internalId = metadata.internalId || metadata.internal_id || 'Unknown';
         
         // Build evaluation URL
         const evalUrl = metadata.url || 
@@ -623,17 +867,19 @@ function addSourcesMessage(sources) {
                 <div class="source-header">
                     <div>
                         <div class="source-title">
-                            ${metadata.agentName || 'Unknown Agent'} - ${metadata.disposition || 'Call'}
+                            ${metadata.agentName || metadata.agent_name || 'Unknown Agent'} - ${metadata.call_disposition || metadata.disposition || 'Call'}
                         </div>
                         <div class="source-meta">
+                            <strong>Call Date:</strong> ${metadata.call_date ? new Date(metadata.call_date).toLocaleDateString() : 'Unknown'} | 
+                            <strong>Duration:</strong> ${metadata.call_duration || 'Unknown'}s | 
+                            <strong>Language:</strong> ${metadata.call_language || metadata.language || 'Unknown'}<br>
                             <strong>Partner:</strong> ${metadata.partner || 'Unknown'} | 
                             <strong>Site:</strong> ${metadata.site || 'Unknown'} | 
                             <strong>LOB:</strong> ${metadata.lob || 'Unknown'}<br>
-                            <strong>Call Date:</strong> ${metadata.call_date ? new Date(metadata.call_date).toLocaleDateString() : 'Unknown'} | 
-                            <strong>Duration:</strong> ${metadata.call_duration || 'Unknown'}s | 
-                            <strong>Language:</strong> ${metadata.language || 'Unknown'}<br>
-                            <strong>Sub-Disposition:</strong> ${metadata.subDisposition || 'None'}<br>
-                            <strong>Template:</strong> ${metadata.template_name || 'Unknown'} | 
+                            <strong>Call Type:</strong> ${metadata.call_type || 'Unknown'} | 
+                            <strong>Sub-Disposition:</strong> ${metadata.call_sub_disposition || metadata.subDisposition || 'None'}<br>
+                            ${metadata.phone_number ? `<strong>Phone:</strong> ${metadata.phone_number} | ` : ''}
+                            ${metadata.contact_id ? `<strong>Contact ID:</strong> ${metadata.contact_id} | ` : ''}
                             <strong>Internal ID:</strong> ${internalId}
                         </div>
                     </div>
@@ -676,9 +922,9 @@ function addLoadingMessage() {
         <div class="message-content">
             <div class="loading-indicator">
                 <div class="spinner"></div>
-                <div>Analyzing call center data with applied filters...</div>
+                <div>Analyzing call center data with aligned metadata filters...</div>
                 <div style="font-size: 0.8rem; opacity: 0.7; margin-top: 4px;">
-                    Processing evaluations, performance metrics, and quality scores
+                    Processing evaluations, call details, dispositions, and performance metrics
                 </div>
             </div>
         </div>
@@ -733,23 +979,24 @@ function exportChat() {
         return;
     }
     
-    console.log('📁 Exporting comprehensive chat history...');
+    console.log('📁 Exporting comprehensive chat history with metadata alignment...');
     
     // Create detailed export content
-    let exportContent = `Metro AI Call Center Analytics Export\n`;
-    exportContent += `${'='.repeat(50)}\n`;
+    let exportContent = `Metro AI Call Center Analytics Export (v4.0)\n`;
+    exportContent += `${'='.repeat(55)}\n`;
     exportContent += `Generated: ${new Date().toISOString()}\n`;
-    exportContent += `Total Messages: ${chatHistory.length}\n\n`;
+    exportContent += `Total Messages: ${chatHistory.length}\n`;
+    exportContent += `Filter Version: Aligned with Call Detail Metadata\n\n`;
     
     // Add comprehensive filter information
     if (Object.keys(currentFilters).length > 0) {
-        exportContent += `Applied Filters:\n`;
-        exportContent += `${'-'.repeat(20)}\n`;
+        exportContent += `Applied Filters (Metadata Aligned):\n`;
+        exportContent += `${'-'.repeat(35)}\n`;
         Object.entries(currentFilters).forEach(([key, value]) => {
-            let displayValue = Array.isArray(value) ? value.join(', ') : value;
-            if (key.includes('Date')) {
+            let displayValue = value;
+            if (key.includes('date')) {
                 displayValue = new Date(value).toLocaleDateString();
-            } else if (key.includes('Duration')) {
+            } else if (key.includes('duration')) {
                 displayValue = `${value} seconds`;
             }
             exportContent += `  ${key}: ${displayValue}\n`;
@@ -767,20 +1014,20 @@ function exportChat() {
     });
     
     // Add footer
-    exportContent += `\n${'-'.repeat(50)}\n`;
-    exportContent += `Metro AI Call Center Analytics\n`;
-    exportContent += `Advanced evaluation analysis and insights\n`;
+    exportContent += `\n${'-'.repeat(55)}\n`;
+    exportContent += `Metro AI Call Center Analytics v4.0\n`;
+    exportContent += `Advanced evaluation analysis with aligned metadata filtering\n`;
     
     // Create and download file
     const blob = new Blob([exportContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `metro-ai-analytics-${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `metro-ai-analytics-v4-${new Date().toISOString().split('T')[0]}.txt`;
     a.click();
     URL.revokeObjectURL(url);
     
-    console.log('✅ Comprehensive chat history exported');
+    console.log('✅ Comprehensive chat history exported with metadata alignment');
 }
 
 // =============================================================================
@@ -797,27 +1044,51 @@ window.handleKeyPress = handleKeyPress;
 window.sendMessage = sendMessage;
 window.clearChat = clearChat;
 window.exportChat = exportChat;
+window.updateHierarchyFilters = updateHierarchyFilters;
+window.updateSubDispositions = updateSubDispositions;
 
 // Enhanced debugging interface
 window.chatDebug = {
     getCurrentFilters: () => currentFilters,
     getChatHistory: () => chatHistory,
     getFilterOptions: () => filterOptions,
+    getHierarchyCache: () => hierarchyCache,
     isLoading: () => isLoading,
     showFilterStats: () => {
-        console.log('📊 Filter Statistics:');
+        console.log('📊 Filter Statistics (v4.0):');
         console.log('Current Filters:', currentFilters);
         console.log('Available Options:', filterOptions);
+        console.log('Hierarchy Cache:', hierarchyCache);
         console.log('Active Filter Count:', Object.keys(currentFilters).length);
     },
     testFilters: () => {
-        console.log('🧪 Testing filter collection...');
-        const testFilters = collectFilters();
+        console.log('🧪 Testing aligned filter collection...');
+        const testFilters = collectAlignedFilters();
         console.log('Collected Filters:', testFilters);
         return testFilters;
+    },
+    validateMetadataAlignment: () => {
+        console.log('🔍 Validating metadata alignment...');
+        const expectedFields = [
+            'call_date_start', 'call_date_end', 'program', 'partner', 'site', 'lob',
+            'phone_number', 'contact_id', 'ucid', 'call_disposition', 'call_sub_disposition',
+            'agent_disposition', 'call_type', 'call_language', 'agent_name'
+        ];
+        
+        const currentFields = Object.keys(currentFilters);
+        const alignmentStatus = {
+            total_possible: expectedFields.length,
+            currently_used: currentFields.length,
+            aligned_fields: currentFields.filter(field => expectedFields.includes(field)),
+            missing_fields: expectedFields.filter(field => !currentFields.includes(field))
+        };
+        
+        console.log('📋 Metadata Alignment Status:', alignmentStatus);
+        return alignmentStatus;
     }
 };
 
-console.log('✅ Metro AI Call Center Analytics Chat v3.0 loaded successfully');
+console.log('✅ Metro AI Call Center Analytics Chat v4.0 loaded successfully');
 console.log('🔧 Enhanced debugging tools available at window.chatDebug');
-console.log('📊 Comprehensive metadata filtering and analytics ready');
+console.log('📊 Metadata-aligned filtering and hierarchical organization ready');
+console.log('📋 Call detail structure: Phone, Contact ID, UCID, Dispositions, Duration, Language, etc.');

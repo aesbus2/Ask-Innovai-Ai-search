@@ -85,7 +85,7 @@
 
         /* Sidebar */
         .sidebar {
-            width: 360px;
+            width: 380px;
             background: white;
             border-right: 1px solid #e1e8ed;
             display: flex;
@@ -299,6 +299,38 @@
 
         .filter-tag .remove:hover {
             opacity: 1;
+        }
+
+        .hierarchy-note {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            font-size: 0.85rem;
+            color: #1565c0;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .input-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .loading-spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #6e32a0;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         /* Main Chat Area */
@@ -621,11 +653,6 @@
             will-change: transform;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
         /* Welcome Screen */
         .welcome-screen {
             flex: 1;
@@ -715,7 +742,7 @@
                 display: none;
             }
 
-            .date-range, .duration-range {
+            .date-range, .duration-range, .input-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -780,11 +807,11 @@
         </div>
 
         <div class="main-layout">
-            <!-- Sidebar with Enhanced Filters -->
+            <!-- Updated Sidebar with Aligned Filters -->
             <div class="sidebar" id="sidebar">
                 <div class="sidebar-header">
-                    <h3>Advanced Analytics Filters</h3>
-                    <p>Filter evaluations to get targeted insights about call center performance</p>
+                    <h3>Call Center Analytics Filters</h3>
+                    <p>Filter evaluations using actual call metadata and evaluation details</p>
                 </div>
 
                 <div class="filter-panel">
@@ -792,7 +819,7 @@
                     <div class="filter-section">
                         <h4>
                             <span class="material-icons">date_range</span>
-                            Date Range
+                            Date & Time Filters
                         </h4>
                         <div class="filter-content">
                             <div class="filter-group">
@@ -812,22 +839,79 @@
                         </div>
                     </div>
 
-                    <!-- Agent Filters -->
+                    <!-- Organizational Hierarchy -->
                     <div class="filter-section">
                         <h4>
-                            <span class="material-icons">person</span>
-                            Agent Performance
+                            <span class="material-icons">account_tree</span>
+                            Organizational Hierarchy
+                        </h4>
+                        <div class="filter-content">
+                            <div class="hierarchy-note">
+                                <strong>Filter Hierarchy:</strong> Program → Partner → Site → LOB
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">Program/Template</label>
+                                <select id="programFilter" class="filter-select" onchange="updateHierarchyFilters('program')">
+                                    <option value="">All Programs</option>
+                                    <option id="programLoading" style="display: none;">
+                                        <span class="loading-spinner"></span>Loading...
+                                    </option>
+                                </select>
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">Partner</label>
+                                <select id="partnerFilter" class="filter-select" onchange="updateHierarchyFilters('partner')">
+                                    <option value="">All Partners</option>
+                                </select>
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">Site</label>
+                                <select id="siteFilter" class="filter-select" onchange="updateHierarchyFilters('site')">
+                                    <option value="">All Sites</option>
+                                </select>
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">Line of Business (LOB)</label>
+                                <select id="lobFilter" class="filter-select">
+                                    <option value="">All LOBs</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Call Identifiers -->
+                    <div class="filter-section">
+                        <h4>
+                            <span class="material-icons">fingerprint</span>
+                            Call Identifiers
                         </h4>
                         <div class="filter-content">
                             <div class="filter-group">
-                                <label class="filter-label">Select Agents</label>
-                                <div class="checkbox-group" id="agentFilters">
-                                    <div class="checkbox-item">
-                                        <input type="checkbox" id="agent-all" value="all" checked>
-                                        <label for="agent-all">All Agents</label>
-                                    </div>
-                                    <!-- Dynamic agent options populated here -->
-                                </div>
+                                <label class="filter-label">Phone Number</label>
+                                <input type="text" id="phoneNumberFilter" class="filter-input" 
+                                       placeholder="e.g., 3094399902" maxlength="15">
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">Contact ID</label>
+                                <input type="text" id="contactIdFilter" class="filter-input" 
+                                       placeholder="e.g., 3014818427" maxlength="20">
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">UCID</label>
+                                <input type="text" id="ucidFilter" class="filter-input" 
+                                       placeholder="e.g., 000011103817514224423" maxlength="30">
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">User ID / Agent ID</label>
+                                <input type="text" id="userIdFilter" class="filter-input" 
+                                       placeholder="Agent identifier" maxlength="20">
                             </div>
                         </div>
                     </div>
@@ -840,54 +924,62 @@
                         </h4>
                         <div class="filter-content">
                             <div class="filter-group">
-                                <label class="filter-label">Main Disposition</label>
-                                <div class="checkbox-group" id="dispositionFilters">
-                                    <div class="checkbox-item">
-                                        <input type="checkbox" id="disp-all" value="all" checked>
-                                        <label for="disp-all">All Dispositions</label>
-                                    </div>
-                                    <!-- Dynamic disposition options populated here -->
-                                </div>
+                                <label class="filter-label">Call Disposition</label>
+                                <select id="callDispositionFilter" class="filter-select" onchange="updateSubDispositions()">
+                                    <option value="">All Dispositions</option>
+                                    <option id="dispositionLoading" style="display: none;">
+                                        <span class="loading-spinner"></span>Loading from database...
+                                    </option>
+                                </select>
                             </div>
+                            
                             <div class="filter-group">
-                                <label class="filter-label">Sub-Disposition</label>
-                                <div class="checkbox-group" id="subDispositionFilters">
-                                    <div class="checkbox-item">
-                                        <input type="checkbox" id="subdisp-all" value="all" checked>
-                                        <label for="subdisp-all">All Sub-Dispositions</label>
-                                    </div>
-                                    <!-- Dynamic sub-disposition options populated here -->
-                                </div>
+                                <label class="filter-label">Call Sub Disposition</label>
+                                <select id="callSubDispositionFilter" class="filter-select">
+                                    <option value="">All Sub-Dispositions</option>
+                                </select>
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">Agent Disposition</label>
+                                <select id="agentDispositionFilter" class="filter-select">
+                                    <option value="">All Agent Dispositions</option>
+                                </select>
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">Call Type</label>
+                                <select id="callTypeFilter" class="filter-select">
+                                    <option value="">All Call Types</option>
+                                    <option value="Direct Connect">Direct Connect</option>
+                                    <option value="Transfer">Transfer</option>
+                                    <option value="Inbound">Inbound</option>
+                                    <option value="Outbound">Outbound</option>
+                                </select>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Organization Filters -->
+                    <!-- Agent Performance -->
                     <div class="filter-section">
                         <h4>
-                            <span class="material-icons">business</span>
-                            Organization
+                            <span class="material-icons">person</span>
+                            Agent Performance
                         </h4>
                         <div class="filter-content">
                             <div class="filter-group">
-                                <label class="filter-label">Partner</label>
-                                <select id="partnerFilter" class="filter-select">
-                                    <option value="">All Partners</option>
-                                    <!-- Dynamic partner options populated here -->
-                                </select>
+                                <label class="filter-label">Agent Name</label>
+                                <input type="text" id="agentNameFilter" class="filter-input" 
+                                       placeholder="e.g., Rey Mendoza" list="agentNamesList">
+                                <datalist id="agentNamesList">
+                                    <!-- Dynamic options populated here -->
+                                </datalist>
                             </div>
+                            
                             <div class="filter-group">
-                                <label class="filter-label">Site</label>
-                                <select id="siteFilter" class="filter-select">
-                                    <option value="">All Sites</option>
-                                    <!-- Dynamic site options populated here -->
-                                </select>
-                            </div>
-                            <div class="filter-group">
-                                <label class="filter-label">Line of Business</label>
-                                <select id="lobFilter" class="filter-select">
-                                    <option value="">All LOBs</option>
-                                    <!-- Dynamic LOB options populated here -->
+                                <label class="filter-label">Agent Sub Disposition</label>
+                                <select id="agentSubDispositionFilter" class="filter-select">
+                                    <option value="">All Agent Sub-Dispositions</option>
                                 </select>
                             </div>
                         </div>
@@ -901,35 +993,51 @@
                         </h4>
                         <div class="filter-content">
                             <div class="filter-group">
-                                <label class="filter-label">Duration (seconds)</label>
-                                <div class="duration-range">
-                                    <input type="number" id="minDuration" class="filter-input" placeholder="Min" min="0">
-                                    <input type="number" id="maxDuration" class="filter-input" placeholder="Max" min="0">
+                                <label class="filter-label">Call Duration (seconds)</label>
+                                <div class="input-grid">
+                                    <input type="number" id="minDuration" class="filter-input" 
+                                           placeholder="Min (e.g., 120)" min="0" max="7200">
+                                    <input type="number" id="maxDuration" class="filter-input" 
+                                           placeholder="Max (e.g., 600)" min="0" max="7200">
                                 </div>
                             </div>
+                            
                             <div class="filter-group">
-                                <label class="filter-label">Language</label>
+                                <label class="filter-label">Call Language</label>
                                 <select id="languageFilter" class="filter-select">
                                     <option value="">All Languages</option>
-                                    <!-- Dynamic language options populated here -->
+                                    <option value="English">English</option>
+                                    <option value="Spanish">Spanish</option>
+                                    <option value="Tagalog">Tagalog</option>
+                                    <option value="Other">Other</option>
                                 </select>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Template Filters -->
+                    <!-- Evaluation Metadata -->
                     <div class="filter-section">
                         <h4>
                             <span class="material-icons">assignment</span>
-                            Evaluation Templates
+                            Evaluation Metadata
                         </h4>
                         <div class="filter-content">
                             <div class="filter-group">
-                                <label class="filter-label">Template</label>
-                                <select id="templateFilter" class="filter-select">
-                                    <option value="">All Templates</option>
-                                    <!-- Dynamic template options populated here -->
-                                </select>
+                                <label class="filter-label">Evaluation ID</label>
+                                <input type="text" id="evaluationIdFilter" class="filter-input" 
+                                       placeholder="Specific evaluation ID" maxlength="20">
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">Internal ID</label>
+                                <input type="text" id="internalIdFilter" class="filter-input" 
+                                       placeholder="Internal system ID" maxlength="30">
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">Template ID</label>
+                                <input type="text" id="templateIdFilter" class="filter-input" 
+                                       placeholder="Template identifier" maxlength="30">
                             </div>
                         </div>
                     </div>
@@ -950,12 +1058,12 @@
                 </div>
             </div>
 
-            <!-- Main Chat Area -->
+            <!-- Main Chat Area (unchanged) -->
             <div class="chat-area">
                 <div class="chat-header">
                     <div>
                         <div class="chat-title">Call Center Analytics Dashboard</div>
-                        <div class="chat-subtitle">AI-powered insights from evaluation data</div>
+                        <div class="chat-subtitle">AI-powered insights from call evaluation data</div>
                     </div>
                     <div class="chat-stats">
                         <div class="stat-item">
@@ -976,37 +1084,37 @@
                 <div class="messages-container" id="messagesContainer">
                     <!-- Welcome Screen -->
                     <div class="welcome-screen" id="welcomeScreen">
-                        <div class="welcome-icon">🎯</div>
+                        <div class="welcome-icon">📞</div>
                         <h2 class="welcome-title">Metro AI Call Center Analytics</h2>
                         <p class="welcome-subtitle">
-                            Ask sophisticated questions about call center performance, agent effectiveness, 
-                            customer satisfaction, and operational insights. Use filters to focus your analysis.
+                            Ask sophisticated questions about call performance, agent effectiveness, 
+                            customer satisfaction, and operational insights. Use the updated filters to focus on specific calls, agents, and time periods.
                         </p>
                         
                         <div class="example-questions">
-                            <div class="example-card" onclick="askQuestion('What is the average call duration by agent and how does it compare to the team average?')">
-                                <h4>📊 Performance Analysis</h4>
-                                <p>What is the average call duration by agent and how does it compare to the team average?</p>
+                            <div class="example-card" onclick="askQuestion('Show me all calls with disposition Account and sub-disposition Rate Plan Or Plan Fit Analysis from this week')">
+                                <h4>📊 Call Analysis</h4>
+                                <p>Show me all calls with disposition "Account" and sub-disposition "Rate Plan Or Plan Fit Analysis" from this week</p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('Show me evaluations where customers mentioned port out or transfer PIN requests')">
-                                <h4>🔍 Content Analysis</h4>
-                                <p>Show me evaluations where customers mentioned port out or transfer PIN requests</p>
+                            <div class="example-card" onclick="askQuestion('What is the average call duration for Direct Connect calls vs other call types?')">
+                                <h4>📈 Performance Metrics</h4>
+                                <p>What is the average call duration for Direct Connect calls vs other call types?</p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('Which agents consistently score highest in customer satisfaction metrics?')">
-                                <h4>👥 Agent Performance</h4>
-                                <p>Which agents consistently score highest in customer satisfaction metrics?</p>
+                            <div class="example-card" onclick="askQuestion('Find evaluations where call duration is over 300 seconds and disposition is Equipment')">
+                                <h4>🔍 Specific Call Patterns</h4>
+                                <p>Find evaluations where call duration is over 300 seconds and disposition is Equipment</p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('What are the most common sub-dispositions for account-related calls this month?')">
-                                <h4>📈 Trend Analysis</h4>
-                                <p>What are the most common sub-dispositions for account-related calls this month?</p>
+                            <div class="example-card" onclick="askQuestion('Compare performance between different sites and partners for Account dispositions')">
+                                <h4>🏢 Site & Partner Analysis</h4>
+                                <p>Compare performance between different sites and partners for Account dispositions</p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('Analyze the quality scores for calls longer than 10 minutes')">
-                                <h4>⚡ Quality Insights</h4>
-                                <p>Analyze the quality scores for calls longer than 10 minutes</p>
+                            <div class="example-card" onclick="askQuestion('Show me trends in call language distribution over the past month')">
+                                <h4>🌍 Language Analysis</h4>
+                                <p>Show me trends in call language distribution over the past month</p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('Compare performance metrics between different sites and partners')">
-                                <h4>🏢 Site Comparison</h4>
-                                <p>Compare performance metrics between different sites and partners</p>
+                            <div class="example-card" onclick="askQuestion('Which agents have the highest success rate for calls longer than 400 seconds?')">
+                                <h4>👥 Agent Effectiveness</h4>
+                                <p>Which agents have the highest success rate for calls longer than 400 seconds?</p>
                             </div>
                         </div>
                     </div>
@@ -1021,20 +1129,20 @@
                 <div class="quick-questions" id="quickQuestions">
                     <h4>💡 Quick Analytics Questions</h4>
                     <div class="question-buttons">
-                        <button class="question-btn" onclick="askQuestion('What is the overall quality score trend this week?')">
-                            Quality score trends
+                        <button class="question-btn" onclick="askQuestion('What are the most common call dispositions this week?')">
+                            Common dispositions
                         </button>
-                        <button class="question-btn" onclick="askQuestion('Show me the longest calls with poor evaluations')">
-                            Long calls with issues
+                        <button class="question-btn" onclick="askQuestion('Show me the longest calls with their outcomes')">
+                            Longest calls analysis
                         </button>
-                        <button class="question-btn" onclick="askQuestion('Which agents need additional training based on recent evaluations?')">
-                            Training opportunities
+                        <button class="question-btn" onclick="askQuestion('Which contact IDs have multiple evaluations?')">
+                            Repeat contacts
                         </button>
-                        <button class="question-btn" onclick="askQuestion('What are the most frequent customer complaints?')">
-                            Common complaints
+                        <button class="question-btn" onclick="askQuestion('Compare English vs Spanish call performance')">
+                            Language comparison
                         </button>
-                        <button class="question-btn" onclick="askQuestion('Compare morning vs afternoon call performance')">
-                            Time-based performance
+                        <button class="question-btn" onclick="askQuestion('What time patterns do we see in call durations?')">
+                            Time-based patterns
                         </button>
                     </div>
                 </div>
@@ -1045,7 +1153,7 @@
                         <textarea 
                             id="chatInput" 
                             class="chat-input" 
-                            placeholder="Ask detailed questions about call center performance, agent effectiveness, quality scores, customer satisfaction..."
+                            placeholder="Ask specific questions about calls, dispositions, agents, performance metrics, or any evaluation data..."
                             rows="1"
                             onkeydown="handleKeyPress(event)"
                         ></textarea>

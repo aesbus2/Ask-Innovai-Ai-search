@@ -19,6 +19,13 @@ from pydantic import BaseModel
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from uuid import uuid4
+from chat_handlers import chat_router
+from typing import Dict, List, Any, Optional
+from fastapi import Query
+from collections import defaultdict
+
+
+
 
 # Production logging setup
 logging.basicConfig(
@@ -72,6 +79,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(chat_router)
 
 # Mount static files
 try:
@@ -949,173 +958,517 @@ async def health():
                 "error": str(e)
             }
         )
+# Additional endpoints for app.py to support aligned filter system
+# Add these endpoints to your existing app.py file
 
-@app.post("/chat")
-async def chat_handler(request: ChatRequest):
-    """Comprehensive analytics chat functionality with full metadata support"""
+from typing import Dict, List, Any, Optional
+from fastapi import Query
+from collections import defaultdict
+
+# Add these endpoints to your FastAPI app
+
+@app.get("/filter_options_metadata")
+async def get_filter_options_metadata():
+    """
+    Get dynamic filter options based on actual evaluation metadata
+    Aligned with call detail structure
+    """
     try:
-        if not GENAI_ACCESS_KEY:
-            return {"reply": "Chat service not configured. Please set GENAI_ACCESS_KEY."}
+        from opensearch_client import get_opensearch_manager
+        manager = get_opensearch_manager()
         
-        # Extract comprehensive filters and metadata focus
-        filters = getattr(request, 'filters', {})
-        is_analytics = getattr(request, 'analytics', False)
-        metadata_focus = getattr(request, 'metadata_focus', [])
+        if not manager.test_connection():
+            return create_fallback_filter_options()
         
-        # Search for context with comprehensive filters
-        context = ""
-        sources = []
+        # Aggregation query to get unique values from metadata
+        aggregation_body = {
+            "size": 0,
+            "aggs": {
+                "programs": {
+                    "terms": {"field": "metadata.template.keyword", "size": 50}
+                },
+                "partners": {
+                    "terms": {"field": "metadata.program.keyword", "size": 50}
+                },
+                "sites": {
+                    "terms": {"field": "metadata.site.keyword", "size": 50}
+                },
+                "lobs": {
+                    "terms": {"field": "metadata.lob.keyword", "size": 50}
+                },
+                "call_dispositions": {
+                    "terms": {"field": "metadata.disposition.keyword", "size": 100}
+                },
+                "call_sub_dispositions": {
+                    "terms": {"field": "metadata.sub_disposition.keyword", "size": 200}
+                },
+                "agent_names": {
+                    "terms": {"field": "metadata.agent.keyword", "size": 200}
+                },
+                "languages": {
+                    "terms": {"field": "metadata.language.keyword", "size": 20}
+                },
+                # Hierarchical relationships
+                "program_partners": {
+                    "terms": {"field": "metadata.template.keyword", "size": 50},
+                    "aggs": {
+                        "partners": {
+                            "terms": {"field": "metadata.program.keyword", "size": 50}
+                        }
+                    }
+                },
+                "partner_sites": {
+                    "terms": {"field": "metadata.program.keyword", "size": 50},
+                    "aggs": {
+                        "sites": {
+                            "terms": {"field": "metadata.site.keyword", "size": 50}
+                        }
+                    }
+                },
+                "site_lobs": {
+                    "terms": {"field": "metadata.site.keyword", "size": 50},
+                    "aggs": {
+                        "lobs": {
+                            "terms": {"field": "metadata.lob.keyword", "size": 50}
+                        }
+                    }
+                },
+                "disposition_subdispositions": {
+                    "terms": {"field": "metadata.disposition.keyword", "size": 100},
+                    "aggs": {
+                        "sub_dispositions": {
+                            "terms": {"field": "metadata.sub_disposition.keyword", "size": 200}
+                        }
+                    }
+                }
+            }
+        }
         
         try:
-            from opensearch_client import get_connection_status
-            conn_status = get_connection_status()
+            response = manager.client.search(
+                index="*",  # Search all indices
+                body=aggregation_body
+            )
             
-            if conn_status.get("connected", False):
-                # Build comprehensive search with all filters
-                search_results = search_opensearch_with_filters(
-                    request.message, 
-                    filters=filters,
-                    index_override="Ai Corporate SPTR - TEST",
-                    size=8  # Increased for better analytics
-                )
-                
-                if search_results:
-                    # Extract comprehensive context from multiple results
-                    context_parts = []
-                    for result in search_results[:5]:  # Use top 5 results
-                        source_data = result.get('_source', {})
-                        text = source_data.get('text', '')
-                        metadata = source_data.get('metadata', {})
-                        
-                        if text:
-                            # Create rich context with metadata
-                            context_piece = f"Evaluation: {text[:250]}"
-                            if metadata:
-                                context_piece += f"\nMetadata: Agent={metadata.get('agentName', 'Unknown')}, "
-                                context_piece += f"Disposition={metadata.get('disposition', 'Unknown')}, "
-                                context_piece += f"SubDisposition={metadata.get('subDisposition', 'None')}, "
-                                context_piece += f"Duration={metadata.get('call_duration', 'Unknown')}s, "
-                                context_piece += f"Site={metadata.get('site', 'Unknown')}, "
-                                context_piece += f"Partner={metadata.get('partner', 'Unknown')}"
-                            
-                            context_parts.append(context_piece)
-                            
-                            # Add to sources for frontend display
-                            sources.append({
-                                'text': text,
-                                'metadata': metadata,
-                                'score': result.get('_score', 0)
-                            })
-                    
-                    context = "\n---\n".join(context_parts)
-                
-        except Exception as e:
-            logger.warning(f"Search context failed: {e}")
-            pass
-        
-        # Build enhanced system message for comprehensive analytics
-        if is_analytics:
-            system_msg = """You are MetroAI Analytics, an advanced call center analytics specialist for Metro by T-Mobile.
-
-Your comprehensive capabilities include:
-- Performance Analysis: Call duration, resolution rates, quality scores, efficiency metrics
-- Agent Evaluation: Individual performance, training needs, improvement areas, strengths
-- Customer Experience: Satisfaction indicators, complaint patterns, service quality
-- Operational Intelligence: Peak time analysis, resource optimization, workflow efficiency
-- Quality Assurance: Evaluation scores, compliance metrics, coaching opportunities
-- Business Intelligence: Partner/site comparisons, LOB performance, trend analysis
-
-Available Metadata Fields for Analysis:
-- internalId: Main reference ID for all evaluations
-- evaluationId: Unique evaluation identifier
-- template_id: Evaluation template reference (always use this over template_name)
-- template_name: Template display name (may change)
-- partner: Call center partner organization
-- site: Specific location/site within partner
-- lob: Line of Business (WNP, Prepaid, Postpaid, Business, Enterprise)
-- agentName: Agent being evaluated
-- agentId: Agent identifier for searches
-- disposition: Main call category (Account, Technical Support, Billing, etc.)
-- subDisposition: Specific call reason within disposition
-- created_on: When evaluation was created in system
-- call_date: When customer actually called (use for temporal analysis)
-- call_duration: Call length in seconds
-- language: Call language
-- url: Direct link to evaluation details
-
-Analysis Guidelines:
-- Always reference template_id instead of template_name for consistency
-- Use call_date for temporal analysis (customer call time)
-- Use created_on for evaluation workflow analysis
-- Normalize dates when analyzing trends
-- Consider partner/site relationships in performance comparisons
-- Factor in LOB differences when comparing metrics
-- Use agentId for accurate agent performance tracking
-- Include specific examples from evaluation data when possible
-- Provide actionable insights for operations improvement
-
-When analyzing transcript data, preserve speaker context and don't split conversations between speakers."""
-        else:
-            system_msg = "You are MetroAI, an intelligent assistant for Metro by T-Mobile customer service operations."
-        
-        # Add comprehensive filter context
-        if filters:
-            filter_context = "Analysis is filtered by: "
-            filter_parts = []
+            aggs = response.get("aggregations", {})
             
-            for key, value in filters.items():
-                if isinstance(value, list):
-                    filter_parts.append(f"{key}: {', '.join(value)}")
-                elif key in ['startCallDate', 'endCallDate', 'startCreatedDate', 'endCreatedDate']:
-                    filter_parts.append(f"{key}: {value}")
-                else:
-                    filter_parts.append(f"{key}: {value}")
-            
-            filter_context += "; ".join(filter_parts)
-            system_msg += f"\n\nCurrent Filter Context: {filter_context}"
-        
-        # Add comprehensive search context
-        if context:
-            system_msg += f"\n\nRelevant Evaluation Data:\n{context}"
-        
-        # Build messages for AI
-        messages = [{"role": "system", "content": system_msg}]
-        messages.extend([{"role": m["role"], "content": m["content"]} for m in request.history])
-        messages.append({"role": "user", "content": request.message})
-        
-        # Call AI service with enhanced context
-        payload = {"model": GENAI_ACCESS_KEY, "messages": messages}
-        
-        response = requests.post(
-            GENAI_ENDPOINT,
-            headers={
-                "Authorization": f"Bearer {GENAI_ACCESS_KEY}",
-                "Content-Type": "application/json"
-            },
-            json=payload,
-            timeout=45  # Increased timeout for complex analytics
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            reply = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            
-            # Return comprehensive response with sources and metadata
-            return {
-                "reply": reply.strip() if reply else "Sorry, I couldn't generate a response.",
-                "sources": sources[:5] if sources else [],  # Limit to 5 most relevant
-                "filters_applied": filters,
-                "context_found": bool(context),
-                "metadata_fields_available": len(metadata_focus) if metadata_focus else 0,
-                "search_results_count": len(sources)
+            # Extract simple lists
+            filter_options = {
+                "programs": extract_terms(aggs.get("programs", {})),
+                "partners": extract_terms(aggs.get("partners", {})),
+                "sites": extract_terms(aggs.get("sites", {})),
+                "lobs": extract_terms(aggs.get("lobs", {})),
+                "callDispositions": extract_terms(aggs.get("call_dispositions", {})),
+                "callSubDispositions": extract_terms(aggs.get("call_sub_dispositions", {})),
+                "agentNames": extract_terms(aggs.get("agent_names", {})),
+                "languages": extract_terms(aggs.get("languages", {})),
+                "callTypes": ["Direct Connect", "Transfer", "Inbound", "Outbound"],  # Static for now
+                "agentDispositions": ["Equipment", "Account Management", "Technical Support", "Customer Service"],  # Static for now
+                "agentSubDispositions": ["NA", "Resolved", "Escalated", "Follow-up Required", "Transferred"]  # Static for now
             }
-        else:
-            logger.error(f"AI service error: {response.status_code} - {response.text}")
-            return {"reply": "AI service temporarily unavailable. Please try again."}
+            
+            # Extract hierarchical relationships
+            hierarchy = {
+                "program_partners": extract_hierarchy(aggs.get("program_partners", {}), "partners"),
+                "partner_sites": extract_hierarchy(aggs.get("partner_sites", {}), "sites"),
+                "site_lobs": extract_hierarchy(aggs.get("site_lobs", {}), "lobs"),
+                "disposition_subdispositions": extract_hierarchy(aggs.get("disposition_subdispositions", {}), "sub_dispositions")
+            }
+            
+            return {
+                **filter_options,
+                "hierarchy": hierarchy,
+                "status": "success",
+                "source": "dynamic_metadata"
+            }
+            
+        except Exception as e:
+            logger.error(f"OpenSearch aggregation failed: {e}")
+            return create_fallback_filter_options()
             
     except Exception as e:
-        logger.error(f"Comprehensive chat error: {e}")
-        return {"reply": "Sorry, there was an error processing your analytics request. Please try again."}
+        logger.error(f"Filter options endpoint failed: {e}")
+        return create_fallback_filter_options()
+
+def extract_terms(aggregation_data: Dict) -> List[str]:
+    """Extract terms from OpenSearch aggregation buckets"""
+    buckets = aggregation_data.get("buckets", [])
+    return [bucket["key"] for bucket in buckets if bucket["key"] and bucket["key"].strip()]
+
+def extract_hierarchy(aggregation_data: Dict, sub_agg_name: str) -> Dict[str, List[str]]:
+    """Extract hierarchical relationships from nested aggregations"""
+    hierarchy = {}
+    buckets = aggregation_data.get("buckets", [])
+    
+    for bucket in buckets:
+        parent_key = bucket["key"]
+        if parent_key and parent_key.strip():
+            sub_agg = bucket.get(sub_agg_name, {})
+            children = extract_terms(sub_agg)
+            if children:
+                hierarchy[parent_key] = children
+    
+    return hierarchy
+
+def create_fallback_filter_options():
+    """Fallback filter options when OpenSearch is not available"""
+    return {
+        "programs": [
+            "Ai Corporate SPTR - TEST",
+            "Customer Service Quality", 
+            "Technical Support QA",
+            "Billing Specialist Review"
+        ],
+        "partners": [
+            "iQor", "Teleperformance", "Concentrix", "Alorica", "Sitel"
+        ],
+        "sites": [
+            "Dasma", "Manila", "Cebu", "Davao", "Iloilo", "Bacolod"
+        ],
+        "lobs": [
+            "WNP", "Prepaid", "Postpaid", "Business", "Enterprise"
+        ],
+        "callDispositions": [
+            "Account", "Technical Support", "Billing", "Port Out", "Service Inquiry", "Equipment"
+        ],
+        "callSubDispositions": [
+            "Rate Plan Or Plan Fit Analysis",
+            "Port Out - Questions/pin/acct #",
+            "Account - Profile Update",
+            "Equipment - Troubleshooting"
+        ],
+        "agentNames": [
+            "Rey Mendoza", "Maria Garcia", "John Smith", "Sarah Johnson"
+        ],
+        "languages": [
+            "English", "Spanish", "Tagalog"
+        ],
+        "callTypes": [
+            "Direct Connect", "Transfer", "Inbound", "Outbound"
+        ],
+        "agentDispositions": [
+            "Equipment", "Account Management", "Technical Support"
+        ],
+        "agentSubDispositions": [
+            "NA", "Resolved", "Escalated"
+        ],
+        "hierarchy": {},
+        "status": "fallback",
+        "source": "static_data"
+    }
+
+@app.post("/analytics/stats")
+async def get_analytics_stats(request: Dict[str, Any]):
+    """
+    Get statistics based on aligned metadata filters
+    """
+    try:
+        filters = request.get("filters", {})
+        filter_version = request.get("filter_version", "4.0")
+        
+        logger.info(f"📊 Getting stats with filter version {filter_version}")
+        logger.info(f"🔍 Applied filters: {list(filters.keys())}")
+        
+        from opensearch_client import get_opensearch_manager
+        manager = get_opensearch_manager()
+        
+        if not manager.test_connection():
+            return {"totalRecords": 0, "status": "opensearch_unavailable"}
+        
+        # Build OpenSearch query based on aligned filters
+        query_body = build_aligned_filter_query(filters)
+        
+        # Get count
+        try:
+            response = manager.client.count(
+                index="*",
+                body={"query": query_body}
+            )
+            
+            total_records = response.get("count", 0)
+            
+            return {
+                "totalRecords": total_records,
+                "status": "success",
+                "filtersApplied": len(filters),
+                "filterVersion": filter_version,
+                "queryType": "aligned_metadata"
+            }
+            
+        except Exception as e:
+            logger.error(f"OpenSearch count query failed: {e}")
+            return {"totalRecords": 0, "status": "query_failed", "error": str(e)}
+            
+    except Exception as e:
+        logger.error(f"Stats endpoint failed: {e}")
+        return {"totalRecords": 0, "status": "error", "error": str(e)}
+
+def build_aligned_filter_query(filters: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build OpenSearch query from aligned metadata filters
+    """
+    must_clauses = []
+    
+    # Date range filters
+    if filters.get("call_date_start") or filters.get("call_date_end"):
+        date_range = {}
+        if filters.get("call_date_start"):
+            date_range["gte"] = filters["call_date_start"]
+        if filters.get("call_date_end"):
+            date_range["lte"] = filters["call_date_end"]
+        
+        must_clauses.append({
+            "range": {
+                "metadata.call_date": date_range
+            }
+        })
+    
+    # Organizational hierarchy filters
+    hierarchy_fields = {
+        "program": "metadata.template.keyword",
+        "partner": "metadata.program.keyword", 
+        "site": "metadata.site.keyword",
+        "lob": "metadata.lob.keyword"
+    }
+    
+    for filter_key, es_field in hierarchy_fields.items():
+        if filters.get(filter_key):
+            must_clauses.append({
+                "term": {es_field: filters[filter_key]}
+            })
+    
+    # Call identifier filters (exact matches)
+    id_fields = {
+        "phone_number": "metadata.phone_number.keyword",
+        "contact_id": "metadata.contact_id.keyword",
+        "ucid": "metadata.ucid.keyword",
+        "user_id": "metadata.agent_id.keyword"
+    }
+    
+    for filter_key, es_field in id_fields.items():
+        if filters.get(filter_key):
+            must_clauses.append({
+                "term": {es_field: filters[filter_key]}
+            })
+    
+    # Call classification filters
+    classification_fields = {
+        "call_disposition": "metadata.disposition.keyword",
+        "call_sub_disposition": "metadata.sub_disposition.keyword",
+        "agent_disposition": "metadata.agent_disposition.keyword",
+        "call_type": "metadata.call_type.keyword",
+        "call_language": "metadata.language.keyword"
+    }
+    
+    for filter_key, es_field in classification_fields.items():
+        if filters.get(filter_key):
+            must_clauses.append({
+                "term": {es_field: filters[filter_key]}
+            })
+    
+    # Agent name filter (partial match)
+    if filters.get("agent_name"):
+        must_clauses.append({
+            "wildcard": {
+                "metadata.agent.keyword": f"*{filters['agent_name']}*"
+            }
+        })
+    
+    # Duration range filter
+    if filters.get("min_duration") or filters.get("max_duration"):
+        duration_range = {}
+        if filters.get("min_duration"):
+            duration_range["gte"] = filters["min_duration"]
+        if filters.get("max_duration"):
+            duration_range["lte"] = filters["max_duration"]
+        
+        must_clauses.append({
+            "range": {
+                "metadata.call_duration": duration_range
+            }
+        })
+    
+    # Evaluation metadata filters
+    eval_fields = {
+        "evaluation_id": "metadata.evaluation_id.keyword",
+        "internal_id": "metadata.internal_id.keyword",
+        "template_id": "metadata.template_id.keyword"
+    }
+    
+    for filter_key, es_field in eval_fields.items():
+        if filters.get(filter_key):
+            must_clauses.append({
+                "term": {es_field: filters[filter_key]}
+            })
+    
+    # If no filters, match all
+    if not must_clauses:
+        return {"match_all": {}}
+    
+    return {
+        "bool": {
+            "must": must_clauses
+        }
+    }
+
+@app.get("/metadata/validation")
+async def validate_metadata_structure():
+    """
+    Validate that the metadata structure aligns with expected call detail fields
+    """
+    try:
+        from opensearch_client import get_opensearch_manager
+        manager = get_opensearch_manager()
+        
+        if not manager.test_connection():
+            return {"status": "opensearch_unavailable"}
+        
+        # Sample a few documents to check metadata structure
+        sample_query = {
+            "size": 10,
+            "query": {"match_all": {}},
+            "_source": ["metadata"]
+        }
+        
+        response = manager.client.search(
+            index="*",
+            body=sample_query
+        )
+        
+        hits = response.get("hits", {}).get("hits", [])
+        
+        if not hits:
+            return {"status": "no_documents", "message": "No documents found for validation"}
+        
+        # Analyze metadata structure
+        metadata_fields = set()
+        sample_metadata = []
+        
+        for hit in hits:
+            metadata = hit.get("_source", {}).get("metadata", {})
+            if metadata:
+                metadata_fields.update(metadata.keys())
+                sample_metadata.append(metadata)
+        
+        # Expected fields based on call detail structure
+        expected_fields = {
+            "call_date", "disposition", "sub_disposition", "call_duration",
+            "agent", "site", "program", "lob", "language", "template",
+            "evaluation_id", "internal_id", "template_id"
+        }
+        
+        # Optional fields that might be present
+        optional_fields = {
+            "phone_number", "contact_id", "ucid", "agent_id", "call_type",
+            "agent_disposition", "agent_sub_disposition"
+        }
+        
+        all_expected = expected_fields | optional_fields
+        
+        validation_result = {
+            "status": "success",
+            "total_metadata_fields": len(metadata_fields),
+            "expected_fields_present": len(metadata_fields & expected_fields),
+            "optional_fields_present": len(metadata_fields & optional_fields),
+            "missing_expected": list(expected_fields - metadata_fields),
+            "missing_optional": list(optional_fields - metadata_fields),
+            "unexpected_fields": list(metadata_fields - all_expected),
+            "sample_metadata": sample_metadata[:3],  # First 3 samples
+            "field_coverage": {
+                "expected": f"{len(metadata_fields & expected_fields)}/{len(expected_fields)}",
+                "optional": f"{len(metadata_fields & optional_fields)}/{len(optional_fields)}",
+                "total": f"{len(metadata_fields & all_expected)}/{len(all_expected)}"
+            }
+        }
+        
+        return validation_result
+        
+    except Exception as e:
+        logger.error(f"Metadata validation failed: {e}")
+        return {"status": "error", "error": str(e)}
+
+@app.get("/filter/hierarchy/{level}")
+async def get_hierarchy_options(
+    level: str,
+    program: Optional[str] = Query(None),
+    partner: Optional[str] = Query(None),
+    site: Optional[str] = Query(None)
+):
+    """
+    Get hierarchical filter options based on parent selections
+    Supports Program -> Partner -> Site -> LOB hierarchy
+    """
+    try:
+        from opensearch_client import get_opensearch_manager
+        manager = get_opensearch_manager()
+        
+        if not manager.test_connection():
+            return {"options": [], "status": "opensearch_unavailable"}
+        
+        # Build query based on parent selections
+        must_clauses = []
+        
+        if program:
+            must_clauses.append({"term": {"metadata.template.keyword": program}})
+        if partner:
+            must_clauses.append({"term": {"metadata.program.keyword": partner}})
+        if site:
+            must_clauses.append({"term": {"metadata.site.keyword": site}})
+        
+        # Determine aggregation field based on level
+        field_mapping = {
+            "partner": "metadata.program.keyword",
+            "site": "metadata.site.keyword", 
+            "lob": "metadata.lob.keyword"
+        }
+        
+        if level not in field_mapping:
+            return {"options": [], "status": "invalid_level", "valid_levels": list(field_mapping.keys())}
+        
+        agg_field = field_mapping[level]
+        
+        query_body = {
+            "size": 0,
+            "query": {
+                "bool": {"must": must_clauses} if must_clauses else {"match_all": {}}
+            },
+            "aggs": {
+                "options": {
+                    "terms": {"field": agg_field, "size": 100}
+                }
+            }
+        }
+        
+        response = manager.client.search(
+            index="*",
+            body=query_body
+        )
+        
+        options = extract_terms(response.get("aggregations", {}).get("options", {}))
+        
+        return {
+            "options": options,
+            "level": level,
+            "parent_filters": {"program": program, "partner": partner, "site": site},
+            "status": "success"
+        }
+        
+    except Exception as e:
+        logger.error(f"Hierarchy options failed: {e}")
+        return {"options": [], "status": "error", "error": str(e)}
+
+# Add these utility functions if they don't exist
+async def cleanup_memory_after_batch():
+    """Memory cleanup function if not already defined"""
+    import gc
+    collected = gc.collect()
+    logger.info(f"🧹 Garbage collected {collected} objects")
+
+logger.info("✅ Aligned filter system endpoints loaded")
+logger.info("📊 Supports hierarchical filtering: Program -> Partner -> Site -> LOB") 
+logger.info("🔍 Supports call identifiers: Phone, Contact ID, UCID, User ID")
+logger.info("📋 Supports call classifications: Dispositions, Types, Languages")
+logger.info("📈 Supports metadata validation and dynamic option loading")
 
 @app.get("/search")
 async def search(q: str):
