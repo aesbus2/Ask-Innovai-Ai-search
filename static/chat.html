@@ -634,6 +634,14 @@
                     <span class="material-icons">refresh</span>
                     <span>Clear</span>
                 </button>
+                <button class="header-btn" onclick="debugSystemState()">
+                    <span class="material-icons">bug_report</span>
+                    <span>Debug</span>
+                </button>
+                <button class="header-btn" onclick="resetSystem()">
+                    <span class="material-icons">restart_alt</span>
+                    <span>Reset</span>
+                </button>
             </div>
         </div>
 
@@ -880,6 +888,9 @@
                         <button class="question-btn" onclick="askQuestion('What patterns do we see in Equipment disposition calls?')">
                             Equipment call patterns
                         </button>
+                        <button class="question-btn" onclick="testSendMessage()" style="background: #dc3545; color: white;">
+                            🧪 Test Send Function
+                        </button>
                     </div>
                 </div>
 
@@ -964,6 +975,15 @@
             const input = document.getElementById('chatInput');
             const sendBtn = document.getElementById('sendBtn');
             
+            // Debug logging
+            console.log('🔍 Debug info:');
+            console.log('  - Input element found:', !!input);
+            console.log('  - Input value:', input ? `"${input.value}"` : 'N/A');
+            console.log('  - Input value length:', input ? input.value.length : 'N/A');
+            console.log('  - Input value trimmed:', input ? `"${input.value.trim()}"` : 'N/A');
+            console.log('  - Input value trimmed length:', input ? input.value.trim().length : 'N/A');
+            console.log('  - isLoading:', isLoading);
+            
             if (!input) {
                 console.error('❌ Chat input not found');
                 updateStatus('Chat input not found', true);
@@ -971,8 +991,17 @@
             }
 
             const message = input.value.trim();
-            if (!message || isLoading) {
-                console.log('⚠️ No message to send or already loading');
+            console.log('📝 Final message to send:', `"${message}"`);
+            
+            if (!message) {
+                console.log('⚠️ No message - input is empty');
+                updateStatus('Please type a message first', true);
+                return;
+            }
+            
+            if (isLoading) {
+                console.log('⚠️ Already loading - request in progress');
+                updateStatus('Please wait for current request to complete', true);
                 return;
             }
 
@@ -1162,8 +1191,47 @@
         }
 
         // =====================================================================
-        // UTILITY FUNCTIONS
+        // DEBUG AND RESET FUNCTIONS
         // =====================================================================
+
+        function resetSystem() {
+            console.log('🔄 Resetting system...');
+            isLoading = false;
+            const sendBtn = document.getElementById('sendBtn');
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '<span class="material-icons">analytics</span> Analyze';
+            }
+            updateStatus('System reset');
+            console.log('✅ System reset complete');
+        }
+
+        function testSendMessage() {
+            console.log('🧪 Testing sendMessage with predefined message...');
+            const input = document.getElementById('chatInput');
+            if (input) {
+                input.value = 'Test message from debug function';
+                sendMessage();
+            } else {
+                console.error('❌ Cannot test - input not found');
+            }
+        }
+
+        function debugSystemState() {
+            console.log('🔍 Current system state:');
+            console.log('  - isLoading:', isLoading);
+            console.log('  - chatInput exists:', !!document.getElementById('chatInput'));
+            console.log('  - sendBtn exists:', !!document.getElementById('sendBtn'));
+            console.log('  - currentFilters:', currentFilters);
+            console.log('  - chatHistory length:', chatHistory.length);
+            
+            const input = document.getElementById('chatInput');
+            if (input) {
+                console.log('  - Input value:', `"${input.value}"`);
+                console.log('  - Input placeholder:', input.placeholder);
+                console.log('  - Input disabled:', input.disabled);
+            }
+        }
 
         function collectFilters() {
             const filters = {};
@@ -1331,6 +1399,10 @@
         function initialize() {
             console.log('🔧 Initializing system...');
             
+            // Ensure loading state is reset
+            isLoading = false;
+            console.log('📋 Initial state set - isLoading:', isLoading);
+            
             // Set default date range
             const today = new Date();
             const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
@@ -1343,6 +1415,17 @@
 
             setupTextareaResize();
             updateStats();
+            
+            // Test that chat input is working
+            const chatInput = document.getElementById('chatInput');
+            console.log('🎯 Chat input test:');
+            console.log('  - Element found:', !!chatInput);
+            if (chatInput) {
+                console.log('  - Placeholder:', chatInput.placeholder);
+                console.log('  - Initial value:', `"${chatInput.value}"`);
+                console.log('  - Element type:', chatInput.tagName);
+                console.log('  - Element disabled:', chatInput.disabled);
+            }
             
             updateStatus('System ready');
             
@@ -1378,6 +1461,11 @@
         window.updateHierarchyFilters = updateHierarchyFilters;
         window.updateSubDispositions = updateSubDispositions;
         window.removeFilter = removeFilter;
+        
+        // Debug functions
+        window.resetSystem = resetSystem;
+        window.testSendMessage = testSendMessage;
+        window.debugSystemState = debugSystemState;
 
         console.log('🎉 Metro AI Call Center Analytics v4.0 - Bulletproof Edition loaded successfully!');
         console.log('🔧 All functions are available and working');
