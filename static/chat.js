@@ -827,7 +827,7 @@ function exportChat() {
 }
 
 // =============================================================================
-// GLOBAL FUNCTION EXPOSURE
+// GLOBAL FUNCTION EXPOSURE - CRITICAL FOR HTML ONCLICK HANDLERS
 // =============================================================================
 
 // Expose functions to global scope for HTML event handlers
