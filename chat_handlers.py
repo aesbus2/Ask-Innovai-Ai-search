@@ -1,5 +1,5 @@
-# chat_handlers.py - Digital Ocean AI Agent Integration
-# Version: 1.0.0 - Separated Chat Logic with Enhanced AI Integration
+# chat_handlers.py - Production Digital Ocean AI Agent Integration
+# Version: 1.1.0 - Production Ready with Clean Logging
 
 import os
 import logging
@@ -12,17 +12,17 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-# Setup logging
+# Setup production logging
 logger = logging.getLogger("ask-innovai.chat")
 
 # Environment configuration for Digital Ocean AI Agent (Llama 3.1 Instruct 8B)
 GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", "")
 GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
 GENAI_MODEL = os.getenv("GENAI_MODEL", "llama-3.1-8b-instruct")
-GENAI_TIMEOUT = int(os.getenv("GENAI_TIMEOUT", "120"))  # Llama may need more time
+GENAI_TIMEOUT = int(os.getenv("GENAI_TIMEOUT", "120"))
 GENAI_MAX_RETRIES = int(os.getenv("GENAI_MAX_RETRIES", "3"))
 
-# Llama 3.1 specific configuration (optimized defaults)
+# Llama 3.1 specific configuration
 LLAMA_MAX_TOKENS = 4096
 LLAMA_TEMPERATURE = 0.7
 LLAMA_TOP_P = 0.9
@@ -41,7 +41,7 @@ class ChatRequest(BaseModel):
     filters: dict = {}
     analytics: bool = False
     metadata_focus: list = []
-    programs: list = []  # Keep for backward compatibility
+    programs: list = []
 
 class ChatResponse(BaseModel):
     reply: str
@@ -57,16 +57,14 @@ class ChatResponse(BaseModel):
 # ============================================================================
 
 async def call_digital_ocean_ai_agent(messages: List[Dict[str, str]]) -> Dict[str, Any]:
-    """
-    Enhanced Digital Ocean AI agent client optimized for Llama 3.1 Instruct (8B)
-    """
+    """Production Digital Ocean AI agent client for Llama 3.1 Instruct"""
     if not GENAI_ENDPOINT or not GENAI_ACCESS_KEY:
         return {
             "success": False, 
             "error": "AI agent not configured. Check GENAI_ENDPOINT and GENAI_ACCESS_KEY."
         }
     
-    # Prepare payload optimized for Llama 3.1 Instruct
+    # Prepare payload for Llama 3.1 Instruct
     payload = {
         "model": GENAI_MODEL,
         "messages": format_messages_for_llama(messages),
@@ -75,18 +73,17 @@ async def call_digital_ocean_ai_agent(messages: List[Dict[str, str]]) -> Dict[st
         "top_p": LLAMA_TOP_P,
         "repetition_penalty": LLAMA_REPETITION_PENALTY,
         "stream": False,
-        "stop": ["<|eot_id|>", "<|end_of_text|>"]  # Llama 3.1 stop tokens
+        "stop": ["<|eot_id|>", "<|end_of_text|>"]
     }
     
     headers = {
         "Authorization": f"Bearer {GENAI_ACCESS_KEY}",
         "Content-Type": "application/json",
-        "User-Agent": "InnovAI-ChatBot/3.3.0-Llama"
+        "User-Agent": "InnovAI-ChatBot/4.1.0-Production"
     }
     
     for attempt in range(GENAI_MAX_RETRIES):
         try:
-            logger.info(f"🦙 Calling Llama 3.1 Instruct on Digital Ocean (attempt {attempt + 1}/{GENAI_MAX_RETRIES})")
             start_time = time.time()
             
             async with aiohttp.ClientSession() as session:
@@ -97,16 +94,13 @@ async def call_digital_ocean_ai_agent(messages: List[Dict[str, str]]) -> Dict[st
                     timeout=aiohttp.ClientTimeout(total=GENAI_TIMEOUT)
                 ) as response:
                     
-                    response_time = round((time.time() - start_time) * 1000)  # milliseconds
+                    response_time = round((time.time() - start_time) * 1000)
                     
                     if response.status == 200:
                         data = await response.json()
-                        
-                        # Handle different response formats
                         reply = extract_llama_reply(data)
                         
                         if reply:
-                            logger.info(f"✅ Llama 3.1 response received ({len(reply)} chars, {response_time}ms)")
                             return {
                                 "success": True, 
                                 "reply": reply,
@@ -115,42 +109,39 @@ async def call_digital_ocean_ai_agent(messages: List[Dict[str, str]]) -> Dict[st
                                 "model": "llama-3.1-8b-instruct"
                             }
                         else:
-                            logger.warning(f"⚠️ Llama 3.1 returned empty response: {data}")
-                            return {"success": False, "error": "Empty response from Llama 3.1"}
+                            logger.warning("Empty response from Llama 3.1")
+                            return {"success": False, "error": "Empty response from AI agent"}
                     
                     elif response.status == 401:
                         error_msg = "Authentication failed - check GENAI_ACCESS_KEY"
-                        logger.error(f"❌ {error_msg}")
+                        logger.error(error_msg)
                         return {"success": False, "error": error_msg}
                     
                     elif response.status == 429:
                         # Rate limited - wait and retry
                         wait_time = 2 ** attempt
-                        logger.warning(f"⚠️ Rate limited, waiting {wait_time}s before retry {attempt + 1}")
+                        logger.warning(f"Rate limited, waiting {wait_time}s before retry")
                         await asyncio.sleep(wait_time)
                         continue
                     
                     elif response.status == 404:
-                        error_msg = f"Llama 3.1 endpoint not found: {GENAI_ENDPOINT}"
-                        logger.error(f"❌ {error_msg}")
+                        error_msg = f"AI endpoint not found: {GENAI_ENDPOINT}"
+                        logger.error(error_msg)
                         return {"success": False, "error": error_msg}
                     
                     else:
                         error_text = await response.text()
                         error_msg = f"HTTP {response.status}: {error_text[:200]}"
-                        logger.error(f"❌ Llama 3.1 error: {error_msg}")
                         
                         if attempt < GENAI_MAX_RETRIES - 1:
                             wait_time = 2 ** attempt
-                            logger.info(f"🔄 Retrying in {wait_time}s...")
                             await asyncio.sleep(wait_time)
                             continue
                         else:
                             return {"success": False, "error": error_msg}
         
         except asyncio.TimeoutError:
-            error_msg = f"Llama 3.1 timeout after {GENAI_TIMEOUT}s"
-            logger.warning(f"⚠️ {error_msg}, attempt {attempt + 1}/{GENAI_MAX_RETRIES}")
+            error_msg = f"AI agent timeout after {GENAI_TIMEOUT}s"
             
             if attempt < GENAI_MAX_RETRIES - 1:
                 await asyncio.sleep(2 ** attempt)
@@ -160,7 +151,6 @@ async def call_digital_ocean_ai_agent(messages: List[Dict[str, str]]) -> Dict[st
         
         except aiohttp.ClientError as e:
             error_msg = f"Network error: {str(e)}"
-            logger.warning(f"⚠️ {error_msg}, attempt {attempt + 1}/{GENAI_MAX_RETRIES}")
             
             if attempt < GENAI_MAX_RETRIES - 1:
                 await asyncio.sleep(2 ** attempt)
@@ -170,7 +160,6 @@ async def call_digital_ocean_ai_agent(messages: List[Dict[str, str]]) -> Dict[st
         
         except Exception as e:
             error_msg = f"Unexpected error: {str(e)}"
-            logger.error(f"❌ {error_msg}, attempt {attempt + 1}/{GENAI_MAX_RETRIES}")
             
             if attempt < GENAI_MAX_RETRIES - 1:
                 await asyncio.sleep(2 ** attempt)
@@ -181,18 +170,14 @@ async def call_digital_ocean_ai_agent(messages: List[Dict[str, str]]) -> Dict[st
     return {"success": False, "error": "All retry attempts failed"}
 
 def format_messages_for_llama(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    """
-    Format messages optimally for Llama 3.1 Instruct
-    """
+    """Format messages optimally for Llama 3.1 Instruct"""
     formatted_messages = []
     
     for message in messages:
         role = message.get("role", "user")
         content = message.get("content", "")
         
-        # Llama 3.1 instruction format optimization
         if role == "system":
-            # Llama responds well to clear, structured system prompts
             formatted_content = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{content}<|eot_id|>"
         elif role == "user":
             formatted_content = f"<|start_header_id|>user<|end_header_id|>\n\n{content}<|eot_id|>"
@@ -209,9 +194,7 @@ def format_messages_for_llama(messages: List[Dict[str, str]]) -> List[Dict[str, 
     return formatted_messages
 
 def extract_llama_reply(response_data: Dict[str, Any]) -> Optional[str]:
-    """
-    Extract Llama 3.1 reply from different response formats
-    """
+    """Extract Llama 3.1 reply from response"""
     try:
         # OpenAI-compatible format
         if "choices" in response_data and len(response_data["choices"]) > 0:
@@ -220,50 +203,33 @@ def extract_llama_reply(response_data: Dict[str, Any]) -> Optional[str]:
                 reply = choice["message"]["content"].strip()
                 return clean_llama_response(reply)
         
-        # Direct reply format
-        if "reply" in response_data:
-            reply = str(response_data["reply"]).strip()
-            return clean_llama_response(reply)
+        # Alternative formats
+        for field in ["reply", "response", "text", "generated_text"]:
+            if field in response_data:
+                reply = str(response_data[field]).strip()
+                return clean_llama_response(reply)
         
-        # Response field format
-        if "response" in response_data:
-            reply = str(response_data["response"]).strip()
-            return clean_llama_response(reply)
-        
-        # Text field format
-        if "text" in response_data:
-            reply = str(response_data["text"]).strip()
-            return clean_llama_response(reply)
-        
-        # Generated text format (common for Llama)
-        if "generated_text" in response_data:
-            reply = str(response_data["generated_text"]).strip()
-            return clean_llama_response(reply)
-        
-        logger.warning(f"⚠️ Unknown Llama response format: {list(response_data.keys())}")
         return None
         
     except Exception as e:
-        logger.error(f"❌ Error extracting Llama reply: {e}")
+        logger.error(f"Error extracting Llama reply: {e}")
         return None
 
 def clean_llama_response(response: str) -> str:
-    """
-    Clean Llama 3.1 response by removing formatting tokens and artifacts
-    """
+    """Clean Llama 3.1 response by removing formatting tokens"""
     # Remove Llama 3.1 special tokens
-    response = response.replace("<|begin_of_text|>", "")
-    response = response.replace("<|end_of_text|>", "")
-    response = response.replace("<|eot_id|>", "")
-    response = response.replace("<|start_header_id|>assistant<|end_header_id|>", "")
-    response = response.replace("<|start_header_id|>system<|end_header_id|>", "")
-    response = response.replace("<|start_header_id|>user<|end_header_id|>", "")
+    tokens_to_remove = [
+        "<|begin_of_text|>", "<|end_of_text|>", "<|eot_id|>",
+        "<|start_header_id|>assistant<|end_header_id|>",
+        "<|start_header_id|>system<|end_header_id|>",
+        "<|start_header_id|>user<|end_header_id|>"
+    ]
     
-    # Clean up any remaining artifacts
-    response = response.strip()
+    for token in tokens_to_remove:
+        response = response.replace(token, "")
     
-    # Remove any repeated system prompts that might leak through
-    lines = response.split('\n')
+    # Clean up and filter system prompt leakage
+    lines = response.strip().split('\n')
     cleaned_lines = []
     
     for line in lines:
@@ -281,26 +247,22 @@ def clean_llama_response(response: str) -> str:
 # ============================================================================
 
 def build_search_context(message: str, filters: Dict[str, Any]) -> tuple[str, List[Dict]]:
-    """
-    Build context from OpenSearch with comprehensive filter support
-    """
+    """Build context from OpenSearch with filter support"""
     context = ""
     sources = []
     
     try:
-        # Import here to avoid circular imports
         from opensearch_client import get_connection_status, search_opensearch
         
         conn_status = get_connection_status()
         
         if not conn_status.get("connected", False):
-            logger.warning("⚠️ OpenSearch not available for context search")
             return context, sources
         
-        # Determine index based on filters or use default
-        index_name = "ai-corporate-sptr-test"  # Your main cleaned collection name
+        # Use cleaned collection name
+        index_name = "ai-corporate-sptr-test"
         
-        # Perform search with filters
+        # Perform search
         search_results = search_opensearch_with_filters(
             message, 
             filters=filters,
@@ -311,7 +273,7 @@ def build_search_context(message: str, filters: Dict[str, Any]) -> tuple[str, Li
         if search_results:
             context_parts = []
             
-            for result in search_results[:5]:  # Use top 5 results
+            for result in search_results[:5]:
                 source_data = result.get('_source', {})
                 text = source_data.get('text', '')
                 metadata = source_data.get('metadata', {})
@@ -320,16 +282,14 @@ def build_search_context(message: str, filters: Dict[str, Any]) -> tuple[str, Li
                     # Create rich context with metadata
                     context_piece = f"Evaluation: {text[:300]}"
                     if metadata:
-                        context_piece += f"\nMetadata: Agent={metadata.get('agentName', 'Unknown')}, "
+                        context_piece += f"\nMetadata: Agent={metadata.get('agent', 'Unknown')}, "
                         context_piece += f"Disposition={metadata.get('disposition', 'Unknown')}, "
-                        context_piece += f"SubDisposition={metadata.get('subDisposition', 'None')}, "
                         context_piece += f"Duration={metadata.get('call_duration', 'Unknown')}s, "
                         context_piece += f"Site={metadata.get('site', 'Unknown')}, "
-                        context_piece += f"Partner={metadata.get('partner', 'Unknown')}"
+                        context_piece += f"Partner={metadata.get('program', 'Unknown')}"
                     
                     context_parts.append(context_piece)
                     
-                    # Add to sources for frontend display
                     sources.append({
                         'text': text,
                         'metadata': metadata,
@@ -339,81 +299,60 @@ def build_search_context(message: str, filters: Dict[str, Any]) -> tuple[str, Li
                     })
             
             context = "\n---\n".join(context_parts)
-            logger.info(f"📊 Built context from {len(sources)} search results")
-        
-        else:
-            logger.info("📊 No search results found for context")
     
     except ImportError:
-        logger.warning("⚠️ OpenSearch client not available")
+        pass
     except Exception as e:
-        logger.error(f"❌ Context search failed: {e}")
+        logger.error(f"Context search failed: {e}")
     
     return context, sources
 
 def search_opensearch_with_filters(query: str, filters: Dict[str, Any] = None, 
                                  index_override: str = None, size: int = 10) -> List[Dict]:
-    """
-    Enhanced OpenSearch with filter support (placeholder for now)
-    This would be implemented based on your OpenSearch schema
-    """
+    """Enhanced OpenSearch with filter support"""
     try:
-        # Import here to avoid circular imports
         from opensearch_client import search_opensearch
         
-        # For now, use basic search - you can enhance this with actual filter logic
+        # Use basic search - can be enhanced with actual filter logic
         results = search_opensearch(query, index_override=index_override, size=size)
-        
-        # Future enhancement: Apply filters to search query
-        # This is where you'd build OpenSearch query with filters
-        if filters:
-            logger.info(f"🔍 Search with filters: {list(filters.keys())}")
-            # TODO: Implement actual filter application to OpenSearch query
         
         return results
     
     except Exception as e:
-        logger.error(f"❌ Filtered search failed: {e}")
+        logger.error(f"Filtered search failed: {e}")
         return []
 
 def build_system_message(is_analytics: bool, filters: Dict[str, Any], context: str) -> str:
-    """
-    Build comprehensive system message optimized for Llama 3.1 Instruct
-    """
+    """Build system message optimized for Llama 3.1 Instruct"""
     if is_analytics:
         system_msg = """You are MetroAI Analytics, an expert call center analytics specialist for Metro by T-Mobile. You analyze call center evaluation data to provide actionable business insights.
 
 ## Your Expertise:
-- Performance Analysis: Call metrics, resolution rates, quality scores, efficiency analysis
-- Agent Performance: Individual evaluation, training needs, performance coaching
-- Customer Experience: Satisfaction patterns, complaint analysis, service quality metrics
-- Operational Intelligence: Resource optimization, workflow efficiency, peak time analysis
-- Quality Assurance: Evaluation scoring, compliance monitoring, improvement recommendations
-- Business Intelligence: Partner/site comparisons, LOB analysis, trend identification
+- Performance Analysis: Call metrics, resolution rates, quality scores
+- Agent Performance: Individual evaluation, training needs, coaching
+- Customer Experience: Satisfaction patterns, complaint analysis
+- Operational Intelligence: Resource optimization, workflow efficiency
+- Quality Assurance: Evaluation scoring, compliance monitoring
+- Business Intelligence: Partner/site comparisons, trend identification
 
-## Data Structure You Analyze:
-- **internalId**: Primary evaluation reference ID
-- **evaluationId**: Unique evaluation identifier  
-- **template_id**: Evaluation template (use this over template_name)
-- **partner**: Call center partner (iQor, Teleperformance, etc.)
-- **site**: Location (Dasma, Manila, Cebu, etc.)
-- **lob**: Line of Business (WNP, Prepaid, Postpaid, Business)
+## Data Structure:
+- **evaluationId**: Unique evaluation identifier
+- **partner**: Call center partner (iQor, Teleperformance)
+- **site**: Location (Dasma, Manila, Cebu)
+- **lob**: Line of Business (WNP, Prepaid, Postpaid)
 - **agentName**: Agent being evaluated
-- **agentId**: Agent identifier for searches
-- **disposition**: Call category (Account, Technical Support, Billing, Port Out)
+- **disposition**: Call category (Account, Technical Support, Billing)
 - **subDisposition**: Specific call reason details
-- **call_date**: Customer call timestamp (use for temporal analysis)
+- **call_date**: Customer call timestamp
 - **call_duration**: Call length in seconds
-- **language**: Call language (english, spanish, etc.)
+- **language**: Call language
 
 ## Analysis Instructions:
-1. Always provide specific, data-driven insights with examples
+1. Provide specific, data-driven insights with examples
 2. Include quantitative metrics when possible
 3. Offer actionable recommendations for improvement
 4. Reference actual evaluation content when making observations
 5. Compare performance across agents, sites, or time periods when relevant
-6. Use call_date for temporal analysis, created_on for workflow analysis
-7. Always reference template_id for consistency over template_name
 
 ## Response Format:
 - Start with key findings
@@ -430,19 +369,16 @@ You help with:
 
 Provide helpful, accurate, and professional responses."""
     
-    # Add filter context with clear formatting for Llama
+    # Add filter context
     if filters:
         system_msg += f"\n\n## Current Analysis Filters:\n"
-        
         for key, value in filters.items():
             if isinstance(value, list):
                 system_msg += f"- **{key}**: {', '.join(map(str, value))}\n"
-            elif key in ['startCallDate', 'endCallDate', 'startCreatedDate', 'endCreatedDate']:
-                system_msg += f"- **{key}**: {value}\n"
             else:
                 system_msg += f"- **{key}**: {value}\n"
     
-    # Add search context with clear formatting for Llama
+    # Add search context
     if context:
         system_msg += f"\n\n## Relevant Evaluation Data:\n{context}"
     
@@ -454,15 +390,11 @@ Provide helpful, accurate, and professional responses."""
 
 @chat_router.post("/chat")
 async def chat_handler(request: ChatRequest):
-    """
-    Enhanced chat endpoint with Digital Ocean AI agent integration
-    """
+    """Production chat endpoint with AI agent integration"""
     start_time = time.time()
     
     try:
-        logger.info(f"💬 Processing chat request: {request.message[:50]}...")
-        
-        # Extract comprehensive filters and metadata focus
+        # Extract filters and metadata focus
         filters = request.filters or {}
         is_analytics = request.analytics or False
         metadata_focus = request.metadata_focus or []
@@ -470,7 +402,7 @@ async def chat_handler(request: ChatRequest):
         # Build search context from OpenSearch
         context, sources = build_search_context(request.message, filters)
         
-        # Build enhanced system message
+        # Build system message
         system_msg = build_system_message(is_analytics, filters, context)
         
         # Prepare messages for AI agent
@@ -478,19 +410,14 @@ async def chat_handler(request: ChatRequest):
         messages.extend([{"role": m["role"], "content": m["content"]} for m in request.history])
         messages.append({"role": "user", "content": request.message})
         
-        logger.info(f"🤖 Sending {len(messages)} messages to Digital Ocean AI agent")
-        
         # Call Digital Ocean AI agent
         ai_response = await call_digital_ocean_ai_agent(messages)
         
-        # Calculate total response time
+        # Calculate response time
         total_response_time = round((time.time() - start_time) * 1000)
         
         if ai_response.get("success"):
             reply = ai_response.get("reply", "")
-            ai_response_time = ai_response.get("response_time_ms", 0)
-            
-            logger.info(f"✅ Chat completed successfully ({total_response_time}ms total)")
             
             return ChatResponse(
                 reply=reply.strip() if reply else "Sorry, I couldn't generate a response.",
@@ -503,7 +430,7 @@ async def chat_handler(request: ChatRequest):
             )
         else:
             error_msg = ai_response.get("error", "Unknown error")
-            logger.error(f"❌ AI agent error: {error_msg}")
+            logger.error(f"AI agent error: {error_msg}")
             
             return ChatResponse(
                 reply="I'm sorry, but I'm having trouble connecting to the AI service right now. Please try again in a moment.",
@@ -517,7 +444,7 @@ async def chat_handler(request: ChatRequest):
             
     except Exception as e:
         total_response_time = round((time.time() - start_time) * 1000)
-        logger.error(f"❌ Chat handler error: {e}")
+        logger.error(f"Chat handler error: {e}")
         
         return ChatResponse(
             reply="Sorry, there was an error processing your request. Please try again.",
@@ -535,7 +462,7 @@ async def chat_handler(request: ChatRequest):
 
 @chat_router.get("/test_ai_agent")
 async def test_ai_agent():
-    """Test Digital Ocean AI agent connectivity and functionality"""
+    """Test Digital Ocean AI agent connectivity"""
     try:
         if not GENAI_ACCESS_KEY or not GENAI_ENDPOINT:
             return JSONResponse(
@@ -546,22 +473,21 @@ async def test_ai_agent():
                 }
             )
         
-        # Test basic connectivity with Llama-optimized prompt
+        # Test basic connectivity
         test_messages = [
             {"role": "system", "content": "You are a helpful assistant. Respond clearly and concisely."},
-            {"role": "user", "content": "Hello! Please respond with exactly: 'Llama 3.1 connection test successful'"}
+            {"role": "user", "content": "Hello! Please respond with exactly: 'AI connection test successful'"}
         ]
         
         basic_response = await call_digital_ocean_ai_agent(test_messages)
         
-        # Test analytics capability with Llama-optimized analytics prompt
+        # Test analytics capability
         analytics_messages = [
             {
                 "role": "system", 
                 "content": """You are MetroAI Analytics, an expert call center analytics specialist for Metro by T-Mobile.
 
-## Sample Data:
-Agent: Rey Mendoza, Disposition: Port Out, Duration: 491s, Site: Dasma, Partner: iQor
+Sample Data: Agent: Rey Mendoza, Disposition: Port Out, Duration: 491s, Site: Dasma, Partner: iQor
 
 Analyze this briefly."""
             },
@@ -598,7 +524,7 @@ Analyze this briefly."""
         }
     
     except Exception as e:
-        logger.error(f"❌ AI agent test failed: {e}")
+        logger.error(f"AI agent test failed: {e}")
         return JSONResponse(
             status_code=500,
             content={
@@ -612,11 +538,10 @@ Analyze this briefly."""
 async def chat_health():
     """Chat-specific health check"""
     try:
-        # Quick connectivity test optimized for Llama 3.1
         if GENAI_ACCESS_KEY and GENAI_ENDPOINT:
             test_messages = [
                 {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Respond with 'Llama health check OK'"}
+                {"role": "user", "content": "Respond with 'Health check OK'"}
             ]
             
             response = await call_digital_ocean_ai_agent(test_messages)
@@ -651,7 +576,7 @@ async def chat_health():
             }
     
     except Exception as e:
-        logger.error(f"❌ Chat health check failed: {e}")
+        logger.error(f"Chat health check failed: {e}")
         return JSONResponse(
             status_code=500,
             content={
@@ -662,24 +587,15 @@ async def chat_health():
         )
 
 # ============================================================================
-# INITIALIZATION LOG
+# INITIALIZATION
 # ============================================================================
 
-logger.info("🚀 Chat handlers module loaded - Optimized for Llama 3.1 Instruct (8B)")
+logger.info("🚀 Production Chat handlers module loaded")
 logger.info(f"   AI Model: {GENAI_MODEL}")
 logger.info(f"   Endpoint: {'✅ Configured' if GENAI_ENDPOINT else '❌ Missing'}")
 logger.info(f"   Access Key: {'✅ Configured' if GENAI_ACCESS_KEY else '❌ Missing'}")
-logger.info(f"   Max Tokens: {LLAMA_MAX_TOKENS}")
-logger.info(f"   Temperature: {LLAMA_TEMPERATURE}")
-logger.info(f"   Top P: {LLAMA_TOP_P}")
-logger.info(f"   Repetition Penalty: {LLAMA_REPETITION_PENALTY}")
-logger.info(f"   Timeout: {GENAI_TIMEOUT}s")
-logger.info(f"   Max Retries: {GENAI_MAX_RETRIES}")
 
 if GENAI_ENDPOINT and GENAI_ACCESS_KEY:
-    logger.info("🦙 Llama 3.1 Instruct (8B) integration ready")
-    logger.info("   ✅ Optimized instruction formatting")
-    logger.info("   ✅ Enhanced response cleaning")
-    logger.info("   ✅ Llama-specific parameters")
+    logger.info("🤖 Production AI integration ready")
 else:
-    logger.warning("⚠️ Llama 3.1 not fully configured - check environment variables")
+    logger.warning("⚠️ AI agent not fully configured - check environment variables")
