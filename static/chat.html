@@ -1,797 +1,764 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:mso="urn:schemas-microsoft-com:office:office" xmlns:msdt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882">
-    <head>
-        <meta charset="UTF-8" />
-        <title>Metro AI Call Insights Chat</title>
-        <link
-            href="https://fonts.googleapis.com/icon?family=Material+Icons"
-            rel="stylesheet"
-        />
-        <style>
-            body {
-                font-family: 'Segoe UI', sans-serif;
-                margin: 0;
-                background: #f5f5f5;
-            }
-            .container {
-                display: flex;
-                flex-direction: column;
-                height: 100vh;
-            }
-            .header {
-                background: #6e32a0;
-                color: white;
-                padding: 16px 32px;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-            }
-            .header h1 {
-                margin: 0;
-                font-size: 1.5em;
-            }
-            .header-controls {
-                display: flex;
-                gap: 12px;
-                align-items: center;
-            }
-            .header-btn {
-                background: rgba(255, 255, 255, 0.2);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                color: white;
-                padding: 8px 16px;
-                border-radius: 6px;
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                font-size: 0.9em;
-                transition: all 0.2s;
-            }
-            .header-btn:hover {
-                background: rgba(255, 255, 255, 0.3);
-                transform: translateY(-1px);
-            }
-            .header-btn.starred {
-                background: #fa9d28;
-                border-color: #fa9d28;
-            }
-            .header-btn.starred:hover {
-                background: #e8881a;
-            }
-            .material-icons {
-                vertical-align: middle;
-            }
-            .chat-section {
-                display: flex;
-                flex: 1;
-                overflow: hidden;
-            }
+<head>
+    <meta charset="UTF-8" />
+    <title>Metro AI Analytics Chat</title>
+    <link
+        href="https://fonts.googleapis.com/icon?family=Material+Icons"
+        rel="stylesheet"
+    />
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #6e32a0 0%, #e20074 100%);
+            color: white;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 12px;
+        }
+
+        .header-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .header-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        /* Main Layout */
+        .main-layout {
+            display: flex;
+            width: 100%;
+            height: 100vh;
+            padding-top: 70px; /* Account for fixed header */
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 320px;
+            background: white;
+            border-right: 1px solid #e1e8ed;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #e1e8ed;
+            background: #f8f9fa;
+        }
+
+        .sidebar-header h3 {
+            color: #6e32a0;
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+        }
+
+        .sidebar-header p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        /* Filter Panel */
+        .filter-panel {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .filter-section {
+            margin-bottom: 24px;
+        }
+
+        .filter-section h4 {
+            color: #333;
+            font-size: 0.95rem;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e20074;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-group {
+            margin-bottom: 16px;
+        }
+
+        .filter-label {
+            display: block;
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+        }
+
+        .filter-input, .filter-select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        .filter-input:focus, .filter-select:focus {
+            outline: none;
+            border-color: #6e32a0;
+            box-shadow: 0 0 0 2px rgba(110, 50, 160, 0.1);
+        }
+
+        .date-range {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 120px;
+            overflow-y: auto;
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            padding: 8px;
+            background: #f8f9fa;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            margin: 0;
+        }
+
+        .checkbox-item label {
+            font-size: 0.85rem;
+            color: #666;
+            cursor: pointer;
+        }
+
+        .filter-actions {
+            padding: 16px;
+            border-top: 1px solid #e1e8ed;
+            background: #f8f9fa;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 8px;
+        }
+
+        .btn-primary {
+            background: #6e32a0;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a2a87;
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #666;
+            border: 1px solid #ddd;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+
+        .active-filters {
+            margin-top: 12px;
+        }
+
+        .filter-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #e20074;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            margin: 2px;
+        }
+
+        .filter-tag .remove {
+            cursor: pointer;
+            opacity: 0.7;
+        }
+
+        .filter-tag .remove:hover {
+            opacity: 1;
+        }
+
+        /* Main Chat Area */
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 16px 24px;
+            background: white;
+            border-bottom: 1px solid #e1e8ed;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .chat-subtitle {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        .chat-stats {
+            display: flex;
+            gap: 16px;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Messages Area */
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            max-width: 85%;
+        }
+
+        .message.user {
+            margin-left: auto;
+        }
+
+        .message.assistant {
+            margin-right: auto;
+        }
+
+        .message-content {
+            padding: 16px 20px;
+            border-radius: 18px;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #e20074 0%, #c3005f 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #e1e8ed;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-meta {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .message.user .message-meta {
+            justify-content: flex-end;
+            color: rgba(255,255,255,0.8);
+        }
+
+        /* Quick Questions */
+        .quick-questions {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e1e8ed;
+        }
+
+        .quick-questions h4 {
+            color: #333;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+
+        .question-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .question-btn {
+            background: #f8f9fa;
+            border: 1px solid #e1e8ed;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #666;
+        }
+
+        .question-btn:hover {
+            background: #6e32a0;
+            color: white;
+            border-color: #6e32a0;
+        }
+
+        /* Chat Input */
+        .chat-input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e1e8ed;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e1e8ed;
+            border-radius: 24px;
+            font-size: 0.95rem;
+            resize: none;
+            min-height: 44px;
+            max-height: 120px;
+            transition: border-color 0.2s;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #6e32a0;
+        }
+
+        .send-btn {
+            background: linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 24px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .send-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(110, 50, 160, 0.3);
+        }
+
+        .send-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Loading States */
+        .loading-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #666;
+            font-size: 0.9rem;
+            padding: 16px;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e1e8ed;
+            border-top: 2px solid #6e32a0;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Welcome Screen */
+        .welcome-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .welcome-icon {
+            font-size: 4rem;
+            color: #6e32a0;
+            margin-bottom: 20px;
+        }
+
+        .welcome-title {
+            font-size: 1.5rem;
+            color: #333;
+            margin-bottom: 12px;
+        }
+
+        .welcome-subtitle {
+            font-size: 1rem;
+            margin-bottom: 30px;
+            max-width: 500px;
+        }
+
+        .example-questions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        .example-card {
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .example-card:hover {
+            border-color: #6e32a0;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(110, 50, 160, 0.15);
+        }
+
+        .example-card h4 {
+            color: #6e32a0;
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+
+        .example-card p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
             .sidebar {
-                width: 260px; /* Reduced from 280px */
-                background: #fff;
-                border-right: 1px solid #ddd;
-                display: flex;
-                flex-direction: column;
-            }
-            .sidebar-header {
-                padding: 20px;
-                border-bottom: 1px solid #eee;
-                font-weight: bold;
-                font-size: 1.1em;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            .sidebar-tabs {
-                display: flex;
-                border-bottom: 1px solid #eee;
-            }
-            .sidebar-tab {
-                flex: 1;
-                padding: 12px;
-                text-align: center;
-                cursor: pointer;
-                border-bottom: 2px solid transparent;
-                font-size: 0.9em;
-                transition: all 0.2s;
-            }
-            .sidebar-tab.active {
-                color: #6e32a0;
-                border-bottom-color: #6e32a0;
-                background: #f9f9f9;
-            }
-            .sidebar-tab:hover:not(.active) {
-                background: #f5f5f5;
-            }
-            .chat-list {
-                flex: 1;
-                overflow-y: auto;
-            }
-            .chat-link {
-                padding: 10px 16px; /* Reduced from 14px 20px */
-                cursor: pointer;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                border-bottom: 1px solid #f0f0f0;
-                position: relative;
-            }
-            .chat-link.active,
-            .chat-link:hover {
-                background: #f9f9f9;
-            }
-            .chat-link.starred::after {
-                content: '⭐';
-                position: absolute;
-                right: 8px;
-                top: 50%;
-                transform: translateY(-50%);
-                font-size: 0.8em;
-            }
-            .chat-preview {
-                font-size: 0.75em; /* Reduced from 0.8em */
-                color: #666;
-                margin-top: 2px;
-            }
-            .program-filters {
-                padding: 12px; /* Reduced from 16px */
-            }
-            .program-filters label {
-                display: block;
-                margin: 2px 0; /* Reduced from 4px */
-                font-size: 0.9em;
-            }
-            .main-chat {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-            }
-            .search-bar {
-                padding: 8px 20px; /* Reduced from 12px 24px */
-                background: #fff;
-                border-bottom: 1px solid #ddd;
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                flex-wrap: wrap;
-            }
-            .search-input, .chat-input {
-                flex: 1;
-                min-width: 200px;
-                padding: 8px; /* Reduced from 10px */
-                border: 1px solid #ccc;
-                border-radius: 6px;
-                font-size: 0.95em;
-            }
-            .search-input {
-                background: #f8f9fa;
-            }
-            .chat-input {
-                background: #fff;
-                border-color: #E20074;
-            }
-            .input-divider {
-                width: 2px;
-                height: 30px;
-                background: #e0e0e0;
-                margin: 0 8px;
-            }
-            .search-btn {
-                background: #6e32a0;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 6px;
-                cursor: pointer;
-                transition: all 0.2s;
-                white-space: nowrap;
-            }
-            .search-btn:hover {
-                background: #5a2a87;
-            }
-            .send-btn {
-                background: #E20074;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 20px;
-                font-size: 1em;
-                cursor: pointer;
-                transition: all 0.2s;
-                white-space: nowrap;
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            }
-            .send-btn:hover {
-                background: #c3005f;
-            }
-            .messages {
-                flex: 1;
-                overflow-y: auto;
-                padding: 20px; /* Reduced from 24px */
-                background: #fafafa;
-            }
-            
-            /* COMPACT STYLES */
-            .compact {
-                margin: 0.3em 0 !important;
-                padding: 0.4em 0.6em !important;
+                width: 100%;
+                position: fixed;
+                top: 70px;
+                left: -100%;
+                height: calc(100vh - 70px);
+                z-index: 999;
+                transition: left 0.3s ease;
             }
 
-            .message-row {
-                margin-bottom: 12px; /* Reduced from 20px */
-                max-width: 90%;
-                position: relative;
-            }
-
-            .message-row.compact {
-                margin-bottom: 10px;
-            }
-
-            .message-row:hover .message-actions {
-                opacity: 1;
-            }
-            
-            .user-msg {
-                background: #e20074;
-                color: white;
-                align-self: flex-end;
-                margin-left: auto;
-                padding: 8px 14px; /* Reduced from 12px 18px */
-                border-radius: 18px 4px 18px 18px;
-                font-size: 0.95em;
-                line-height: 1.3;
-            }
-            
-            .assistant-msg {
-                background: #fff;
-                padding: 10px 14px; /* Reduced from 16px 20px */
-                border-radius: 4px 18px 18px 18px;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-                position: relative;
-                border-left: 3px solid #6e32a0;
-                margin: 8px 0;
-            }
-            
-            .message-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 6px; /* Reduced from 12px */
-                padding-bottom: 4px; /* Reduced from 8px */
-                border-bottom: 1px solid #f0f0f0;
-                font-size: 0.9em;
-            }
-
-            .message-header strong {
-                color: #6e32a0;
-                font-weight: 600;
-            }
-            
-            .message-actions {
-                display: flex;
-                gap: 8px;
-                align-items: center;
-                opacity: 0.7;
-                transition: opacity 0.2s ease;
-            }
-            
-            .action-btn {
-                background: none;
-                border: none;
-                cursor: pointer;
-                padding: 3px 6px; /* Reduced from 6px 8px */
-                border-radius: 6px;
-                color: #888;
-                transition: all 0.2s ease;
-                display: flex;
-                align-items: center;
-                gap: 4px;
-            }
-            
-            .action-btn:hover {
-                background: #f0f0f0;
-                color: #6e32a0;
-                transform: translateY(-1px);
-            }
-            
-            .action-btn .material-icons {
-                font-size: 1em; /* Reduced from 1.2em */
-            }
-
-            .message-content {
-                transition: max-height 0.3s ease-in-out;
-                overflow: hidden;
-            }
-            
-            .message-content.collapsed {
-                max-height: 120px !important; /* Reduced from 300px */
-                overflow: hidden;
-                position: relative;
-            }
-            
-            .message-content.expanded {
-                max-height: none;
-                overflow: visible;
-                position: relative;
-            }
-            
-            .message-content.collapsed::after {
-                content: '';
-                position: absolute;
-                bottom: 0;
+            .sidebar.open {
                 left: 0;
-                right: 0;
-                height: 30px; /* Reduced from 60px */
-                background: linear-gradient(transparent, white);
-                pointer-events: none;
-            }
-            
-            .section-heading {
-                display: block;
-                font-weight: bold;
-                color: #6e32a0;
-                margin: 8px 0 6px 0; /* Reduced margins */
-                font-size: 0.95em;
-                border-left: 2px solid #6e32a0; /* Thinner border */
-                padding-left: 8px; /* Reduced from 12px */
-            }
-            
-            .step-list,
-            .suggest-list {
-                margin: 6px 0; /* Reduced from 8px */
-                padding-left: 18px; /* Reduced from 20px */
-            }
-            
-            .step-list li,
-            .suggest-list li {
-                margin: 4px 0; /* Reduced from 6px */
-                line-height: 1.3; /* Reduced from 1.4 */
-                font-size: 0.9em;
-            }
-            
-            .references-section {
-                margin-top: 8px; /* Reduced from 12px */
-                padding: 8px; /* Reduced from 12px */
-                background: #f8f9fa;
-                border-radius: 6px;
-                border-left: 4px solid #10b981;
-            }
-            
-            .reference-link {
-                display: inline-block;
-                color: #10b981;
-                text-decoration: none;
-                margin: 3px 6px 3px 0; /* Reduced margins */
-                padding: 4px 8px; /* Reduced padding */
-                background: rgba(16, 185, 129, 0.1);
-                border-radius: 4px;
-                transition: all 0.2s;
-                font-size: 0.85em; /* Reduced from 0.9em */
-            }
-            
-            .reference-link:hover {
-                background: rgba(16, 185, 129, 0.2);
-                transform: translateY(-1px);
-            }
-            
-            /* Response sections compact */
-            .response-section {
-                margin: 6px 0; /* Reduced from varies */
-                padding: 4px 0;
             }
 
-            .response-section:not(:last-child) {
-                border-bottom: 1px solid #f8f8f8;
+            .chat-area {
+                width: 100%;
             }
 
-            .summary-content {
-                line-height: 1.4; /* Reduced from 1.7 */
-                margin: 6px 0; /* Reduced from 12px */
-                font-size: 0.95em;
-                color: #333;
-            }
-
-            .summary-content p {
-                margin: 8px 0; /* Reduced from 16px */
-            }
-
-            .summary-short {
-                color: #333;
-                line-height: 1.4;
-                font-size: 0.95em;
-            }
-
-            .summary-full {
-                color: #333;
-                line-height: 1.5;
-            }
-
-            .steps-summary,
-            .references-summary {
-                color: #6e32a0;
-                font-weight: 500;
-                font-size: 0.9em;
-                padding: 4px 8px;
-                background: #f8f9fa;
-                border-radius: 4px;
-                border-left: 3px solid #6e32a0;
-                cursor: pointer;
-                transition: all 0.2s ease;
-            }
-
-            .references-summary {
-                color: #10b981;
-                border-left-color: #10b981;
-            }
-
-            .steps-summary:hover,
-            .references-summary:hover {
-                background: #e9ecef;
-                transform: translateY(-1px);
-            }
-
-            .enhanced-step-list {
-                margin: 8px 0; /* Reduced from 16px */
-                padding-left: 20px; /* Reduced from 28px */
-            }
-
-            .enhanced-step-list li {
-                margin: 6px 0; /* Reduced from 12px */
-                line-height: 1.4; /* Reduced from 1.6 */
-                font-size: 0.9em;
-                color: #444;
-            }
-
-            .enhanced-step-list li::marker {
-                color: #6e32a0;
-                font-weight: bold;
-            }
-
-            .reference-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Smaller min width */
-                gap: 8px; /* Reduced from 16px */
-                margin: 8px 0; /* Reduced from 16px */
-            }
-
-            .reference-card {
-                background: white;
-                border: 1px solid #e9ecef;
-                border-radius: 8px;
-                padding: 8px; /* Reduced from 16px */
-                transition: all 0.2s ease;
-                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                font-size: 0.9em;
-            }
-
-            .reference-card:hover {
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-                transform: translateY(-2px);
-            }
-
-            .ref-header {
-                margin-bottom: 4px; /* Reduced from 8px */
-            }
-
-            .reference-title-link {
-                color: #6e32a0;
-                text-decoration: none;
-                font-weight: bold;
-                display: inline-flex;
-                align-items: center;
-                gap: 6px; /* Reduced from 8px */
-                font-size: 0.9em;
-            }
-
-            .reference-title-link:hover {
-                color: #8b4cb8;
-                text-decoration: underline;
-            }
-
-            .external-icon {
-                font-size: 0.8em;
-                opacity: 0.7;
-            }
-
-            .reference-title {
-                font-weight: bold;
-                color: #333;
-                font-size: 0.9em;
-            }
-
-            .ref-meta {
-                display: flex;
-                gap: 6px; /* Reduced from 12px */
-                margin: 4px 0; /* Reduced from 6px */
-                flex-wrap: wrap;
-            }
-
-            .ref-program,
-            .ref-lob,
-            .ref-score {
-                font-size: 0.75em; /* Reduced from 0.85em */
-                padding: 1px 6px; /* Reduced padding */
-                border-radius: 4px;
-                background: #e9ecef;
-                color: #495057;
-            }
-
-            .ref-program {
-                background: #d1ecf1;
-                color: #0c5460;
-            }
-
-            .ref-lob {
-                background: #d4edda;
-                color: #155724;
-            }
-
-            .ref-score {
-                background: #fff3cd;
-                color: #856404;
-            }
-
-            .ref-action {
-                margin-top: 6px; /* Reduced from 8px */
-            }
-
-            .view-doc-link {
-                color: #10b981;
-                text-decoration: none;
-                font-size: 0.85em; /* Reduced from 0.9em */
-            }
-
-            .view-doc-link:hover {
-                text-decoration: underline;
-            }
-            
-            .helpful-rating {
-                margin-top: 8px; /* Reduced from 16px */
-                padding-top: 6px; /* Reduced from 12px */
-                border-top: 1px solid #f0f0f0;
-                display: flex;
-                align-items: center;
-                gap: 8px; /* Reduced from 12px */
-                flex-wrap: wrap;
-            }
-
-            .rate-label {
-                font-size: 0.85em; /* Reduced from 0.95em */
-                color: #666;
-                font-weight: 500;
-            }
-
-            .thumb-btn {
-                background: none;
-                border: 1px solid #ddd;
-                padding: 4px 6px; /* Reduced from 8px 10px */
-                border-radius: 6px;
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                transition: all 0.2s ease;
-                font-size: 0.8em;
-            }
-
-            .thumb-btn:hover {
-                background: #f0f0f0;
-                border-color: #6e32a0;
-                transform: translateY(-1px);
-            }
-
-            .thumb-btn.selected {
-                background: #6e32a0;
-                color: white;
-                border-color: #6e32a0;
-            }
-
-            .thumb-btn .material-icons {
-                font-size: 1em; /* Reduced from default */
-            }
-
-            .rate-confirm {
-                color: #10b981;
-                font-size: 0.8em; /* Reduced from 0.9em */
-                font-weight: 500;
+            .header-btn span:not(.material-icons) {
                 display: none;
-                animation: fadeIn 0.3s ease;
             }
 
-            /* Hidden messages indicator */
-            .hidden-messages-indicator {
-                background: #f8f9fa;
-                border-radius: 6px;
-                margin-bottom: 10px;
+            .date-range {
+                grid-template-columns: 1fr;
             }
 
-            .hidden-messages-indicator button {
-                font-size: 0.8em;
-                transition: all 0.2s ease;
+            .example-questions {
+                grid-template-columns: 1fr;
             }
+        }
 
-            .hidden-messages-indicator button:hover {
-                background: #6e32a0;
-                color: white;
-                border-color: #6e32a0;
-            }
+        /* Sources Display */
+        .sources-container {
+            margin-top: 12px;
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #10b981;
+        }
+        
+        .sources-container h4 {
+            color: #10b981;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+        
+        .source-item {
+            background: white;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            border: 1px solid #e1e8ed;
+            font-size: 0.9rem;
+        }
+        
+        .source-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .source-item strong {
+            color: #6e32a0;
+        }
+        
+        .source-item small {
+            color: #666;
+            font-size: 0.8rem;
+        }
+        
+        .source-text {
+            display: block;
+            margin-top: 8px;
+            color: #555;
+            font-style: italic;
+        }
 
-            /* System message compact */
-            .system-msg {
-                padding: 6px 10px;
-                font-size: 0.9em;
-                background: #f8f9fa;
-                border-radius: 6px;
-                color: #666;
-                text-align: center;
+        /* Enhanced Filter Styles */
+        .filter-section {
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            background: white;
+        }
+        
+        .filter-section h4 {
+            background: #f8f9fa;
+            margin: -16px -16px 16px -16px;
+            padding: 12px 16px;
+            border-radius: 8px 8px 0 0;
+            border-bottom: 1px solid #e1e8ed;
+        }
+        
+        .checkbox-group {
+            background: #f8f9fa;
+            border-radius: 6px;
+            max-height: 150px;
+        }
+        
+        .checkbox-group::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .checkbox-group::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+        
+        .checkbox-group::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+        
+        .checkbox-item:hover {
+            background: rgba(110, 50, 160, 0.05);
+        }
+        
+        .filter-tag {
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* System Message Styles */
+        .message.system .message-content {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #bbdefb;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        
+        .message.system .message-meta {
+            color: #1565c0;
+            opacity: 0.8;
+        }
+
+        /* Enhanced Loading States */
+        .loading-indicator {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .loading-indicator .spinner {
+            margin: 0 auto 12px;
+        }
+        
+        .loading-indicator {
+            color: #6e32a0;
+            font-weight: 500;
+        }
+
+        /* Statistics Display */
+        .chat-stats {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .stat-item {
+            white-space: nowrap;
+        }
+        
+        .stat-item .material-icons {
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+
+        /* Responsive Enhancements */
+        @media (max-width: 768px) {
+            .filter-section {
+                padding: 12px;
             }
             
-            /* Search Results Styles */
-            .search-result-item {
-                padding: 8px; /* Reduced from 12px */
-                margin: 6px 0; /* Reduced from 8px */
-                background: white;
-                border-radius: 6px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                cursor: pointer;
-                transition: all 0.2s;
+            .filter-section h4 {
+                margin: -12px -12px 12px -12px;
+                padding: 8px 12px;
             }
-            .search-result-item:hover {
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-                transform: translateY(-1px);
+            
+            .checkbox-group {
+                max-height: 100px;
             }
-            .search-title {
-                font-weight: bold;
-                color: #6e32a0;
-                margin-bottom: 6px;
-                text-decoration: none;
+            
+            .chat-stats {
+                flex-direction: column;
+                gap: 8px;
             }
-            .search-title:hover {
-                text-decoration: underline;
-            }
-            .search-preview {
-                font-size: 0.9em;
-                color: #666;
-                margin-top: 6px;
-                line-height: 1.4;
-            }
-            .search-collection {
-                font-size: 0.8em;
-                color: #6e32a0;
-                font-weight: bold;
+            
+            .sources-container {
                 margin-top: 8px;
+                padding: 12px;
             }
-
-            /* Loading states */
-            .loading {
-                text-align: center;
-                color: #666;
-                padding: 15px; /* Reduced from 20px */
-                font-style: italic;
-                font-size: 0.9em;
+            
+            .source-item {
+                padding: 8px;
             }
+        }
 
-            /* Empty state */
-            .empty-state {
-                text-align: center;
-                color: #666;
-                padding: 30px 15px; /* Reduced from 40px 20px */
-                font-style: italic;
-                font-size: 0.9em;
-            }
+        /* Utility Classes */
+        .text-center { text-align: center; }
+        .text-muted { color: #666; }
+        .mb-0 { margin-bottom: 0; }
+        .mb-1 { margin-bottom: 8px; }
+        .mb-2 { margin-bottom: 16px; }
+        .hidden { display: none; }
+        
+        /* Performance Optimizations */
+        .message-content {
+            will-change: transform;
+        }
+        
+        .sidebar {
+            will-change: transform;
+        }
+        
+        .spinner {
+            will-change: transform;
+        }
+    </style>
 
-            /* Improved scrollbar */
-            .messages::-webkit-scrollbar {
-                width: 6px; /* Thinner scrollbar */
-            }
-
-            .messages::-webkit-scrollbar-track {
-                background: #f1f1f1;
-                border-radius: 3px;
-            }
-
-            .messages::-webkit-scrollbar-thumb {
-                background: #c1c1c1;
-                border-radius: 3px;
-            }
-
-            .messages::-webkit-scrollbar-thumb:hover {
-                background: #a1a1a1;
-            }
-
-            @keyframes fadeIn {
-                from { opacity: 0; }
-                to { opacity: 1; }
-            }
-
-            .spinning {
-                animation: spin 1s linear infinite;
-            }
-
-            @keyframes spin {
-                from {
-                    transform: rotate(0deg);
-                }
-                to {
-                    transform: rotate(360deg);
-                }
-            }
-
-            /* Responsive */
-            @media (max-width: 768px) {
-                .container {
-                    flex-direction: column;
-                }
-                
-                .chat-section {
-                    flex-direction: column;
-                }
-                .sidebar {
-                    width: 100%;
-                    max-height: 200px;
-                }
-                .header-controls {
-                    gap: 8px;
-                }
-                .header-btn {
-                    padding: 6px 12px;
-                    font-size: 0.8em;
-                }
-                .message-row {
-                    max-width: 98%;
-                }
-                
-                .assistant-msg {
-                    padding: 8px 12px;
-                }
-                
-                .user-msg {
-                    padding: 6px 12px;
-                }
-                
-                .message-content.collapsed {
-                    max-height: 100px; /* Even smaller on mobile */
-                }
-
-                .reference-grid {
-                    grid-template-columns: 1fr;
-                }
-
-                .ref-meta {
-                    flex-direction: column;
-                    gap: 4px;
-                }
-
-                /* Mobile search bar adjustments */
-                .search-bar {
-                    flex-direction: column;
-                    gap: 6px;
-                    padding: 12px;
-                }
-                
-                .search-input, .chat-input {
-                    min-width: auto;
-                    width: 100%;
-                    font-size: 0.9em;
-                    padding: 8px;
-                }
-                
-                .input-divider {
-                    width: 100%;
-                    height: 1px;
-                    margin: 4px 0;
-                }
-                
-                .search-btn, .send-btn {
-                    width: 100%;
-                    padding: 8px 12px;
-                    font-size: 0.9em;
-                }
-            }
-        </style>
-    
 <!--[if gte mso 9]><xml>
 <mso:CustomDocumentProperties>
 <mso:MediaServiceImageTags msdt:dt="string"></mso:MediaServiceImageTags>
@@ -800,123 +767,629 @@
 </mso:CustomDocumentProperties>
 </xml><![endif]-->
 </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>
-                    <span class="material-icons">chat_bubble_outline</span>
-                    Metro AI Chat
-                </h1>
-                <div class="header-controls">
-                    <button
-                        class="header-btn"
-                        id="starChatBtn"
-                        onclick="toggleStarChat()"
-                        title="Save/Unsave Chat"
-                    >
-                        <span class="material-icons">star_border</span>
-                        <span>Save</span>
-                    </button>
-                    <button
-                        class="header-btn"
-                        onclick="startNewChat()"
-                        title="Start New Chat"
-                    >
-                        <span class="material-icons">add</span>
-                        <span>New</span>
-                    </button>
-                    <button
-                        class="header-btn"
-                        onclick="clearCurrentChat()"
-                        title="Clear Current Chat"
-                    >
-                        <span class="material-icons">clear</span>
-                        <span>Clear</span>
-                    </button>
-                </div>
-            </div>
-            <div class="chat-section">
-                <div class="sidebar">
-                    <div class="sidebar-tabs">
-                        <div
-                            class="sidebar-tab active"
-                            id="recentTab"
-                            onclick="switchTab('recent')"
-                        >
-                            Recent
-                        </div>
-                        <div
-                            class="sidebar-tab"
-                            id="savedTab"
-                            onclick="switchTab('saved')"
-                        >
-                            Saved ⭐
-                        </div>
-                    </div>
-                    <div id="recentChats" class="chat-list"></div>
-                    <div
-                        id="savedChats"
-                        class="chat-list"
-                        style="display: none"
-                    ></div>
-                    <div class="program-filters">
-                        <div style="margin-bottom: 8px">
-                            <strong>Filter by Programs:</strong>
-                        </div>
-                        <label style="display: block; margin: 4px 0">
-                            <input
-                                type="checkbox"
-                                value="Metro"
-                                checked
-                                onchange="toggleProgram(this)"
-                            />
-                            <span style="margin-left: 6px">Metro</span>
-                        </label>
-                        <div
-                            style="
-                                margin-top: 8px;
-                                font-size: 0.8em;
-                                color: #666;
-                            "
-                        >
-                            <em>Select programs to filter chat responses</em>
-                        </div>
-                    </div>
-                </div>
-                <div class="main-chat">
-                    <div class="search-bar">
-                        <input
-                            id="chatInput"
-                            class="chat-input"
-                            type="text"
-                            placeholder="Ask your MetroAI Assistant..."
-                        />
-                        <button class="send-btn" id="sendBtn">
-                            <span class="material-icons">auto_awesome</span>
-                            Ask AI
-                        </button>
-                        <div class="input-divider"></div>
-                        <input
-                            id="searchInput"
-                            class="search-input"
-                            type="text"
-                            placeholder="Search knowledge base..."
-                        />
-                        <button class="search-btn" id="searchBtn">
-                            Search
-                        </button>
-                    </div>
-                    <div id="messages" class="messages"></div>
-                    <div
-                        id="search-results"
-                        class="messages"
-                        style="display: none"
-                    ></div>
-                </div>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>
+                <span class="material-icons">analytics</span>
+                Metro AI Analytics
+            </h1>
+            <div class="header-controls">
+                <button class="header-btn" onclick="toggleSidebar()">
+                    <span class="material-icons">tune</span>
+                    <span>Filters</span>
+                </button>
+                <button class="header-btn" onclick="exportChat()">
+                    <span class="material-icons">download</span>
+                    <span>Export</span>
+                </button>
+                <button class="header-btn" onclick="clearChat()">
+                    <span class="material-icons">refresh</span>
+                    <span>Clear</span>
+                </button>
             </div>
         </div>
 
-        <!-- Load JavaScript from external file -->
-        <script src="/static/chat.js"></script>
-    </body>
+        <div class="main-layout">
+            <!-- Sidebar with Filters -->
+            <div class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <h3>Analysis Filters</h3>
+                    <p>Filter your data to get more targeted insights</p>
+                </div>
+
+                <div class="filter-panel">
+                    <!-- Date Range Filter -->
+                    <div class="filter-section">
+                        <h4>
+                            <span class="material-icons">date_range</span>
+                            Date Range
+                        </h4>
+                        <div class="filter-group">
+                            <label class="filter-label">Call Date Range</label>
+                            <div class="date-range">
+                                <input type="date" id="startDate" class="filter-input">
+                                <input type="date" id="endDate" class="filter-input">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Filter -->
+                    <div class="filter-section">
+                        <h4>
+                            <span class="material-icons">person</span>
+                            Agents
+                        </h4>
+                        <div class="filter-group">
+                            <label class="filter-label">Select Agents</label>
+                            <div class="checkbox-group" id="agentFilters">
+                                <div class="checkbox-item">
+                                    <input type="checkbox" id="agent-all" value="all" checked>
+                                    <label for="agent-all">All Agents</label>
+                                </div>
+                                <!-- Dynamic agent options will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Disposition Filter -->
+                    <div class="filter-section">
+                        <h4>
+                            <span class="material-icons">call</span>
+                            Call Types
+                        </h4>
+                        <div class="filter-group">
+                            <label class="filter-label">Disposition</label>
+                            <div class="checkbox-group" id="dispositionFilters">
+                                <div class="checkbox-item">
+                                    <input type="checkbox" id="disp-all" value="all" checked>
+                                    <label for="disp-all">All Types</label>
+                                </div>
+                                <!-- Dynamic disposition options will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Location Filter -->
+                    <div class="filter-section">
+                        <h4>
+                            <span class="material-icons">location_on</span>
+                            Location
+                        </h4>
+                        <div class="filter-group">
+                            <label class="filter-label">Site</label>
+                            <select id="siteFilter" class="filter-select">
+                                <option value="">All Sites</option>
+                                <!-- Dynamic site options will be populated here -->
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Line of Business</label>
+                            <select id="lobFilter" class="filter-select">
+                                <option value="">All LOBs</option>
+                                <!-- Dynamic LOB options will be populated here -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Call Duration Filter -->
+                    <div class="filter-section">
+                        <h4>
+                            <span class="material-icons">timer</span>
+                            Call Duration
+                        </h4>
+                        <div class="filter-group">
+                            <label class="filter-label">Duration Range (seconds)</label>
+                            <div class="date-range">
+                                <input type="number" id="minDuration" class="filter-input" placeholder="Min">
+                                <input type="number" id="maxDuration" class="filter-input" placeholder="Max">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Language Filter -->
+                    <div class="filter-section">
+                        <h4>
+                            <span class="material-icons">language</span>
+                            Language
+                        </h4>
+                        <div class="filter-group">
+                            <select id="languageFilter" class="filter-select">
+                                <option value="">All Languages</option>
+                                <option value="english">English</option>
+                                <option value="spanish">Spanish</option>
+                                <!-- Add more languages as needed -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="filter-actions">
+                    <button class="btn btn-primary" onclick="applyFilters()">
+                        Apply Filters
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearFilters()">
+                        Clear All
+                    </button>
+                    <div class="active-filters" id="activeFilters">
+                        <!-- Active filter tags will appear here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Chat Area -->
+            <div class="chat-area">
+                <div class="chat-header">
+                    <div>
+                        <div class="chat-title">Call Center Analytics</div>
+                        <div class="chat-subtitle">Ask questions about your call center data</div>
+                    </div>
+                    <div class="chat-stats">
+                        <div class="stat-item">
+                            <span class="material-icons">dataset</span>
+                            <span id="totalRecords">0 records</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="material-icons">filter_alt</span>
+                            <span id="activeFiltersCount">0 filters</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="messages-container" id="messagesContainer">
+                    <!-- Welcome Screen -->
+                    <div class="welcome-screen" id="welcomeScreen">
+                        <div class="welcome-icon">🤖</div>
+                        <h2 class="welcome-title">Welcome to Metro AI Analytics</h2>
+                        <p class="welcome-subtitle">
+                            Ask analytical questions about your call center data. Use the filters on the left to narrow down your analysis.
+                        </p>
+                        
+                        <div class="example-questions">
+                            <div class="example-card" onclick="askQuestion('What is the average call duration for account-related calls this month?')">
+                                <h4>📊 Performance Metrics</h4>
+                                <p>What is the average call duration for account-related calls this month?</p>
+                            </div>
+                            <div class="example-card" onclick="askQuestion('Show me calls where agents mentioned port out or transfer PIN')">
+                                <h4>🔍 Content Analysis</h4>
+                                <p>Show me calls where agents mentioned port out or transfer PIN</p>
+                            </div>
+                            <div class="example-card" onclick="askQuestion('Which agents have the highest customer satisfaction ratings?')">
+                                <h4>👥 Agent Performance</h4>
+                                <p>Which agents have the highest customer satisfaction ratings?</p>
+                            </div>
+                            <div class="example-card" onclick="askQuestion('What are the most common customer complaints this week?')">
+                                <h4>📝 Sentiment Analysis</h4>
+                                <p>What are the most common customer complaints this week?</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Messages -->
+                    <div id="chatMessages" class="hidden">
+                        <!-- Messages will be populated here -->
+                    </div>
+                </div>
+
+                <!-- Quick Questions -->
+                <div class="quick-questions" id="quickQuestions">
+                    <h4>💡 Quick Questions</h4>
+                    <div class="question-buttons">
+                        <button class="question-btn" onclick="askQuestion('What is the overall sentiment of calls today?')">
+                            Overall sentiment today
+                        </button>
+                        <button class="question-btn" onclick="askQuestion('Show me the longest calls this week')">
+                            Longest calls this week
+                        </button>
+                        <button class="question-btn" onclick="askQuestion('Which agents need more training?')">
+                            Agents needing training
+                        </button>
+                        <button class="question-btn" onclick="askQuestion('What are the trending issues?')">
+                            Trending issues
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="chat-input-area">
+                    <div class="input-container">
+                        <textarea 
+                            id="chatInput" 
+                            class="chat-input" 
+                            placeholder="Ask a question about your call center data..."
+                            rows="1"
+                            onkeydown="handleKeyPress(event)"
+                        ></textarea>
+                        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                            <span class="material-icons">send</span>
+                            Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentFilters = {};
+        let chatHistory = [];
+        let isLoading = false;
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initializePage();
+            loadFilterOptions();
+            updateStats();
+        });
+
+        function initializePage() {
+            // Set default date range to last 30 days
+            const today = new Date();
+            const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+            
+            document.getElementById('endDate').value = today.toISOString().split('T')[0];
+            document.getElementById('startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+
+            // Auto-resize textarea
+            const chatInput = document.getElementById('chatInput');
+            chatInput.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = this.scrollHeight + 'px';
+            });
+        }
+
+        async function loadFilterOptions() {
+            try {
+                // This would typically load from your API
+                // For now, we'll use sample data
+                const sampleData = {
+                    agents: ['Rey Mendoza', 'Maria Garcia', 'John Smith', 'Sarah Johnson'],
+                    dispositions: ['Account', 'Technical Support', 'Billing', 'Port Out'],
+                    sites: ['Dasma', 'Manila', 'Cebu', 'Davao'],
+                    lobs: ['WNP', 'Prepaid', 'Postpaid', 'Business']
+                };
+
+                populateFilterOptions(sampleData);
+            } catch (error) {
+                console.error('Error loading filter options:', error);
+            }
+        }
+
+        function populateFilterOptions(data) {
+            // Populate agent filters
+            const agentFilters = document.getElementById('agentFilters');
+            data.agents.forEach(agent => {
+                const div = document.createElement('div');
+                div.className = 'checkbox-item';
+                div.innerHTML = `
+                    <input type="checkbox" id="agent-${agent}" value="${agent}">
+                    <label for="agent-${agent}">${agent}</label>
+                `;
+                agentFilters.appendChild(div);
+            });
+
+            // Populate disposition filters
+            const dispositionFilters = document.getElementById('dispositionFilters');
+            data.dispositions.forEach(disposition => {
+                const div = document.createElement('div');
+                div.className = 'checkbox-item';
+                div.innerHTML = `
+                    <input type="checkbox" id="disp-${disposition}" value="${disposition}">
+                    <label for="disp-${disposition}">${disposition}</label>
+                `;
+                dispositionFilters.appendChild(div);
+            });
+
+            // Populate site filter
+            const siteFilter = document.getElementById('siteFilter');
+            data.sites.forEach(site => {
+                const option = document.createElement('option');
+                option.value = site;
+                option.textContent = site;
+                siteFilter.appendChild(option);
+            });
+
+            // Populate LOB filter
+            const lobFilter = document.getElementById('lobFilter');
+            data.lobs.forEach(lob => {
+                const option = document.createElement('option');
+                option.value = lob;
+                option.textContent = lob;
+                lobFilter.appendChild(option);
+            });
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('open');
+        }
+
+        function applyFilters() {
+            currentFilters = collectFilters();
+            updateActiveFilters();
+            updateStats();
+            
+            // If there are messages, refresh the analysis
+            if (chatHistory.length > 0) {
+                addMessage('system', 'Filters updated. Your analysis will now use the new filter criteria.');
+            }
+        }
+
+        function collectFilters() {
+            const filters = {};
+
+            // Date range
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            if (startDate) filters.startDate = startDate;
+            if (endDate) filters.endDate = endDate;
+
+            // Agents
+            const selectedAgents = Array.from(document.querySelectorAll('#agentFilters input[type="checkbox"]:checked:not([value="all"])'))
+                .map(checkbox => checkbox.value);
+            if (selectedAgents.length > 0) filters.agents = selectedAgents;
+
+            // Dispositions
+            const selectedDispositions = Array.from(document.querySelectorAll('#dispositionFilters input[type="checkbox"]:checked:not([value="all"])'))
+                .map(checkbox => checkbox.value);
+            if (selectedDispositions.length > 0) filters.dispositions = selectedDispositions;
+
+            // Site
+            const site = document.getElementById('siteFilter').value;
+            if (site) filters.site = site;
+
+            // LOB
+            const lob = document.getElementById('lobFilter').value;
+            if (lob) filters.lob = lob;
+
+            // Duration
+            const minDuration = document.getElementById('minDuration').value;
+            const maxDuration = document.getElementById('maxDuration').value;
+            if (minDuration) filters.minDuration = parseInt(minDuration);
+            if (maxDuration) filters.maxDuration = parseInt(maxDuration);
+
+            // Language
+            const language = document.getElementById('languageFilter').value;
+            if (language) filters.language = language;
+
+            return filters;
+        }
+
+        function updateActiveFilters() {
+            const activeFiltersDiv = document.getElementById('activeFilters');
+            activeFiltersDiv.innerHTML = '';
+
+            const filterCount = Object.keys(currentFilters).length;
+            document.getElementById('activeFiltersCount').textContent = `${filterCount} filters`;
+
+            Object.entries(currentFilters).forEach(([key, value]) => {
+                const tag = document.createElement('span');
+                tag.className = 'filter-tag';
+                
+                let displayValue = value;
+                if (Array.isArray(value)) {
+                    displayValue = value.length > 2 ? `${value.length} selected` : value.join(', ');
+                }
+                
+                tag.innerHTML = `
+                    ${key}: ${displayValue}
+                    <span class="material-icons remove" onclick="removeFilter('${key}')">close</span>
+                `;
+                activeFiltersDiv.appendChild(tag);
+            });
+        }
+
+        function removeFilter(filterKey) {
+            delete currentFilters[filterKey];
+            updateActiveFilters();
+            updateStats();
+        }
+
+        function clearFilters() {
+            currentFilters = {};
+            updateActiveFilters();
+            updateStats();
+            
+            // Reset form
+            document.getElementById('startDate').value = '';
+            document.getElementById('endDate').value = '';
+            document.getElementById('siteFilter').value = '';
+            document.getElementById('lobFilter').value = '';
+            document.getElementById('minDuration').value = '';
+            document.getElementById('maxDuration').value = '';
+            document.getElementById('languageFilter').value = '';
+            
+            // Uncheck all checkboxes
+            document.querySelectorAll('#agentFilters input[type="checkbox"]:not([value="all"])').forEach(cb => cb.checked = false);
+            document.querySelectorAll('#dispositionFilters input[type="checkbox"]:not([value="all"])').forEach(cb => cb.checked = false);
+            document.querySelectorAll('input[value="all"]').forEach(cb => cb.checked = true);
+        }
+
+        function updateStats() {
+            // This would typically make an API call to get actual stats
+            // For now, we'll simulate it
+            const recordCount = Math.floor(Math.random() * 1000) + 100;
+            document.getElementById('totalRecords').textContent = `${recordCount} records`;
+        }
+
+        function askQuestion(question) {
+            document.getElementById('chatInput').value = question;
+            sendMessage();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (!message || isLoading) return;
+            
+            input.value = '';
+            input.style.height = 'auto';
+            
+            // Hide welcome screen, show chat
+            document.getElementById('welcomeScreen').classList.add('hidden');
+            document.getElementById('chatMessages').classList.remove('hidden');
+            
+            // Add user message
+            addMessage('user', message);
+            
+            // Show loading
+            isLoading = true;
+            updateSendButton();
+            addLoadingMessage();
+            
+            try {
+                // Make API call with filters
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        history: chatHistory,
+                        filters: currentFilters
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // Remove loading message
+                removeLoadingMessage();
+                
+                // Add assistant response
+                addMessage('assistant', data.reply || 'Sorry, I couldn\'t process your request.');
+                
+            } catch (error) {
+                console.error('Error:', error);
+                removeLoadingMessage();
+                addMessage('assistant', 'Sorry, there was an error processing your request. Please try again.');
+            } finally {
+                isLoading = false;
+                updateSendButton();
+            }
+        }
+
+        function addMessage(sender, content) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            
+            messageDiv.innerHTML = `
+                <div class="message-content">
+                    ${content}
+                </div>
+                <div class="message-meta">
+                    <span>${timestamp}</span>
+                    ${sender === 'assistant' ? '<span class="material-icons">smart_toy</span>' : '<span class="material-icons">person</span>'}
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // Add to history
+            chatHistory.push({
+                role: sender === 'user' ? 'user' : 'assistant',
+                content: content
+            });
+        }
+
+        function addLoadingMessage() {
+            const messagesContainer = document.getElementById('chatMessages');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message assistant';
+            loadingDiv.id = 'loadingMessage';
+            loadingDiv.innerHTML = `
+                <div class="message-content">
+                    <div class="loading-indicator">
+                        <div class="spinner"></div>
+                        Analyzing your data...
+                    </div>
+                </div>
+            `;
+            messagesContainer.appendChild(loadingDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function removeLoadingMessage() {
+            const loadingMessage = document.getElementById('loadingMessage');
+            if (loadingMessage) {
+                loadingMessage.remove();
+            }
+        }
+
+        function updateSendButton() {
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = isLoading;
+            sendBtn.innerHTML = isLoading ? 
+                '<div class="spinner"></div> Sending...' : 
+                '<span class="material-icons">send</span> Send';
+        }
+
+        function clearChat() {
+            chatHistory = [];
+            document.getElementById('chatMessages').innerHTML = '';
+            document.getElementById('chatMessages').classList.add('hidden');
+            document.getElementById('welcomeScreen').classList.remove('hidden');
+        }
+
+        function exportChat() {
+            if (chatHistory.length === 0) {
+                alert('No chat history to export');
+                return;
+            }
+            
+            const chatText = chatHistory.map(msg => 
+                `${msg.role.toUpperCase()}: ${msg.content}`
+            ).join('\n\n');
+            
+            const blob = new Blob([chatText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `metro-ai-chat-${new Date().toISOString().split('T')[0]}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Handle checkbox group behavior
+        document.addEventListener('change', function(event) {
+            if (event.target.type === 'checkbox') {
+                const group = event.target.closest('.checkbox-group');
+                if (!group) return;
+                
+                const allCheckbox = group.querySelector('input[value="all"]');
+                const otherCheckboxes = group.querySelectorAll('input[type="checkbox"]:not([value="all"])');
+                
+                if (event.target.value === 'all') {
+                    if (event.target.checked) {
+                        otherCheckboxes.forEach(cb => cb.checked = false);
+                    }
+                } else {
+                    if (event.target.checked) {
+                        allCheckbox.checked = false;
+                    } else {
+                        // If no other checkboxes are selected, check "all"
+                        const anySelected = Array.from(otherCheckboxes).some(cb => cb.checked);
+                        if (!anySelected) {
+                            allCheckbox.checked = true;
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
 </html>

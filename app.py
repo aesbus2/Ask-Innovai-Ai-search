@@ -952,32 +952,93 @@ async def health():
 
 @app.post("/chat")
 async def chat_handler(request: ChatRequest):
-    """Production chat functionality"""
+    """Enhanced analytics chat functionality with filter support"""
     try:
         if not GENAI_ACCESS_KEY:
             return {"reply": "Chat service not configured. Please set GENAI_ACCESS_KEY."}
         
-        # Search for context
+        # Extract filters from request
+        filters = getattr(request, 'filters', {})
+        is_analytics = getattr(request, 'analytics', False)
+        
+        # Search for context with filters
         context = ""
+        sources = []
+        
         try:
-            # Search in your main data index
             from opensearch_client import get_connection_status
             conn_status = get_connection_status()
             
             if conn_status.get("connected", False):
-                search_results = search_opensearch(request.message, index_override="ai-corporate-sptr-test")
+                # Build search with filters
+                search_results = search_opensearch_with_filters(
+                    request.message, 
+                    filters=filters,
+                    index_override="Ai Corporate SPTR - TEST",
+                    size=5
+                )
+                
                 if search_results:
-                    first_result = search_results[0].get('_source', {})
-                    context = first_result.get('text', '')[:500]
+                    # Extract context from multiple results for better analytics
+                    context_parts = []
+                    for result in search_results[:3]:  # Use top 3 results
+                        source_data = result.get('_source', {})
+                        text = source_data.get('text', '')
+                        if text:
+                            context_parts.append(text[:300])  # Truncate each piece
+                            
+                            # Add to sources for frontend display
+                            sources.append({
+                                'text': text,
+                                'metadata': source_data.get('metadata', {}),
+                                'score': result.get('_score', 0)
+                            })
+                    
+                    context = "\n---\n".join(context_parts)
+                
         except Exception as e:
             logger.warning(f"Search context failed: {e}")
             pass
         
-        # Build messages
-        system_msg = "You are MetroAI, an intelligent assistant for Metro by T-Mobile customer service operations."
-        if context:
-            system_msg += f" Context: {context}"
+        # Build enhanced system message for analytics
+        if is_analytics:
+            system_msg = """You are MetroAI Analytics, an intelligent assistant specialized in analyzing Metro by T-Mobile call center data.
+
+Your capabilities include:
+- Analyzing call patterns, duration, and volume
+- Identifying customer sentiment and satisfaction trends
+- Evaluating agent performance and training needs
+- Spotting common issues and resolution patterns
+- Providing actionable insights for operations improvement
+
+When analyzing data, consider:
+- Call metadata (agent, disposition, site, LOB, duration, date)
+- Customer interaction patterns
+- Agent performance indicators
+- Operational efficiency metrics
+- Customer satisfaction signals
+
+Always provide specific, actionable insights based on the data."""
+        else:
+            system_msg = "You are MetroAI, an intelligent assistant for Metro by T-Mobile customer service operations."
         
+        # Add filter context
+        if filters:
+            filter_context = "Current analysis filters: "
+            filter_parts = []
+            for key, value in filters.items():
+                if isinstance(value, list):
+                    filter_parts.append(f"{key}: {', '.join(value)}")
+                else:
+                    filter_parts.append(f"{key}: {value}")
+            filter_context += "; ".join(filter_parts)
+            system_msg += f"\n\n{filter_context}"
+        
+        # Add search context
+        if context:
+            system_msg += f"\n\nRelevant data context:\n{context}"
+        
+        # Build messages
         messages = [{"role": "system", "content": system_msg}]
         messages.extend([{"role": m["role"], "content": m["content"]} for m in request.history])
         messages.append({"role": "user", "content": request.message})
@@ -998,7 +1059,14 @@ async def chat_handler(request: ChatRequest):
         if response.status_code == 200:
             data = response.json()
             reply = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            return {"reply": reply.strip() if reply else "Sorry, I couldn't generate a response."}
+            
+            # Return enhanced response with sources
+            return {
+                "reply": reply.strip() if reply else "Sorry, I couldn't generate a response.",
+                "sources": sources[:3] if sources else [],  # Limit sources
+                "filters_applied": filters,
+                "context_found": bool(context)
+            }
         else:
             return {"reply": "AI service temporarily unavailable"}
             
