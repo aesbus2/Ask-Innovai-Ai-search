@@ -2,7 +2,7 @@
 <html lang="en" xmlns:mso="urn:schemas-microsoft-com:office:office" xmlns:msdt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882">
 <head>
     <meta charset="UTF-8" />
-    <title>Metro AI Analytics Chat</title>
+    <title>Metro AI Call Center Analytics</title>
     <link
         href="https://fonts.googleapis.com/icon?family=Material+Icons"
         rel="stylesheet"
@@ -40,11 +40,11 @@
             left: 0;
             right: 0;
             z-index: 1000;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 15px rgba(0,0,0,0.1);
         }
 
         .header h1 {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             font-weight: 600;
             display: flex;
             align-items: center;
@@ -80,12 +80,12 @@
             display: flex;
             width: 100%;
             height: 100vh;
-            padding-top: 70px; /* Account for fixed header */
+            padding-top: 70px;
         }
 
         /* Sidebar */
         .sidebar {
-            width: 320px;
+            width: 360px;
             background: white;
             border-right: 1px solid #e1e8ed;
             display: flex;
@@ -119,22 +119,36 @@
         }
 
         .filter-section {
-            margin-bottom: 24px;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
 
         .filter-section h4 {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            margin: 0;
+            padding: 12px 16px;
+            border-radius: 8px 8px 0 0;
+            border-bottom: 1px solid #e1e8ed;
             color: #333;
             font-size: 0.95rem;
-            margin-bottom: 12px;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #e20074;
             display: flex;
             align-items: center;
             gap: 8px;
         }
 
+        .filter-content {
+            padding: 16px;
+        }
+
         .filter-group {
             margin-bottom: 16px;
+        }
+
+        .filter-group:last-child {
+            margin-bottom: 0;
         }
 
         .filter-label {
@@ -166,11 +180,17 @@
             gap: 8px;
         }
 
+        .duration-range {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
         .checkbox-group {
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            max-height: 120px;
+            gap: 6px;
+            max-height: 150px;
             overflow-y: auto;
             border: 1px solid #e1e8ed;
             border-radius: 6px;
@@ -178,11 +198,31 @@
             background: #f8f9fa;
         }
 
+        .checkbox-group::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .checkbox-group::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .checkbox-group::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
         .checkbox-item {
             display: flex;
             align-items: center;
             gap: 8px;
             padding: 4px 0;
+            transition: background-color 0.2s;
+        }
+
+        .checkbox-item:hover {
+            background: rgba(110, 50, 160, 0.05);
+            border-radius: 4px;
         }
 
         .checkbox-item input[type="checkbox"] {
@@ -193,6 +233,7 @@
             font-size: 0.85rem;
             color: #666;
             cursor: pointer;
+            flex: 1;
         }
 
         .filter-actions {
@@ -210,15 +251,17 @@
             cursor: pointer;
             transition: all 0.2s;
             margin-bottom: 8px;
+            font-weight: 500;
         }
 
         .btn-primary {
-            background: #6e32a0;
+            background: linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%);
             color: white;
         }
 
         .btn-primary:hover {
-            background: #5a2a87;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(110, 50, 160, 0.3);
         }
 
         .btn-secondary {
@@ -245,11 +288,13 @@
             border-radius: 12px;
             font-size: 0.8rem;
             margin: 2px;
+            animation: fadeIn 0.3s ease;
         }
 
         .filter-tag .remove {
             cursor: pointer;
             opacity: 0.7;
+            font-size: 0.8rem;
         }
 
         .filter-tag .remove:hover {
@@ -291,12 +336,21 @@
             gap: 16px;
             font-size: 0.85rem;
             color: #666;
+            background: rgba(110, 50, 160, 0.1);
+            padding: 8px 16px;
+            border-radius: 20px;
         }
 
         .stat-item {
             display: flex;
             align-items: center;
             gap: 4px;
+            white-space: nowrap;
+        }
+
+        .stat-item .material-icons {
+            font-size: 1rem;
+            opacity: 0.8;
         }
 
         /* Messages Area */
@@ -320,11 +374,17 @@
             margin-right: auto;
         }
 
+        .message.system {
+            margin: 12px auto;
+            max-width: 70%;
+        }
+
         .message-content {
             padding: 16px 20px;
             border-radius: 18px;
             position: relative;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            will-change: transform;
         }
 
         .message.user .message-content {
@@ -340,6 +400,14 @@
             border-bottom-left-radius: 4px;
         }
 
+        .message.system .message-content {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #bbdefb;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
         .message-meta {
             font-size: 0.8rem;
             color: #666;
@@ -352,6 +420,90 @@
         .message.user .message-meta {
             justify-content: flex-end;
             color: rgba(255,255,255,0.8);
+        }
+
+        .message.system .message-meta {
+            color: #1565c0;
+            opacity: 0.8;
+            justify-content: center;
+        }
+
+        /* Sources Display */
+        .sources-container {
+            margin-top: 16px;
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #10b981;
+        }
+
+        .sources-container h4 {
+            color: #10b981;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+
+        .source-item {
+            background: white;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            border: 1px solid #e1e8ed;
+            font-size: 0.9rem;
+            position: relative;
+        }
+
+        .source-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .source-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .source-title {
+            font-weight: 600;
+            color: #6e32a0;
+            margin-bottom: 4px;
+        }
+
+        .source-meta {
+            font-size: 0.8rem;
+            color: #666;
+            line-height: 1.3;
+        }
+
+        .source-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .source-link {
+            color: #6e32a0;
+            text-decoration: none;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .source-link:hover {
+            background: rgba(110, 50, 160, 0.1);
+            text-decoration: none;
+        }
+
+        .source-text {
+            display: block;
+            margin-top: 8px;
+            color: #555;
+            font-style: italic;
+            line-height: 1.4;
         }
 
         /* Quick Questions */
@@ -388,6 +540,7 @@
             background: #6e32a0;
             color: white;
             border-color: #6e32a0;
+            transform: translateY(-1px);
         }
 
         /* Chat Input */
@@ -449,20 +602,23 @@
         /* Loading States */
         .loading-indicator {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 8px;
-            color: #666;
+            gap: 12px;
+            color: #6e32a0;
             font-size: 0.9rem;
-            padding: 16px;
+            padding: 20px;
+            font-weight: 500;
         }
 
         .spinner {
-            width: 20px;
-            height: 20px;
-            border: 2px solid #e1e8ed;
-            border-top: 2px solid #6e32a0;
+            width: 24px;
+            height: 24px;
+            border: 3px solid #e1e8ed;
+            border-top: 3px solid #6e32a0;
             border-radius: 50%;
             animation: spin 1s linear infinite;
+            will-change: transform;
         }
 
         @keyframes spin {
@@ -497,14 +653,14 @@
         .welcome-subtitle {
             font-size: 1rem;
             margin-bottom: 30px;
-            max-width: 500px;
+            max-width: 600px;
         }
 
         .example-questions {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 16px;
-            max-width: 800px;
+            max-width: 1000px;
             width: 100%;
         }
 
@@ -544,6 +700,7 @@
                 height: calc(100vh - 70px);
                 z-index: 999;
                 transition: left 0.3s ease;
+                will-change: transform;
             }
 
             .sidebar.open {
@@ -558,182 +715,21 @@
                 display: none;
             }
 
-            .date-range {
+            .date-range, .duration-range {
                 grid-template-columns: 1fr;
             }
 
             .example-questions {
                 grid-template-columns: 1fr;
             }
-        }
 
-        /* Sources Display */
-        .sources-container {
-            margin-top: 12px;
-            padding: 16px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border-left: 4px solid #10b981;
-        }
-        
-        .sources-container h4 {
-            color: #10b981;
-            margin-bottom: 12px;
-            font-size: 0.95rem;
-        }
-        
-        .source-item {
-            background: white;
-            padding: 12px;
-            margin-bottom: 8px;
-            border-radius: 6px;
-            border: 1px solid #e1e8ed;
-            font-size: 0.9rem;
-        }
-        
-        .source-item:last-child {
-            margin-bottom: 0;
-        }
-        
-        .source-item strong {
-            color: #6e32a0;
-        }
-        
-        .source-item small {
-            color: #666;
-            font-size: 0.8rem;
-        }
-        
-        .source-text {
-            display: block;
-            margin-top: 8px;
-            color: #555;
-            font-style: italic;
-        }
-
-        /* Enhanced Filter Styles */
-        .filter-section {
-            border: 1px solid #e1e8ed;
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 16px;
-            background: white;
-        }
-        
-        .filter-section h4 {
-            background: #f8f9fa;
-            margin: -16px -16px 16px -16px;
-            padding: 12px 16px;
-            border-radius: 8px 8px 0 0;
-            border-bottom: 1px solid #e1e8ed;
-        }
-        
-        .checkbox-group {
-            background: #f8f9fa;
-            border-radius: 6px;
-            max-height: 150px;
-        }
-        
-        .checkbox-group::-webkit-scrollbar {
-            width: 6px;
-        }
-        
-        .checkbox-group::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 3px;
-        }
-        
-        .checkbox-group::-webkit-scrollbar-thumb {
-            background: #c1c1c1;
-            border-radius: 3px;
-        }
-        
-        .checkbox-item:hover {
-            background: rgba(110, 50, 160, 0.05);
-        }
-        
-        .filter-tag {
-            animation: fadeIn 0.3s ease;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* System Message Styles */
-        .message.system .message-content {
-            background: #e3f2fd;
-            color: #1565c0;
-            border: 1px solid #bbdefb;
-            font-size: 0.9rem;
-            text-align: center;
-        }
-        
-        .message.system .message-meta {
-            color: #1565c0;
-            opacity: 0.8;
-        }
-
-        /* Enhanced Loading States */
-        .loading-indicator {
-            text-align: center;
-            padding: 20px;
-        }
-        
-        .loading-indicator .spinner {
-            margin: 0 auto 12px;
-        }
-        
-        .loading-indicator {
-            color: #6e32a0;
-            font-weight: 500;
-        }
-
-        /* Statistics Display */
-        .chat-stats {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 8px 16px;
-            border-radius: 20px;
-            backdrop-filter: blur(10px);
-        }
-        
-        .stat-item {
-            white-space: nowrap;
-        }
-        
-        .stat-item .material-icons {
-            font-size: 1rem;
-            opacity: 0.8;
-        }
-
-        /* Responsive Enhancements */
-        @media (max-width: 768px) {
-            .filter-section {
-                padding: 12px;
-            }
-            
-            .filter-section h4 {
-                margin: -12px -12px 12px -12px;
-                padding: 8px 12px;
-            }
-            
-            .checkbox-group {
-                max-height: 100px;
-            }
-            
             .chat-stats {
                 flex-direction: column;
                 gap: 8px;
             }
-            
-            .sources-container {
-                margin-top: 8px;
-                padding: 12px;
-            }
-            
-            .source-item {
-                padding: 8px;
+
+            .sidebar {
+                width: 320px;
             }
         }
 
@@ -745,17 +741,9 @@
         .mb-2 { margin-bottom: 16px; }
         .hidden { display: none; }
         
-        /* Performance Optimizations */
-        .message-content {
-            will-change: transform;
-        }
-        
-        .sidebar {
-            will-change: transform;
-        }
-        
-        .spinner {
-            will-change: transform;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 
@@ -773,7 +761,7 @@
         <div class="header">
             <h1>
                 <span class="material-icons">analytics</span>
-                Metro AI Analytics
+                Metro AI Call Center Analytics
             </h1>
             <div class="header-controls">
                 <button class="header-btn" onclick="toggleSidebar()">
@@ -792,124 +780,168 @@
         </div>
 
         <div class="main-layout">
-            <!-- Sidebar with Filters -->
+            <!-- Sidebar with Enhanced Filters -->
             <div class="sidebar" id="sidebar">
                 <div class="sidebar-header">
-                    <h3>Analysis Filters</h3>
-                    <p>Filter your data to get more targeted insights</p>
+                    <h3>Advanced Analytics Filters</h3>
+                    <p>Filter evaluations to get targeted insights about call center performance</p>
                 </div>
 
                 <div class="filter-panel">
-                    <!-- Date Range Filter -->
+                    <!-- Date Filters -->
                     <div class="filter-section">
                         <h4>
                             <span class="material-icons">date_range</span>
                             Date Range
                         </h4>
-                        <div class="filter-group">
-                            <label class="filter-label">Call Date Range</label>
-                            <div class="date-range">
-                                <input type="date" id="startDate" class="filter-input">
-                                <input type="date" id="endDate" class="filter-input">
+                        <div class="filter-content">
+                            <div class="filter-group">
+                                <label class="filter-label">Call Date Range</label>
+                                <div class="date-range">
+                                    <input type="date" id="startCallDate" class="filter-input" title="Start Date">
+                                    <input type="date" id="endCallDate" class="filter-input" title="End Date">
+                                </div>
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label">Evaluation Created</label>
+                                <div class="date-range">
+                                    <input type="date" id="startCreatedDate" class="filter-input" title="Created Start Date">
+                                    <input type="date" id="endCreatedDate" class="filter-input" title="Created End Date">
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Agent Filter -->
+                    <!-- Agent Filters -->
                     <div class="filter-section">
                         <h4>
                             <span class="material-icons">person</span>
-                            Agents
+                            Agent Performance
                         </h4>
-                        <div class="filter-group">
-                            <label class="filter-label">Select Agents</label>
-                            <div class="checkbox-group" id="agentFilters">
-                                <div class="checkbox-item">
-                                    <input type="checkbox" id="agent-all" value="all" checked>
-                                    <label for="agent-all">All Agents</label>
+                        <div class="filter-content">
+                            <div class="filter-group">
+                                <label class="filter-label">Select Agents</label>
+                                <div class="checkbox-group" id="agentFilters">
+                                    <div class="checkbox-item">
+                                        <input type="checkbox" id="agent-all" value="all" checked>
+                                        <label for="agent-all">All Agents</label>
+                                    </div>
+                                    <!-- Dynamic agent options populated here -->
                                 </div>
-                                <!-- Dynamic agent options will be populated here -->
                             </div>
                         </div>
                     </div>
 
-                    <!-- Disposition Filter -->
+                    <!-- Call Classification -->
                     <div class="filter-section">
                         <h4>
                             <span class="material-icons">call</span>
-                            Call Types
+                            Call Classification
                         </h4>
-                        <div class="filter-group">
-                            <label class="filter-label">Disposition</label>
-                            <div class="checkbox-group" id="dispositionFilters">
-                                <div class="checkbox-item">
-                                    <input type="checkbox" id="disp-all" value="all" checked>
-                                    <label for="disp-all">All Types</label>
+                        <div class="filter-content">
+                            <div class="filter-group">
+                                <label class="filter-label">Main Disposition</label>
+                                <div class="checkbox-group" id="dispositionFilters">
+                                    <div class="checkbox-item">
+                                        <input type="checkbox" id="disp-all" value="all" checked>
+                                        <label for="disp-all">All Dispositions</label>
+                                    </div>
+                                    <!-- Dynamic disposition options populated here -->
                                 </div>
-                                <!-- Dynamic disposition options will be populated here -->
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label">Sub-Disposition</label>
+                                <div class="checkbox-group" id="subDispositionFilters">
+                                    <div class="checkbox-item">
+                                        <input type="checkbox" id="subdisp-all" value="all" checked>
+                                        <label for="subdisp-all">All Sub-Dispositions</label>
+                                    </div>
+                                    <!-- Dynamic sub-disposition options populated here -->
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Location Filter -->
+                    <!-- Organization Filters -->
                     <div class="filter-section">
                         <h4>
-                            <span class="material-icons">location_on</span>
-                            Location
+                            <span class="material-icons">business</span>
+                            Organization
                         </h4>
-                        <div class="filter-group">
-                            <label class="filter-label">Site</label>
-                            <select id="siteFilter" class="filter-select">
-                                <option value="">All Sites</option>
-                                <!-- Dynamic site options will be populated here -->
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label class="filter-label">Line of Business</label>
-                            <select id="lobFilter" class="filter-select">
-                                <option value="">All LOBs</option>
-                                <!-- Dynamic LOB options will be populated here -->
-                            </select>
+                        <div class="filter-content">
+                            <div class="filter-group">
+                                <label class="filter-label">Partner</label>
+                                <select id="partnerFilter" class="filter-select">
+                                    <option value="">All Partners</option>
+                                    <!-- Dynamic partner options populated here -->
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label">Site</label>
+                                <select id="siteFilter" class="filter-select">
+                                    <option value="">All Sites</option>
+                                    <!-- Dynamic site options populated here -->
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label">Line of Business</label>
+                                <select id="lobFilter" class="filter-select">
+                                    <option value="">All LOBs</option>
+                                    <!-- Dynamic LOB options populated here -->
+                                </select>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Call Duration Filter -->
+                    <!-- Call Characteristics -->
                     <div class="filter-section">
                         <h4>
                             <span class="material-icons">timer</span>
-                            Call Duration
+                            Call Characteristics
                         </h4>
-                        <div class="filter-group">
-                            <label class="filter-label">Duration Range (seconds)</label>
-                            <div class="date-range">
-                                <input type="number" id="minDuration" class="filter-input" placeholder="Min">
-                                <input type="number" id="maxDuration" class="filter-input" placeholder="Max">
+                        <div class="filter-content">
+                            <div class="filter-group">
+                                <label class="filter-label">Duration (seconds)</label>
+                                <div class="duration-range">
+                                    <input type="number" id="minDuration" class="filter-input" placeholder="Min" min="0">
+                                    <input type="number" id="maxDuration" class="filter-input" placeholder="Max" min="0">
+                                </div>
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label">Language</label>
+                                <select id="languageFilter" class="filter-select">
+                                    <option value="">All Languages</option>
+                                    <!-- Dynamic language options populated here -->
+                                </select>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Language Filter -->
+                    <!-- Template Filters -->
                     <div class="filter-section">
                         <h4>
-                            <span class="material-icons">language</span>
-                            Language
+                            <span class="material-icons">assignment</span>
+                            Evaluation Templates
                         </h4>
-                        <div class="filter-group">
-                            <select id="languageFilter" class="filter-select">
-                                <option value="">All Languages</option>
-                                <option value="english">English</option>
-                                <option value="spanish">Spanish</option>
-                                <!-- Add more languages as needed -->
-                            </select>
+                        <div class="filter-content">
+                            <div class="filter-group">
+                                <label class="filter-label">Template</label>
+                                <select id="templateFilter" class="filter-select">
+                                    <option value="">All Templates</option>
+                                    <!-- Dynamic template options populated here -->
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="filter-actions">
                     <button class="btn btn-primary" onclick="applyFilters()">
+                        <span class="material-icons">filter_alt</span>
                         Apply Filters
                     </button>
                     <button class="btn btn-secondary" onclick="clearFilters()">
+                        <span class="material-icons">clear</span>
                         Clear All
                     </button>
                     <div class="active-filters" id="activeFilters">
@@ -922,17 +954,21 @@
             <div class="chat-area">
                 <div class="chat-header">
                     <div>
-                        <div class="chat-title">Call Center Analytics</div>
-                        <div class="chat-subtitle">Ask questions about your call center data</div>
+                        <div class="chat-title">Call Center Analytics Dashboard</div>
+                        <div class="chat-subtitle">AI-powered insights from evaluation data</div>
                     </div>
                     <div class="chat-stats">
                         <div class="stat-item">
                             <span class="material-icons">dataset</span>
-                            <span id="totalRecords">0 records</span>
+                            <span id="totalRecords">0 evaluations</span>
                         </div>
                         <div class="stat-item">
                             <span class="material-icons">filter_alt</span>
                             <span id="activeFiltersCount">0 filters</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="material-icons">schedule</span>
+                            <span id="dateRange">All dates</span>
                         </div>
                     </div>
                 </div>
@@ -940,28 +976,37 @@
                 <div class="messages-container" id="messagesContainer">
                     <!-- Welcome Screen -->
                     <div class="welcome-screen" id="welcomeScreen">
-                        <div class="welcome-icon">🤖</div>
-                        <h2 class="welcome-title">Welcome to Metro AI Analytics</h2>
+                        <div class="welcome-icon">🎯</div>
+                        <h2 class="welcome-title">Metro AI Call Center Analytics</h2>
                         <p class="welcome-subtitle">
-                            Ask analytical questions about your call center data. Use the filters on the left to narrow down your analysis.
+                            Ask sophisticated questions about call center performance, agent effectiveness, 
+                            customer satisfaction, and operational insights. Use filters to focus your analysis.
                         </p>
                         
                         <div class="example-questions">
-                            <div class="example-card" onclick="askQuestion('What is the average call duration for account-related calls this month?')">
-                                <h4>📊 Performance Metrics</h4>
-                                <p>What is the average call duration for account-related calls this month?</p>
+                            <div class="example-card" onclick="askQuestion('What is the average call duration by agent and how does it compare to the team average?')">
+                                <h4>📊 Performance Analysis</h4>
+                                <p>What is the average call duration by agent and how does it compare to the team average?</p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('Show me calls where agents mentioned port out or transfer PIN')">
+                            <div class="example-card" onclick="askQuestion('Show me evaluations where customers mentioned port out or transfer PIN requests')">
                                 <h4>🔍 Content Analysis</h4>
-                                <p>Show me calls where agents mentioned port out or transfer PIN</p>
+                                <p>Show me evaluations where customers mentioned port out or transfer PIN requests</p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('Which agents have the highest customer satisfaction ratings?')">
+                            <div class="example-card" onclick="askQuestion('Which agents consistently score highest in customer satisfaction metrics?')">
                                 <h4>👥 Agent Performance</h4>
-                                <p>Which agents have the highest customer satisfaction ratings?</p>
+                                <p>Which agents consistently score highest in customer satisfaction metrics?</p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('What are the most common customer complaints this week?')">
-                                <h4>📝 Sentiment Analysis</h4>
-                                <p>What are the most common customer complaints this week?</p>
+                            <div class="example-card" onclick="askQuestion('What are the most common sub-dispositions for account-related calls this month?')">
+                                <h4>📈 Trend Analysis</h4>
+                                <p>What are the most common sub-dispositions for account-related calls this month?</p>
+                            </div>
+                            <div class="example-card" onclick="askQuestion('Analyze the quality scores for calls longer than 10 minutes')">
+                                <h4>⚡ Quality Insights</h4>
+                                <p>Analyze the quality scores for calls longer than 10 minutes</p>
+                            </div>
+                            <div class="example-card" onclick="askQuestion('Compare performance metrics between different sites and partners')">
+                                <h4>🏢 Site Comparison</h4>
+                                <p>Compare performance metrics between different sites and partners</p>
                             </div>
                         </div>
                     </div>
@@ -974,19 +1019,22 @@
 
                 <!-- Quick Questions -->
                 <div class="quick-questions" id="quickQuestions">
-                    <h4>💡 Quick Questions</h4>
+                    <h4>💡 Quick Analytics Questions</h4>
                     <div class="question-buttons">
-                        <button class="question-btn" onclick="askQuestion('What is the overall sentiment of calls today?')">
-                            Overall sentiment today
+                        <button class="question-btn" onclick="askQuestion('What is the overall quality score trend this week?')">
+                            Quality score trends
                         </button>
-                        <button class="question-btn" onclick="askQuestion('Show me the longest calls this week')">
-                            Longest calls this week
+                        <button class="question-btn" onclick="askQuestion('Show me the longest calls with poor evaluations')">
+                            Long calls with issues
                         </button>
-                        <button class="question-btn" onclick="askQuestion('Which agents need more training?')">
-                            Agents needing training
+                        <button class="question-btn" onclick="askQuestion('Which agents need additional training based on recent evaluations?')">
+                            Training opportunities
                         </button>
-                        <button class="question-btn" onclick="askQuestion('What are the trending issues?')">
-                            Trending issues
+                        <button class="question-btn" onclick="askQuestion('What are the most frequent customer complaints?')">
+                            Common complaints
+                        </button>
+                        <button class="question-btn" onclick="askQuestion('Compare morning vs afternoon call performance')">
+                            Time-based performance
                         </button>
                     </div>
                 </div>
@@ -997,13 +1045,13 @@
                         <textarea 
                             id="chatInput" 
                             class="chat-input" 
-                            placeholder="Ask a question about your call center data..."
+                            placeholder="Ask detailed questions about call center performance, agent effectiveness, quality scores, customer satisfaction..."
                             rows="1"
                             onkeydown="handleKeyPress(event)"
                         ></textarea>
                         <button class="send-btn" id="sendBtn" onclick="sendMessage()">
-                            <span class="material-icons">send</span>
-                            Send
+                            <span class="material-icons">analytics</span>
+                            Analyze
                         </button>
                     </div>
                 </div>
@@ -1011,385 +1059,6 @@
         </div>
     </div>
 
-    <script>
-        // Global state
-        let currentFilters = {};
-        let chatHistory = [];
-        let isLoading = false;
-
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            initializePage();
-            loadFilterOptions();
-            updateStats();
-        });
-
-        function initializePage() {
-            // Set default date range to last 30 days
-            const today = new Date();
-            const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
-            
-            document.getElementById('endDate').value = today.toISOString().split('T')[0];
-            document.getElementById('startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
-
-            // Auto-resize textarea
-            const chatInput = document.getElementById('chatInput');
-            chatInput.addEventListener('input', function() {
-                this.style.height = 'auto';
-                this.style.height = this.scrollHeight + 'px';
-            });
-        }
-
-        async function loadFilterOptions() {
-            try {
-                // This would typically load from your API
-                // For now, we'll use sample data
-                const sampleData = {
-                    agents: ['Rey Mendoza', 'Maria Garcia', 'John Smith', 'Sarah Johnson'],
-                    dispositions: ['Account', 'Technical Support', 'Billing', 'Port Out'],
-                    sites: ['Dasma', 'Manila', 'Cebu', 'Davao'],
-                    lobs: ['WNP', 'Prepaid', 'Postpaid', 'Business']
-                };
-
-                populateFilterOptions(sampleData);
-            } catch (error) {
-                console.error('Error loading filter options:', error);
-            }
-        }
-
-        function populateFilterOptions(data) {
-            // Populate agent filters
-            const agentFilters = document.getElementById('agentFilters');
-            data.agents.forEach(agent => {
-                const div = document.createElement('div');
-                div.className = 'checkbox-item';
-                div.innerHTML = `
-                    <input type="checkbox" id="agent-${agent}" value="${agent}">
-                    <label for="agent-${agent}">${agent}</label>
-                `;
-                agentFilters.appendChild(div);
-            });
-
-            // Populate disposition filters
-            const dispositionFilters = document.getElementById('dispositionFilters');
-            data.dispositions.forEach(disposition => {
-                const div = document.createElement('div');
-                div.className = 'checkbox-item';
-                div.innerHTML = `
-                    <input type="checkbox" id="disp-${disposition}" value="${disposition}">
-                    <label for="disp-${disposition}">${disposition}</label>
-                `;
-                dispositionFilters.appendChild(div);
-            });
-
-            // Populate site filter
-            const siteFilter = document.getElementById('siteFilter');
-            data.sites.forEach(site => {
-                const option = document.createElement('option');
-                option.value = site;
-                option.textContent = site;
-                siteFilter.appendChild(option);
-            });
-
-            // Populate LOB filter
-            const lobFilter = document.getElementById('lobFilter');
-            data.lobs.forEach(lob => {
-                const option = document.createElement('option');
-                option.value = lob;
-                option.textContent = lob;
-                lobFilter.appendChild(option);
-            });
-        }
-
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('open');
-        }
-
-        function applyFilters() {
-            currentFilters = collectFilters();
-            updateActiveFilters();
-            updateStats();
-            
-            // If there are messages, refresh the analysis
-            if (chatHistory.length > 0) {
-                addMessage('system', 'Filters updated. Your analysis will now use the new filter criteria.');
-            }
-        }
-
-        function collectFilters() {
-            const filters = {};
-
-            // Date range
-            const startDate = document.getElementById('startDate').value;
-            const endDate = document.getElementById('endDate').value;
-            if (startDate) filters.startDate = startDate;
-            if (endDate) filters.endDate = endDate;
-
-            // Agents
-            const selectedAgents = Array.from(document.querySelectorAll('#agentFilters input[type="checkbox"]:checked:not([value="all"])'))
-                .map(checkbox => checkbox.value);
-            if (selectedAgents.length > 0) filters.agents = selectedAgents;
-
-            // Dispositions
-            const selectedDispositions = Array.from(document.querySelectorAll('#dispositionFilters input[type="checkbox"]:checked:not([value="all"])'))
-                .map(checkbox => checkbox.value);
-            if (selectedDispositions.length > 0) filters.dispositions = selectedDispositions;
-
-            // Site
-            const site = document.getElementById('siteFilter').value;
-            if (site) filters.site = site;
-
-            // LOB
-            const lob = document.getElementById('lobFilter').value;
-            if (lob) filters.lob = lob;
-
-            // Duration
-            const minDuration = document.getElementById('minDuration').value;
-            const maxDuration = document.getElementById('maxDuration').value;
-            if (minDuration) filters.minDuration = parseInt(minDuration);
-            if (maxDuration) filters.maxDuration = parseInt(maxDuration);
-
-            // Language
-            const language = document.getElementById('languageFilter').value;
-            if (language) filters.language = language;
-
-            return filters;
-        }
-
-        function updateActiveFilters() {
-            const activeFiltersDiv = document.getElementById('activeFilters');
-            activeFiltersDiv.innerHTML = '';
-
-            const filterCount = Object.keys(currentFilters).length;
-            document.getElementById('activeFiltersCount').textContent = `${filterCount} filters`;
-
-            Object.entries(currentFilters).forEach(([key, value]) => {
-                const tag = document.createElement('span');
-                tag.className = 'filter-tag';
-                
-                let displayValue = value;
-                if (Array.isArray(value)) {
-                    displayValue = value.length > 2 ? `${value.length} selected` : value.join(', ');
-                }
-                
-                tag.innerHTML = `
-                    ${key}: ${displayValue}
-                    <span class="material-icons remove" onclick="removeFilter('${key}')">close</span>
-                `;
-                activeFiltersDiv.appendChild(tag);
-            });
-        }
-
-        function removeFilter(filterKey) {
-            delete currentFilters[filterKey];
-            updateActiveFilters();
-            updateStats();
-        }
-
-        function clearFilters() {
-            currentFilters = {};
-            updateActiveFilters();
-            updateStats();
-            
-            // Reset form
-            document.getElementById('startDate').value = '';
-            document.getElementById('endDate').value = '';
-            document.getElementById('siteFilter').value = '';
-            document.getElementById('lobFilter').value = '';
-            document.getElementById('minDuration').value = '';
-            document.getElementById('maxDuration').value = '';
-            document.getElementById('languageFilter').value = '';
-            
-            // Uncheck all checkboxes
-            document.querySelectorAll('#agentFilters input[type="checkbox"]:not([value="all"])').forEach(cb => cb.checked = false);
-            document.querySelectorAll('#dispositionFilters input[type="checkbox"]:not([value="all"])').forEach(cb => cb.checked = false);
-            document.querySelectorAll('input[value="all"]').forEach(cb => cb.checked = true);
-        }
-
-        function updateStats() {
-            // This would typically make an API call to get actual stats
-            // For now, we'll simulate it
-            const recordCount = Math.floor(Math.random() * 1000) + 100;
-            document.getElementById('totalRecords').textContent = `${recordCount} records`;
-        }
-
-        function askQuestion(question) {
-            document.getElementById('chatInput').value = question;
-            sendMessage();
-        }
-
-        function handleKeyPress(event) {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                sendMessage();
-            }
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('chatInput');
-            const message = input.value.trim();
-            
-            if (!message || isLoading) return;
-            
-            input.value = '';
-            input.style.height = 'auto';
-            
-            // Hide welcome screen, show chat
-            document.getElementById('welcomeScreen').classList.add('hidden');
-            document.getElementById('chatMessages').classList.remove('hidden');
-            
-            // Add user message
-            addMessage('user', message);
-            
-            // Show loading
-            isLoading = true;
-            updateSendButton();
-            addLoadingMessage();
-            
-            try {
-                // Make API call with filters
-                const response = await fetch('/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        message: message,
-                        history: chatHistory,
-                        filters: currentFilters
-                    })
-                });
-                
-                const data = await response.json();
-                
-                // Remove loading message
-                removeLoadingMessage();
-                
-                // Add assistant response
-                addMessage('assistant', data.reply || 'Sorry, I couldn\'t process your request.');
-                
-            } catch (error) {
-                console.error('Error:', error);
-                removeLoadingMessage();
-                addMessage('assistant', 'Sorry, there was an error processing your request. Please try again.');
-            } finally {
-                isLoading = false;
-                updateSendButton();
-            }
-        }
-
-        function addMessage(sender, content) {
-            const messagesContainer = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${sender}`;
-            
-            const timestamp = new Date().toLocaleTimeString();
-            
-            messageDiv.innerHTML = `
-                <div class="message-content">
-                    ${content}
-                </div>
-                <div class="message-meta">
-                    <span>${timestamp}</span>
-                    ${sender === 'assistant' ? '<span class="material-icons">smart_toy</span>' : '<span class="material-icons">person</span>'}
-                </div>
-            `;
-            
-            messagesContainer.appendChild(messageDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            
-            // Add to history
-            chatHistory.push({
-                role: sender === 'user' ? 'user' : 'assistant',
-                content: content
-            });
-        }
-
-        function addLoadingMessage() {
-            const messagesContainer = document.getElementById('chatMessages');
-            const loadingDiv = document.createElement('div');
-            loadingDiv.className = 'message assistant';
-            loadingDiv.id = 'loadingMessage';
-            loadingDiv.innerHTML = `
-                <div class="message-content">
-                    <div class="loading-indicator">
-                        <div class="spinner"></div>
-                        Analyzing your data...
-                    </div>
-                </div>
-            `;
-            messagesContainer.appendChild(loadingDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        function removeLoadingMessage() {
-            const loadingMessage = document.getElementById('loadingMessage');
-            if (loadingMessage) {
-                loadingMessage.remove();
-            }
-        }
-
-        function updateSendButton() {
-            const sendBtn = document.getElementById('sendBtn');
-            sendBtn.disabled = isLoading;
-            sendBtn.innerHTML = isLoading ? 
-                '<div class="spinner"></div> Sending...' : 
-                '<span class="material-icons">send</span> Send';
-        }
-
-        function clearChat() {
-            chatHistory = [];
-            document.getElementById('chatMessages').innerHTML = '';
-            document.getElementById('chatMessages').classList.add('hidden');
-            document.getElementById('welcomeScreen').classList.remove('hidden');
-        }
-
-        function exportChat() {
-            if (chatHistory.length === 0) {
-                alert('No chat history to export');
-                return;
-            }
-            
-            const chatText = chatHistory.map(msg => 
-                `${msg.role.toUpperCase()}: ${msg.content}`
-            ).join('\n\n');
-            
-            const blob = new Blob([chatText], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `metro-ai-chat-${new Date().toISOString().split('T')[0]}.txt`;
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        // Handle checkbox group behavior
-        document.addEventListener('change', function(event) {
-            if (event.target.type === 'checkbox') {
-                const group = event.target.closest('.checkbox-group');
-                if (!group) return;
-                
-                const allCheckbox = group.querySelector('input[value="all"]');
-                const otherCheckboxes = group.querySelectorAll('input[type="checkbox"]:not([value="all"])');
-                
-                if (event.target.value === 'all') {
-                    if (event.target.checked) {
-                        otherCheckboxes.forEach(cb => cb.checked = false);
-                    }
-                } else {
-                    if (event.target.checked) {
-                        allCheckbox.checked = false;
-                    } else {
-                        // If no other checkboxes are selected, check "all"
-                        const anySelected = Array.from(otherCheckboxes).some(cb => cb.checked);
-                        if (!anySelected) {
-                            allCheckbox.checked = true;
-                        }
-                    }
-                }
-            }
-        });
-    </script>
+    <script src="/static/chat.js"></script>
 </body>
 </html>

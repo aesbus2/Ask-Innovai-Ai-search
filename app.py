@@ -952,16 +952,17 @@ async def health():
 
 @app.post("/chat")
 async def chat_handler(request: ChatRequest):
-    """Enhanced analytics chat functionality with filter support"""
+    """Comprehensive analytics chat functionality with full metadata support"""
     try:
         if not GENAI_ACCESS_KEY:
             return {"reply": "Chat service not configured. Please set GENAI_ACCESS_KEY."}
         
-        # Extract filters from request
+        # Extract comprehensive filters and metadata focus
         filters = getattr(request, 'filters', {})
         is_analytics = getattr(request, 'analytics', False)
+        metadata_focus = getattr(request, 'metadata_focus', [])
         
-        # Search for context with filters
+        # Search for context with comprehensive filters
         context = ""
         sources = []
         
@@ -970,27 +971,39 @@ async def chat_handler(request: ChatRequest):
             conn_status = get_connection_status()
             
             if conn_status.get("connected", False):
-                # Build search with filters
+                # Build comprehensive search with all filters
                 search_results = search_opensearch_with_filters(
                     request.message, 
                     filters=filters,
                     index_override="Ai Corporate SPTR - TEST",
-                    size=5
+                    size=8  # Increased for better analytics
                 )
                 
                 if search_results:
-                    # Extract context from multiple results for better analytics
+                    # Extract comprehensive context from multiple results
                     context_parts = []
-                    for result in search_results[:3]:  # Use top 3 results
+                    for result in search_results[:5]:  # Use top 5 results
                         source_data = result.get('_source', {})
                         text = source_data.get('text', '')
+                        metadata = source_data.get('metadata', {})
+                        
                         if text:
-                            context_parts.append(text[:300])  # Truncate each piece
+                            # Create rich context with metadata
+                            context_piece = f"Evaluation: {text[:250]}"
+                            if metadata:
+                                context_piece += f"\nMetadata: Agent={metadata.get('agentName', 'Unknown')}, "
+                                context_piece += f"Disposition={metadata.get('disposition', 'Unknown')}, "
+                                context_piece += f"SubDisposition={metadata.get('subDisposition', 'None')}, "
+                                context_piece += f"Duration={metadata.get('call_duration', 'Unknown')}s, "
+                                context_piece += f"Site={metadata.get('site', 'Unknown')}, "
+                                context_piece += f"Partner={metadata.get('partner', 'Unknown')}"
+                            
+                            context_parts.append(context_piece)
                             
                             # Add to sources for frontend display
                             sources.append({
                                 'text': text,
-                                'metadata': source_data.get('metadata', {}),
+                                'metadata': metadata,
                                 'score': result.get('_score', 0)
                             })
                     
@@ -1000,50 +1013,77 @@ async def chat_handler(request: ChatRequest):
             logger.warning(f"Search context failed: {e}")
             pass
         
-        # Build enhanced system message for analytics
+        # Build enhanced system message for comprehensive analytics
         if is_analytics:
-            system_msg = """You are MetroAI Analytics, an intelligent assistant specialized in analyzing Metro by T-Mobile call center data.
+            system_msg = """You are MetroAI Analytics, an advanced call center analytics specialist for Metro by T-Mobile.
 
-Your capabilities include:
-- Analyzing call patterns, duration, and volume
-- Identifying customer sentiment and satisfaction trends
-- Evaluating agent performance and training needs
-- Spotting common issues and resolution patterns
-- Providing actionable insights for operations improvement
+Your comprehensive capabilities include:
+- Performance Analysis: Call duration, resolution rates, quality scores, efficiency metrics
+- Agent Evaluation: Individual performance, training needs, improvement areas, strengths
+- Customer Experience: Satisfaction indicators, complaint patterns, service quality
+- Operational Intelligence: Peak time analysis, resource optimization, workflow efficiency
+- Quality Assurance: Evaluation scores, compliance metrics, coaching opportunities
+- Business Intelligence: Partner/site comparisons, LOB performance, trend analysis
 
-When analyzing data, consider:
-- Call metadata (agent, disposition, site, LOB, duration, date)
-- Customer interaction patterns
-- Agent performance indicators
-- Operational efficiency metrics
-- Customer satisfaction signals
+Available Metadata Fields for Analysis:
+- internalId: Main reference ID for all evaluations
+- evaluationId: Unique evaluation identifier
+- template_id: Evaluation template reference (always use this over template_name)
+- template_name: Template display name (may change)
+- partner: Call center partner organization
+- site: Specific location/site within partner
+- lob: Line of Business (WNP, Prepaid, Postpaid, Business, Enterprise)
+- agentName: Agent being evaluated
+- agentId: Agent identifier for searches
+- disposition: Main call category (Account, Technical Support, Billing, etc.)
+- subDisposition: Specific call reason within disposition
+- created_on: When evaluation was created in system
+- call_date: When customer actually called (use for temporal analysis)
+- call_duration: Call length in seconds
+- language: Call language
+- url: Direct link to evaluation details
 
-Always provide specific, actionable insights based on the data."""
+Analysis Guidelines:
+- Always reference template_id instead of template_name for consistency
+- Use call_date for temporal analysis (customer call time)
+- Use created_on for evaluation workflow analysis
+- Normalize dates when analyzing trends
+- Consider partner/site relationships in performance comparisons
+- Factor in LOB differences when comparing metrics
+- Use agentId for accurate agent performance tracking
+- Include specific examples from evaluation data when possible
+- Provide actionable insights for operations improvement
+
+When analyzing transcript data, preserve speaker context and don't split conversations between speakers."""
         else:
             system_msg = "You are MetroAI, an intelligent assistant for Metro by T-Mobile customer service operations."
         
-        # Add filter context
+        # Add comprehensive filter context
         if filters:
-            filter_context = "Current analysis filters: "
+            filter_context = "Analysis is filtered by: "
             filter_parts = []
+            
             for key, value in filters.items():
                 if isinstance(value, list):
                     filter_parts.append(f"{key}: {', '.join(value)}")
+                elif key in ['startCallDate', 'endCallDate', 'startCreatedDate', 'endCreatedDate']:
+                    filter_parts.append(f"{key}: {value}")
                 else:
                     filter_parts.append(f"{key}: {value}")
+            
             filter_context += "; ".join(filter_parts)
-            system_msg += f"\n\n{filter_context}"
+            system_msg += f"\n\nCurrent Filter Context: {filter_context}"
         
-        # Add search context
+        # Add comprehensive search context
         if context:
-            system_msg += f"\n\nRelevant data context:\n{context}"
+            system_msg += f"\n\nRelevant Evaluation Data:\n{context}"
         
-        # Build messages
+        # Build messages for AI
         messages = [{"role": "system", "content": system_msg}]
         messages.extend([{"role": m["role"], "content": m["content"]} for m in request.history])
         messages.append({"role": "user", "content": request.message})
         
-        # Call AI service
+        # Call AI service with enhanced context
         payload = {"model": GENAI_ACCESS_KEY, "messages": messages}
         
         response = requests.post(
@@ -1053,26 +1093,29 @@ Always provide specific, actionable insights based on the data."""
                 "Content-Type": "application/json"
             },
             json=payload,
-            timeout=30
+            timeout=45  # Increased timeout for complex analytics
         )
         
         if response.status_code == 200:
             data = response.json()
             reply = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             
-            # Return enhanced response with sources
+            # Return comprehensive response with sources and metadata
             return {
                 "reply": reply.strip() if reply else "Sorry, I couldn't generate a response.",
-                "sources": sources[:3] if sources else [],  # Limit sources
+                "sources": sources[:5] if sources else [],  # Limit to 5 most relevant
                 "filters_applied": filters,
-                "context_found": bool(context)
+                "context_found": bool(context),
+                "metadata_fields_available": len(metadata_focus) if metadata_focus else 0,
+                "search_results_count": len(sources)
             }
         else:
-            return {"reply": "AI service temporarily unavailable"}
+            logger.error(f"AI service error: {response.status_code} - {response.text}")
+            return {"reply": "AI service temporarily unavailable. Please try again."}
             
     except Exception as e:
-        logger.error(f"Chat error: {e}")
-        return {"reply": "Sorry, there was an error. Please try again."}
+        logger.error(f"Comprehensive chat error: {e}")
+        return {"reply": "Sorry, there was an error processing your analytics request. Please try again."}
 
 @app.get("/search")
 async def search(q: str):

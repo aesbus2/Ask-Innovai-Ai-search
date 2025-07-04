@@ -1,5 +1,5 @@
-// Enhanced chat.js for Metro AI Analytics
-// Version: 2.0.0 - Analytics-focused with advanced filtering
+// Enhanced Metro AI Call Center Analytics Chat
+// Version: 3.0.0 - Comprehensive Metadata Support
 
 // Global state management
 let currentFilters = {};
@@ -8,13 +8,17 @@ let isLoading = false;
 let filterOptions = {
     agents: [],
     dispositions: [],
+    subDispositions: [],
+    partners: [],
     sites: [],
-    lobs: []
+    lobs: [],
+    languages: [],
+    templates: []
 };
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Metro AI Analytics Chat initializing...');
+    console.log('🚀 Metro AI Call Center Analytics initializing...');
     initializePage();
     loadFilterOptions();
     updateStats();
@@ -31,11 +35,11 @@ function initializePage() {
     const today = new Date();
     const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
     
-    const endDateInput = document.getElementById('endDate');
-    const startDateInput = document.getElementById('startDate');
+    const endCallDate = document.getElementById('endCallDate');
+    const startCallDate = document.getElementById('startCallDate');
     
-    if (endDateInput) endDateInput.value = today.toISOString().split('T')[0];
-    if (startDateInput) startDateInput.value = thirtyDaysAgo.toISOString().split('T')[0];
+    if (endCallDate) endCallDate.value = today.toISOString().split('T')[0];
+    if (startCallDate) startCallDate.value = thirtyDaysAgo.toISOString().split('T')[0];
 
     // Auto-resize textarea
     const chatInput = document.getElementById('chatInput');
@@ -49,6 +53,9 @@ function initializePage() {
     // Initialize event listeners
     setupEventListeners();
     
+    // Update date range display
+    updateDateRangeDisplay();
+    
     console.log('✅ Page initialization complete');
 }
 
@@ -60,15 +67,14 @@ function setupEventListeners() {
         }
     });
 
-    // Handle filter changes
-    document.addEventListener('change', function(event) {
-        if (event.target.classList.contains('filter-input') || 
-            event.target.classList.contains('filter-select')) {
-            // Auto-apply filters when they change (optional)
-            // You might want to debounce this
-            // setTimeout(() => applyFilters(), 500);
-        }
+    // Handle partner/site relationship
+    document.getElementById('partnerFilter')?.addEventListener('change', function(event) {
+        updateSiteOptions(event.target.value);
     });
+
+    // Handle date changes
+    document.getElementById('startCallDate')?.addEventListener('change', updateDateRangeDisplay);
+    document.getElementById('endCallDate')?.addEventListener('change', updateDateRangeDisplay);
 }
 
 function handleCheckboxGroupChange(event) {
@@ -95,15 +101,34 @@ function handleCheckboxGroupChange(event) {
     }
 }
 
+function updateDateRangeDisplay() {
+    const startDate = document.getElementById('startCallDate')?.value;
+    const endDate = document.getElementById('endCallDate')?.value;
+    const dateRangeDisplay = document.getElementById('dateRange');
+    
+    if (dateRangeDisplay) {
+        if (startDate && endDate) {
+            const start = new Date(startDate).toLocaleDateString();
+            const end = new Date(endDate).toLocaleDateString();
+            dateRangeDisplay.textContent = `${start} - ${end}`;
+        } else if (startDate) {
+            dateRangeDisplay.textContent = `From ${new Date(startDate).toLocaleDateString()}`;
+        } else if (endDate) {
+            dateRangeDisplay.textContent = `Until ${new Date(endDate).toLocaleDateString()}`;
+        } else {
+            dateRangeDisplay.textContent = 'All dates';
+        }
+    }
+}
+
 // =============================================================================
 // FILTER MANAGEMENT
 // =============================================================================
 
 async function loadFilterOptions() {
-    console.log('📊 Loading filter options...');
+    console.log('📊 Loading comprehensive filter options...');
     
     try {
-        // Try to load real filter options from the backend
         const response = await fetch('/filter_options');
         if (response.ok) {
             const data = await response.json();
@@ -115,12 +140,36 @@ async function loadFilterOptions() {
     } catch (error) {
         console.warn('⚠️ Could not load filter options from API, using sample data:', error);
         
-        // Fallback to sample data
+        // Comprehensive fallback data
         filterOptions = {
-            agents: ['Rey Mendoza', 'Maria Garcia', 'John Smith', 'Sarah Johnson', 'Ana Rodriguez', 'David Chen'],
-            dispositions: ['Account', 'Technical Support', 'Billing', 'Port Out - Questions/pin/acct #', 'Service Inquiry', 'Complaint'],
-            sites: ['Dasma', 'Manila', 'Cebu', 'Davao', 'Iloilo', 'Bacolod'],
-            lobs: ['WNP', 'Prepaid', 'Postpaid', 'Business', 'Enterprise']
+            agents: [
+                'Rey Mendoza', 'Maria Garcia', 'John Smith', 'Sarah Johnson', 
+                'Ana Rodriguez', 'David Chen', 'Lisa Wang', 'Carlos Martinez',
+                'Jennifer Taylor', 'Michael Brown', 'Ashley Davis', 'Robert Wilson'
+            ],
+            dispositions: [
+                'Account', 'Technical Support', 'Billing', 'Port Out', 
+                'Service Inquiry', 'Complaint', 'New Service', 'Upgrade Request',
+                'Cancellation', 'Payment Issue', 'Device Support', 'Network Issue'
+            ],
+            subDispositions: [
+                'Port Out - Questions/pin/acct #', 'Account - Profile Update',
+                'Billing - Payment Plan', 'Technical - Device Setup', 'Service - Plan Change',
+                'Complaint - Service Quality', 'New Service - Activation', 'Upgrade - Device',
+                'Cancellation - Retention', 'Payment - Past Due', 'Device - Replacement',
+                'Network - Coverage Issue', 'Account - Security', 'Billing - Dispute'
+            ],
+            partners: ['iQor', 'Teleperformance', 'Concentrix', 'Alorica', 'Sitel'],
+            sites: [
+                'Dasma', 'Manila', 'Cebu', 'Davao', 'Iloilo', 'Bacolod',
+                'Quezon City', 'Makati', 'Taguig', 'Pasig', 'Calamba'
+            ],
+            lobs: ['WNP', 'Prepaid', 'Postpaid', 'Business', 'Enterprise', 'Government'],
+            languages: ['english', 'spanish', 'tagalog', 'cebuano'],
+            templates: [
+                'Ai Corporate SPTR - TEST', 'Customer Service Quality', 'Technical Support QA',
+                'Billing Specialist Review', 'Retention Specialist Evaluation', 'Sales Performance'
+            ]
         };
     }
     
@@ -128,68 +177,67 @@ async function loadFilterOptions() {
 }
 
 function populateFilterOptions(data) {
-    console.log('🔧 Populating filter UI elements...');
+    console.log('🔧 Populating comprehensive filter UI elements...');
     
     try {
         // Populate agent filters
-        const agentFilters = document.getElementById('agentFilters');
-        if (agentFilters && data.agents) {
-            data.agents.forEach(agent => {
-                const div = document.createElement('div');
-                div.className = 'checkbox-item';
-                div.innerHTML = `
-                    <input type="checkbox" id="agent-${agent.replace(/\s+/g, '-')}" value="${agent}">
-                    <label for="agent-${agent.replace(/\s+/g, '-')}">${agent}</label>
-                `;
-                agentFilters.appendChild(div);
-            });
-        }
-
-        // Populate disposition filters
-        const dispositionFilters = document.getElementById('dispositionFilters');
-        if (dispositionFilters && data.dispositions) {
-            data.dispositions.forEach(disposition => {
-                const div = document.createElement('div');
-                div.className = 'checkbox-item';
-                const safeId = disposition.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
-                div.innerHTML = `
-                    <input type="checkbox" id="disp-${safeId}" value="${disposition}">
-                    <label for="disp-${safeId}">${disposition}</label>
-                `;
-                dispositionFilters.appendChild(div);
-            });
-        }
-
-        // Populate site filter
-        const siteFilter = document.getElementById('siteFilter');
-        if (siteFilter && data.sites) {
-            data.sites.forEach(site => {
-                const option = document.createElement('option');
-                option.value = site;
-                option.textContent = site;
-                siteFilter.appendChild(option);
-            });
-        }
-
-        // Populate LOB filter
-        const lobFilter = document.getElementById('lobFilter');
-        if (lobFilter && data.lobs) {
-            data.lobs.forEach(lob => {
-                const option = document.createElement('option');
-                option.value = lob;
-                option.textContent = lob;
-                lobFilter.appendChild(option);
-            });
-        }
+        populateCheckboxGroup('agentFilters', data.agents, 'agent');
         
-        console.log('✅ Filter options populated successfully');
+        // Populate disposition filters
+        populateCheckboxGroup('dispositionFilters', data.dispositions, 'disp');
+        
+        // Populate sub-disposition filters
+        populateCheckboxGroup('subDispositionFilters', data.subDispositions, 'subdisp');
+        
+        // Populate dropdown options
+        populateSelectOptions('partnerFilter', data.partners);
+        populateSelectOptions('siteFilter', data.sites);
+        populateSelectOptions('lobFilter', data.lobs);
+        populateSelectOptions('languageFilter', data.languages);
+        populateSelectOptions('templateFilter', data.templates);
+        
+        console.log('✅ All filter options populated successfully');
     } catch (error) {
         console.error('❌ Error populating filter options:', error);
     }
 }
 
+function populateCheckboxGroup(containerId, options, prefix) {
+    const container = document.getElementById(containerId);
+    if (!container || !options) return;
+    
+    options.forEach(option => {
+        const div = document.createElement('div');
+        div.className = 'checkbox-item';
+        const safeId = `${prefix}-${option.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '_')}`;
+        div.innerHTML = `
+            <input type="checkbox" id="${safeId}" value="${option}">
+            <label for="${safeId}">${option}</label>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function populateSelectOptions(selectId, options) {
+    const select = document.getElementById(selectId);
+    if (!select || !options) return;
+    
+    options.forEach(option => {
+        const optionElement = document.createElement('option');
+        optionElement.value = option;
+        optionElement.textContent = option;
+        select.appendChild(optionElement);
+    });
+}
+
+function updateSiteOptions(selectedPartner) {
+    // This could be enhanced to filter sites based on partner
+    // For now, it's a placeholder for future enhancement
+    console.log('🏢 Partner selected:', selectedPartner);
+}
+
 function applyFilters() {
-    console.log('🔍 Applying filters...');
+    console.log('🔍 Applying comprehensive filters...');
     
     currentFilters = collectFilters();
     updateActiveFilters();
@@ -199,7 +247,7 @@ function applyFilters() {
     
     // If there are messages, refresh the analysis
     if (chatHistory.length > 0) {
-        addMessage('system', '🔄 Filters updated. Your analysis will now use the new filter criteria.');
+        addMessage('system', '🔄 Filters updated. Your analysis will now use the new filter criteria for more targeted insights.');
     }
 }
 
@@ -207,39 +255,53 @@ function collectFilters() {
     const filters = {};
 
     try {
-        // Date range
-        const startDate = document.getElementById('startDate')?.value;
-        const endDate = document.getElementById('endDate')?.value;
-        if (startDate) filters.startDate = startDate;
-        if (endDate) filters.endDate = endDate;
+        // Date range filters
+        const startCallDate = document.getElementById('startCallDate')?.value;
+        const endCallDate = document.getElementById('endCallDate')?.value;
+        const startCreatedDate = document.getElementById('startCreatedDate')?.value;
+        const endCreatedDate = document.getElementById('endCreatedDate')?.value;
+        
+        if (startCallDate) filters.startCallDate = startCallDate;
+        if (endCallDate) filters.endCallDate = endCallDate;
+        if (startCreatedDate) filters.startCreatedDate = startCreatedDate;
+        if (endCreatedDate) filters.endCreatedDate = endCreatedDate;
 
-        // Agents
+        // Agent filters
         const selectedAgents = Array.from(document.querySelectorAll('#agentFilters input[type="checkbox"]:checked:not([value="all"])'))
             .map(checkbox => checkbox.value);
         if (selectedAgents.length > 0) filters.agents = selectedAgents;
 
-        // Dispositions
+        // Disposition filters
         const selectedDispositions = Array.from(document.querySelectorAll('#dispositionFilters input[type="checkbox"]:checked:not([value="all"])'))
             .map(checkbox => checkbox.value);
         if (selectedDispositions.length > 0) filters.dispositions = selectedDispositions;
 
-        // Site
-        const site = document.getElementById('siteFilter')?.value;
-        if (site) filters.site = site;
+        // Sub-disposition filters
+        const selectedSubDispositions = Array.from(document.querySelectorAll('#subDispositionFilters input[type="checkbox"]:checked:not([value="all"])'))
+            .map(checkbox => checkbox.value);
+        if (selectedSubDispositions.length > 0) filters.subDispositions = selectedSubDispositions;
 
-        // LOB
+        // Organization filters
+        const partner = document.getElementById('partnerFilter')?.value;
+        const site = document.getElementById('siteFilter')?.value;
         const lob = document.getElementById('lobFilter')?.value;
+        
+        if (partner) filters.partner = partner;
+        if (site) filters.site = site;
         if (lob) filters.lob = lob;
 
-        // Duration
+        // Call characteristics
         const minDuration = document.getElementById('minDuration')?.value;
         const maxDuration = document.getElementById('maxDuration')?.value;
+        const language = document.getElementById('languageFilter')?.value;
+        
         if (minDuration) filters.minDuration = parseInt(minDuration);
         if (maxDuration) filters.maxDuration = parseInt(maxDuration);
-
-        // Language
-        const language = document.getElementById('languageFilter')?.value;
         if (language) filters.language = language;
+
+        // Template filter
+        const template = document.getElementById('templateFilter')?.value;
+        if (template) filters.template = template;
 
     } catch (error) {
         console.error('❌ Error collecting filters:', error);
@@ -265,12 +327,38 @@ function updateActiveFilters() {
         tag.className = 'filter-tag';
         
         let displayValue = value;
+        let displayKey = key;
+        
+        // Format display names
+        const keyMap = {
+            'startCallDate': 'Call From',
+            'endCallDate': 'Call To',
+            'startCreatedDate': 'Created From',
+            'endCreatedDate': 'Created To',
+            'agents': 'Agents',
+            'dispositions': 'Dispositions',
+            'subDispositions': 'Sub-Dispositions',
+            'partner': 'Partner',
+            'site': 'Site',
+            'lob': 'LOB',
+            'minDuration': 'Min Duration',
+            'maxDuration': 'Max Duration',
+            'language': 'Language',
+            'template': 'Template'
+        };
+        
+        displayKey = keyMap[key] || key;
+        
         if (Array.isArray(value)) {
             displayValue = value.length > 2 ? `${value.length} selected` : value.join(', ');
+        } else if (key.includes('Date')) {
+            displayValue = new Date(value).toLocaleDateString();
+        } else if (key.includes('Duration')) {
+            displayValue = `${value}s`;
         }
         
         tag.innerHTML = `
-            ${key}: ${displayValue}
+            ${displayKey}: ${displayValue}
             <span class="material-icons remove" onclick="removeFilter('${key}')">close</span>
         `;
         activeFiltersDiv.appendChild(tag);
@@ -282,6 +370,7 @@ function removeFilter(filterKey) {
     delete currentFilters[filterKey];
     updateActiveFilters();
     updateStats();
+    updateDateRangeDisplay();
 }
 
 function clearFilters() {
@@ -290,11 +379,13 @@ function clearFilters() {
     currentFilters = {};
     updateActiveFilters();
     updateStats();
+    updateDateRangeDisplay();
     
-    // Reset form elements
+    // Reset all form elements
     const elementsToReset = [
-        'startDate', 'endDate', 'siteFilter', 'lobFilter', 
-        'minDuration', 'maxDuration', 'languageFilter'
+        'startCallDate', 'endCallDate', 'startCreatedDate', 'endCreatedDate',
+        'partnerFilter', 'siteFilter', 'lobFilter', 'languageFilter', 'templateFilter',
+        'minDuration', 'maxDuration'
     ];
     
     elementsToReset.forEach(id => {
@@ -302,10 +393,16 @@ function clearFilters() {
         if (element) element.value = '';
     });
     
-    // Uncheck all checkboxes except "all"
-    document.querySelectorAll('#agentFilters input[type="checkbox"]:not([value="all"])').forEach(cb => cb.checked = false);
-    document.querySelectorAll('#dispositionFilters input[type="checkbox"]:not([value="all"])').forEach(cb => cb.checked = false);
-    document.querySelectorAll('input[value="all"]').forEach(cb => cb.checked = true);
+    // Reset checkbox groups
+    const checkboxGroups = ['agentFilters', 'dispositionFilters', 'subDispositionFilters'];
+    checkboxGroups.forEach(groupId => {
+        const group = document.getElementById(groupId);
+        if (group) {
+            group.querySelectorAll('input[type="checkbox"]:not([value="all"])').forEach(cb => cb.checked = false);
+            const allCheckbox = group.querySelector('input[value="all"]');
+            if (allCheckbox) allCheckbox.checked = true;
+        }
+    });
     
     console.log('✅ All filters cleared');
 }
@@ -315,7 +412,7 @@ function clearFilters() {
 // =============================================================================
 
 async function updateStats() {
-    console.log('📊 Updating statistics...');
+    console.log('📊 Updating statistics with current filters...');
     
     try {
         const response = await fetch('/analytics/stats', {
@@ -332,7 +429,7 @@ async function updateStats() {
             const data = await response.json();
             const totalRecords = document.getElementById('totalRecords');
             if (totalRecords) {
-                totalRecords.textContent = `${data.totalRecords || 0} records`;
+                totalRecords.textContent = `${data.totalRecords || 0} evaluations`;
             }
             console.log('✅ Statistics updated:', data);
         } else {
@@ -345,7 +442,7 @@ async function updateStats() {
         const recordCount = Math.floor(Math.random() * 1000) + 100;
         const totalRecords = document.getElementById('totalRecords');
         if (totalRecords) {
-            totalRecords.textContent = `${recordCount} records`;
+            totalRecords.textContent = `${recordCount} evaluations`;
         }
     }
 }
@@ -387,8 +484,8 @@ async function sendMessage() {
     input.value = '';
     input.style.height = 'auto';
     
-    console.log('💬 Sending message:', message);
-    console.log('🔍 With filters:', currentFilters);
+    console.log('💬 Sending analytics message:', message);
+    console.log('🔍 With comprehensive filters:', currentFilters);
     
     // Hide welcome screen, show chat
     const welcomeScreen = document.getElementById('welcomeScreen');
@@ -406,7 +503,7 @@ async function sendMessage() {
     addLoadingMessage();
     
     try {
-        // Make API call with filters
+        // Make API call with comprehensive filters and metadata
         const response = await fetch('/chat', {
             method: 'POST',
             headers: {
@@ -416,7 +513,13 @@ async function sendMessage() {
                 message: message,
                 history: chatHistory,
                 filters: currentFilters,
-                analytics: true // Flag to indicate this is an analytics query
+                analytics: true,
+                metadata_focus: [
+                    'internalId', 'evaluationId', 'template_id', 'template_name',
+                    'partner', 'site', 'lob', 'agentName', 'agentId',
+                    'disposition', 'subDisposition', 'call_date', 'created_on',
+                    'call_duration', 'language', 'url'
+                ]
             })
         });
         
@@ -433,17 +536,17 @@ async function sendMessage() {
         const reply = data.reply || 'Sorry, I couldn\'t process your request.';
         addMessage('assistant', reply);
         
-        // If there are related documents, show them
+        // If there are related evaluations, show them
         if (data.sources && data.sources.length > 0) {
             addSourcesMessage(data.sources);
         }
         
-        console.log('✅ Message sent successfully');
+        console.log('✅ Analytics message sent successfully');
         
     } catch (error) {
         console.error('❌ Error sending message:', error);
         removeLoadingMessage();
-        addMessage('assistant', 'Sorry, there was an error processing your request. Please try again.');
+        addMessage('assistant', 'Sorry, there was an error processing your analytics request. Please try again.');
     } finally {
         isLoading = false;
         updateSendButton();
@@ -490,8 +593,7 @@ function addMessage(sender, content) {
 }
 
 function formatAssistantMessage(content) {
-    // Basic formatting for assistant messages
-    // You can enhance this to handle markdown, charts, etc.
+    // Enhanced formatting for assistant messages
     return content
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
@@ -505,17 +607,44 @@ function addSourcesMessage(sources) {
     const sourceDiv = document.createElement('div');
     sourceDiv.className = 'message assistant';
     
-    let sourcesHtml = '<div class="sources-container"><h4>📚 Related Sources:</h4>';
+    let sourcesHtml = '<div class="sources-container"><h4>📚 Related Evaluations:</h4>';
     
     sources.forEach((source, index) => {
         const metadata = source.metadata || {};
+        const evaluationId = metadata.evaluationId || 'Unknown';
+        const internalId = metadata.internalId || 'Unknown';
+        
+        // Build evaluation URL
+        const evalUrl = metadata.url || 
+            `https://innovai-demo.metrocare-agent.com/evaluation/view/${evaluationId}`;
+        
         sourcesHtml += `
             <div class="source-item">
-                <strong>${metadata.agent || 'Unknown Agent'}</strong> - ${metadata.disposition || 'Call'}
-                <br>
-                <small>Date: ${metadata.call_date || 'Unknown'} | Duration: ${metadata.call_duration || 'Unknown'}s</small>
-                <br>
-                <span class="source-text">${source.text?.substring(0, 200) || 'No text'}...</span>
+                <div class="source-header">
+                    <div>
+                        <div class="source-title">
+                            ${metadata.agentName || 'Unknown Agent'} - ${metadata.disposition || 'Call'}
+                        </div>
+                        <div class="source-meta">
+                            <strong>Partner:</strong> ${metadata.partner || 'Unknown'} | 
+                            <strong>Site:</strong> ${metadata.site || 'Unknown'} | 
+                            <strong>LOB:</strong> ${metadata.lob || 'Unknown'}<br>
+                            <strong>Call Date:</strong> ${metadata.call_date ? new Date(metadata.call_date).toLocaleDateString() : 'Unknown'} | 
+                            <strong>Duration:</strong> ${metadata.call_duration || 'Unknown'}s | 
+                            <strong>Language:</strong> ${metadata.language || 'Unknown'}<br>
+                            <strong>Sub-Disposition:</strong> ${metadata.subDisposition || 'None'}<br>
+                            <strong>Template:</strong> ${metadata.template_name || 'Unknown'} | 
+                            <strong>Internal ID:</strong> ${internalId}
+                        </div>
+                    </div>
+                    <div class="source-actions">
+                        <a href="${evalUrl}" target="_blank" class="source-link">
+                            <span class="material-icons">open_in_new</span>
+                            View Evaluation
+                        </a>
+                    </div>
+                </div>
+                <span class="source-text">${source.text?.substring(0, 300) || 'No text available'}...</span>
             </div>
         `;
     });
@@ -547,7 +676,10 @@ function addLoadingMessage() {
         <div class="message-content">
             <div class="loading-indicator">
                 <div class="spinner"></div>
-                Analyzing your data with current filters...
+                <div>Analyzing call center data with applied filters...</div>
+                <div style="font-size: 0.8rem; opacity: 0.7; margin-top: 4px;">
+                    Processing evaluations, performance metrics, and quality scores
+                </div>
             </div>
         </div>
     `;
@@ -568,8 +700,8 @@ function updateSendButton() {
     
     sendBtn.disabled = isLoading;
     sendBtn.innerHTML = isLoading ? 
-        '<div class="spinner"></div> Sending...' : 
-        '<span class="material-icons">send</span> Send';
+        '<div class="spinner"></div> Analyzing...' : 
+        '<span class="material-icons">analytics</span> Analyze';
 }
 
 // =============================================================================
@@ -601,30 +733,43 @@ function exportChat() {
         return;
     }
     
-    console.log('📁 Exporting chat history...');
+    console.log('📁 Exporting comprehensive chat history...');
     
-    // Create export content
-    let exportContent = `Metro AI Analytics Chat Export\n`;
+    // Create detailed export content
+    let exportContent = `Metro AI Call Center Analytics Export\n`;
+    exportContent += `${'='.repeat(50)}\n`;
     exportContent += `Generated: ${new Date().toISOString()}\n`;
     exportContent += `Total Messages: ${chatHistory.length}\n\n`;
     
-    // Add active filters
+    // Add comprehensive filter information
     if (Object.keys(currentFilters).length > 0) {
-        exportContent += `Active Filters:\n`;
+        exportContent += `Applied Filters:\n`;
+        exportContent += `${'-'.repeat(20)}\n`;
         Object.entries(currentFilters).forEach(([key, value]) => {
-            exportContent += `  ${key}: ${Array.isArray(value) ? value.join(', ') : value}\n`;
+            let displayValue = Array.isArray(value) ? value.join(', ') : value;
+            if (key.includes('Date')) {
+                displayValue = new Date(value).toLocaleDateString();
+            } else if (key.includes('Duration')) {
+                displayValue = `${value} seconds`;
+            }
+            exportContent += `  ${key}: ${displayValue}\n`;
         });
         exportContent += '\n';
     }
     
     // Add chat history
-    exportContent += `Chat History:\n`;
-    exportContent += `${'='.repeat(50)}\n\n`;
+    exportContent += `Analytics Conversation:\n`;
+    exportContent += `${'-'.repeat(30)}\n\n`;
     
     chatHistory.forEach((msg, index) => {
         exportContent += `${index + 1}. ${msg.role.toUpperCase()}:\n`;
         exportContent += `${msg.content}\n\n`;
     });
+    
+    // Add footer
+    exportContent += `\n${'-'.repeat(50)}\n`;
+    exportContent += `Metro AI Call Center Analytics\n`;
+    exportContent += `Advanced evaluation analysis and insights\n`;
     
     // Create and download file
     const blob = new Blob([exportContent], { type: 'text/plain' });
@@ -635,49 +780,7 @@ function exportChat() {
     a.click();
     URL.revokeObjectURL(url);
     
-    console.log('✅ Chat history exported');
-}
-
-// =============================================================================
-// SEARCH FUNCTIONALITY (Legacy support)
-// =============================================================================
-
-// Keep the original search functionality for backward compatibility
-async function performSearch() {
-    const searchInput = document.getElementById('searchInput');
-    if (!searchInput) return;
-    
-    const query = searchInput.value.trim();
-    if (!query) return;
-
-    console.log('🔍 Performing search:', query);
-    
-    try {
-        const response = await fetch('/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: query,
-                filters: currentFilters
-            })
-        });
-        
-        if (response.ok) {
-            const results = await response.json();
-            displaySearchResults(results);
-        } else {
-            throw new Error('Search failed');
-        }
-    } catch (error) {
-        console.error('❌ Search error:', error);
-        alert('Search failed. Please try again.');
-    }
-}
-
-function displaySearchResults(results) {
-    console.log('📋 Displaying search results:', results);
-    // Implementation depends on your search results UI
-    // This is a placeholder for backward compatibility
+    console.log('✅ Comprehensive chat history exported');
 }
 
 // =============================================================================
@@ -694,15 +797,27 @@ window.handleKeyPress = handleKeyPress;
 window.sendMessage = sendMessage;
 window.clearChat = clearChat;
 window.exportChat = exportChat;
-window.performSearch = performSearch;
 
-// Initialize debugging
+// Enhanced debugging interface
 window.chatDebug = {
     getCurrentFilters: () => currentFilters,
     getChatHistory: () => chatHistory,
     getFilterOptions: () => filterOptions,
-    isLoading: () => isLoading
+    isLoading: () => isLoading,
+    showFilterStats: () => {
+        console.log('📊 Filter Statistics:');
+        console.log('Current Filters:', currentFilters);
+        console.log('Available Options:', filterOptions);
+        console.log('Active Filter Count:', Object.keys(currentFilters).length);
+    },
+    testFilters: () => {
+        console.log('🧪 Testing filter collection...');
+        const testFilters = collectFilters();
+        console.log('Collected Filters:', testFilters);
+        return testFilters;
+    }
 };
 
-console.log('✅ Enhanced Metro AI Analytics Chat loaded successfully');
-console.log('🔧 Debug tools available at window.chatDebug');
+console.log('✅ Metro AI Call Center Analytics Chat v3.0 loaded successfully');
+console.log('🔧 Enhanced debugging tools available at window.chatDebug');
+console.log('📊 Comprehensive metadata filtering and analytics ready');
