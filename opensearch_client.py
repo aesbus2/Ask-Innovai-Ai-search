@@ -669,6 +669,194 @@ class OpenSearchManager:
         
         return search_body
     
+    def search_evaluation_chunks(self, query: str, evaluation_id: str = None,
+                               content_type: str = None, index_name: str = None) -> List[Dict]:
+        """
+        ENHANCED: Search within chunks of evaluations using nested queries
+        """
+        if not self.client:
+            logger.error("❌ OpenSearch client not initialized")
+            return []
+        
+        start_time = time.time()
+        index_pattern = index_name or "eval-*"
+        
+        try:
+            # Build nested query to search within chunks
+            nested_query = {
+                "nested": {
+                    "path": "chunks",
+                    "query": {
+                        "bool": {
+                            "must": [
+                                {"match": {"chunks.text": query}}
+                            ]
+                        }
+                    },
+                    "inner_hits": {
+                        "size": 10,
+                        "highlight": {
+                            "fields": {
+                                "chunks.text": {}
+                            }
+                        }
+                    }
+                }
+            }
+            
+            # Add filters if specified
+            bool_query = {"bool": {"must": [nested_query]}}
+            
+            if evaluation_id:
+                bool_query["bool"]["must"].append({
+                    "term": {"evaluationId": evaluation_id}
+                })
+            
+            if content_type:
+                nested_query["nested"]["query"]["bool"]["must"].append({
+                    "term": {"chunks.content_type": content_type}
+                })
+            
+            search_body = {
+                "query": bool_query,
+                "size": 20
+            }
+            
+            response = self.client.search(
+                index=index_pattern,
+                body=search_body
+            )
+            
+            response_time = time.time() - start_time
+            self._record_operation(True, response_time, f"search_chunks:{index_pattern}")
+            
+            # Process nested search results
+            results = []
+            
+            for hit in response.get("hits", {}).get("hits", []):
+                source = hit.get("_source", {})
+                inner_hits = hit.get("inner_hits", {}).get("chunks", {}).get("hits", [])
+                
+                for inner_hit in inner_hits:
+                    chunk_source = inner_hit.get("_source", {})
+                    highlight = inner_hit.get("highlight", {})
+                    
+                    result = {
+                        "_id": f"{hit.get('_id')}-chunk-{chunk_source.get('chunk_index')}",
+                        "_score": inner_hit.get("_score", 0),
+                        "_index": hit.get("_index"),
+                        
+                        # Chunk information
+                        "text": chunk_source.get("text", ""),
+                        "content_type": chunk_source.get("content_type"),
+                        "chunk_index": chunk_source.get("chunk_index"),
+                        
+                        # Parent evaluation information
+                        "evaluationId": source.get("evaluationId"),
+                        "template_id": source.get("template_id"),
+                        "template_name": source.get("template_name"),
+                        "metadata": source.get("metadata", {}),
+                        
+                        # Highlighting
+                        "highlight": highlight,
+                        
+                        # For backward compatibility
+                        "_source": chunk_source
+                    }
+                    results.append(result)
+            
+            logger.info(f"🔍 Found {len(results)} chunk matches in {response_time:.3f}s")
+            return results
+            
+        except Exception as e:
+            response_time = time.time() - start_time
+            self._record_operation(False, response_time, f"search_chunks:{index_pattern}")
+            logger.error(f"❌ Chunk search failed: {e}")
+            return []
+    
+    def get_evaluation_by_id(self, evaluation_id: str, index_name: str = None) -> Optional[Dict]:
+        """Get a specific evaluation document by ID"""
+        if not self.client:
+            return None
+        
+        try:
+            index_pattern = index_name or "eval-*"
+            
+            # Search by evaluationId field (not document _id)
+            response = self.client.search(
+                index=index_pattern,
+                body={
+                    "query": {"term": {"evaluationId": evaluation_id}},
+                    "size": 1
+                }
+            )
+            
+            hits = response.get("hits", {}).get("hits", [])
+            
+            if hits:
+                return hits[0]
+            else:
+                return None
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to get evaluation {evaluation_id}: {e}")
+            return None
+    
+    def get_template_collections(self) -> List[Dict[str, Any]]:
+        """Get list of template-based collections with statistics"""
+        if not self.client:
+            return []
+        
+        try:
+            # Get all indices that start with 'eval-'
+            indices = self.client.indices.get(index="eval-*")
+            
+            collections = []
+            
+            for index_name in indices.keys():
+                try:
+                    # Get index stats
+                    stats = self.client.indices.stats(index=index_name)
+                    doc_count = stats["_all"]["primaries"]["docs"]["count"]
+                    
+                    # Get sample document to extract template info
+                    sample = self.client.search(
+                        index=index_name,
+                        body={"query": {"match_all": {}}, "size": 1}
+                    )
+                    
+                    template_id = None
+                    template_name = None
+                    
+                    if sample["hits"]["hits"]:
+                        source = sample["hits"]["hits"][0]["_source"]
+                        template_id = source.get("template_id")
+                        template_name = source.get("template_name")
+                    
+                    collections.append({
+                        "collection_name": index_name,
+                        "template_id": template_id,
+                        "template_name": template_name,
+                        "document_count": doc_count,
+                        "status": "active"
+                    })
+                    
+                except Exception as e:
+                    collections.append({
+                        "collection_name": index_name,
+                        "template_id": None,
+                        "template_name": None,
+                        "document_count": 0,
+                        "status": "error",
+                        "error": str(e)[:100]
+                    })
+            
+            return collections
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to get template collections: {e}")
+            return []
+    
     def get_performance_stats(self) -> Dict[str, Any]:
         """Get OpenSearch performance statistics"""
         success_rate = 0.0
@@ -726,6 +914,71 @@ def search_opensearch(query: str, index_override: str = None,
     """
     manager = get_opensearch_manager()
     return manager.search_evaluations(query, index_override, filters, size)
+
+def search_vector(query_vector: List[float], index_override: str = None, 
+                 size: int = 10) -> List[Dict]:
+    """
+    ENHANCED: Vector search for evaluation documents
+    """
+    manager = get_opensearch_manager()
+    
+    if not manager.client:
+        return []
+    
+    try:
+        index_pattern = index_override or "eval-*"
+        
+        # Search using document-level embeddings
+        search_body = {
+            "query": {
+                "script_score": {
+                    "query": {"match_all": {}},
+                    "script": {
+                        "source": "cosineSimilarity(params.query_vector, 'document_embedding') + 1.0",
+                        "params": {"query_vector": query_vector}
+                    }
+                }
+            },
+            "size": size
+        }
+        
+        response = manager.client.search(
+            index=index_pattern,
+            body=search_body
+        )
+        
+        return response.get("hits", {}).get("hits", [])
+        
+    except Exception as e:
+        logger.error(f"❌ Vector search failed: {e}")
+        return []
+
+def search_evaluation_chunks(query: str, evaluation_id: str = None, 
+                           content_type: str = None) -> List[Dict]:
+    """
+    NEW: Search within chunks of evaluations (for detailed analysis)
+    """
+    manager = get_opensearch_manager()
+    return manager.search_evaluation_chunks(query, evaluation_id, content_type)
+
+def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
+    """
+    NEW: Get specific evaluation by ID
+    """
+    manager = get_opensearch_manager()
+    return manager.get_evaluation_by_id(evaluation_id)
+
+def get_template_collections() -> List[Dict[str, Any]]:
+    """
+    NEW: Get list of template-based collections
+    """
+    manager = get_opensearch_manager()
+    return manager.get_template_collections()
+
+def get_opensearch_stats() -> Dict[str, Any]:
+    """Get OpenSearch performance statistics"""
+    manager = get_opensearch_manager()
+    return manager.get_performance_stats()
 
 # Health check function
 def health_check() -> Dict[str, Any]:
