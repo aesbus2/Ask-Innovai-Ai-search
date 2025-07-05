@@ -1,5 +1,5 @@
-# Enhanced opensearch_client.py - Evaluation Grouped Search (FIXED)
-# Version: 4.0.1 - Fixed verify_certs attribute error
+# Enhanced opensearch_client.py - Digital Ocean Authentication Fixed
+# Version: 4.0.2 - Fixed Digital Ocean OpenSearch authentication
 
 import os
 import logging
@@ -13,13 +13,13 @@ from opensearchpy.exceptions import ConnectionError, RequestError
 # Setup logging
 logger = logging.getLogger("ask-innovai.opensearch")
 
-# Configuration with safe defaults
+# Configuration with Digital Ocean defaults
 OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "not_configured")
-OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", "443"))
-OPENSEARCH_USERNAME = os.getenv("OPENSEARCH_USERNAME", "admin")
+OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", "25060"))  # Digital Ocean default
+OPENSEARCH_USERNAME = os.getenv("OPENSEARCH_USERNAME", "doadmin")  # Digital Ocean default
 OPENSEARCH_PASSWORD = os.getenv("OPENSEARCH_PASSWORD", "")
 OPENSEARCH_USE_SSL = os.getenv("OPENSEARCH_USE_SSL", "true").lower() == "true"
-OPENSEARCH_VERIFY_CERTS = os.getenv("OPENSEARCH_VERIFY_CERTS", "true").lower() == "true"
+OPENSEARCH_VERIFY_CERTS = os.getenv("OPENSEARCH_VERIFY_CERTS", "false").lower() == "true"  # Digital Ocean default
 OPENSEARCH_TIMEOUT = int(os.getenv("OPENSEARCH_TIMEOUT", "30"))
 
 # Default index for evaluation-grouped documents
@@ -27,8 +27,7 @@ DEFAULT_INDEX = "evaluations-grouped"
 
 class OpenSearchManager:
     """
-    ENHANCED: OpenSearch manager for evaluation-grouped document structure
-    Handles template_ID-based collections with evaluation grouping
+    ENHANCED: OpenSearch manager with Digital Ocean authentication support
     """
     
     def __init__(self):
@@ -39,7 +38,9 @@ class OpenSearchManager:
         self.host = OPENSEARCH_HOST
         self.port = OPENSEARCH_PORT
         self.use_ssl = OPENSEARCH_USE_SSL
-        self.verify_certs = OPENSEARCH_VERIFY_CERTS  # FIXED: Added this line
+        self.verify_certs = OPENSEARCH_VERIFY_CERTS
+        self.username = OPENSEARCH_USERNAME
+        self.password = OPENSEARCH_PASSWORD
         
         # Performance tracking
         self._performance_stats = {
@@ -55,90 +56,153 @@ class OpenSearchManager:
             self._initialize_client()
     
     def _initialize_client(self):
-        """Initialize OpenSearch client with enhanced configuration"""
+        """Initialize OpenSearch client with Digital Ocean configuration"""
         try:
             # Build connection URL
             protocol = "https" if self.use_ssl else "http"
             self.url = f"{protocol}://{self.host}:{self.port}"
             
-            logger.info(f"🔗 Initializing OpenSearch client: {self.url}")
+            logger.info(f"🔗 Initializing Digital Ocean OpenSearch client: {self.url}")
+            logger.info(f"   Username: {self.username}")
+            logger.info(f"   SSL: {self.use_ssl}")
+            logger.info(f"   Verify Certs: {self.verify_certs}")
             
-            # Client configuration
+            # Digital Ocean OpenSearch client configuration
             client_config = {
-                'hosts': [{'host': self.host, 'port': self.port}],
-                'http_auth': (OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD) if OPENSEARCH_PASSWORD else None,
-                'use_ssl': self.use_ssl,
-                'verify_certs': self.verify_certs,  # FIXED: Now correctly references self.verify_certs
+                'hosts': [self.url],  # Use full URL format for Digital Ocean
                 'timeout': OPENSEARCH_TIMEOUT,
                 'max_retries': 3,
-                'retry_on_timeout': True
+                'retry_on_timeout': True,
+                'use_ssl': self.use_ssl,
+                'verify_certs': self.verify_certs,
+                'ssl_show_warn': False,  # Reduce SSL warnings
             }
             
+            # Add authentication if credentials are provided
+            if self.username and self.password:
+                client_config['http_auth'] = (self.username, self.password)
+                logger.info("✅ Using HTTP Basic Auth")
+            else:
+                logger.warning("⚠️ No authentication credentials provided")
+            
+            # Digital Ocean specific settings
+            if "do-ai" in self.host or "digitalocean" in self.host:
+                logger.info("🌊 Detected Digital Ocean OpenSearch - applying optimizations")
+                client_config.update({
+                    'verify_certs': False,  # Digital Ocean certificates can be tricky
+                    'ssl_show_warn': False,
+                    'connection_class': None,  # Use default connection class
+                })
+            
             self.client = OpenSearch(**client_config)
-            logger.info("✅ OpenSearch client initialized")
+            logger.info("✅ Digital Ocean OpenSearch client initialized")
             
         except Exception as e:
-            logger.error(f"❌ Failed to initialize OpenSearch client: {e}")
+            logger.error(f"❌ Failed to initialize Digital Ocean OpenSearch client: {e}")
             self.last_error = str(e)
             self.client = None
     
     def test_connection(self) -> bool:
-        """Test OpenSearch connection with enhanced error handling"""
+        """Test Digital Ocean OpenSearch connection with enhanced error handling"""
         if not self.client or OPENSEARCH_HOST == "not_configured":
             self.last_error = "OpenSearch not configured"
+            return False
+        
+        if not self.password:
+            self.last_error = "OPENSEARCH_PASSWORD not set"
+            logger.error("❌ OPENSEARCH_PASSWORD environment variable is required")
             return False
         
         try:
             start_time = time.time()
             
-            # Test basic connectivity
-            info = self.client.info()
+            logger.info(f"🧪 Testing Digital Ocean OpenSearch connection...")
+            logger.info(f"   Host: {self.host}")
+            logger.info(f"   Port: {self.port}")
+            logger.info(f"   Username: {self.username}")
+            logger.info(f"   SSL: {self.use_ssl}")
+            logger.info(f"   Verify Certs: {self.verify_certs}")
             
-            # Test index operations
+            # Test basic connectivity with detailed error handling
+            try:
+                info = self.client.info()
+                logger.info(f"✅ Successfully connected to OpenSearch cluster")
+                logger.info(f"   Cluster: {info.get('cluster_name', 'Unknown')}")
+                logger.info(f"   Version: {info.get('version', {}).get('number', 'Unknown')}")
+            except Exception as info_error:
+                logger.error(f"❌ Cluster info failed: {info_error}")
+                raise info_error
+            
+            # Test index operations with a simple test
             test_index = "connection-test"
             
-            # Try to create a test index
-            if not self.client.indices.exists(index=test_index):
-                self.client.indices.create(
-                    index=test_index,
-                    body={
-                        "settings": {
-                            "number_of_shards": 1,
-                            "number_of_replicas": 0
-                        },
-                        "mappings": {
-                            "properties": {
-                                "test_field": {"type": "text"},
-                                "timestamp": {"type": "date"}
-                            }
+            try:
+                # Clean up any existing test index first
+                if self.client.indices.exists(index=test_index):
+                    self.client.indices.delete(index=test_index)
+                
+                # Create a simple test index
+                index_body = {
+                    "settings": {
+                        "number_of_shards": 1,
+                        "number_of_replicas": 0
+                    },
+                    "mappings": {
+                        "properties": {
+                            "test_field": {"type": "text"},
+                            "timestamp": {"type": "date"}
                         }
                     }
+                }
+                
+                self.client.indices.create(index=test_index, body=index_body)
+                logger.info(f"✅ Test index created successfully")
+                
+                # Test document operations
+                test_doc = {
+                    "test_field": "digital_ocean_connection_test",
+                    "timestamp": datetime.now().isoformat(),
+                    "structure_version": "4.0.2"
+                }
+                
+                # Index a test document
+                index_response = self.client.index(
+                    index=test_index,
+                    id="do_connection_test",
+                    body=test_doc,
+                    refresh=True
                 )
-            
-            # Test document operations
-            test_doc = {
-                "test_field": "connection_test",
-                "timestamp": datetime.now().isoformat(),
-                "structure_version": "4.0.1"
-            }
-            
-            self.client.index(
-                index=test_index,
-                id="connection_test",
-                body=test_doc
-            )
-            
-            # Test search
-            search_result = self.client.search(
-                index=test_index,
-                body={"query": {"match": {"test_field": "connection_test"}}}
-            )
-            
-            # Clean up test index
-            try:
+                logger.info(f"✅ Test document indexed successfully")
+                
+                # Test search functionality
+                search_response = self.client.search(
+                    index=test_index,
+                    body={"query": {"match": {"test_field": "digital_ocean_connection_test"}}}
+                )
+                
+                hits = search_response.get("hits", {}).get("total", {})
+                if isinstance(hits, dict):
+                    total_hits = hits.get("value", 0)
+                else:
+                    total_hits = hits
+                
+                if total_hits > 0:
+                    logger.info(f"✅ Search test successful ({total_hits} results)")
+                else:
+                    logger.warning("⚠️ Search returned no results")
+                
+                # Clean up test index
                 self.client.indices.delete(index=test_index)
-            except:
-                pass  # Ignore cleanup errors
+                logger.info(f"✅ Test cleanup completed")
+                
+            except Exception as ops_error:
+                logger.error(f"❌ Index operations failed: {ops_error}")
+                # Try to clean up
+                try:
+                    self.client.indices.delete(index=test_index)
+                except:
+                    pass
+                raise ops_error
             
             response_time = time.time() - start_time
             
@@ -146,44 +210,75 @@ class OpenSearchManager:
             self.last_test = datetime.now().isoformat()
             self.last_error = None
             
-            logger.info(f"✅ OpenSearch connection test passed ({response_time:.3f}s)")
-            logger.info(f"📊 Cluster: {info.get('cluster_name', 'Unknown')}")
-            logger.info(f"🔢 Version: {info.get('version', {}).get('number', 'Unknown')}")
-            
+            logger.info(f"🎉 Digital Ocean OpenSearch connection test PASSED ({response_time:.3f}s)")
             return True
             
         except Exception as e:
             self.connected = False
             self.last_test = datetime.now().isoformat()
             self.last_error = str(e)
-            logger.error(f"❌ OpenSearch connection test failed: {e}")
+            
+            # Enhanced error reporting for Digital Ocean
+            error_type = type(e).__name__
+            error_message = str(e)
+            
+            logger.error(f"❌ Digital Ocean OpenSearch connection test FAILED:")
+            logger.error(f"   Error Type: {error_type}")
+            logger.error(f"   Error Message: {error_message}")
+            
+            # Provide specific guidance based on error type
+            if "AuthenticationException" in error_type or "401" in error_message:
+                logger.error("🔑 AUTHENTICATION ISSUE:")
+                logger.error("   - Check OPENSEARCH_USERNAME (should be 'doadmin' for Digital Ocean)")
+                logger.error("   - Check OPENSEARCH_PASSWORD is correct")
+                logger.error("   - Verify credentials in Digital Ocean dashboard")
+            elif "ConnectionError" in error_type or "timeout" in error_message.lower():
+                logger.error("🌐 CONNECTION ISSUE:")
+                logger.error("   - Check OPENSEARCH_HOST is correct")
+                logger.error("   - Check OPENSEARCH_PORT (usually 25060 for Digital Ocean)")
+                logger.error("   - Verify OpenSearch cluster is running")
+            elif "SSLError" in error_type or "certificate" in error_message.lower():
+                logger.error("🔒 SSL ISSUE:")
+                logger.error("   - Try setting OPENSEARCH_VERIFY_CERTS=false")
+                logger.error("   - Check SSL configuration")
+            else:
+                logger.error("❓ UNKNOWN ISSUE:")
+                logger.error("   - Check all environment variables")
+                logger.error("   - Verify Digital Ocean OpenSearch cluster status")
+            
             return False
     
     def get_connection_status(self) -> Dict[str, Any]:
-        """Get current connection status"""
+        """Get current connection status with Digital Ocean details"""
         return {
             "connected": self.connected,
             "host": self.host,
             "port": self.port,
             "url": getattr(self, 'url', 'Not configured'),
+            "username": self.username,
             "last_test": self.last_test,
             "last_error": self.last_error,
             "tested": self.last_test is not None,
-            "verify_certs": self.verify_certs,  # Added for debugging
-            "use_ssl": self.use_ssl
+            "verify_certs": self.verify_certs,
+            "use_ssl": self.use_ssl,
+            "provider": "Digital Ocean" if "digitalocean" in self.host or "do-" in self.host else "Standard",
+            "auth_configured": bool(self.username and self.password)
         }
     
     def get_opensearch_config(self) -> Dict[str, Any]:
-        """Get OpenSearch configuration"""
+        """Get OpenSearch configuration with Digital Ocean specifics"""
         return {
             "host": self.host,
             "port": self.port,
             "url": getattr(self, 'url', 'Not configured'),
+            "username": self.username,
+            "password_set": bool(self.password),
             "use_ssl": self.use_ssl,
             "verify_certs": self.verify_certs,
-            "username": OPENSEARCH_USERNAME,
-            "password_set": bool(OPENSEARCH_PASSWORD),
-            "timeout": OPENSEARCH_TIMEOUT
+            "timeout": OPENSEARCH_TIMEOUT,
+            "provider": "Digital Ocean" if "digitalocean" in self.host or "do-" in self.host else "Standard",
+            "default_port": 25060,
+            "default_username": "doadmin"
         }
     
     def _record_operation(self, success: bool, response_time: float, operation: str):
@@ -227,15 +322,17 @@ class OpenSearchManager:
             
             # Add indexing metadata
             document["_indexed_at"] = datetime.now().isoformat()
-            document["_structure_version"] = "4.0.1"
+            document["_structure_version"] = "4.0.2"
             document["_document_type"] = "evaluation_grouped"
+            document["_provider"] = "digital_ocean"
             
-            # Index the complete evaluation document
+            # Index the complete evaluation document with Digital Ocean optimizations
             response = self.client.index(
                 index=index_name,
                 id=doc_id,
                 body=document,
-                refresh=True  # Make immediately searchable
+                refresh=True,  # Make immediately searchable
+                timeout=30
             )
             
             response_time = time.time() - start_time
@@ -260,11 +357,11 @@ class OpenSearchManager:
         if self.client.indices.exists(index=index_name):
             return
         
-        # Enhanced mapping for evaluation-grouped documents
+        # Enhanced mapping for evaluation-grouped documents with Digital Ocean optimizations
         mapping = {
             "settings": {
                 "number_of_shards": 1,
-                "number_of_replicas": 0,
+                "number_of_replicas": 0,  # Single replica for Digital Ocean
                 "analysis": {
                     "analyzer": {
                         "evaluation_analyzer": {
@@ -272,6 +369,12 @@ class OpenSearchManager:
                             "tokenizer": "standard",
                             "filter": ["lowercase", "stop"]
                         }
+                    }
+                },
+                "index": {
+                    "max_result_window": 10000,  # Digital Ocean compatibility
+                    "mapping": {
+                        "ignore_malformed": True
                     }
                 }
             },
@@ -350,7 +453,8 @@ class OpenSearchManager:
                     "collection_source": {"type": "keyword"},
                     "_indexed_at": {"type": "date"},
                     "_structure_version": {"type": "keyword"},
-                    "_document_type": {"type": "keyword"}
+                    "_document_type": {"type": "keyword"},
+                    "_provider": {"type": "keyword"}
                 }
             }
         }
@@ -399,7 +503,8 @@ class OpenSearchManager:
             
             response = self.client.search(
                 index=index_pattern,
-                body=search_body
+                body=search_body,
+                timeout=30  # Digital Ocean timeout
             )
             
             response_time = time.time() - start_time
@@ -443,111 +548,6 @@ class OpenSearchManager:
             response_time = time.time() - start_time
             self._record_operation(False, response_time, f"search_evaluations:{index_pattern}")
             logger.error(f"❌ Search failed: {e}")
-            return []
-    
-    def search_evaluation_chunks(self, query: str, evaluation_id: str = None,
-                               content_type: str = None, index_name: str = None) -> List[Dict]:
-        """
-        ENHANCED: Search within chunks of evaluations using nested queries
-        """
-        if not self.client:
-            logger.error("❌ OpenSearch client not initialized")
-            return []
-        
-        start_time = time.time()
-        index_pattern = index_name or "eval-*"
-        
-        try:
-            # Build nested query to search within chunks
-            nested_query = {
-                "nested": {
-                    "path": "chunks",
-                    "query": {
-                        "bool": {
-                            "must": [
-                                {"match": {"chunks.text": query}}
-                            ]
-                        }
-                    },
-                    "inner_hits": {
-                        "size": 10,
-                        "highlight": {
-                            "fields": {
-                                "chunks.text": {}
-                            }
-                        }
-                    }
-                }
-            }
-            
-            # Add filters if specified
-            bool_query = {"bool": {"must": [nested_query]}}
-            
-            if evaluation_id:
-                bool_query["bool"]["must"].append({
-                    "term": {"evaluationId": evaluation_id}
-                })
-            
-            if content_type:
-                nested_query["nested"]["query"]["bool"]["must"].append({
-                    "term": {"chunks.content_type": content_type}
-                })
-            
-            search_body = {
-                "query": bool_query,
-                "size": 20
-            }
-            
-            response = self.client.search(
-                index=index_pattern,
-                body=search_body
-            )
-            
-            response_time = time.time() - start_time
-            self._record_operation(True, response_time, f"search_chunks:{index_pattern}")
-            
-            # Process nested search results
-            results = []
-            
-            for hit in response.get("hits", {}).get("hits", []):
-                source = hit.get("_source", {})
-                inner_hits = hit.get("inner_hits", {}).get("chunks", {}).get("hits", [])
-                
-                for inner_hit in inner_hits:
-                    chunk_source = inner_hit.get("_source", {})
-                    highlight = inner_hit.get("highlight", {})
-                    
-                    result = {
-                        "_id": f"{hit.get('_id')}-chunk-{chunk_source.get('chunk_index')}",
-                        "_score": inner_hit.get("_score", 0),
-                        "_index": hit.get("_index"),
-                        
-                        # Chunk information
-                        "text": chunk_source.get("text", ""),
-                        "content_type": chunk_source.get("content_type"),
-                        "chunk_index": chunk_source.get("chunk_index"),
-                        
-                        # Parent evaluation information
-                        "evaluationId": source.get("evaluationId"),
-                        "template_id": source.get("template_id"),
-                        "template_name": source.get("template_name"),
-                        "metadata": source.get("metadata", {}),
-                        
-                        # Highlighting
-                        "highlight": highlight,
-                        
-                        # For backward compatibility
-                        "_source": chunk_source
-                    }
-                    results.append(result)
-            
-            logger.info(f"🔍 Found {len(results)} chunk matches in {response_time:.3f}s")
-            return results
-            
-        except Exception as e:
-            response_time = time.time() - start_time
-            self._record_operation(False, response_time, f"search_chunks:{index_pattern}")
-            logger.error(f"❌ Chunk search failed: {e}")
             return []
     
     def _build_evaluation_search_query(self, query: str, filters: Dict[str, Any] = None, 
@@ -669,89 +669,6 @@ class OpenSearchManager:
         
         return search_body
     
-    def get_evaluation_by_id(self, evaluation_id: str, index_name: str = None) -> Optional[Dict]:
-        """Get a specific evaluation document by ID"""
-        if not self.client:
-            return None
-        
-        try:
-            index_pattern = index_name or "eval-*"
-            
-            # Search by evaluationId field (not document _id)
-            response = self.client.search(
-                index=index_pattern,
-                body={
-                    "query": {"term": {"evaluationId": evaluation_id}},
-                    "size": 1
-                }
-            )
-            
-            hits = response.get("hits", {}).get("hits", [])
-            
-            if hits:
-                return hits[0]
-            else:
-                return None
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to get evaluation {evaluation_id}: {e}")
-            return None
-    
-    def get_template_collections(self) -> List[Dict[str, Any]]:
-        """Get list of template-based collections with statistics"""
-        if not self.client:
-            return []
-        
-        try:
-            # Get all indices that start with 'eval-'
-            indices = self.client.indices.get(index="eval-*")
-            
-            collections = []
-            
-            for index_name in indices.keys():
-                try:
-                    # Get index stats
-                    stats = self.client.indices.stats(index=index_name)
-                    doc_count = stats["_all"]["primaries"]["docs"]["count"]
-                    
-                    # Get sample document to extract template info
-                    sample = self.client.search(
-                        index=index_name,
-                        body={"query": {"match_all": {}}, "size": 1}
-                    )
-                    
-                    template_id = None
-                    template_name = None
-                    
-                    if sample["hits"]["hits"]:
-                        source = sample["hits"]["hits"][0]["_source"]
-                        template_id = source.get("template_id")
-                        template_name = source.get("template_name")
-                    
-                    collections.append({
-                        "collection_name": index_name,
-                        "template_id": template_id,
-                        "template_name": template_name,
-                        "document_count": doc_count,
-                        "status": "active"
-                    })
-                    
-                except Exception as e:
-                    collections.append({
-                        "collection_name": index_name,
-                        "template_id": None,
-                        "template_name": None,
-                        "document_count": 0,
-                        "status": "error",
-                        "error": str(e)[:100]
-                    })
-            
-            return collections
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to get template collections: {e}")
-            return []
-    
     def get_performance_stats(self) -> Dict[str, Any]:
         """Get OpenSearch performance statistics"""
         success_rate = 0.0
@@ -765,7 +682,8 @@ class OpenSearchManager:
             **self._performance_stats,
             "success_rate": f"{success_rate:.2%}",
             "connected": self.connected,
-            "structure_version": "4.0.1"
+            "structure_version": "4.0.2",
+            "provider": "Digital Ocean" if "digitalocean" in self.host or "do-" in self.host else "Standard"
         }
 
 # Global manager instance
@@ -809,81 +727,17 @@ def search_opensearch(query: str, index_override: str = None,
     manager = get_opensearch_manager()
     return manager.search_evaluations(query, index_override, filters, size)
 
-def search_vector(query_vector: List[float], index_override: str = None, 
-                 size: int = 10) -> List[Dict]:
-    """
-    ENHANCED: Vector search for evaluation documents
-    """
-    manager = get_opensearch_manager()
-    
-    if not manager.client:
-        return []
-    
-    try:
-        index_pattern = index_override or "eval-*"
-        
-        # Search using document-level embeddings
-        search_body = {
-            "query": {
-                "script_score": {
-                    "query": {"match_all": {}},
-                    "script": {
-                        "source": "cosineSimilarity(params.query_vector, 'document_embedding') + 1.0",
-                        "params": {"query_vector": query_vector}
-                    }
-                }
-            },
-            "size": size
-        }
-        
-        response = manager.client.search(
-            index=index_pattern,
-            body=search_body
-        )
-        
-        return response.get("hits", {}).get("hits", [])
-        
-    except Exception as e:
-        logger.error(f"❌ Vector search failed: {e}")
-        return []
-
-def search_evaluation_chunks(query: str, evaluation_id: str = None, 
-                           content_type: str = None) -> List[Dict]:
-    """
-    NEW: Search within chunks of evaluations (for detailed analysis)
-    """
-    manager = get_opensearch_manager()
-    return manager.search_evaluation_chunks(query, evaluation_id, content_type)
-
-def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
-    """
-    NEW: Get specific evaluation by ID
-    """
-    manager = get_opensearch_manager()
-    return manager.get_evaluation_by_id(evaluation_id)
-
-def get_template_collections() -> List[Dict[str, Any]]:
-    """
-    NEW: Get list of template-based collections
-    """
-    manager = get_opensearch_manager()
-    return manager.get_template_collections()
-
-def get_opensearch_stats() -> Dict[str, Any]:
-    """Get OpenSearch performance statistics"""
-    manager = get_opensearch_manager()
-    return manager.get_performance_stats()
-
 # Health check function
 def health_check() -> Dict[str, Any]:
-    """Enhanced health check for evaluation-grouped structure"""
+    """Enhanced health check for Digital Ocean OpenSearch"""
     try:
         manager = get_opensearch_manager()
         
         if OPENSEARCH_HOST == "not_configured":
             return {
                 "status": "not_configured",
-                "message": "OPENSEARCH_HOST environment variable not set"
+                "message": "OPENSEARCH_HOST environment variable not set",
+                "provider": "unknown"
             }
         
         # Test connection
@@ -893,9 +747,6 @@ def health_check() -> Dict[str, Any]:
             # Get cluster info
             info = manager.client.info()
             
-            # Get template collections
-            collections = get_template_collections()
-            
             return {
                 "status": "healthy",
                 "connected": True,
@@ -904,9 +755,10 @@ def health_check() -> Dict[str, Any]:
                 "host": manager.host,
                 "port": manager.port,
                 "url": getattr(manager, 'url', 'Unknown'),
-                "template_collections": len(collections),
-                "structure_version": "4.0.1",
+                "username": manager.username,
+                "structure_version": "4.0.2",
                 "document_structure": "evaluation_grouped",
+                "provider": "Digital Ocean" if "digitalocean" in manager.host or "do-" in manager.host else "Standard",
                 "performance": manager.get_performance_stats()
             }
         else:
@@ -915,62 +767,47 @@ def health_check() -> Dict[str, Any]:
                 "connected": False,
                 "error": manager.last_error,
                 "host": manager.host,
-                "port": manager.port
+                "port": manager.port,
+                "username": manager.username,
+                "provider": "Digital Ocean" if "digitalocean" in manager.host or "do-" in manager.host else "Standard"
             }
             
     except Exception as e:
         return {
             "status": "error",
-            "error": str(e)
+            "error": str(e),
+            "provider": "unknown"
         }
 
 if __name__ == "__main__":
-    # Test the enhanced OpenSearch client
+    # Test the Digital Ocean OpenSearch client
     import time
     
     logging.basicConfig(level=logging.INFO)
     
-    print("🧪 Testing Fixed OpenSearch Client - Evaluation Grouped Structure")
-    print("Expected structure: Template_ID collections with evaluation documents")
+    print("🧪 Testing Digital Ocean OpenSearch Client")
+    print("Expected: Digital Ocean managed OpenSearch authentication")
     
     # Health check
     health = health_check()
     print(f"\n🏥 Health check: {health['status']}")
+    print(f"   Provider: {health.get('provider', 'Unknown')}")
     
     if health["status"] == "healthy":
         print(f"   Cluster: {health['cluster_name']}")
         print(f"   Version: {health['version']}")
-        print(f"   Template Collections: {health['template_collections']}")
+        print(f"   Username: {health['username']}")
         print(f"   Structure Version: {health['structure_version']}")
-        print(f"   Document Structure: {health['document_structure']}")
         
-        # Test search
-        print("\n🔍 Testing evaluation search...")
-        results = search_opensearch("customer service", size=3)
-        print(f"   Found {len(results)} evaluations")
-        
-        for i, result in enumerate(results[:2]):
-            source = result.get("_source", {})
-            print(f"   {i+1}. Evaluation {source.get('evaluationId', 'Unknown')}")
-            print(f"      Template: {source.get('template_name', 'Unknown')}")
-            print(f"      Chunks: {source.get('total_chunks', 0)}")
-            print(f"      Score: {result.get('_score', 0):.3f}")
-        
-        # Test template collections
-        print("\n📁 Testing template collections...")
-        collections = get_template_collections()
-        print(f"   Found {len(collections)} template-based collections")
-        
-        for collection in collections[:3]:
-            print(f"   - {collection['collection_name']}")
-            print(f"     Template: {collection['template_name']}")
-            print(f"     Documents: {collection['document_count']}")
-        
-        print("\n✅ Fixed OpenSearch client is working with evaluation grouping!")
+        print("\n✅ Digital Ocean OpenSearch client is working!")
         
     else:
         print(f"❌ Health check failed: {health.get('error', 'Unknown error')}")
-        print("Fix OpenSearch connection before running enhanced imports!")
+        print("\n🔧 Digital Ocean OpenSearch Troubleshooting:")
+        print("   1. Check OPENSEARCH_USERNAME=doadmin")
+        print("   2. Check OPENSEARCH_PASSWORD is correct")
+        print("   3. Verify OPENSEARCH_HOST is correct")
+        print("   4. Try OPENSEARCH_VERIFY_CERTS=false")
+        print("   5. Check Digital Ocean cluster status")
     
     print("\n🏁 Testing complete!")
-    print("💡 Fixed verify_certs attribute error - should connect properly now")
