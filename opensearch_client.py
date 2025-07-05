@@ -1,605 +1,972 @@
-# opensearch_client.py - Production Ready OpenSearch Client
-# Version: 3.0.0 - Clean, Simple, and Reliable
+# Enhanced opensearch_client.py - Evaluation Grouped Search
+# Version: 4.0.0 - Updated for template_ID collections and evaluation grouping
 
 import os
 import logging
-import time
 import json
-from typing import Optional, Dict, List, Any, Union
+import time
 from datetime import datetime
-import threading
-import random
-
-try:
-    from opensearchpy import OpenSearch, exceptions
-    OPENSEARCH_AVAILABLE = True
-except ImportError:
-    OPENSEARCH_AVAILABLE = False
-    logging.warning("opensearch-py not installed. Run: pip install opensearch-py")
+from typing import List, Dict, Optional, Any, Union
+from opensearchpy import OpenSearch
+from opensearchpy.exceptions import ConnectionError, RequestError
 
 # Setup logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ask-innovai.opensearch")
 
-# Configuration constants
-DEFAULT_TIMEOUT = 30
-DEFAULT_MAX_RETRIES = 3
-DEFAULT_BATCH_SIZE = 100
-DEFAULT_INDEX = "innovai-default"
+# Configuration with safe defaults
+OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "not_configured")
+OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", "443"))
+OPENSEARCH_USERNAME = os.getenv("OPENSEARCH_USERNAME", "admin")
+OPENSEARCH_PASSWORD = os.getenv("OPENSEARCH_PASSWORD", "")
+OPENSEARCH_USE_SSL = os.getenv("OPENSEARCH_USE_SSL", "true").lower() == "true"
+OPENSEARCH_VERIFY_CERTS = os.getenv("OPENSEARCH_VERIFY_CERTS", "true").lower() == "true"
+OPENSEARCH_TIMEOUT = int(os.getenv("OPENSEARCH_TIMEOUT", "30"))
 
-class OpenSearchClient:
+# Default index for evaluation-grouped documents
+DEFAULT_INDEX = "evaluations-grouped"
+
+class OpenSearchManager:
     """
-    Production-ready OpenSearch client with:
-    - Connection pooling
-    - Automatic retry logic
-    - Health monitoring
-    - Error handling
-    - Configuration management
+    ENHANCED: OpenSearch manager for evaluation-grouped document structure
+    Handles template_ID-based collections with evaluation grouping
     """
     
     def __init__(self):
         self.client = None
-        self.config = {}
-        self.is_connected = False
-        self.last_health_check = 0
-        self.health_check_interval = 300  # 5 minutes
-        self.connection_lock = threading.Lock()
+        self.connected = False
+        self.last_test = None
+        self.last_error = None
+        self.host = OPENSEARCH_HOST
+        self.port = OPENSEARCH_PORT
+        self.use_ssl = OPENSEARCH_USE_SSL
         
-        # Statistics
-        self.stats = {
+        # Performance tracking
+        self._performance_stats = {
             "total_operations": 0,
             "successful_operations": 0,
             "failed_operations": 0,
-            "connection_errors": 0,
-            "last_error": None,
-            "last_success": None
+            "total_response_time": 0.0,
+            "avg_response_time": 0.0,
+            "last_operation": None
         }
         
-        # Initialize
-        self._load_config()
-        self._initialize_client()
-    
-    def _load_config(self):
-        """Load configuration from environment variables"""
-        # Get environment variables
-        host = os.getenv("OPENSEARCH_HOST", "localhost")
-        port = int(os.getenv("OPENSEARCH_PORT", "9200"))
-        user = os.getenv("OPENSEARCH_USER", "admin")
-        password = os.getenv("OPENSEARCH_PASS", "admin")
-        
-        # Clean host (remove protocol if present)
-        clean_host = host.replace("https://", "").replace("http://", "")
-        
-        # Determine if we should use SSL
-        use_ssl = False
-        if host.startswith("https://"):
-            use_ssl = True
-        elif any(keyword in clean_host.lower() for keyword in ["cloud", "digitalocean", "aws", "elastic"]):
-            use_ssl = True
-        elif port in [443, 9243, 25060]:  # Common SSL ports
-            use_ssl = True
-        
-        # Build configuration
-        self.config = {
-            "host": clean_host,
-            "port": port,
-            "user": user,
-            "password": password,
-            "use_ssl": use_ssl,
-            "url": f"{'https' if use_ssl else 'http'}://{clean_host}:{port}",
-            "configured": bool(host and host != "localhost" and password != "admin")
-        }
-        
-        logger.info(f"OpenSearch config loaded: {self.config['url']}")
+        if OPENSEARCH_HOST != "not_configured":
+            self._initialize_client()
     
     def _initialize_client(self):
-        """Initialize OpenSearch client with production settings"""
-        if not OPENSEARCH_AVAILABLE:
-            logger.error("OpenSearch library not available")
-            return False
-        
+        """Initialize OpenSearch client with enhanced configuration"""
         try:
-            # Create client with robust settings
-            self.client = OpenSearch(
-                hosts=[{
-                    'host': self.config['host'],
-                    'port': self.config['port']
-                }],
-                http_auth=(self.config['user'], self.config['password']),
-                use_ssl=self.config['use_ssl'],
-                verify_certs=False,  # Common for managed services
-                ssl_assert_hostname=False,
-                ssl_show_warn=False,
-                
-                # Timeout settings
-                timeout=DEFAULT_TIMEOUT,
-                
-                # Retry settings
-                max_retries=DEFAULT_MAX_RETRIES,
-                retry_on_timeout=True,
-                retry_on_status={502, 503, 504},
-                
-                # Connection pool
-                maxsize=20,
-                
-                # Performance
-                http_compress=True,
-                
-                # Headers
-                headers={"User-Agent": "InnovAI-Client/3.0.0"}
-            )
+            # Build connection URL
+            protocol = "https" if self.use_ssl else "http"
+            self.url = f"{protocol}://{self.host}:{self.port}"
             
-            logger.info("OpenSearch client initialized")
-            return True
+            logger.info(f"🔗 Initializing OpenSearch client: {self.url}")
             
-        except Exception as e:
-            logger.error(f"Failed to initialize OpenSearch client: {e}")
-            self.client = None
-            return False
-    
-    def test_connection(self, force_check: bool = False) -> bool:
-        """Test OpenSearch connection with caching"""
-        current_time = time.time()
-        
-        # Use cached result if recent
-        if not force_check and self.is_connected:
-            if current_time - self.last_health_check < self.health_check_interval:
-                return True
-        
-        with self.connection_lock:
-            if not self.client:
-                if not self._initialize_client():
-                    return False
-            
-            try:
-                # Perform ping
-                result = self.client.ping()
-                
-                if result:
-                    self.is_connected = True
-                    self.last_health_check = current_time
-                    self.stats["last_success"] = datetime.now().isoformat()
-                    logger.debug("OpenSearch connection successful")
-                    return True
-                else:
-                    self._handle_connection_error("Ping returned False")
-                    return False
-                    
-            except exceptions.ConnectionError as e:
-                self._handle_connection_error(f"Connection error: {e}")
-                return False
-            except Exception as e:
-                self._handle_connection_error(f"Unexpected error: {e}")
-                return False
-    
-    def _handle_connection_error(self, error_msg: str):
-        """Handle connection errors consistently"""
-        self.is_connected = False
-        self.stats["connection_errors"] += 1
-        self.stats["last_error"] = error_msg
-        logger.warning(f"OpenSearch connection failed: {error_msg}")
-    
-    def _retry_operation(self, operation_func, *args, **kwargs):
-        """Retry operation with exponential backoff"""
-        max_retries = DEFAULT_MAX_RETRIES
-        
-        for attempt in range(max_retries):
-            try:
-                return operation_func(*args, **kwargs)
-            except exceptions.ConnectionError as e:
-                if attempt < max_retries - 1:
-                    delay = (2 ** attempt) + random.uniform(0, 1)
-                    logger.warning(f"Connection error, retrying in {delay:.1f}s: {e}")
-                    time.sleep(delay)
-                    continue
-                else:
-                    raise
-            except Exception as e:
-                # Don't retry non-connection errors
-                raise
-    
-    def index_document(self, doc_id: str, body: Dict[str, Any], index_name: str = None) -> bool:
-        """Index a document with retry logic"""
-        if not index_name:
-            index_name = DEFAULT_INDEX
-        
-        # Check connection first
-        if not self.test_connection():
-            raise Exception("OpenSearch not available")
-        
-        try:
-            def _index_operation():
-                return self.client.index(
-                    index=index_name,
-                    id=doc_id,
-                    body=body,
-                    refresh=False  # Don't force refresh for performance
-                )
-            
-            result = self._retry_operation(_index_operation)
-            
-            # Update stats
-            self.stats["total_operations"] += 1
-            self.stats["successful_operations"] += 1
-            
-            logger.debug(f"Document indexed: {doc_id} -> {index_name}")
-            return True
-            
-        except Exception as e:
-            self.stats["total_operations"] += 1
-            self.stats["failed_operations"] += 1
-            self.stats["last_error"] = str(e)
-            
-            logger.error(f"Failed to index document {doc_id}: {e}")
-            raise Exception(f"Indexing failed: {e}")
-    
-    def search(self, query: str, index_name: str = None, size: int = 10, **kwargs) -> List[Dict[str, Any]]:
-        """Search documents with text query"""
-        if not index_name:
-            index_name = "*"  # Search all indices
-        
-        if not self.test_connection():
-            logger.warning("OpenSearch not available for search")
-            return []
-        
-        try:
-            # Build search body
-            body = {
-                "size": size,
-                "query": {
-                    "multi_match": {
-                        "query": query,
-                        "fields": ["text", "content", "title", "metadata.*"],
-                        "type": "best_fields",
-                        "fuzziness": "AUTO"
-                    }
-                },
-                "highlight": {
-                    "fields": {
-                        "text": {"fragment_size": 150},
-                        "content": {"fragment_size": 150}
-                    }
-                }
+            # Client configuration
+            client_config = {
+                'hosts': [{'host': self.host, 'port': self.port}],
+                'http_auth': (OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD) if OPENSEARCH_PASSWORD else None,
+                'use_ssl': self.use_ssl,
+                'verify_certs': self.verify_certs,
+                'timeout': OPENSEARCH_TIMEOUT,
+                'max_retries': 3,
+                'retry_on_timeout': True
             }
             
-            def _search_operation():
-                return self.client.search(
-                    index=index_name,
-                    body=body,
-                    **kwargs
-                )
-            
-            response = self._retry_operation(_search_operation)
-            hits = response.get("hits", {}).get("hits", [])
-            
-            # Update stats
-            self.stats["total_operations"] += 1
-            self.stats["successful_operations"] += 1
-            
-            logger.debug(f"Search completed: {query} -> {len(hits)} results")
-            return hits
+            self.client = OpenSearch(**client_config)
+            logger.info("✅ OpenSearch client initialized")
             
         except Exception as e:
-            self.stats["total_operations"] += 1
-            self.stats["failed_operations"] += 1
-            self.stats["last_error"] = str(e)
-            
-            logger.error(f"Search failed: {e}")
-            return []
+            logger.error(f"❌ Failed to initialize OpenSearch client: {e}")
+            self.last_error = str(e)
+            self.client = None
     
-    def vector_search(self, embedding: List[float], index_name: str = None, size: int = 10, 
-                     filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-        """Search documents using vector similarity"""
-        if not index_name:
-            index_name = "*"
-        
-        if not self.test_connection():
-            logger.warning("OpenSearch not available for vector search")
-            return []
+    def test_connection(self) -> bool:
+        """Test OpenSearch connection with enhanced error handling"""
+        if not self.client or OPENSEARCH_HOST == "not_configured":
+            self.last_error = "OpenSearch not configured"
+            return False
         
         try:
-            # Build filter clauses
-            filter_clauses = []
-            if filters:
-                for field, value in filters.items():
-                    if isinstance(value, list):
-                        filter_clauses.append({"terms": {field: value}})
-                    else:
-                        filter_clauses.append({"term": {field: value}})
+            start_time = time.time()
             
-            # Build search body
-            body = {
-                "size": size,
-                "query": {
-                    "script_score": {
-                        "query": {
-                            "bool": {
-                                "filter": filter_clauses
-                            } if filter_clauses else {"match_all": {}}
+            # Test basic connectivity
+            info = self.client.info()
+            
+            # Test index operations
+            test_index = "connection-test"
+            
+            # Try to create a test index
+            if not self.client.indices.exists(index=test_index):
+                self.client.indices.create(
+                    index=test_index,
+                    body={
+                        "settings": {
+                            "number_of_shards": 1,
+                            "number_of_replicas": 0
                         },
-                        "script": {
-                            "source": "cosineSimilarity(params.query_vector, 'embedding') + 1.0",
-                            "params": {
-                                "query_vector": embedding
+                        "mappings": {
+                            "properties": {
+                                "test_field": {"type": "text"},
+                                "timestamp": {"type": "date"}
+                            }
+                        }
+                    }
+                )
+            
+            # Test document operations
+            test_doc = {
+                "test_field": "connection_test",
+                "timestamp": datetime.now().isoformat(),
+                "structure_version": "4.0.0"
+            }
+            
+            self.client.index(
+                index=test_index,
+                id="connection_test",
+                body=test_doc
+            )
+            
+            # Test search
+            search_result = self.client.search(
+                index=test_index,
+                body={"query": {"match": {"test_field": "connection_test"}}}
+            )
+            
+            # Clean up test index
+            try:
+                self.client.indices.delete(index=test_index)
+            except:
+                pass  # Ignore cleanup errors
+            
+            response_time = time.time() - start_time
+            
+            self.connected = True
+            self.last_test = datetime.now().isoformat()
+            self.last_error = None
+            
+            logger.info(f"✅ OpenSearch connection test passed ({response_time:.3f}s)")
+            logger.info(f"📊 Cluster: {info.get('cluster_name', 'Unknown')}")
+            logger.info(f"🔢 Version: {info.get('version', {}).get('number', 'Unknown')}")
+            
+            return True
+            
+        except Exception as e:
+            self.connected = False
+            self.last_test = datetime.now().isoformat()
+            self.last_error = str(e)
+            logger.error(f"❌ OpenSearch connection test failed: {e}")
+            return False
+    
+    def get_connection_status(self) -> Dict[str, Any]:
+        """Get current connection status"""
+        return {
+            "connected": self.connected,
+            "host": self.host,
+            "port": self.port,
+            "url": getattr(self, 'url', 'Not configured'),
+            "last_test": self.last_test,
+            "last_error": self.last_error,
+            "tested": self.last_test is not None
+        }
+    
+    def get_opensearch_config(self) -> Dict[str, Any]:
+        """Get OpenSearch configuration"""
+        return {
+            "host": self.host,
+            "port": self.port,
+            "url": getattr(self, 'url', 'Not configured'),
+            "use_ssl": self.use_ssl,
+            "username": OPENSEARCH_USERNAME,
+            "password_set": bool(OPENSEARCH_PASSWORD),
+            "timeout": OPENSEARCH_TIMEOUT
+        }
+    
+    def _record_operation(self, success: bool, response_time: float, operation: str):
+        """Record operation statistics"""
+        self._performance_stats["total_operations"] += 1
+        self._performance_stats["total_response_time"] += response_time
+        self._performance_stats["last_operation"] = operation
+        
+        if success:
+            self._performance_stats["successful_operations"] += 1
+        else:
+            self._performance_stats["failed_operations"] += 1
+        
+        # Calculate average
+        total_ops = self._performance_stats["total_operations"]
+        if total_ops > 0:
+            self._performance_stats["avg_response_time"] = (
+                self._performance_stats["total_response_time"] / total_ops
+            )
+    
+    def index_evaluation_document(self, doc_id: str, document: Dict[str, Any], 
+                                index_name: str = None) -> bool:
+        """
+        ENHANCED: Index a complete evaluation document with grouped chunks
+        """
+        if not self.client:
+            logger.error("❌ OpenSearch client not initialized")
+            return False
+        
+        start_time = time.time()
+        index_name = index_name or DEFAULT_INDEX
+        
+        try:
+            # Ensure the index exists with proper mapping for evaluation documents
+            self._ensure_evaluation_index_exists(index_name)
+            
+            # Validate document structure
+            if not self._validate_evaluation_document(document):
+                logger.error(f"❌ Invalid evaluation document structure for {doc_id}")
+                return False
+            
+            # Add indexing metadata
+            document["_indexed_at"] = datetime.now().isoformat()
+            document["_structure_version"] = "4.0.0"
+            document["_document_type"] = "evaluation_grouped"
+            
+            # Index the complete evaluation document
+            response = self.client.index(
+                index=index_name,
+                id=doc_id,
+                body=document,
+                refresh=True  # Make immediately searchable
+            )
+            
+            response_time = time.time() - start_time
+            self._record_operation(True, response_time, f"index_evaluation:{index_name}")
+            
+            logger.info(f"✅ Indexed evaluation {doc_id} in {index_name} ({response_time:.3f}s)")
+            logger.info(f"   📄 Chunks: {document.get('total_chunks', 0)}")
+            logger.info(f"   📋 Template: {document.get('template_name', 'Unknown')}")
+            
+            return True
+            
+        except Exception as e:
+            response_time = time.time() - start_time
+            self._record_operation(False, response_time, f"index_evaluation:{index_name}")
+            logger.error(f"❌ Failed to index evaluation {doc_id}: {e}")
+            return False
+    
+    def _ensure_evaluation_index_exists(self, index_name: str):
+        """
+        ENHANCED: Ensure index exists with proper mapping for evaluation documents
+        """
+        if self.client.indices.exists(index=index_name):
+            return
+        
+        # Enhanced mapping for evaluation-grouped documents
+        mapping = {
+            "settings": {
+                "number_of_shards": 1,
+                "number_of_replicas": 0,
+                "analysis": {
+                    "analyzer": {
+                        "evaluation_analyzer": {
+                            "type": "custom",
+                            "tokenizer": "standard",
+                            "filter": ["lowercase", "stop"]
+                        }
+                    }
+                }
+            },
+            "mappings": {
+                "properties": {
+                    # Primary identifiers
+                    "evaluationId": {"type": "keyword"},
+                    "internalId": {"type": "keyword"},
+                    "template_id": {"type": "keyword"},
+                    "template_name": {"type": "text", "analyzer": "evaluation_analyzer", 
+                                    "fields": {"keyword": {"type": "keyword"}}},
+                    
+                    # Document structure
+                    "document_type": {"type": "keyword"},
+                    "total_chunks": {"type": "integer"},
+                    "evaluation_chunks_count": {"type": "integer"},
+                    "transcript_chunks_count": {"type": "integer"},
+                    
+                    # Full content for search
+                    "full_text": {"type": "text", "analyzer": "evaluation_analyzer"},
+                    "evaluation_text": {"type": "text", "analyzer": "evaluation_analyzer"},
+                    "transcript_text": {"type": "text", "analyzer": "evaluation_analyzer"},
+                    
+                    # Chunks array with nested mapping
+                    "chunks": {
+                        "type": "nested",
+                        "properties": {
+                            "chunk_index": {"type": "integer"},
+                            "text": {"type": "text", "analyzer": "evaluation_analyzer"},
+                            "content_type": {"type": "keyword"},
+                            "length": {"type": "integer"},
+                            "embedding": {"type": "dense_vector", "dims": 384},
+                            
+                            # QA-specific fields
+                            "section": {"type": "keyword"},
+                            "question": {"type": "text", "analyzer": "evaluation_analyzer"},
+                            "answer": {"type": "text", "analyzer": "evaluation_analyzer"},
+                            "qa_pair_index": {"type": "integer"},
+                            
+                            # Transcript-specific fields
+                            "speakers": {"type": "keyword"},
+                            "timestamps": {"type": "keyword"},
+                            "speaker_count": {"type": "integer"},
+                            "transcript_chunk_index": {"type": "integer"}
+                        }
+                    },
+                    
+                    # Document-level embedding
+                    "document_embedding": {"type": "dense_vector", "dims": 384},
+                    
+                    # Metadata with enhanced structure
+                    "metadata": {
+                        "properties": {
+                            "evaluationId": {"type": "keyword"},
+                            "internalId": {"type": "keyword"},
+                            "template_id": {"type": "keyword"},
+                            "template_name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                            "partner": {"type": "keyword"},
+                            "site": {"type": "keyword"},
+                            "lob": {"type": "keyword"},
+                            "agent": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                            "agent_id": {"type": "keyword"},
+                            "disposition": {"type": "keyword"},
+                            "sub_disposition": {"type": "keyword"},
+                            "language": {"type": "keyword"},
+                            "call_date": {"type": "date"},
+                            "call_duration": {"type": "integer"},
+                            "created_on": {"type": "date"}
+                        }
+                    },
+                    
+                    # System fields
+                    "source": {"type": "keyword"},
+                    "indexed_at": {"type": "date"},
+                    "collection_name": {"type": "keyword"},
+                    "collection_source": {"type": "keyword"},
+                    "_indexed_at": {"type": "date"},
+                    "_structure_version": {"type": "keyword"},
+                    "_document_type": {"type": "keyword"}
+                }
+            }
+        }
+        
+        try:
+            self.client.indices.create(index=index_name, body=mapping)
+            logger.info(f"✅ Created evaluation index: {index_name}")
+        except Exception as e:
+            logger.error(f"❌ Failed to create index {index_name}: {e}")
+            raise
+    
+    def _validate_evaluation_document(self, document: Dict[str, Any]) -> bool:
+        """Validate evaluation document structure"""
+        required_fields = ["evaluationId", "template_id", "chunks", "metadata"]
+        
+        for field in required_fields:
+            if field not in document:
+                logger.error(f"❌ Missing required field: {field}")
+                return False
+        
+        if not isinstance(document["chunks"], list):
+            logger.error("❌ Chunks must be a list")
+            return False
+        
+        if len(document["chunks"]) == 0:
+            logger.error("❌ Document must have at least one chunk")
+            return False
+        
+        return True
+    
+    def search_evaluations(self, query: str, index_name: str = None, 
+                         filters: Dict[str, Any] = None, size: int = 10) -> List[Dict]:
+        """
+        ENHANCED: Search evaluation documents (returns evaluations, not chunks)
+        """
+        if not self.client:
+            logger.error("❌ OpenSearch client not initialized")
+            return []
+        
+        start_time = time.time()
+        index_pattern = index_name or "eval-*"
+        
+        try:
+            # Build search query for evaluation documents
+            search_body = self._build_evaluation_search_query(query, filters, size)
+            
+            response = self.client.search(
+                index=index_pattern,
+                body=search_body
+            )
+            
+            response_time = time.time() - start_time
+            self._record_operation(True, response_time, f"search_evaluations:{index_pattern}")
+            
+            hits = response.get("hits", {}).get("hits", [])
+            total_hits = response.get("hits", {}).get("total", {})
+            
+            if isinstance(total_hits, dict):
+                total_count = total_hits.get("value", 0)
+            else:
+                total_count = total_hits
+            
+            logger.info(f"🔍 Found {total_count} evaluations in {response_time:.3f}s")
+            
+            # Process results to return evaluation-level information
+            results = []
+            for hit in hits:
+                source = hit.get("_source", {})
+                result = {
+                    "_id": hit.get("_id"),
+                    "_score": hit.get("_score", 0),
+                    "_index": hit.get("_index"),
+                    "_source": source,
+                    
+                    # Evaluation-level fields for easy access
+                    "evaluationId": source.get("evaluationId"),
+                    "template_id": source.get("template_id"),
+                    "template_name": source.get("template_name"),
+                    "total_chunks": source.get("total_chunks", 0),
+                    "metadata": source.get("metadata", {}),
+                    
+                    # For backward compatibility, create a "text" field from full_text
+                    "text": source.get("full_text", "")[:500]  # First 500 chars for preview
+                }
+                results.append(result)
+            
+            return results
+            
+        except Exception as e:
+            response_time = time.time() - start_time
+            self._record_operation(False, response_time, f"search_evaluations:{index_pattern}")
+            logger.error(f"❌ Search failed: {e}")
+            return []
+    
+    def search_evaluation_chunks(self, query: str, evaluation_id: str = None,
+                               content_type: str = None, index_name: str = None) -> List[Dict]:
+        """
+        ENHANCED: Search within chunks of evaluations using nested queries
+        """
+        if not self.client:
+            logger.error("❌ OpenSearch client not initialized")
+            return []
+        
+        start_time = time.time()
+        index_pattern = index_name or "eval-*"
+        
+        try:
+            # Build nested query to search within chunks
+            nested_query = {
+                "nested": {
+                    "path": "chunks",
+                    "query": {
+                        "bool": {
+                            "must": [
+                                {"match": {"chunks.text": query}}
+                            ]
+                        }
+                    },
+                    "inner_hits": {
+                        "size": 10,
+                        "highlight": {
+                            "fields": {
+                                "chunks.text": {}
                             }
                         }
                     }
                 }
             }
             
-            def _vector_search_operation():
-                return self.client.search(
-                    index=index_name,
-                    body=body
-                )
+            # Add filters if specified
+            bool_query = {"bool": {"must": [nested_query]}}
             
-            response = self._retry_operation(_vector_search_operation)
-            hits = response.get("hits", {}).get("hits", [])
+            if evaluation_id:
+                bool_query["bool"]["must"].append({
+                    "term": {"evaluationId": evaluation_id}
+                })
             
-            # Update stats
-            self.stats["total_operations"] += 1
-            self.stats["successful_operations"] += 1
+            if content_type:
+                nested_query["nested"]["query"]["bool"]["must"].append({
+                    "term": {"chunks.content_type": content_type}
+                })
             
-            logger.debug(f"Vector search completed: {len(embedding)} dims -> {len(hits)} results")
-            return hits
-            
-        except Exception as e:
-            self.stats["total_operations"] += 1
-            self.stats["failed_operations"] += 1
-            self.stats["last_error"] = str(e)
-            
-            logger.error(f"Vector search failed: {e}")
-            return []
-    
-    def get_indices(self) -> List[str]:
-        """Get list of available indices"""
-        if not self.test_connection():
-            return []
-        
-        try:
-            indices = self.client.indices.get_alias(index="*")
-            # Filter out system indices
-            user_indices = [name for name in indices.keys() if not name.startswith('.')]
-            return user_indices
-        except Exception as e:
-            logger.error(f"Failed to get indices: {e}")
-            return []
-    
-    def get_index_stats(self, index_name: str) -> Dict[str, Any]:
-        """Get statistics for a specific index"""
-        if not self.test_connection():
-            return {"status": "connection_failed"}
-        
-        try:
-            # Check if index exists
-            if not self.client.indices.exists(index=index_name):
-                return {"status": "not_found", "index": index_name}
-            
-            # Get stats
-            stats = self.client.indices.stats(index=index_name)
-            doc_count = stats["_all"]["primaries"]["docs"]["count"]
-            index_size = stats["_all"]["primaries"]["store"]["size_in_bytes"]
-            
-            return {
-                "status": "healthy",
-                "index": index_name,
-                "document_count": doc_count,
-                "size_bytes": index_size,
-                "size_mb": round(index_size / (1024 * 1024), 2)
+            search_body = {
+                "query": bool_query,
+                "size": 20
             }
             
+            response = self.client.search(
+                index=index_pattern,
+                body=search_body
+            )
+            
+            response_time = time.time() - start_time
+            self._record_operation(True, response_time, f"search_chunks:{index_pattern}")
+            
+            # Process nested search results
+            results = []
+            
+            for hit in response.get("hits", {}).get("hits", []):
+                source = hit.get("_source", {})
+                inner_hits = hit.get("inner_hits", {}).get("chunks", {}).get("hits", [])
+                
+                for inner_hit in inner_hits:
+                    chunk_source = inner_hit.get("_source", {})
+                    highlight = inner_hit.get("highlight", {})
+                    
+                    result = {
+                        "_id": f"{hit.get('_id')}-chunk-{chunk_source.get('chunk_index')}",
+                        "_score": inner_hit.get("_score", 0),
+                        "_index": hit.get("_index"),
+                        
+                        # Chunk information
+                        "text": chunk_source.get("text", ""),
+                        "content_type": chunk_source.get("content_type"),
+                        "chunk_index": chunk_source.get("chunk_index"),
+                        
+                        # Parent evaluation information
+                        "evaluationId": source.get("evaluationId"),
+                        "template_id": source.get("template_id"),
+                        "template_name": source.get("template_name"),
+                        "metadata": source.get("metadata", {}),
+                        
+                        # Highlighting
+                        "highlight": highlight,
+                        
+                        # For backward compatibility
+                        "_source": chunk_source
+                    }
+                    results.append(result)
+            
+            logger.info(f"🔍 Found {len(results)} chunk matches in {response_time:.3f}s")
+            return results
+            
         except Exception as e:
-            logger.error(f"Failed to get index stats: {e}")
-            return {"status": "error", "error": str(e)}
+            response_time = time.time() - start_time
+            self._record_operation(False, response_time, f"search_chunks:{index_pattern}")
+            logger.error(f"❌ Chunk search failed: {e}")
+            return []
     
-    def create_index(self, index_name: str, mapping: Dict[str, Any] = None) -> bool:
-        """Create an index with optional mapping"""
-        if not self.test_connection():
-            return False
+    def _build_evaluation_search_query(self, query: str, filters: Dict[str, Any] = None, 
+                                     size: int = 10) -> Dict[str, Any]:
+        """
+        Build search query for evaluation documents
+        """
+        # Main text search across multiple fields
+        text_query = {
+            "multi_match": {
+                "query": query,
+                "fields": [
+                    "full_text^2",           # Boost full text
+                    "evaluation_text^1.5",   # Boost evaluation content
+                    "transcript_text",
+                    "template_name^1.2",     # Boost template name
+                    "metadata.disposition^1.1",
+                    "metadata.agent^1.1"
+                ],
+                "type": "best_fields",
+                "fuzziness": "AUTO"
+            }
+        }
+        
+        # Also search within chunks using nested query
+        nested_query = {
+            "nested": {
+                "path": "chunks",
+                "query": {
+                    "multi_match": {
+                        "query": query,
+                        "fields": [
+                            "chunks.text^1.5",
+                            "chunks.question",
+                            "chunks.answer"
+                        ],
+                        "fuzziness": "AUTO"
+                    }
+                },
+                "score_mode": "max"
+            }
+        }
+        
+        # Combine queries
+        combined_query = {
+            "bool": {
+                "should": [
+                    text_query,
+                    nested_query
+                ],
+                "minimum_should_match": 1
+            }
+        }
+        
+        # Apply filters if provided
+        if filters:
+            filter_clauses = []
+            
+            # Date filters
+            if filters.get("call_date_start") or filters.get("call_date_end"):
+                date_range = {}
+                if filters.get("call_date_start"):
+                    date_range["gte"] = filters["call_date_start"]
+                if filters.get("call_date_end"):
+                    date_range["lte"] = filters["call_date_end"]
+                
+                filter_clauses.append({
+                    "range": {"metadata.call_date": date_range}
+                })
+            
+            # Keyword filters
+            keyword_filters = {
+                "template_id": "template_id",
+                "partner": "metadata.partner",
+                "site": "metadata.site",
+                "lob": "metadata.lob",
+                "agent_name": "metadata.agent",
+                "disposition": "metadata.disposition",
+                "language": "metadata.language"
+            }
+            
+            for filter_key, field_path in keyword_filters.items():
+                if filters.get(filter_key):
+                    filter_clauses.append({
+                        "term": {f"{field_path}.keyword": filters[filter_key]}
+                    })
+            
+            # Duration filter
+            if filters.get("min_duration") or filters.get("max_duration"):
+                duration_range = {}
+                if filters.get("min_duration"):
+                    duration_range["gte"] = filters["min_duration"]
+                if filters.get("max_duration"):
+                    duration_range["lte"] = filters["max_duration"]
+                
+                filter_clauses.append({
+                    "range": {"metadata.call_duration": duration_range}
+                })
+            
+            if filter_clauses:
+                combined_query["bool"]["filter"] = filter_clauses
+        
+        # Build final search body
+        search_body = {
+            "query": combined_query,
+            "size": size,
+            "sort": [
+                {"_score": {"order": "desc"}},
+                {"metadata.call_date": {"order": "desc"}}
+            ],
+            "highlight": {
+                "fields": {
+                    "full_text": {"fragment_size": 150, "number_of_fragments": 2},
+                    "evaluation_text": {"fragment_size": 150, "number_of_fragments": 1},
+                    "transcript_text": {"fragment_size": 150, "number_of_fragments": 1}
+                }
+            }
+        }
+        
+        return search_body
+    
+    def get_evaluation_by_id(self, evaluation_id: str, index_name: str = None) -> Optional[Dict]:
+        """Get a specific evaluation document by ID"""
+        if not self.client:
+            return None
         
         try:
-            # Check if index already exists
-            if self.client.indices.exists(index=index_name):
-                logger.info(f"Index {index_name} already exists")
-                return True
+            index_pattern = index_name or "eval-*"
             
-            # Create index
-            body = {}
-            if mapping:
-                body["mappings"] = mapping
+            # Search by evaluationId field (not document _id)
+            response = self.client.search(
+                index=index_pattern,
+                body={
+                    "query": {"term": {"evaluationId": evaluation_id}},
+                    "size": 1
+                }
+            )
             
-            self.client.indices.create(index=index_name, body=body)
-            logger.info(f"Index created: {index_name}")
-            return True
+            hits = response.get("hits", {}).get("hits", [])
             
-        except Exception as e:
-            logger.error(f"Failed to create index {index_name}: {e}")
-            return False
-    
-    def delete_index(self, index_name: str) -> bool:
-        """Delete an index"""
-        if not self.test_connection():
-            return False
-        
-        try:
-            if self.client.indices.exists(index=index_name):
-                self.client.indices.delete(index=index_name)
-                logger.info(f"Index deleted: {index_name}")
-                return True
+            if hits:
+                return hits[0]
             else:
-                logger.warning(f"Index {index_name} does not exist")
-                return False
+                return None
                 
         except Exception as e:
-            logger.error(f"Failed to delete index {index_name}: {e}")
-            return False
+            logger.error(f"❌ Failed to get evaluation {evaluation_id}: {e}")
+            return None
     
-    def get_health(self) -> Dict[str, Any]:
-        """Get comprehensive health information"""
-        health_info = {
-            "timestamp": datetime.now().isoformat(),
-            "client_initialized": self.client is not None,
-            "connection_status": "unknown",
-            "config": self.config,
-            "stats": self.stats
-        }
+    def get_template_collections(self) -> List[Dict[str, Any]]:
+        """Get list of template-based collections with statistics"""
+        if not self.client:
+            return []
         
-        if self.test_connection():
-            health_info["connection_status"] = "connected"
+        try:
+            # Get all indices that start with 'eval-'
+            indices = self.client.indices.get(index="eval-*")
             
-            # Try to get cluster health
-            try:
-                cluster_health = self.client.cluster.health()
-                health_info["cluster_health"] = {
-                    "status": cluster_health.get("status", "unknown"),
-                    "number_of_nodes": cluster_health.get("number_of_nodes", 0),
-                    "active_shards": cluster_health.get("active_shards", 0)
-                }
-            except Exception as e:
-                health_info["cluster_health"] = {"error": str(e)}
-        else:
-            health_info["connection_status"] = "disconnected"
-        
-        return health_info
+            collections = []
+            
+            for index_name in indices.keys():
+                try:
+                    # Get index stats
+                    stats = self.client.indices.stats(index=index_name)
+                    doc_count = stats["_all"]["primaries"]["docs"]["count"]
+                    
+                    # Get sample document to extract template info
+                    sample = self.client.search(
+                        index=index_name,
+                        body={"query": {"match_all": {}}, "size": 1}
+                    )
+                    
+                    template_id = None
+                    template_name = None
+                    
+                    if sample["hits"]["hits"]:
+                        source = sample["hits"]["hits"][0]["_source"]
+                        template_id = source.get("template_id")
+                        template_name = source.get("template_name")
+                    
+                    collections.append({
+                        "collection_name": index_name,
+                        "template_id": template_id,
+                        "template_name": template_name,
+                        "document_count": doc_count,
+                        "status": "active"
+                    })
+                    
+                except Exception as e:
+                    collections.append({
+                        "collection_name": index_name,
+                        "template_id": None,
+                        "template_name": None,
+                        "document_count": 0,
+                        "status": "error",
+                        "error": str(e)[:100]
+                    })
+            
+            return collections
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to get template collections: {e}")
+            return []
     
-    def get_stats(self) -> Dict[str, Any]:
-        """Get client statistics"""
-        total_ops = self.stats["total_operations"]
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """Get OpenSearch performance statistics"""
         success_rate = 0.0
-        
-        if total_ops > 0:
-            success_rate = (self.stats["successful_operations"] / total_ops) * 100
+        if self._performance_stats["total_operations"] > 0:
+            success_rate = (
+                self._performance_stats["successful_operations"] / 
+                self._performance_stats["total_operations"]
+            )
         
         return {
-            **self.stats,
-            "success_rate": f"{success_rate:.1f}%",
-            "connection_healthy": self.is_connected,
-            "config_valid": self.config.get("configured", False)
+            **self._performance_stats,
+            "success_rate": f"{success_rate:.2%}",
+            "connected": self.connected,
+            "structure_version": "4.0.0"
         }
-    
-    def reset_stats(self):
-        """Reset all statistics"""
-        self.stats = {
-            "total_operations": 0,
-            "successful_operations": 0,
-            "failed_operations": 0,
-            "connection_errors": 0,
-            "last_error": None,
-            "last_success": None
-        }
-        logger.info("OpenSearch statistics reset")
 
-# Global client instance
-_client = None
-_client_lock = threading.Lock()
+# Global manager instance
+_opensearch_manager = None
 
-def get_client() -> OpenSearchClient:
-    """Get or create global OpenSearch client instance"""
-    global _client
-    
-    if _client is None:
-        with _client_lock:
-            if _client is None:
-                _client = OpenSearchClient()
-    
-    return _client
+def get_opensearch_manager() -> OpenSearchManager:
+    """Get or create the global OpenSearch manager"""
+    global _opensearch_manager
+    if _opensearch_manager is None:
+        _opensearch_manager = OpenSearchManager()
+    return _opensearch_manager
 
-# Convenience functions for backward compatibility
+# Enhanced convenience functions for backward compatibility
 def test_connection() -> bool:
     """Test OpenSearch connection"""
-    return get_client().test_connection()
+    manager = get_opensearch_manager()
+    return manager.test_connection()
 
 def get_connection_status() -> Dict[str, Any]:
     """Get connection status"""
-    client = get_client()
-    return {
-        "tested": True,
-        "connected": client.is_connected,
-        "last_error": client.stats.get("last_error"),
-        "last_test": client.last_health_check
-    }
+    manager = get_opensearch_manager()
+    return manager.get_connection_status()
 
 def get_opensearch_config() -> Dict[str, Any]:
     """Get OpenSearch configuration"""
-    return get_client().config
+    manager = get_opensearch_manager()
+    return manager.get_opensearch_config()
 
-def index_document(doc_id: str, body: Dict[str, Any], index_override: str = None) -> bool:
-    """Index a document"""
-    return get_client().index_document(doc_id, body, index_override)
+def index_document(doc_id: str, document: Dict[str, Any], index_override: str = None) -> bool:
+    """
+    ENHANCED: Index evaluation document (now groups chunks within evaluation)
+    """
+    manager = get_opensearch_manager()
+    return manager.index_evaluation_document(doc_id, document, index_override)
 
-def search_opensearch(query: str, index_override: str = None, size: int = 10) -> List[Dict[str, Any]]:
-    """Search OpenSearch"""
-    return get_client().search(query, index_override, size)
+def search_opensearch(query: str, index_override: str = None, 
+                     filters: Dict[str, Any] = None, size: int = 10) -> List[Dict]:
+    """
+    ENHANCED: Search evaluations (returns evaluation documents, not chunks)
+    """
+    manager = get_opensearch_manager()
+    return manager.search_evaluations(query, index_override, filters, size)
 
-def search_vector(embedding: List[float], index_override: str = None, size: int = 10, 
-                 filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-    """Vector similarity search"""
-    return get_client().vector_search(embedding, index_override, size, filters)
+def search_vector(query_vector: List[float], index_override: str = None, 
+                 size: int = 10) -> List[Dict]:
+    """
+    ENHANCED: Vector search for evaluation documents
+    """
+    manager = get_opensearch_manager()
+    
+    if not manager.client:
+        return []
+    
+    try:
+        index_pattern = index_override or "eval-*"
+        
+        # Search using document-level embeddings
+        search_body = {
+            "query": {
+                "script_score": {
+                    "query": {"match_all": {}},
+                    "script": {
+                        "source": "cosineSimilarity(params.query_vector, 'document_embedding') + 1.0",
+                        "params": {"query_vector": query_vector}
+                    }
+                }
+            },
+            "size": size
+        }
+        
+        response = manager.client.search(
+            index=index_pattern,
+            body=search_body
+        )
+        
+        return response.get("hits", {}).get("hits", [])
+        
+    except Exception as e:
+        logger.error(f"❌ Vector search failed: {e}")
+        return []
 
-def get_opensearch_manager():
-    """Get OpenSearch manager (for compatibility)"""
-    return get_client()
+def search_evaluation_chunks(query: str, evaluation_id: str = None, 
+                           content_type: str = None) -> List[Dict]:
+    """
+    NEW: Search within chunks of evaluations (for detailed analysis)
+    """
+    manager = get_opensearch_manager()
+    return manager.search_evaluation_chunks(query, evaluation_id, content_type)
+
+def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
+    """
+    NEW: Get specific evaluation by ID
+    """
+    manager = get_opensearch_manager()
+    return manager.get_evaluation_by_id(evaluation_id)
+
+def get_template_collections() -> List[Dict[str, Any]]:
+    """
+    NEW: Get list of template-based collections
+    """
+    manager = get_opensearch_manager()
+    return manager.get_template_collections()
 
 def get_opensearch_stats() -> Dict[str, Any]:
-    """Get OpenSearch statistics"""
-    return get_client().get_stats()
+    """Get OpenSearch performance statistics"""
+    manager = get_opensearch_manager()
+    return manager.get_performance_stats()
 
-def reset_opensearch_stats():
-    """Reset OpenSearch statistics"""
-    get_client().reset_stats()
-
-def get_main_data_index() -> str:
-    """Get the main data index name"""
-    return "ai-corporate-sptr-test"
-
-# Health check functions
+# Health check function
 def health_check() -> Dict[str, Any]:
-    """Comprehensive health check"""
-    return get_client().get_health()
+    """Enhanced health check for evaluation-grouped structure"""
+    try:
+        manager = get_opensearch_manager()
+        
+        if OPENSEARCH_HOST == "not_configured":
+            return {
+                "status": "not_configured",
+                "message": "OPENSEARCH_HOST environment variable not set"
+            }
+        
+        # Test connection
+        connection_ok = manager.test_connection()
+        
+        if connection_ok:
+            # Get cluster info
+            info = manager.client.info()
+            
+            # Get template collections
+            collections = get_template_collections()
+            
+            return {
+                "status": "healthy",
+                "connected": True,
+                "cluster_name": info.get("cluster_name", "Unknown"),
+                "version": info.get("version", {}).get("number", "Unknown"),
+                "host": manager.host,
+                "port": manager.port,
+                "url": getattr(manager, 'url', 'Unknown'),
+                "template_collections": len(collections),
+                "structure_version": "4.0.0",
+                "document_structure": "evaluation_grouped",
+                "performance": manager.get_performance_stats()
+            }
+        else:
+            return {
+                "status": "unhealthy",
+                "connected": False,
+                "error": manager.last_error,
+                "host": manager.host,
+                "port": manager.port
+            }
+            
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
 
-def get_indices() -> List[str]:
-    """Get list of available indices"""
-    return get_client().get_indices()
-
-def get_index_info(index_name: str) -> Dict[str, Any]:
-    """Get index information"""
-    return get_client().get_index_stats(index_name)
-
-# Initialize on import
 if __name__ == "__main__":
-    # Test the client
-    print("🔍 Testing OpenSearch Client...")
+    # Test the enhanced OpenSearch client
+    import time
     
-    client = get_client()
+    logging.basicConfig(level=logging.INFO)
     
-    # Test connection
-    if client.test_connection():
-        print("✅ Connection successful")
+    print("🧪 Testing Enhanced OpenSearch Client - Evaluation Grouped Structure")
+    print("Expected structure: Template_ID collections with evaluation documents")
+    
+    # Health check
+    health = health_check()
+    print(f"\n🏥 Health check: {health['status']}")
+    
+    if health["status"] == "healthy":
+        print(f"   Cluster: {health['cluster_name']}")
+        print(f"   Version: {health['version']}")
+        print(f"   Template Collections: {health['template_collections']}")
+        print(f"   Structure Version: {health['structure_version']}")
+        print(f"   Document Structure: {health['document_structure']}")
         
-        # Get health
-        health = client.get_health()
-        print(f"📊 Health: {health['connection_status']}")
+        # Test search
+        print("\n🔍 Testing evaluation search...")
+        results = search_opensearch("customer service", size=3)
+        print(f"   Found {len(results)} evaluations")
         
-        # Get indices
-        indices = client.get_indices()
-        print(f"📁 Indices: {len(indices)} found")
+        for i, result in enumerate(results[:2]):
+            source = result.get("_source", {})
+            print(f"   {i+1}. Evaluation {source.get('evaluationId', 'Unknown')}")
+            print(f"      Template: {source.get('template_name', 'Unknown')}")
+            print(f"      Chunks: {source.get('total_chunks', 0)}")
+            print(f"      Score: {result.get('_score', 0):.3f}")
         
-        # Get stats
-        stats = client.get_stats()
-        print(f"📈 Stats: {stats['success_rate']} success rate")
+        # Test template collections
+        print("\n📁 Testing template collections...")
+        collections = get_template_collections()
+        print(f"   Found {len(collections)} template-based collections")
+        
+        for collection in collections[:3]:
+            print(f"   - {collection['collection_name']}")
+            print(f"     Template: {collection['template_name']}")
+            print(f"     Documents: {collection['document_count']}")
+        
+        print("\n✅ Enhanced OpenSearch client is working with evaluation grouping!")
         
     else:
-        print("❌ Connection failed")
-        health = client.get_health()
-        print(f"❌ Error: {health['stats'].get('last_error', 'Unknown')}")
+        print(f"❌ Health check failed: {health.get('error', 'Unknown error')}")
+        print("Fix OpenSearch connection before running enhanced imports!")
     
-    print("🏁 Test complete")
-else:
-    try:
-        # Initialize client on import
-        client = get_client()
-        logger.info("🔌 OpenSearch client v3.0.0 initialized")
-        logger.info(f"   Target: {client.config['url']}")
-        logger.info(f"   SSL: {client.config['use_ssl']}")
-        logger.info(f"   Configured: {client.config['configured']}")
-    except Exception as e:
-        logger.error(f"❌ OpenSearch client initialization failed: {e}")
+    print("\n🏁 Testing complete!")
+    print("💡 New structure enables better evaluation-level search and aggregation")

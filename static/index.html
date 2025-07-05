@@ -246,6 +246,39 @@
             padding: 20px;
             color: #666;
         }
+
+        .max-docs-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 8px;
+            margin-top: 8px;
+            font-size: 0.85em;
+            color: #856404;
+        }
+
+        .max-docs-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 4px;
+            padding: 8px;
+            margin-top: 8px;
+            font-size: 0.85em;
+            color: #1565c0;
+        }
+
+        #maxDocsInput:invalid {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.1);
+        }
+
+        #maxDocsInput:valid {
+            border-color: #28a745;
+        }
+
+        #maxDocsInput:placeholder-shown {
+            border-color: #ddd;
+        }
         
         .spinner {
             display: inline-block;
@@ -321,41 +354,77 @@
             </div>
             
             <!-- Import Configuration Section -->
-            <div class="section">
-                <h2><span class="emoji">📥</span> Data Import Configuration</h2>
-                
-                <div class="control-group">
-                    <label for="collectionSelect">Collection:</label>
-                    <select id="collectionSelect">
-                        <option value="all">All Collections</option>                       
-                    </select>
-                </div>
-                
-                <div class="control-group">
-                    <label for="importTypeSelect">Import Type:</label>
-                    <select id="importTypeSelect">
-                        <option value="full">Full Import (All Documents)</option>
-                        <option value="incremental">Incremental (Updated Only)</option>
-                    </select>
-                </div>
-                
-                <div class="control-group">
-                    <label for="maxDocsInput">Max Documents:</label>
-                    <input type="number" id="maxDocsInput" placeholder="Leave empty for all" min="1" max="10000">
-                </div>
-                
-                <div class="control-group">
-                    <button class="btn" onclick="startImport()">
-                        <span class="emoji">🚀</span> Start Import
-                    </button>
-                    <button class="btn secondary" onclick="testOpenSearchConnection()">
-                        <span class="emoji">🔌</span> Test OpenSearch
-                    </button>
-                    <button class="btn secondary" onclick="getImportStatistics()">
-                        <span class="emoji">📊</span> View Statistics
-                    </button>
-                </div>
+        <div class="section">
+            <h2><span class="emoji">📥</span> Enhanced Data Import Configuration</h2>
+            
+            <div class="control-group">
+                <label for="collectionSelect">Collection:</label>
+                <select id="collectionSelect">
+                    <option value="all">All Collections</option>                       
+                </select>
             </div>
+        
+        <div class="control-group">
+            <label for="importTypeSelect">Import Type:</label>
+            <select id="importTypeSelect">
+                <option value="full">Full Import (All Documents)</option>
+                <option value="incremental">Incremental (Updated Only)</option>
+            </select>
+        </div>
+        
+        <!-- Enhanced Max Documents Input -->
+        <div class="control-group">
+            <label for="maxDocsInput">Max Documents:</label>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <input 
+                    type="number" 
+                    id="maxDocsInput" 
+                    class="filter-input"
+                    placeholder="Leave empty for all" 
+                    min="1" 
+                    max="10000"
+                    title="Maximum number of documents to import"
+                    style="flex: 1;"
+                >
+                <span id="maxDocsDisplay" style="font-size: 0.85em; color: #666; min-width: 100px; font-weight: 500;">
+                    All documents
+                </span>
+            </div>
+            
+            <!-- Dynamic info box -->
+            <div id="maxDocsInfo" class="max-docs-info" style="display: none;">
+                <strong>📊 Import Scope:</strong>
+                <div id="maxDocsInfoText">All available documents will be processed</div>
+            </div>
+            
+            <div style="font-size: 0.8em; color: #666; margin-top: 6px;">
+                💡 <strong>Guidelines:</strong>
+                <ul style="margin: 4px 0 0 16px; padding: 0;">
+                    <li><strong>Testing:</strong> Use 10-50 documents for quick tests</li>
+                    <li><strong>Development:</strong> Use 100-500 documents for dev work</li>
+                    <li><strong>Production:</strong> Leave empty for complete import</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <button class="btn" onclick="startImport()">
+                <span class="emoji">🚀</span> Start Enhanced Import
+            </button>
+            <button class="btn secondary" onclick="checkLastImportInfo()">
+                <span class="emoji">📅</span> Last Import Info
+            </button>
+            <button class="btn danger" onclick="clearImportTimestamp()">
+                <span class="emoji">🔄</span> Reset Timestamp
+            </button>
+        </div>
+        
+        <!-- Import preview -->
+        <div id="importPreview" style="margin-top: 15px; padding: 12px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #6e32a0; display: none;">
+            <strong>📋 Import Preview:</strong>
+            <div id="importPreviewText" style="margin-top: 6px; font-size: 0.9em; color: #333;"></div>
+        </div>
+    </div>
             
             <!-- Import Status Section -->
             <div class="section">
@@ -410,7 +479,7 @@
         let pollInterval = null;
 
         // Initialize on page load
-        document.addEventListener('DOMContentLoaded', () => {
+       document.addEventListener('DOMContentLoaded', () => {
             console.log("🚀 Ask InnovAI Admin - Production");
             refreshStatus();
             checkSystemHealth();
@@ -420,9 +489,31 @@
                 .then(r => r.json())
                 .then(data => console.log("✅ Server ping successful:", data))
                 .catch(error => console.error("❌ Server ping failed:", error));
+            
+            // 🆕 ADD THIS: Max docs validation and display updates
+            setupMaxDocsValidation();
+            
+            const maxDocsInput = document.getElementById("maxDocsInput");
+            if (maxDocsInput) {
+                maxDocsInput.addEventListener("input", updateMaxDocsDisplay);
+                maxDocsInput.addEventListener("change", updateMaxDocsDisplay);
+                updateMaxDocsDisplay(); // Initial display
+            }
+            
+            // 🆕 ADD THIS: Setup other import-related UI updates
+            const importTypeSelect = document.getElementById("importTypeSelect");
+            const collectionSelect = document.getElementById("collectionSelect");
+            
+            if (importTypeSelect) {
+                importTypeSelect.addEventListener("change", updateMaxDocsDisplay);
+            }
+            
+            if (collectionSelect) {
+                collectionSelect.addEventListener("change", updateMaxDocsDisplay);
+            }
         });
 
-        // Auto-refresh status every 30 seconds
+        // Keep your existing auto-refresh (this is good!)
         setInterval(() => {
             if (!pollInterval) {
                 refreshStatus();
@@ -635,6 +726,57 @@
             }
             
             grid.innerHTML = html;
+        }
+
+        // Enhanced JavaScript for better max documents handling
+        function updateMaxDocsDisplay() {
+            const maxDocsInput = document.getElementById("maxDocsInput");
+            const maxDocsDisplay = document.getElementById("maxDocsDisplay");
+            const maxDocsInfo = document.getElementById("maxDocsInfo");
+            const maxDocsInfoText = document.getElementById("maxDocsInfoText");
+            const importPreview = document.getElementById("importPreview");
+            const importPreviewText = document.getElementById("importPreviewText");
+            
+            if (!maxDocsInput) return;
+            
+            const value = maxDocsInput.value.trim();
+            const numValue = parseInt(value);
+            
+            // Update display text
+            if (value === "" || isNaN(numValue)) {
+                maxDocsDisplay.textContent = "All documents";
+                maxDocsDisplay.style.color = "#666";
+                maxDocsInfoText.textContent = "All available documents will be processed";
+                maxDocsInfo.className = "max-docs-info";
+            } else {
+                maxDocsDisplay.textContent = `Max: ${numValue.toLocaleString()}`;
+                maxDocsDisplay.style.color = "#6e32a0";
+                maxDocsInfoText.textContent = `Import will be limited to ${numValue.toLocaleString()} documents`;
+                maxDocsInfo.className = "max-docs-warning";
+            }
+            
+            // Show/hide info box
+            if (maxDocsInfo) {
+                maxDocsInfo.style.display = "block";
+            }
+            
+            // Update import preview
+            const importType = document.getElementById("importTypeSelect")?.value || "full";
+            const collection = document.getElementById("collectionSelect")?.value || "all";
+            
+            let previewText = `${importType.charAt(0).toUpperCase() + importType.slice(1)} import from ${collection} collection`;
+            if (value !== "" && !isNaN(numValue)) {
+                previewText += ` (limited to ${numValue.toLocaleString()} documents)`;
+            } else {
+                previewText += ` (all available documents)`;
+            }
+            
+            if (importPreviewText) {
+                importPreviewText.textContent = previewText;
+            }
+            if (importPreview) {
+                importPreview.style.display = "block";
+            }
         }
 
         // ============================================================================

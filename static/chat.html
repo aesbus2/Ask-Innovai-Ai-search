@@ -723,9 +723,16 @@
                             <div class="hierarchy-note">
                                 <strong>Filter Hierarchy:</strong> Program → Partner → Site → LOB
                             </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">Template</label>
+                                <select id="programFilter" class="filter-select" onchange="updateHierarchyFilters('template_id')">
+                                    <option value="">All Templates</option>
+                                </select>
+                            </div>
                             
                             <div class="filter-group">
-                                <label class="filter-label">Program/Template</label>
+                                <label class="filter-label">Program</label>
                                 <select id="programFilter" class="filter-select" onchange="updateHierarchyFilters('program')">
                                     <option value="">All Programs</option>
                                 </select>
@@ -871,26 +878,26 @@
                         <div class="welcome-icon">📞</div>
                         <h2 class="welcome-title">Metro AI Call Center Analytics</h2>
                         <p class="welcome-subtitle">
-                            Ask sophisticated questions about call performance, agent effectiveness, 
+                            Ask questions about call performance, agent effectiveness, 
                             customer satisfaction, and operational insights. Use the filters to focus your analysis.
                         </p>
                         
                         <div class="example-questions">
-                            <div class="example-card" onclick="askQuestion('Show me all calls with disposition Account and sub-disposition Rate Plan Or Plan Fit Analysis from this week')">
+                            <div class="example-card" onclick="askQuestion('Show all call dispositions and sub dispositions, included total number of calls, evaluation score average and coaching suggestions')">
                                 <h4>📊 Call Analysis</h4>
                                 <p>Show me all calls with disposition "Account" and sub-disposition "Rate Plan Or Plan Fit Analysis" from this week</p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('What is the average call duration for calls longer than 300 seconds?')">
+                            <div class="example-card" onclick="askQuestion('What is the call disposition for calls longer than 90 seconds?')">
                                 <h4>📈 Performance Metrics</h4>
-                                <p>What is the average call duration for calls longer than 300 seconds?</p>
+                                <p>find the types of calls we received with AHT over 15 minutes. </p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('Find evaluations where agent is Rey Mendoza and call duration over 400 seconds')">
-                                <h4>🔍 Specific Agent Analysis</h4>
-                                <p>Find evaluations where agent is Rey Mendoza and call duration over 400 seconds</p>
+                            <div class="example-card" onclick="askQuestion('Find evaluations where the agent scored less than 50% on their QA weighted score')">
+                                <h4>🔍 Agent Analysis</h4>
+                                <p>Find all agents that scored below 50% on theit QA weighted score</p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('Compare performance between different sites for Account dispositions')">
+                            <div class="example-card" onclick="askQuestion('Compare performance between different sites for Account dispositions, scores and provided a detail summary of the overall performance.')">
                                 <h4>🏢 Site Comparison</h4>
-                                <p>Compare performance between different sites for Account dispositions</p>
+                                <p>Compare performance for all sites</p>
                             </div>
                         </div>
                     </div>
@@ -914,8 +921,8 @@
                         <button class="question-btn" onclick="askQuestion('Which agents have the best performance metrics?')">
                             Top performing agents
                         </button>
-                        <button class="question-btn" onclick="askQuestion('What patterns do we see in Equipment disposition calls?')">
-                            Equipment call patterns
+                        <button class="question-btn" onclick="askQuestion('What patterns do we see for calls that require troubleshooting?')">
+                            Troubleshooting call patterns
                         </button>
                     </div>
                 </div>

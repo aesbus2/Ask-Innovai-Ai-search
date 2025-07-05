@@ -25,6 +25,15 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(r => r.json())
         .then(data => console.log("✅ Server ping successful:", data))
         .catch(error => console.error("❌ Server ping failed:", error));
+
+     setupMaxDocsValidation();
+
+     const maxDocsInput = document.getElementById("maxDocsInput");
+    if (maxDocsInput) {
+        maxDocsInput.addEventListener("input", updateMaxDocsDisplay);
+        maxDocsInput.addEventListener("change", updateMaxDocsDisplay);
+        updateMaxDocsDisplay(); // Initial display
+    }
 });
 
 // ============================================================================
@@ -38,18 +47,37 @@ async function startImport() {
     
     const selectedCollection = collectionSelect ? collectionSelect.value : "all";
     const importType = importTypeSelect ? importTypeSelect.value : "full";
-    const maxDocs = maxDocsInput ? parseInt(maxDocsInput.value) : undefined;
+    
+    // FIXED: Properly handle max documents input
+    let maxDocs = null;
+    if (maxDocsInput && maxDocsInput.value.trim() !== "") {
+        const parsedValue = parseInt(maxDocsInput.value.trim());
+        if (!isNaN(parsedValue) && parsedValue > 0) {
+            maxDocs = parsedValue;
+        } else {
+            alert("❌ Max Documents must be a positive number or left empty for all documents");
+            return;
+        }
+    }
 
     const config = { 
         collection: selectedCollection, 
         import_type: importType
     };
     
-    if (maxDocs) {
+    // FIXED: Only add max_docs if it's explicitly set
+    if (maxDocs !== null) {
         config.max_docs = maxDocs;
     }
     
-    const modeText = maxDocs ? `Limiting to ${maxDocs} documents` : "Processing all available documents";
+    // Enhanced confirmation message
+    let modeText;
+    if (maxDocs !== null) {
+        modeText = `Limiting to ${maxDocs} documents`;
+    } else {
+        modeText = "Processing ALL available documents";
+    }
+    
     const importTypeText = importType === "incremental" ? "Incremental (only updated documents)" : "Full (all documents)";
 
     const confirmMsg = `Start ${importType} import?
@@ -61,6 +89,14 @@ Scope: ${modeText}
 This will fetch evaluation data from your API and index it for search and chat.`;
 
     if (!confirm(confirmMsg)) return;
+
+    // Debug logging
+    console.log("🚀 Starting import with config:", config);
+    if (maxDocs !== null) {
+        console.log(`📊 Max documents limit: ${maxDocs}`);
+    } else {
+        console.log("📊 No document limit - importing all available");
+    }
 
     try {
         const response = await fetch("/import", {
@@ -80,7 +116,13 @@ This will fetch evaluation data from your API and index it for search and chat.`
         }
 
         if (response.ok) {
-            alert(`✅ ${importType.charAt(0).toUpperCase() + importType.slice(1)} import started successfully!`);
+            let successMsg = `✅ ${importType.charAt(0).toUpperCase() + importType.slice(1)} import started successfully!`;
+            if (maxDocs !== null) {
+                successMsg += `\n📊 Limited to ${maxDocs} documents`;
+            } else {
+                successMsg += `\n📊 Processing all available documents`;
+            }
+            alert(successMsg);
             startPolling();
         } else {
             alert(`❌ Import failed: ${data.detail || data.message || "Unknown error"}`);
@@ -88,6 +130,52 @@ This will fetch evaluation data from your API and index it for search and chat.`
     } catch (error) {
         console.error("Import request failed:", error);
         alert(`❌ Import request failed: ${error.message}`);
+    }
+}
+
+// BONUS: Add input validation for the max documents field
+function setupMaxDocsValidation() {
+    const maxDocsInput = document.getElementById("maxDocsInput");
+    if (maxDocsInput) {
+        maxDocsInput.addEventListener("input", function(e) {
+            const value = e.target.value.trim();
+            
+            // Remove non-numeric characters except for initial clearing
+            if (value !== "" && (isNaN(value) || parseInt(value) < 0)) {
+                e.target.style.borderColor = "#dc3545";
+                e.target.title = "Must be a positive number or empty for all documents";
+            } else {
+                e.target.style.borderColor = "#ddd";
+                e.target.title = "Maximum number of documents to import (leave empty for all)";
+            }
+        });
+        
+        maxDocsInput.addEventListener("blur", function(e) {
+            const value = e.target.value.trim();
+            if (value !== "" && (isNaN(value) || parseInt(value) <= 0)) {
+                alert("Max Documents must be a positive number or left empty");
+                e.target.focus();
+            }
+        });
+    }
+}
+
+// BONUS: Enhanced UI feedback for max documents
+function updateMaxDocsDisplay() {
+    const maxDocsInput = document.getElementById("maxDocsInput");
+    if (maxDocsInput) {
+        const displayElement = document.getElementById("maxDocsDisplay");
+        const value = maxDocsInput.value.trim();
+        
+        if (displayElement) {
+            if (value === "" || isNaN(value)) {
+                displayElement.textContent = "All documents";
+                displayElement.style.color = "#666";
+            } else {
+                displayElement.textContent = `Max: ${parseInt(value).toLocaleString()}`;
+                displayElement.style.color = "#6e32a0";
+            }
+        }
     }
 }
 

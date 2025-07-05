@@ -146,11 +146,10 @@ async function loadDynamicFilterOptions() {
         // Fallback data
         filterOptions = {
             programs: [
-                'Ai Corporate SPTR - TEST',
-                'Customer Service Quality',
-                'Technical Support QA',
-                'Billing Specialist Review'
-            ],
+                'Metro',
+                'ASW',
+                'T-Mobile Prepaid'
+                        ],
             partners: [
                 'iQor', 'Teleperformance', 'Concentrix', 'Alorica', 'Sitel'
             ],
@@ -158,7 +157,7 @@ async function loadDynamicFilterOptions() {
                 'Dasma', 'Manila', 'Cebu', 'Davao', 'Iloilo', 'Bacolod'
             ],
             lobs: [
-                'WNP', 'Prepaid', 'Postpaid', 'Business', 'Enterprise'
+                'CSR', 'CSR-Supervisor', 'Chat', 'chat-supervisor', 
             ],
             callDispositions: [
                 'Account', 'Technical Support', 'Billing', 'Port Out',
