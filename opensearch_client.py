@@ -1,5 +1,5 @@
-# Enhanced opensearch_client.py - Evaluation Grouped Search
-# Version: 4.0.0 - Updated for template_ID collections and evaluation grouping
+# Enhanced opensearch_client.py - Evaluation Grouped Search (FIXED)
+# Version: 4.0.1 - Fixed verify_certs attribute error
 
 import os
 import logging
@@ -39,6 +39,7 @@ class OpenSearchManager:
         self.host = OPENSEARCH_HOST
         self.port = OPENSEARCH_PORT
         self.use_ssl = OPENSEARCH_USE_SSL
+        self.verify_certs = OPENSEARCH_VERIFY_CERTS  # FIXED: Added this line
         
         # Performance tracking
         self._performance_stats = {
@@ -67,7 +68,7 @@ class OpenSearchManager:
                 'hosts': [{'host': self.host, 'port': self.port}],
                 'http_auth': (OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD) if OPENSEARCH_PASSWORD else None,
                 'use_ssl': self.use_ssl,
-                'verify_certs': self.verify_certs,
+                'verify_certs': self.verify_certs,  # FIXED: Now correctly references self.verify_certs
                 'timeout': OPENSEARCH_TIMEOUT,
                 'max_retries': 3,
                 'retry_on_timeout': True
@@ -118,7 +119,7 @@ class OpenSearchManager:
             test_doc = {
                 "test_field": "connection_test",
                 "timestamp": datetime.now().isoformat(),
-                "structure_version": "4.0.0"
+                "structure_version": "4.0.1"
             }
             
             self.client.index(
@@ -167,7 +168,9 @@ class OpenSearchManager:
             "url": getattr(self, 'url', 'Not configured'),
             "last_test": self.last_test,
             "last_error": self.last_error,
-            "tested": self.last_test is not None
+            "tested": self.last_test is not None,
+            "verify_certs": self.verify_certs,  # Added for debugging
+            "use_ssl": self.use_ssl
         }
     
     def get_opensearch_config(self) -> Dict[str, Any]:
@@ -177,6 +180,7 @@ class OpenSearchManager:
             "port": self.port,
             "url": getattr(self, 'url', 'Not configured'),
             "use_ssl": self.use_ssl,
+            "verify_certs": self.verify_certs,
             "username": OPENSEARCH_USERNAME,
             "password_set": bool(OPENSEARCH_PASSWORD),
             "timeout": OPENSEARCH_TIMEOUT
@@ -223,7 +227,7 @@ class OpenSearchManager:
             
             # Add indexing metadata
             document["_indexed_at"] = datetime.now().isoformat()
-            document["_structure_version"] = "4.0.0"
+            document["_structure_version"] = "4.0.1"
             document["_document_type"] = "evaluation_grouped"
             
             # Index the complete evaluation document
@@ -761,7 +765,7 @@ class OpenSearchManager:
             **self._performance_stats,
             "success_rate": f"{success_rate:.2%}",
             "connected": self.connected,
-            "structure_version": "4.0.0"
+            "structure_version": "4.0.1"
         }
 
 # Global manager instance
@@ -901,7 +905,7 @@ def health_check() -> Dict[str, Any]:
                 "port": manager.port,
                 "url": getattr(manager, 'url', 'Unknown'),
                 "template_collections": len(collections),
-                "structure_version": "4.0.0",
+                "structure_version": "4.0.1",
                 "document_structure": "evaluation_grouped",
                 "performance": manager.get_performance_stats()
             }
@@ -926,7 +930,7 @@ if __name__ == "__main__":
     
     logging.basicConfig(level=logging.INFO)
     
-    print("🧪 Testing Enhanced OpenSearch Client - Evaluation Grouped Structure")
+    print("🧪 Testing Fixed OpenSearch Client - Evaluation Grouped Structure")
     print("Expected structure: Template_ID collections with evaluation documents")
     
     # Health check
@@ -962,11 +966,11 @@ if __name__ == "__main__":
             print(f"     Template: {collection['template_name']}")
             print(f"     Documents: {collection['document_count']}")
         
-        print("\n✅ Enhanced OpenSearch client is working with evaluation grouping!")
+        print("\n✅ Fixed OpenSearch client is working with evaluation grouping!")
         
     else:
         print(f"❌ Health check failed: {health.get('error', 'Unknown error')}")
         print("Fix OpenSearch connection before running enhanced imports!")
     
     print("\n🏁 Testing complete!")
-    print("💡 New structure enables better evaluation-level search and aggregation")
+    print("💡 Fixed verify_certs attribute error - should connect properly now")

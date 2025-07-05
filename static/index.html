@@ -478,8 +478,98 @@
     <script>
         let pollInterval = null;
 
+        // FIXED: Define setupMaxDocsValidation inline to avoid loading issues
+        function setupMaxDocsValidation() {
+            const maxDocsInput = document.getElementById("maxDocsInput");
+            if (maxDocsInput) {
+                maxDocsInput.addEventListener("input", function(e) {
+                    const value = e.target.value.trim();
+                    
+                    // Remove non-numeric characters except for initial clearing
+                    if (value !== "" && (isNaN(value) || parseInt(value) < 0)) {
+                        e.target.style.borderColor = "#dc3545";
+                        e.target.title = "Must be a positive number or empty for all documents";
+                    } else {
+                        e.target.style.borderColor = "#ddd";
+                        e.target.title = "Maximum number of documents to import (leave empty for all)";
+                    }
+                });
+                
+                maxDocsInput.addEventListener("blur", function(e) {
+                    const value = e.target.value.trim();
+                    if (value !== "" && (isNaN(value) || parseInt(value) <= 0)) {
+                        alert("Max Documents must be a positive number or left empty");
+                        e.target.focus();
+                    }
+                });
+            }
+        }
+
+        // FIXED: Define updateMaxDocsDisplay inline to avoid loading issues
+        function updateMaxDocsDisplay() {
+            const maxDocsInput = document.getElementById("maxDocsInput");
+            const maxDocsDisplay = document.getElementById("maxDocsDisplay");
+            const maxDocsInfo = document.getElementById("maxDocsInfo");
+            const maxDocsInfoText = document.getElementById("maxDocsInfoText");
+            const importPreview = document.getElementById("importPreview");
+            const importPreviewText = document.getElementById("importPreviewText");
+            
+            if (!maxDocsInput) return;
+            
+            const value = maxDocsInput.value.trim();
+            const numValue = parseInt(value);
+            
+            // Update display text
+            if (value === "" || isNaN(numValue)) {
+                if (maxDocsDisplay) {
+                    maxDocsDisplay.textContent = "All documents";
+                    maxDocsDisplay.style.color = "#666";
+                }
+                if (maxDocsInfoText) {
+                    maxDocsInfoText.textContent = "All available documents will be processed";
+                }
+                if (maxDocsInfo) {
+                    maxDocsInfo.className = "max-docs-info";
+                }
+            } else {
+                if (maxDocsDisplay) {
+                    maxDocsDisplay.textContent = `Max: ${numValue.toLocaleString()}`;
+                    maxDocsDisplay.style.color = "#6e32a0";
+                }
+                if (maxDocsInfoText) {
+                    maxDocsInfoText.textContent = `Import will be limited to ${numValue.toLocaleString()} documents`;
+                }
+                if (maxDocsInfo) {
+                    maxDocsInfo.className = "max-docs-warning";
+                }
+            }
+            
+            // Show/hide info box
+            if (maxDocsInfo) {
+                maxDocsInfo.style.display = "block";
+            }
+            
+            // Update import preview
+            const importType = document.getElementById("importTypeSelect")?.value || "full";
+            const collection = document.getElementById("collectionSelect")?.value || "all";
+            
+            let previewText = `${importType.charAt(0).toUpperCase() + importType.slice(1)} import from ${collection} collection`;
+            if (value !== "" && !isNaN(numValue)) {
+                previewText += ` (limited to ${numValue.toLocaleString()} documents)`;
+            } else {
+                previewText += ` (all available documents)`;
+            }
+            
+            if (importPreviewText) {
+                importPreviewText.textContent = previewText;
+            }
+            if (importPreview) {
+                importPreview.style.display = "block";
+            }
+        }
+
         // Initialize on page load
-       document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', () => {
             console.log("🚀 Ask InnovAI Admin - Production");
             refreshStatus();
             checkSystemHealth();
@@ -490,7 +580,7 @@
                 .then(data => console.log("✅ Server ping successful:", data))
                 .catch(error => console.error("❌ Server ping failed:", error));
             
-            // 🆕 ADD THIS: Max docs validation and display updates
+            // Setup max docs validation
             setupMaxDocsValidation();
             
             const maxDocsInput = document.getElementById("maxDocsInput");
@@ -500,7 +590,7 @@
                 updateMaxDocsDisplay(); // Initial display
             }
             
-            // 🆕 ADD THIS: Setup other import-related UI updates
+            // Setup other import-related UI updates
             const importTypeSelect = document.getElementById("importTypeSelect");
             const collectionSelect = document.getElementById("collectionSelect");
             
@@ -513,7 +603,7 @@
             }
         });
 
-        // Keep your existing auto-refresh (this is good!)
+        // Keep auto-refresh
         setInterval(() => {
             if (!pollInterval) {
                 refreshStatus();
@@ -728,57 +818,6 @@
             grid.innerHTML = html;
         }
 
-        // Enhanced JavaScript for better max documents handling
-        function updateMaxDocsDisplay() {
-            const maxDocsInput = document.getElementById("maxDocsInput");
-            const maxDocsDisplay = document.getElementById("maxDocsDisplay");
-            const maxDocsInfo = document.getElementById("maxDocsInfo");
-            const maxDocsInfoText = document.getElementById("maxDocsInfoText");
-            const importPreview = document.getElementById("importPreview");
-            const importPreviewText = document.getElementById("importPreviewText");
-            
-            if (!maxDocsInput) return;
-            
-            const value = maxDocsInput.value.trim();
-            const numValue = parseInt(value);
-            
-            // Update display text
-            if (value === "" || isNaN(numValue)) {
-                maxDocsDisplay.textContent = "All documents";
-                maxDocsDisplay.style.color = "#666";
-                maxDocsInfoText.textContent = "All available documents will be processed";
-                maxDocsInfo.className = "max-docs-info";
-            } else {
-                maxDocsDisplay.textContent = `Max: ${numValue.toLocaleString()}`;
-                maxDocsDisplay.style.color = "#6e32a0";
-                maxDocsInfoText.textContent = `Import will be limited to ${numValue.toLocaleString()} documents`;
-                maxDocsInfo.className = "max-docs-warning";
-            }
-            
-            // Show/hide info box
-            if (maxDocsInfo) {
-                maxDocsInfo.style.display = "block";
-            }
-            
-            // Update import preview
-            const importType = document.getElementById("importTypeSelect")?.value || "full";
-            const collection = document.getElementById("collectionSelect")?.value || "all";
-            
-            let previewText = `${importType.charAt(0).toUpperCase() + importType.slice(1)} import from ${collection} collection`;
-            if (value !== "" && !isNaN(numValue)) {
-                previewText += ` (limited to ${numValue.toLocaleString()} documents)`;
-            } else {
-                previewText += ` (all available documents)`;
-            }
-            
-            if (importPreviewText) {
-                importPreviewText.textContent = previewText;
-            }
-            if (importPreview) {
-                importPreview.style.display = "block";
-            }
-        }
-
         // ============================================================================
         // SYSTEM HEALTH FUNCTIONS
         // ============================================================================
@@ -894,35 +933,6 @@
             }
         }
 
-        async function getImportStatistics() {
-            const container = document.getElementById("actionResults");
-            if (!container) return;
-            
-            container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading statistics...</div>';
-            
-            try {
-                const response = await fetch('/import_statistics');
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    const stats = data.statistics;
-                    let html = `
-                        <div class="result-card">
-                            <h4>📊 Knowledge Base Statistics</h4>
-                            <p><strong>Total Documents:</strong> ${stats.total_documents || 0}</p>
-                            <p><strong>Total Chunks:</strong> ${stats.total_chunks || 0}</p>
-                            <p><strong>Last Import:</strong> ${stats.last_import ? new Date(stats.last_import).toLocaleString() : 'Never'}</p>
-                        </div>
-                    `;
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = `<div class="status failed">❌ Error: ${data.error}</div>`;
-                }
-            } catch (error) {
-                container.innerHTML = `<div class="status failed">❌ Failed: ${error.message}</div>`;
-            }
-        }
-
         async function testSearch() {
             const query = prompt('🔍 Enter search query to test:', 'customer service');
             if (!query) return;
@@ -977,107 +987,68 @@
             }
         }
 
-        async function testOpenSearchConnection() {
-            const container = document.getElementById("actionResults");
-            if (!container) return;
-            
-            container.innerHTML = '<div class="loading"><div class="spinner"></div>Testing OpenSearch connection...</div>';
-            
+        function openChatInterface() {
+            window.open('/chat', '_blank');
+        }
+
+        // FIXED: Add missing functions that were called from HTML
+        async function checkLastImportInfo() {
             try {
-                const response = await fetch('/test_opensearch');
+                const response = await fetch('/last_import_info');
+                
+                // Handle 404 - endpoint doesn't exist yet
+                if (response.status === 404) {
+                    console.log("📅 Last import info endpoint not available");
+                    return;
+                }
+                
+                if (!response.ok) {
+                    console.error(`Last import info error: ${response.status}`);
+                    return;
+                }
+                
                 const data = await response.json();
                 
-                if (data.status === 'success') {
-                    let indicesInfo = '';
-                    if (data.indices && data.indices.user_indices) {
-                        const userIndices = data.indices.user_indices;
-                        if (userIndices.length > 0) {
-                            indicesInfo = `
-                                <p><strong>Existing Indices:</strong></p>
-                                <ul style="margin-left: 20px;">
-                                    ${userIndices.map(index => `<li>${index}</li>`).join('')}
-                                </ul>
-                            `;
-                        } else {
-                            indicesInfo = '<p><strong>Existing Indices:</strong> None (first import will create them)</p>';
-                        }
-                    }
+                if (data.status === 'success' && data.last_import_timestamp) {
+                    const timestamp = new Date(data.last_import_timestamp).toLocaleString();
+                    console.log(`📅 Last import: ${timestamp}`);
                     
-                    let warningInfo = '';
-                    if (data.warning) {
-                        warningInfo = `<p style="color: #856404; margin-top: 10px;"><strong>Warning:</strong> ${data.warning}</p>`;
-                    }
-                    
-                    container.innerHTML = `
-                        <div class="result-card">
-                            <h4>✅ OpenSearch Connection Test</h4>
-                            <p><strong>Status:</strong> Connected successfully</p>
-                            <p><strong>Host:</strong> ${data.host}</p>
-                            <p><strong>Port:</strong> ${data.port}</p>
-                            <p><strong>URL:</strong> ${data.url}</p>
-                            <p><strong>SSL:</strong> ${data.ssl_enabled ? 'Enabled' : 'Disabled'}</p>
-                            ${indicesInfo}
-                            ${warningInfo}
-                            <p style="color: #28a745; margin-top: 10px;">Ready for import!</p>
-                            <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
-                                Your data will be indexed as: <strong>"Ai Corporate SPTR - TEST"</strong>
-                            </p>
-                        </div>
-                    `;
-                } else {
-                    // Handle both 500 and 503 errors
-                    const isServiceUnavailable = response.status === 503;
-                    const statusText = isServiceUnavailable ? "Service Unavailable" : "Connection Failed";
-                    
-                    let debugInfo = '';
-                    if (data.details) {
-                        debugInfo = `
-                            <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; font-size: 0.9em;">
-                                <strong>Debug Info:</strong><br>
-                                Connection Working: ${data.details.connection_working ? 'Yes' : 'No'}<br>
-                                Last Test: ${data.details.last_test ? new Date(data.details.last_test * 1000).toLocaleString() : 'Never'}<br>
-                                ${data.details.error ? `Error: ${data.details.error}` : ''}
+                    // You could display this in the UI if there's a container for it
+                    const infoContainer = document.getElementById("lastImportInfo");
+                    if (infoContainer) {
+                        infoContainer.innerHTML = `
+                            <div style="background: #e3f2fd; padding: 8px; border-radius: 4px; margin: 8px 0; font-size: 0.9em;">
+                                <strong>📅 Last Import:</strong> ${timestamp}
                             </div>
                         `;
                     }
-                    
-                    container.innerHTML = `
-                        <div class="result-card">
-                            <h4>❌ OpenSearch Connection Test</h4>
-                            <p><strong>Status:</strong> ${statusText}</p>
-                            <p><strong>Host:</strong> ${data.host}</p>
-                            <p><strong>Port:</strong> ${data.port}</p>
-                            <p><strong>URL:</strong> ${data.url}</p>
-                            <p><strong>SSL:</strong> ${data.ssl_enabled ? 'Enabled' : 'Disabled'}</p>
-                            <p style="color: #dc3545; margin-top: 10px;"><strong>Error:</strong> ${data.message}</p>
-                            ${debugInfo}
-                            <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
-                                <strong>🔧 Troubleshooting:</strong><br>
-                                1. Check if OpenSearch service is running<br>
-                                2. Verify host: <code>${data.host}</code><br>
-                                3. Verify port: <code>${data.port}</code><br>
-                                4. Check credentials (OPENSEARCH_USER/OPENSEARCH_PASS)<br>
-                                5. Ensure network access to port ${data.port}
-                            </p>
-                        </div>
-                    `;
                 }
             } catch (error) {
-                container.innerHTML = `
-                    <div class="result-card">
-                        <h4>❌ OpenSearch Connection Test</h4>
-                        <p><strong>Status:</strong> Request failed</p>
-                        <p style="color: #dc3545;"><strong>Error:</strong> ${error.message}</p>
-                        <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
-                            This could indicate a network issue or that the server is not responding.
-                        </p>
-                    </div>
-                `;
+                console.error("Failed to check last import info:", error);
             }
         }
 
-        function openChatInterface() {
-            window.open('/chat', '_blank');
+        async function clearImportTimestamp() {
+            if (!confirm("Reset import timestamp? The next incremental import will process all documents. Continue?")) {
+                return;
+            }
+            
+            try {
+                const response = await fetch("/clear_import_timestamp", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                
+                const data = await response.json();
+                if (data.status === 'success') {
+                    alert("✅ Import timestamp reset successfully!");
+                    checkLastImportInfo(); // Refresh the display
+                } else {
+                    alert(`❌ Error: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`❌ Failed to reset timestamp: ${error.message}`);
+            }
         }
 
         console.log("✅ Ask InnovAI Admin - Production Ready");
