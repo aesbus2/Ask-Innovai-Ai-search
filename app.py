@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from uuid import uuid4
+from uuid import  uuid4
 from chat_handlers import chat_router
 from collections import defaultdict
 
