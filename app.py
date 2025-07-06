@@ -9,6 +9,9 @@ import json
 import sys
 import re
 import time
+import gc
+import os
+import psutil   
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, Query
@@ -405,6 +408,291 @@ def split_transcript_by_speakers(transcript: str) -> List[Dict[str, Any]]:
     
     return chunks
 
+@app.get("/opensearch_statistics")
+async def get_opensearch_statistics():
+    """Get comprehensive OpenSearch database statistics"""
+    try:
+        from opensearch_client import get_opensearch_client
+        
+        client = get_opensearch_client()
+        if not client:
+            return {
+                "status": "error",
+                "error": "OpenSearch client not available"
+            }
+        
+        # Check if we have any evaluation indices
+        try:
+            indices_response = client.indices.get(index="eval-*")
+            if not indices_response:
+                return {
+                    "status": "success",
+                    "data": {
+                        "total_evaluations": 0,
+                        "total_chunks": 0,
+                        "evaluations_with_transcript": 0,
+                        "template_counts": {},
+                        "lob_counts": {},
+                        "partner_counts": {},
+                        "site_counts": {},
+                        "language_counts": {},
+                        "indices": []
+                    },
+                    "message": "No evaluation data found"
+                }
+        except Exception:
+            return {
+                "status": "success", 
+                "data": {
+                    "total_evaluations": 0,
+                    "total_chunks": 0,
+                    "evaluations_with_transcript": 0,
+                    "template_counts": {},
+                    "lob_counts": {},
+                    "partner_counts": {},
+                    "site_counts": {},
+                    "language_counts": {},
+                    "indices": []
+                },
+                "message": "No evaluation indices found"
+            }
+        
+        # Build comprehensive aggregation query
+        agg_query = {
+            "size": 0,  # We only want aggregations, not documents
+            "aggs": {
+                "template_names": {
+                    "terms": {
+                        "field": "template_name.keyword",
+                        "size": 50,
+                        "missing": "Unknown Template"
+                    }
+                },
+                "lob_distribution": {
+                    "terms": {
+                        "field": "metadata.lob.keyword",
+                        "size": 20,
+                        "missing": "Unknown LOB"
+                    }
+                },
+                "partner_distribution": {
+                    "terms": {
+                        "field": "metadata.partner.keyword", 
+                        "size": 20,
+                        "missing": "Unknown Partner"
+                    }
+                },
+                "site_distribution": {
+                    "terms": {
+                        "field": "metadata.site.keyword",
+                        "size": 30,
+                        "missing": "Unknown Site"
+                    }
+                },
+                "language_distribution": {
+                    "terms": {
+                        "field": "metadata.language.keyword",
+                        "size": 10,
+                        "missing": "Unknown Language"
+                    }
+                },
+                "total_chunks_sum": {
+                    "sum": {
+                        "field": "total_chunks"
+                    }
+                },
+                "evaluations_with_transcript": {
+                    "filter": {
+                        "range": {
+                            "transcript_chunks_count": {"gt": 0}
+                        }
+                    }
+                },
+                "evaluation_chunks_sum": {
+                    "sum": {
+                        "field": "evaluation_chunks_count"
+                    }
+                },
+                "transcript_chunks_sum": {
+                    "sum": {
+                        "field": "transcript_chunks_count"
+                    }
+                }
+            }
+        }
+        
+        # Execute the aggregation query
+        response = client.search(
+            index="eval-*",
+            body=agg_query
+        )
+        
+        # Extract aggregation results
+        aggs = response.get("aggregations", {})
+        total_hits = response.get("hits", {}).get("total", {})
+        
+        # Handle different OpenSearch response formats
+        if isinstance(total_hits, dict):
+            total_evaluations = total_hits.get("value", 0)
+        else:
+            total_evaluations = total_hits
+        
+        # Process template name counts
+        template_buckets = aggs.get("template_names", {}).get("buckets", [])
+        template_counts = {
+            bucket["key"]: bucket["doc_count"] 
+            for bucket in template_buckets
+        }
+        
+        # Process LOB counts
+        lob_buckets = aggs.get("lob_distribution", {}).get("buckets", [])
+        lob_counts = {
+            bucket["key"]: bucket["doc_count"]
+            for bucket in lob_buckets
+        }
+        
+        # Process Partner counts
+        partner_buckets = aggs.get("partner_distribution", {}).get("buckets", [])
+        partner_counts = {
+            bucket["key"]: bucket["doc_count"]
+            for bucket in partner_buckets
+        }
+        
+        # Process Site counts
+        site_buckets = aggs.get("site_distribution", {}).get("buckets", [])
+        site_counts = {
+            bucket["key"]: bucket["doc_count"]
+            for bucket in site_buckets
+        }
+        
+        # Process Language counts
+        language_buckets = aggs.get("language_distribution", {}).get("buckets", [])
+        language_counts = {
+            bucket["key"]: bucket["doc_count"]
+            for bucket in language_buckets
+        }
+        
+        # Extract other metrics
+        total_chunks = int(aggs.get("total_chunks_sum", {}).get("value", 0))
+        evaluations_with_transcript = aggs.get("evaluations_with_transcript", {}).get("doc_count", 0)
+        evaluation_chunks_total = int(aggs.get("evaluation_chunks_sum", {}).get("value", 0))
+        transcript_chunks_total = int(aggs.get("transcript_chunks_sum", {}).get("value", 0))
+        
+        # Get index information
+        try:
+            index_stats = client.indices.stats(index="eval-*")
+            indices_info = []
+            
+            for index_name, stats in index_stats.get("indices", {}).items():
+                doc_count = stats.get("primaries", {}).get("docs", {}).get("count", 0)
+                store_size = stats.get("primaries", {}).get("store", {}).get("size_in_bytes", 0)
+                size_mb = store_size / (1024 * 1024) if store_size else 0
+                
+                indices_info.append({
+                    "name": index_name,
+                    "documents": doc_count,
+                    "size_mb": round(size_mb, 2)
+                })
+        except Exception as e:
+            logger.warning(f"Could not get index stats: {e}")
+            indices_info = []
+        
+        return {
+            "status": "success",
+            "data": {
+                "total_evaluations": total_evaluations,
+                "total_chunks": total_chunks,
+                "evaluation_chunks": evaluation_chunks_total,
+                "transcript_chunks": transcript_chunks_total,
+                "evaluations_with_transcript": evaluations_with_transcript,
+                "evaluations_without_transcript": total_evaluations - evaluations_with_transcript,
+                "template_counts": template_counts,
+                "lob_counts": lob_counts,
+                "partner_counts": partner_counts,
+                "site_counts": site_counts,
+                "language_counts": language_counts,
+                "indices": indices_info,
+                "structure_info": {
+                    "version": "4.0.1",
+                    "document_type": "evaluation_grouped",
+                    "collection_strategy": "template_id_based"
+                }
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get OpenSearch statistics: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.get("/opensearch_health_detailed")
+async def get_opensearch_health_detailed():
+    """Get detailed OpenSearch cluster health and statistics"""
+    try:
+        from opensearch_client import get_opensearch_client, test_connection
+        
+        if not test_connection():
+            return {
+                "status": "error",
+                "error": "OpenSearch connection failed"
+            }
+        
+        client = get_opensearch_client()
+        
+        # Get cluster health
+        cluster_health = client.cluster.health()
+        
+        # Get cluster stats
+        cluster_stats = client.cluster.stats()
+        
+        # Get index information
+        try:
+            all_indices = client.indices.get(index="*")
+            user_indices = [name for name in all_indices.keys() if not name.startswith('.')]
+            system_indices = [name for name in all_indices.keys() if name.startswith('.')]
+            eval_indices = [name for name in all_indices.keys() if name.startswith('eval-')]
+        except Exception:
+            user_indices = []
+            system_indices = []
+            eval_indices = []
+        
+        return {
+            "status": "success",
+            "cluster_health": {
+                "status": cluster_health.get("status"),
+                "number_of_nodes": cluster_health.get("number_of_nodes"),
+                "number_of_data_nodes": cluster_health.get("number_of_data_nodes"),
+                "active_primary_shards": cluster_health.get("active_primary_shards"),
+                "active_shards": cluster_health.get("active_shards"),
+                "relocating_shards": cluster_health.get("relocating_shards"),
+                "initializing_shards": cluster_health.get("initializing_shards"),
+                "unassigned_shards": cluster_health.get("unassigned_shards")
+            },
+            "indices_summary": {
+                "total_indices": len(user_indices) + len(system_indices),
+                "user_indices": len(user_indices),
+                "system_indices": len(system_indices),
+                "evaluation_indices": len(eval_indices)
+            },
+            "storage": {
+                "total_size": cluster_stats.get("indices", {}).get("store", {}).get("size_in_bytes", 0),
+                "total_documents": cluster_stats.get("indices", {}).get("docs", {}).get("count", 0)
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get detailed OpenSearch health: {e}")
+        return {
+            "status": "error", 
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
 async def process_evaluation(evaluation: Dict) -> Dict:
     """
     ENHANCED: Process evaluation with template_ID-based collections and evaluation grouping
@@ -710,17 +998,7 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
     ENHANCED: Production import process with evaluation grouping
     Now creates one document per evaluation instead of per chunk
     """
-    import gc
-    import os
-    
-    # Import psutil with fallback
-    try:
-        import psutil
-        PSUTIL_AVAILABLE = True
-    except ImportError:
-        PSUTIL_AVAILABLE = False
-        log_import("⚠️ psutil not available - memory monitoring disabled")
-    
+     
     try:
         update_import_status("running", "Starting enhanced import with evaluation grouping")
         log_import("🚀 Starting ENHANCED import: Template_ID collections + Evaluation grouping")

@@ -143,7 +143,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
                         "text": {"type": "text", "analyzer": "evaluation_analyzer"},
                         "content_type": {"type": "keyword"},
                         "length": {"type": "integer"},
-                        "embedding": {"type": "dense_vector", "dims": 384},
+                                                    # "embedding": {"type": "dense_vector", "dims": 384},  # Commented out - not supported in older OpenSearch
                         
                         # QA-specific fields
                         "section": {"type": "keyword"},
@@ -387,38 +387,10 @@ def search_vector(query_vector: List[float], index_override: str = None,
                  size: int = 10) -> List[Dict]:
     """
     ENHANCED: Vector search for evaluation documents
+    NOTE: Disabled for older OpenSearch versions that don't support dense_vector
     """
-    client = get_opensearch_client()
-    if not client:
-        logger.warning("❌ OpenSearch client not available")
-        return []
-    
-    index_pattern = index_override or "eval-*"
-    
-    try:
-        search_body = {
-            "query": {
-                "script_score": {
-                    "query": {"match_all": {}},
-                    "script": {
-                        "source": "cosineSimilarity(params.query_vector, 'document_embedding') + 1.0",
-                        "params": {"query_vector": query_vector}
-                    }
-                }
-            },
-            "size": size
-        }
-        
-        response = client.search(
-            index=index_pattern,
-            body=search_body
-        )
-        
-        return response.get("hits", {}).get("hits", [])
-        
-    except Exception as e:
-        logger.error(f"❌ Vector search failed: {e}")
-        return []
+    logger.warning("Vector search not available - OpenSearch version doesn't support dense_vector fields")
+    return []
 
 def search_evaluation_chunks(query: str, evaluation_id: str = None, 
                            content_type: str = None) -> List[Dict]:

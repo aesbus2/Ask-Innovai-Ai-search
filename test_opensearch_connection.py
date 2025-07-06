@@ -6,6 +6,8 @@ This combines your proven working authentication with enhanced features
 
 import os
 import sys
+from opensearchpy import OpenSearch
+import time
 
 def test_environment_variables():
     """Test that your working environment variables are properly detected"""
@@ -134,6 +136,82 @@ def test_connection():
             
     except Exception as e:
         print(f"❌ Connection test failed: {e}")
+        return False
+    
+def test_document_indexing():
+    """Test actual document indexing"""
+    print("\n5. Document Indexing Test:")
+    
+    # Get environment variables
+    opensearch_host = os.getenv("OPENSEARCH_HOST", "NOT_SET")
+    opensearch_port = int(os.getenv("OPENSEARCH_PORT", "25060"))
+    opensearch_user = os.getenv("OPENSEARCH_USER", "admin")
+    opensearch_pass = os.getenv("OPENSEARCH_PASS", "admin")
+    
+    if opensearch_host == "NOT_SET":
+        print("   ❌ OPENSEARCH_HOST not set, skipping indexing test")
+        return False
+    
+    # Build URL
+    clean_host = opensearch_host.replace("http://", "").replace("https://", "")
+    protocol = "https" if "cloud" in clean_host.lower() or "digitalocean" in clean_host.lower() else "http"
+    opensearch_url = f"{protocol}://{clean_host}:{opensearch_port}"
+    
+    try:
+        client = OpenSearch(
+            hosts=[opensearch_url],
+            http_auth=(opensearch_user, opensearch_pass),
+            use_ssl=opensearch_url.startswith("https"),
+            verify_certs=False,
+            timeout=15,
+            max_retries=2,
+            retry_on_timeout=True
+        )
+        
+        # Test document
+        test_doc = {
+            "text": "This is a test document for connection debugging",
+            "metadata": {
+                "test": True,
+                "created_at": time.time()
+            },
+            "indexed_at": time.time()
+        }
+        
+        test_index = "connection-test"
+        test_doc_id = f"test-{int(time.time())}"
+        
+        print(f"   Testing index: {test_index}")
+        print(f"   Testing doc ID: {test_doc_id}")
+        
+        # Index the document
+        result = client.index(
+            index=test_index,
+            id=test_doc_id,
+            body=test_doc,
+            timeout='10s'
+        )
+        
+        print(f"   ✅ Document indexed successfully")
+        print(f"   Result: {result.get('result', 'unknown')}")
+        
+        # Try to retrieve it
+        time.sleep(1)  # Wait for indexing
+        try:
+            retrieved = client.get(index=test_index, id=test_doc_id)
+            print(f"   ✅ Document retrieved successfully")
+            
+            # Clean up
+            client.delete(index=test_index, id=test_doc_id)
+            print(f"   ✅ Test document cleaned up")
+            
+        except Exception as e:
+            print(f"   ⚠️  Could not retrieve test document: {e}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"   ❌ Document indexing test failed: {e}")
         return False
 
 def main():

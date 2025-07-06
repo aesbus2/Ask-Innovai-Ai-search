@@ -1,10 +1,10 @@
-// Updated main.js for Ask InnovAI Admin Interface
+// Enhanced main.js for Ask InnovAI Admin Interface with OpenSearch Statistics
 // Compatible with enhanced app.py backend
-// Version: 2.0.0
+// Version: 2.1.0 - Added comprehensive OpenSearch statistics
 
 let pollInterval = null;
 
-console.log("✅ Ask InnovAI Admin - Enhanced main.js loaded");
+console.log("✅ Ask InnovAI Admin - Enhanced main.js with statistics loaded");
 
 // Auto-refresh status every 10 seconds if not actively importing
 setInterval(() => {
@@ -15,10 +15,11 @@ setInterval(() => {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("🚀 DOM loaded, initializing admin interface...");
+    console.log("🚀 DOM loaded, initializing enhanced admin interface...");
     refreshStatus();
     checkSystemHealth();
     checkLastImportInfo();
+    loadOpenSearchStats(); // Load statistics on startup
     
     // Basic server ping to verify connectivity
     fetch("/ping")
@@ -35,6 +36,230 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMaxDocsDisplay(); // Initial display
     }
 });
+
+// ============================================================================
+// OPENSEARCH STATISTICS FUNCTIONS
+// ============================================================================
+
+async function loadOpenSearchStats() {
+    //Load comprehensive OpenSearch database statistics
+    const container = document.getElementById('statisticsContainer');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="loading-stats">
+            <div class="spinner"></div>
+            Loading database statistics...
+        </div>
+    `;
+    
+    try {
+        console.log("📊 Loading OpenSearch statistics...");
+        const response = await fetch('/opensearch_statistics');
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            console.log("✅ Statistics loaded successfully");
+            displayStatistics(result.data, result.timestamp);
+        } else {
+            console.error("❌ Statistics error:", result.error);
+            container.innerHTML = `
+                <div class="stats-error">
+                    <strong>❌ Error loading statistics:</strong> ${result.error}
+                    <br><small>Check OpenSearch connection and try again.</small>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Failed to load statistics:', error);
+        container.innerHTML = `
+            <div class="stats-error">
+                <strong>❌ Failed to connect to server:</strong> ${error.message}
+                <br><small>Verify the backend is running and try refreshing.</small>
+            </div>
+        `;
+    }
+}
+
+function displayStatistics(data, timestamp) {
+   // Display comprehensive statistics in dashboard format
+    const container = document.getElementById('statisticsContainer');
+    if (!container) return;
+    
+    // Calculate some additional metrics
+    const avgChunksPerEval = data.total_evaluations > 0 ? 
+        (data.total_chunks / data.total_evaluations).toFixed(1) : 0;
+    
+    const transcriptPercentage = data.total_evaluations > 0 ? 
+        ((data.evaluations_with_transcript / data.total_evaluations) * 100).toFixed(1) : 0;
+    
+    const html = `
+        <div class="stats-dashboard">
+            <!-- Main Overview Stats -->
+            <div class="stats-card">
+                <h3>📄 Total Evaluations</h3>
+                <div class="stats-number">${data.total_evaluations.toLocaleString()}</div>
+                <div class="stats-label">Complete Evaluations</div>
+                <div class="stats-breakdown">
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">📝 With Transcript</span>
+                        <span class="breakdown-value">${data.evaluations_with_transcript.toLocaleString()} (${transcriptPercentage}%)</span>
+                    </div>
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">📋 Evaluation Only</span>
+                        <span class="breakdown-value">${data.evaluations_without_transcript.toLocaleString()}</span>
+                    </div>
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">📊 Avg Chunks/Eval</span>
+                        <span class="breakdown-value">${avgChunksPerEval}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="stats-card">
+                <h3>🧩 Total Chunks</h3>
+                <div class="stats-number">${data.total_chunks.toLocaleString()}</div>
+                <div class="stats-label">All Content Pieces</div>
+                <div class="stats-breakdown">
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">📝 Evaluation Chunks</span>
+                        <span class="breakdown-value">${data.evaluation_chunks.toLocaleString()}</span>
+                    </div>
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">🎙️ Transcript Chunks</span>
+                        <span class="breakdown-value">${data.transcript_chunks.toLocaleString()}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Template Distribution -->
+            <div class="stats-card">
+                <h3>📋 Templates</h3>
+                <div class="stats-number">${Object.keys(data.template_counts).length}</div>
+                <div class="stats-label">Unique Templates</div>
+                <div class="stats-breakdown">
+                    ${Object.entries(data.template_counts)
+                        .sort(([,a], [,b]) => b - a)
+                        .slice(0, 5)
+                        .map(([template, count]) => `
+                            <div class="breakdown-item">
+                                <span class="breakdown-label" title="${template}">${template.length > 20 ? template.substring(0, 20) + '...' : template}</span>
+                                <span class="breakdown-value">${count.toLocaleString()}</span>
+                            </div>
+                        `).join('')}
+                    ${Object.keys(data.template_counts).length > 5 ? 
+                        `<div class="breakdown-item">
+                            <span class="breakdown-label">...and ${Object.keys(data.template_counts).length - 5} more</span>
+                            <span class="breakdown-value"></span>
+                        </div>` : ''}
+                </div>
+            </div>
+            
+            <!-- LOB Distribution -->
+            <div class="stats-card">
+                <h3>🏢 Line of Business</h3>
+                <div class="stats-number">${Object.keys(data.lob_counts).length}</div>
+                <div class="stats-label">Unique LOBs</div>
+                <div class="stats-breakdown">
+                    ${Object.entries(data.lob_counts)
+                        .sort(([,a], [,b]) => b - a)
+                        .map(([lob, count]) => `
+                            <div class="breakdown-item">
+                                <span class="breakdown-label">${lob}</span>
+                                <span class="breakdown-value">${count.toLocaleString()}</span>
+                            </div>
+                        `).join('')}
+                </div>
+            </div>
+            
+            <!-- Partner Distribution -->
+            <div class="stats-card">
+                <h3>🤝 Partners</h3>
+                <div class="stats-number">${Object.keys(data.partner_counts).length}</div>
+                <div class="stats-label">Unique Partners</div>
+                <div class="stats-breakdown">
+                    ${Object.entries(data.partner_counts)
+                        .sort(([,a], [,b]) => b - a)
+                        .map(([partner, count]) => `
+                            <div class="breakdown-item">
+                                <span class="breakdown-label">${partner}</span>
+                                <span class="breakdown-value">${count.toLocaleString()}</span>
+                            </div>
+                        `).join('')}
+                </div>
+            </div>
+            
+            <!-- Site Distribution -->
+            <div class="stats-card">
+                <h3>🏢 Sites</h3>
+                <div class="stats-number">${Object.keys(data.site_counts).length}</div>
+                <div class="stats-label">Unique Sites</div>
+                <div class="stats-breakdown">
+                    ${Object.entries(data.site_counts)
+                        .sort(([,a], [,b]) => b - a)
+                        .slice(0, 6)
+                        .map(([site, count]) => `
+                            <div class="breakdown-item">
+                                <span class="breakdown-label">${site}</span>
+                                <span class="breakdown-value">${count.toLocaleString()}</span>
+                            </div>
+                        `).join('')}
+                    ${Object.keys(data.site_counts).length > 6 ? 
+                        `<div class="breakdown-item">
+                            <span class="breakdown-label">...and ${Object.keys(data.site_counts).length - 6} more</span>
+                            <span class="breakdown-value"></span>
+                        </div>` : ''}
+                </div>
+            </div>
+            
+            <!-- Language Distribution -->
+            <div class="stats-card">
+                <h3>🌐 Languages</h3>
+                <div class="stats-number">${Object.keys(data.language_counts).length}</div>
+                <div class="stats-label">Languages Used</div>
+                <div class="stats-breakdown">
+                    ${Object.entries(data.language_counts)
+                        .sort(([,a], [,b]) => b - a)
+                        .map(([language, count]) => `
+                            <div class="breakdown-item">
+                                <span class="breakdown-label">${language}</span>
+                                <span class="breakdown-value">${count.toLocaleString()}</span>
+                            </div>
+                        `).join('')}
+                </div>
+            </div>
+            
+            <!-- Index Information -->
+            <div class="stats-card">
+                <h3>💾 Storage</h3>
+                <div class="stats-number">${data.indices.length}</div>
+                <div class="stats-label">Active Indices</div>
+                <div class="stats-breakdown">
+                    ${data.indices.slice(0, 4).map(index => `
+                        <div class="breakdown-item">
+                            <span class="breakdown-label" title="${index.name}">${index.name.length > 15 ? index.name.substring(0, 15) + '...' : index.name}</span>
+                            <span class="breakdown-value">${index.size_mb.toFixed(1)}MB</span>
+                        </div>
+                    `).join('')}
+                    ${data.indices.length > 4 ? 
+                        `<div class="breakdown-item">
+                            <span class="breakdown-label">...and ${data.indices.length - 4} more</span>
+                            <span class="breakdown-value"></span>
+                        </div>` : ''}
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats-last-updated">
+            📅 Last updated: ${new Date(timestamp).toLocaleString()} | 
+            📊 Structure: ${data.structure_info.document_type} | 
+            🏷️ Collections: ${data.structure_info.collection_strategy}
+        </div>
+    `;
+    
+    container.innerHTML = html;
+    console.log("📊 Statistics dashboard updated");
+}
 
 // ============================================================================
 // IMPORT MANAGEMENT FUNCTIONS
@@ -195,10 +420,11 @@ function startPolling() {
                 clearInterval(pollInterval);
                 pollInterval = null;
                 
-                // Refresh import info after completion
+                // Refresh import info and statistics after completion
                 if (status.status === 'completed') {
                     setTimeout(() => {
                         checkLastImportInfo();
+                        loadOpenSearchStats(); // Refresh statistics after import
                     }, 1000);
                 }
             }
@@ -285,6 +511,10 @@ function updateStatusDisplay(data) {
     // Show results if completed
     if (data.status === 'completed' && data.results) {
         showResults(data.results);
+        // Auto-refresh statistics after successful import
+        setTimeout(() => {
+            loadOpenSearchStats();
+        }, 2000);
     }
 }
 
@@ -301,8 +531,10 @@ function showResults(results) {
     // Define key metrics to display
     const metrics = [
         { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: '📄' },
-        { key: 'total_chunks_indexed', label: 'Chunks Indexed', class: 'info', icon: '🧩' },
-        { key: 'empty_documents', label: 'Empty Documents', class: 'warning', icon: '📭' },
+        { key: 'total_evaluations_indexed', label: 'Evaluations Indexed', class: 'success', icon: '📋' },
+        { key: 'total_chunks_processed', label: 'Chunks Processed', class: 'info', icon: '🧩' },
+        { key: 'errors', label: 'Errors', class: 'warning', icon: '❌' },
+        { key: 'opensearch_errors', label: 'OpenSearch Errors', class: 'danger', icon: '🔥' },
         { key: 'import_type', label: 'Import Type', class: 'info', icon: '🔄' }
     ];
     
@@ -326,19 +558,23 @@ function showResults(results) {
     });
     
     // Collections processed
-    if (results.collections_processed && Array.isArray(results.collections_processed)) {
+    if (results.template_collections_created && Array.isArray(results.template_collections_created)) {
         html += `
             <div class="result-card">
-                <h4>📁 Collections Processed</h4>
-                <div class="result-value info">${results.collections_processed.join(', ')}</div>
+                <h4>📁 Template Collections</h4>
+                <div class="result-value info">${results.template_collections_created.length}</div>
+                <div style="font-size: 0.8em; margin-top: 8px; color: #666;">
+                    ${results.template_collections_created.slice(0, 3).join(', ')}
+                    ${results.template_collections_created.length > 3 ? '...' : ''}
+                </div>
             </div>
         `;
     }
     
     // Import timestamp
-    if (results.new_import_timestamp) {
+    if (results.completed_at) {
         try {
-            const timestamp = new Date(results.new_import_timestamp).toLocaleString();
+            const timestamp = new Date(results.completed_at).toLocaleString();
             html += `
                 <div class="result-card">
                     <h4>⏰ Completed At</h4>
@@ -350,21 +586,14 @@ function showResults(results) {
         }
     }
     
-    // Handle empty documents by collection if it's an object
-    if (results.empty_documents_by_collection && typeof results.empty_documents_by_collection === 'object') {
-        const emptyDocs = results.empty_documents_by_collection;
-        if (Object.keys(emptyDocs).length > 0) {
-            let emptyDocsText = Object.entries(emptyDocs)
-                .map(([collection, count]) => `${collection}: ${count}`)
-                .join(', ');
-            
-            html += `
-                <div class="result-card">
-                    <h4>📭 Empty by Collection</h4>
-                    <div class="result-value warning" style="font-size: 1em;">${emptyDocsText}</div>
-                </div>
-            `;
-        }
+    // Success rate
+    if (results.success_rate) {
+        html += `
+            <div class="result-card">
+                <h4>📈 Success Rate</h4>
+                <div class="result-value success">${results.success_rate}</div>
+            </div>
+        `;
     }
     
     grid.innerHTML = html;
@@ -375,8 +604,6 @@ function showResults(results) {
 // ============================================================================
 // SYSTEM HEALTH AND MONITORING
 // ============================================================================
-
-// Replace your checkSystemHealth function with this safer version:
 
 async function checkSystemHealth() {
     const container = document.getElementById('healthStatus');
@@ -443,19 +670,14 @@ async function checkSystemHealth() {
             `;
         }
         
-        // Add last import info if available
-        if (health.last_import && health.last_import.timestamp) {
-            try {
-                const timestamp = new Date(health.last_import.timestamp).toLocaleString();
-                html += `
-                    <div class="health-item">
-                        <div class="health-label">📅 LAST IMPORT</div>
-                        <div class="health-value">${timestamp}</div>
-                    </div>
-                `;
-            } catch (e) {
-                // Ignore timestamp formatting errors
-            }
+        // Add enhanced structure info
+        if (health.enhancements) {
+            html += `
+                <div class="health-item">
+                    <div class="health-label">🔄 STRUCTURE</div>
+                    <div class="health-value">${health.enhancements.document_structure}</div>
+                </div>
+            `;
         }
         
         container.innerHTML = html;
@@ -472,7 +694,6 @@ async function checkSystemHealth() {
     }
 }
 
-// Also update checkLastImportInfo to handle 404 errors:
 async function checkLastImportInfo() {
     try {
         const response = await fetch('/last_import_info');
@@ -488,30 +709,6 @@ async function checkLastImportInfo() {
             return;
         }
         
-        const data = await response.json();
-        
-        if (data.status === 'success' && data.last_import_timestamp) {
-            const timestamp = new Date(data.last_import_timestamp).toLocaleString();
-            console.log(`📅 Last import: ${timestamp}`);
-            
-            // You could display this in the UI if there's a container for it
-            const infoContainer = document.getElementById("lastImportInfo");
-            if (infoContainer) {
-                infoContainer.innerHTML = `
-                    <div style="background: #e3f2fd; padding: 8px; border-radius: 4px; margin: 8px 0; font-size: 0.9em;">
-                        <strong>📅 Last Import:</strong> ${timestamp}
-                    </div>
-                `;
-            }
-        }
-    } catch (error) {
-        console.error("Failed to check last import info:", error);
-    }
-}
-
-async function checkLastImportInfo() {
-    try {
-        const response = await fetch('/last_import_info');
         const data = await response.json();
         
         if (data.status === 'success' && data.last_import_timestamp) {
@@ -585,78 +782,6 @@ async function toggleLogs() {
     }
 }
 
-// Quick action functions that can be called from the UI
-async function getImportStatistics() {
-    const container = document.getElementById("actionResults");
-    if (!container) return;
-    
-    container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading statistics...</div>';
-    
-    try {
-        const response = await fetch('/import_statistics');
-        const data = await response.json();
-        
-        if (data.status === 'success') {
-            const stats = data.statistics;
-            let html = `
-                <div class="result-card">
-                    <h4>📊 Knowledge Base Statistics</h4>
-                    <p><strong>Total Documents:</strong> ${stats.total_documents || 0}</p>
-                    <p><strong>Total Chunks:</strong> ${stats.total_chunks || 0}</p>
-                    <p><strong>Collections:</strong> ${Object.keys(stats.collections || {}).length}</p>
-                </div>
-            `;
-            container.innerHTML = html;
-        } else {
-            container.innerHTML = `<div class="status failed">❌ Error: ${data.error}</div>`;
-        }
-    } catch (error) {
-        container.innerHTML = `<div class="status failed">❌ Failed: ${error.message}</div>`;
-    }
-}
-
-async function countDocsByCollectionAndProgram() {
-    const container = document.getElementById("actionResults");
-    if (!container) return;
-    
-    container.innerHTML = '<div class="loading"><div class="spinner"></div>Counting documents...</div>';
-    
-    try {
-        const response = await fetch('/count_by_collection_and_program');
-        const data = await response.json();
-        
-        if (data.status === 'success') {
-            let html = '<div class="result-card"><h4>📋 Document Counts</h4>';
-            
-            const counts = data.collection_program_counts;
-            if (Object.keys(counts).length === 0) {
-                html += '<p>No documents found in any collection.</p>';
-            } else {
-                for (const [collection, programs] of Object.entries(counts)) {
-                    html += `<div style="margin-bottom: 10px;"><strong>${collection}:</strong><ul style="margin-left: 20px;">`;
-                    
-                    if (Object.keys(programs).length === 0) {
-                        html += '<li>No documents found</li>';
-                    } else {
-                        for (const [program, count] of Object.entries(programs)) {
-                            const programDisplay = (!program || program === 'all') ? 
-                                '<em>All Programs</em>' : program;
-                            html += `<li>${programDisplay}: <strong>${count}</strong> documents</li>`;
-                        }
-                    }
-                    html += '</ul></div>';
-                }
-            }
-            html += '</div>';
-            container.innerHTML = html;
-        } else {
-            container.innerHTML = `<div class="status failed">❌ Error: ${data.error}</div>`;
-        }
-    } catch (error) {
-        container.innerHTML = `<div class="status failed">❌ Failed: ${error.message}</div>`;
-    }
-}
-
 async function testSearch() {
     const query = prompt('🔍 Enter search query to test:', 'customer service');
     if (!query) return;
@@ -712,6 +837,10 @@ async function testSearch() {
     }
 }
 
+function openChatInterface() {
+    window.open('/chat', '_blank');
+}
+
 // ============================================================================
 // GLOBAL WINDOW FUNCTIONS (for HTML onclick handlers)
 // ============================================================================
@@ -723,8 +852,8 @@ window.checkSystemHealth = checkSystemHealth;
 window.checkLastImportInfo = checkLastImportInfo;
 window.clearImportTimestamp = clearImportTimestamp;
 window.toggleLogs = toggleLogs;
-window.getImportStatistics = getImportStatistics;
-window.countDocsByCollectionAndProgram = countDocsByCollectionAndProgram;
 window.testSearch = testSearch;
+window.openChatInterface = openChatInterface;
+window.loadOpenSearchStats = loadOpenSearchStats; // NEW: Expose statistics function
 
-console.log("✅ Ask InnovAI Admin main.js loaded successfully - all functions available");
+console.log("✅ Ask InnovAI Admin enhanced main.js loaded successfully - all functions including statistics available");

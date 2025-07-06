@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-delete_opensearch_data.py - Simple OpenSearch Data Deletion Script
-Version: 1.0.0 - Clean slate for enhanced structure migration
+FIXED delete_opensearch_data.py - Attribute Error Resolved
+Version: 1.2.0 - Fixed manager.host/manager.port attribute error
 
 This script deletes ALL user data from OpenSearch to prepare for 
 the new template_ID-based collections with evaluation grouping.
@@ -27,8 +27,8 @@ def delete_all_opensearch_data():
     DESTRUCTIVE OPERATION - USE WITH CAUTION
     """
     try:
-        # Import OpenSearch client
-        from opensearch_client import get_opensearch_manager
+        # Import OpenSearch client DIRECTLY (skip manager)
+        from opensearch_client import get_opensearch_client, test_connection, get_opensearch_config
         
         print("🧹 OpenSearch Data Deletion Script")
         print("=" * 50)
@@ -36,20 +36,34 @@ def delete_all_opensearch_data():
         print("⚠️  This operation CANNOT be undone!")
         print("=" * 50)
         
-        # Test connection first
-        manager = get_opensearch_manager()
-        
-        if not manager.test_connection():
+        # Test connection first using the working function
+        if not test_connection():
             print("❌ Cannot connect to OpenSearch")
-            print("   Check your OPENSEARCH_HOST and credentials")
+            
+            # Get config info for debugging
+            config = get_opensearch_config()
+            print("   Configuration details:")
+            print(f"     Host: {config.get('host', 'Not set')}")
+            print(f"     Port: {config.get('port', 'Not set')}")
+            print(f"     User: {config.get('user', 'Not set')}")
+            print(f"     Password set: {config.get('password_set', False)}")
+            print("   Check your OPENSEARCH_HOST, OPENSEARCH_USER, and OPENSEARCH_PASS")
             return False
         
-        print(f"✅ Connected to OpenSearch: {manager.host}:{manager.port}")
+        # Get config for display
+        config = get_opensearch_config()
+        print(f"✅ Connected to OpenSearch: {config['host']}:{config['port']}")
+        
+        # Get client directly
+        client = get_opensearch_client()
+        if not client:
+            print("❌ Cannot create OpenSearch client")
+            return False
         
         # Get all indices
         print("\n🔍 Scanning for indices...")
         try:
-            all_indices = manager.client.indices.get(index="*")
+            all_indices = client.indices.get(index="*")
         except Exception as e:
             print(f"❌ Failed to list indices: {e}")
             return False
@@ -78,7 +92,7 @@ def delete_all_opensearch_data():
         for i, index_name in enumerate(user_indices, 1):
             try:
                 # Get document count for each index
-                stats = manager.client.indices.stats(index=index_name)
+                stats = client.indices.stats(index=index_name)
                 doc_count = stats["_all"]["primaries"]["docs"]["count"]
                 store_size = stats["_all"]["primaries"]["store"]["size_in_bytes"]
                 size_mb = store_size / (1024 * 1024) if store_size else 0
@@ -97,7 +111,7 @@ def delete_all_opensearch_data():
             
             for index_name in user_indices:
                 try:
-                    stats = manager.client.indices.stats(index=index_name)
+                    stats = client.indices.stats(index=index_name)
                     total_docs += stats["_all"]["primaries"]["docs"]["count"]
                     store_size = stats["_all"]["primaries"]["store"]["size_in_bytes"]
                     total_size_mb += store_size / (1024 * 1024) if store_size else 0
@@ -136,7 +150,7 @@ def delete_all_opensearch_data():
         for i, index_name in enumerate(user_indices, 1):
             try:
                 print(f"   Deleting {i}/{len(user_indices)}: {index_name}...", end="")
-                manager.client.indices.delete(index=index_name)
+                client.indices.delete(index=index_name)
                 print(" ✅")
                 deleted_count += 1
                 
@@ -177,9 +191,9 @@ def delete_all_opensearch_data():
 
 def main():
     """Main execution"""
-    print("🛠️  Ask InnovAI - OpenSearch Data Deletion")
+    print("🛠️  Ask InnovAI - OpenSearch Data Deletion (FIXED)")
     print("   Preparing for enhanced structure migration")
-    print("   Version: 1.0.0")
+    print("   Version: 1.2.0 - Fixed attribute error")
     print()
     
     # Check if user really wants to proceed
