@@ -1,21 +1,24 @@
-// Enhanced main.js for Ask InnovAI Admin Interface with OpenSearch Statistics
+// Enhanced main.js for Ask InnovAI Admin Interface v2.2.0
 // Compatible with enhanced app.py backend
-// Version: 2.1.0 - Added comprehensive OpenSearch statistics
+// Version: 2.2.0 - Added "Evaluations Processed" as primary metric for source data verification
 
 let pollInterval = null;
 
-console.log("✅ Ask InnovAI Admin - Enhanced main.js with statistics loaded");
+console.log("✅ Ask InnovAI Admin v2.2.0 - Enhanced main.js with Evaluations Processed tracking loaded");
 
-// Auto-refresh status every 10 seconds if not actively importing
+// Auto-refresh status every 30 seconds if not actively importing
 setInterval(() => {
     if (!pollInterval) {
         refreshStatus();
     }
-}, 10000);
+}, 30000);
+
+// Auto-refresh statistics every 30 seconds
+setInterval(loadOpenSearchStats, 30000);
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("🚀 DOM loaded, initializing enhanced admin interface...");
+    console.log("🚀 DOM loaded, initializing enhanced admin interface v2.2.0...");
     refreshStatus();
     checkSystemHealth();
     checkLastImportInfo();
@@ -27,22 +30,34 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(data => console.log("✅ Server ping successful:", data))
         .catch(error => console.error("❌ Server ping failed:", error));
 
-     setupMaxDocsValidation();
+    setupMaxDocsValidation();
 
-     const maxDocsInput = document.getElementById("maxDocsInput");
+    const maxDocsInput = document.getElementById("maxDocsInput");
     if (maxDocsInput) {
         maxDocsInput.addEventListener("input", updateMaxDocsDisplay);
         maxDocsInput.addEventListener("change", updateMaxDocsDisplay);
         updateMaxDocsDisplay(); // Initial display
     }
+
+    // Setup other import-related UI updates
+    const importTypeSelect = document.getElementById("importTypeSelect");
+    const collectionSelect = document.getElementById("collectionSelect");
+    
+    if (importTypeSelect) {
+        importTypeSelect.addEventListener("change", updateMaxDocsDisplay);
+    }
+    
+    if (collectionSelect) {
+        collectionSelect.addEventListener("change", updateMaxDocsDisplay);
+    }
 });
 
 // ============================================================================
-// OPENSEARCH STATISTICS FUNCTIONS
+// OPENSEARCH STATISTICS FUNCTIONS - ENHANCED WITH EVALUATIONS PROCESSED
 // ============================================================================
 
 async function loadOpenSearchStats() {
-    //Load comprehensive OpenSearch database statistics
+    // Load comprehensive OpenSearch database statistics with Evaluations Processed focus
     const container = document.getElementById('statisticsContainer');
     if (!container) return;
     
@@ -82,7 +97,7 @@ async function loadOpenSearchStats() {
 }
 
 function displayStatistics(data, timestamp) {
-   // Display comprehensive statistics in dashboard format
+    // Display comprehensive statistics with EVALUATIONS PROCESSED as primary metric
     const container = document.getElementById('statisticsContainer');
     if (!container) return;
     
@@ -95,12 +110,16 @@ function displayStatistics(data, timestamp) {
     
     const html = `
         <div class="stats-dashboard">
-            <!-- Main Overview Stats -->
-            <div class="stats-card">
-                <h3>📄 Total Evaluations</h3>
+            <!-- PRIMARY METRIC: Evaluations Processed -->
+            <div class="stats-card priority-metric">
+                <h3>🆔 Evaluations Processed</h3>
                 <div class="stats-number">${data.total_evaluations.toLocaleString()}</div>
-                <div class="stats-label">Complete Evaluations</div>
+                <div class="stats-label">Unique EvaluationIDs</div>
                 <div class="stats-breakdown">
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">📊 Source Data Match</span>
+                        <span class="breakdown-value">Compare with your source system</span>
+                    </div>
                     <div class="breakdown-item">
                         <span class="breakdown-label">📝 With Transcript</span>
                         <span class="breakdown-value">${data.evaluations_with_transcript.toLocaleString()} (${transcriptPercentage}%)</span>
@@ -109,9 +128,26 @@ function displayStatistics(data, timestamp) {
                         <span class="breakdown-label">📋 Evaluation Only</span>
                         <span class="breakdown-value">${data.evaluations_without_transcript.toLocaleString()}</span>
                     </div>
+                </div>
+            </div>
+            
+            <!-- Evaluation Details -->
+            <div class="stats-card">
+                <h3>📄 Evaluation Details</h3>
+                <div class="stats-number">${avgChunksPerEval}</div>
+                <div class="stats-label">Avg Chunks per Evaluation</div>
+                <div class="stats-breakdown">
                     <div class="breakdown-item">
-                        <span class="breakdown-label">📊 Avg Chunks/Eval</span>
-                        <span class="breakdown-value">${avgChunksPerEval}</span>
+                        <span class="breakdown-label">📊 Data Processing</span>
+                        <span class="breakdown-value">Enhanced structure v4.0+</span>
+                    </div>
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">🏗️ Document Model</span>
+                        <span class="breakdown-value">1 doc per evaluationID</span>
+                    </div>
+                    <div class="breakdown-item">
+                        <span class="breakdown-label">🧩 Content Grouping</span>
+                        <span class="breakdown-value">Chunks within evaluations</span>
                     </div>
                 </div>
             </div>
@@ -254,15 +290,20 @@ function displayStatistics(data, timestamp) {
             📅 Last updated: ${new Date(timestamp).toLocaleString()} | 
             📊 Structure: ${data.structure_info.document_type} | 
             🏷️ Collections: ${data.structure_info.collection_strategy}
+            <br>
+            <div style="margin-top: 8px; padding: 8px; background: #e3f2fd; border-radius: 4px; font-size: 0.9em; border-left: 4px solid #6e32a0;">
+                <strong>📋 Source Data Verification:</strong> The "Evaluations Processed" count represents unique evaluationIDs successfully imported. 
+                Compare this number with your source system to verify data completeness and identify any missing evaluations.
+            </div>
         </div>
     `;
     
     container.innerHTML = html;
-    console.log("📊 Statistics dashboard updated");
+    console.log("📊 Statistics dashboard updated with Evaluations Processed focus");
 }
 
 // ============================================================================
-// IMPORT MANAGEMENT FUNCTIONS
+// IMPORT MANAGEMENT FUNCTIONS - ENHANCED
 // ============================================================================
 
 async function startImport() {
@@ -358,7 +399,7 @@ This will fetch evaluation data from your API and index it for search and chat.`
     }
 }
 
-// BONUS: Add input validation for the max documents field
+// Enhanced input validation for max documents field
 function setupMaxDocsValidation() {
     const maxDocsInput = document.getElementById("maxDocsInput");
     if (maxDocsInput) {
@@ -385,22 +426,66 @@ function setupMaxDocsValidation() {
     }
 }
 
-// BONUS: Enhanced UI feedback for max documents
+// Enhanced UI feedback for max documents
 function updateMaxDocsDisplay() {
     const maxDocsInput = document.getElementById("maxDocsInput");
-    if (maxDocsInput) {
-        const displayElement = document.getElementById("maxDocsDisplay");
-        const value = maxDocsInput.value.trim();
-        
-        if (displayElement) {
-            if (value === "" || isNaN(value)) {
-                displayElement.textContent = "All documents";
-                displayElement.style.color = "#666";
-            } else {
-                displayElement.textContent = `Max: ${parseInt(value).toLocaleString()}`;
-                displayElement.style.color = "#6e32a0";
-            }
+    const maxDocsDisplay = document.getElementById("maxDocsDisplay");
+    const maxDocsInfo = document.getElementById("maxDocsInfo");
+    const maxDocsInfoText = document.getElementById("maxDocsInfoText");
+    const importPreview = document.getElementById("importPreview");
+    const importPreviewText = document.getElementById("importPreviewText");
+    
+    if (!maxDocsInput) return;
+    
+    const value = maxDocsInput.value.trim();
+    const numValue = parseInt(value);
+    
+    // Update display text
+    if (value === "" || isNaN(numValue)) {
+        if (maxDocsDisplay) {
+            maxDocsDisplay.textContent = "All documents";
+            maxDocsDisplay.style.color = "#666";
         }
+        if (maxDocsInfoText) {
+            maxDocsInfoText.textContent = "All available documents will be processed";
+        }
+        if (maxDocsInfo) {
+            maxDocsInfo.className = "max-docs-info";
+        }
+    } else {
+        if (maxDocsDisplay) {
+            maxDocsDisplay.textContent = `Max: ${numValue.toLocaleString()}`;
+            maxDocsDisplay.style.color = "#6e32a0";
+        }
+        if (maxDocsInfoText) {
+            maxDocsInfoText.textContent = `Import will be limited to ${numValue.toLocaleString()} documents`;
+        }
+        if (maxDocsInfo) {
+            maxDocsInfo.className = "max-docs-warning";
+        }
+    }
+    
+    // Show/hide info box
+    if (maxDocsInfo) {
+        maxDocsInfo.style.display = "block";
+    }
+    
+    // Update import preview
+    const importType = document.getElementById("importTypeSelect")?.value || "full";
+    const collection = document.getElementById("collectionSelect")?.value || "all";
+    
+    let previewText = `${importType.charAt(0).toUpperCase() + importType.slice(1)} import from ${collection} collection`;
+    if (value !== "" && !isNaN(numValue)) {
+        previewText += ` (limited to ${numValue.toLocaleString()} documents)`;
+    } else {
+        previewText += ` (all available documents)`;
+    }
+    
+    if (importPreviewText) {
+        importPreviewText.textContent = previewText;
+    }
+    if (importPreview) {
+        importPreview.style.display = "block";
     }
 }
 
@@ -528,18 +613,18 @@ function showResults(results) {
     
     let html = '';
     
-    // Define key metrics to display
+    // ENHANCED: Define key metrics with Evaluations Processed as priority #1
     const metrics = [
-        { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: '📄' },
-        { key: 'total_evaluations_indexed', label: 'Evaluations Indexed', class: 'success', icon: '📋' },
-        { key: 'total_chunks_processed', label: 'Chunks Processed', class: 'info', icon: '🧩' },
-        { key: 'errors', label: 'Errors', class: 'warning', icon: '❌' },
-        { key: 'opensearch_errors', label: 'OpenSearch Errors', class: 'danger', icon: '🔥' },
-        { key: 'import_type', label: 'Import Type', class: 'info', icon: '🔄' }
+        { key: 'total_evaluations_indexed', label: 'Evaluations Processed', class: 'success', icon: '🆔', priority: 1 },
+        { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: '📄', priority: 2 },
+        { key: 'total_chunks_processed', label: 'Chunks Processed', class: 'info', icon: '🧩', priority: 3 },
+        { key: 'errors', label: 'Errors', class: 'warning', icon: '❌', priority: 4 },
+        { key: 'opensearch_errors', label: 'OpenSearch Errors', class: 'danger', icon: '🔥', priority: 5 },
+        { key: 'import_type', label: 'Import Type', class: 'info', icon: '🔄', priority: 6 }
     ];
     
-    // Display key metrics
-    metrics.forEach(metric => {
+    // Display key metrics (sorted by priority)
+    metrics.sort((a, b) => a.priority - b.priority).forEach(metric => {
         if (results.hasOwnProperty(metric.key)) {
             let value = results[metric.key];
             
@@ -548,10 +633,19 @@ function showResults(results) {
                 value = value.charAt(0).toUpperCase() + value.slice(1);
             }
             
+            // Add special styling for evaluations processed
+            let extraInfo = '';
+            let cardClass = 'result-card';
+            if (metric.key === 'total_evaluations_indexed') {
+                extraInfo = '<div style="font-size: 0.8em; margin-top: 4px; color: #666; font-weight: 500;">Unique EvaluationIDs</div>';
+                cardClass = 'result-card priority-metric';
+            }
+            
             html += `
-                <div class="result-card">
+                <div class="${cardClass}">
                     <h4>${metric.icon} ${metric.label}</h4>
                     <div class="result-value ${metric.class}">${value}</div>
+                    ${extraInfo}
                 </div>
             `;
         }
@@ -598,7 +692,7 @@ function showResults(results) {
     
     grid.innerHTML = html;
     
-    console.log("📈 Import results displayed:", results);
+    console.log("📈 Import results displayed with Evaluations Processed focus:", results);
 }
 
 // ============================================================================
@@ -679,6 +773,14 @@ async function checkSystemHealth() {
                 </div>
             `;
         }
+        
+        // Add version info
+        html += `
+            <div class="health-item">
+                <div class="health-label">🚀 VERSION</div>
+                <div class="health-value">v2.2.0 Enhanced</div>
+            </div>
+        `;
         
         container.innerHTML = html;
         console.log("🏥 System health checked:", health);
@@ -854,6 +956,8 @@ window.clearImportTimestamp = clearImportTimestamp;
 window.toggleLogs = toggleLogs;
 window.testSearch = testSearch;
 window.openChatInterface = openChatInterface;
-window.loadOpenSearchStats = loadOpenSearchStats; // NEW: Expose statistics function
+window.loadOpenSearchStats = loadOpenSearchStats; // Enhanced statistics function
 
-console.log("✅ Ask InnovAI Admin enhanced main.js loaded successfully - all functions including statistics available");
+console.log("✅ Ask InnovAI Admin enhanced main.js v2.2.0 loaded successfully");
+console.log("🆔 NEW FEATURE: Evaluations Processed as primary metric for source data verification");
+console.log("📊 All functions including enhanced statistics with Evaluations Processed focus available");
