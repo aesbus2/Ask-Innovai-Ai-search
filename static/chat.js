@@ -1,5 +1,6 @@
 // Enhanced Metro AI Call Center Analytics Chat - COMPLETE PRODUCTION VERSION
-// Version: 4.3.0 - Production-ready with real data filters and comprehensive error handling
+// Version: 4.3.1 - Production-ready with real data filters and comprehensive error handling
+// in cludes metadata loading and pre-created pormpts
 
 // =============================================================================
 // PRODUCTION CONFIGURATION & GLOBAL STATE
@@ -55,21 +56,25 @@ document.addEventListener('DOMContentLoaded', function() {
         // Core initialization
         initializePage();
         
-        // Load real filter data with production error handling
-        loadDynamicFilterOptions()
-            .then(() => {
-                performanceMetrics.filterLoadTime = performance.now() - startTime;
-                console.log(`⚡ Filter loading completed in ${performanceMetrics.filterLoadTime.toFixed(2)}ms`);
-            })
-            .catch(error => {
-                console.error("❌ Critical: Filter loading failed during initialization:", error);
-                handleCriticalFilterError(error);
-            });
+        // Load real filter data with production error handling (non-blocking)
+        setTimeout(() => {
+            loadDynamicFilterOptions()
+                .then(() => {
+                    performanceMetrics.filterLoadTime = performance.now() - startTime;
+                    console.log(`⚡ Filter loading completed in ${performanceMetrics.filterLoadTime.toFixed(2)}ms`);
+                })
+                .catch(error => {
+                    console.error("❌ Critical: Filter loading failed during initialization:", error);
+                    handleCriticalFilterError(error);
+                });
+        }, 500);
         
-        // Initial stats update with error handling
-        updateStats().catch(error => {
-            console.warn("⚠️ Initial stats update failed:", error);
-        });
+        // Initial stats update with error handling (non-blocking)
+        setTimeout(() => {
+            updateStats().catch(error => {
+                console.warn("⚠️ Initial stats update failed:", error);
+            });
+        }, 1000);
         
         // Setup production error handlers
         setupProductionErrorHandlers();
@@ -386,8 +391,27 @@ function setFilterLoadingState(isLoading) {
         if (isLoading) {
             element.classList.add('loading-filter');
             element.disabled = true;
+            
+            // Update the first option to show loading
+            if (element.tagName === 'SELECT' && element.firstElementChild) {
+                const originalText = element.firstElementChild.textContent;
+                if (!originalText.includes('Loading')) {
+                    element.firstElementChild.setAttribute('data-original', originalText);
+                    element.firstElementChild.textContent = originalText.replace('All ', 'Loading ') + '...';
+                }
+            }
         } else {
             element.classList.remove('loading-filter');
+            element.disabled = false;
+            
+            // Restore original text
+            if (element.tagName === 'SELECT' && element.firstElementChild) {
+                const originalText = element.firstElementChild.getAttribute('data-original');
+                if (originalText) {
+                    element.firstElementChild.textContent = originalText;
+                    element.firstElementChild.removeAttribute('data-original');
+                }
+            }
         }
     });
     
@@ -398,7 +422,10 @@ function setFilterLoadingState(isLoading) {
         if (element) {
             if (isLoading) {
                 element.textContent = '🔄 Loading...';
-                element.className = '';
+                element.className = 'data-status';
+            } else {
+                element.textContent = '✅ Ready';
+                element.className = 'data-status data-status-ok';
             }
         }
     });
@@ -1116,9 +1143,14 @@ async function updateStats() {
         // Fallback calculation
         const totalRecords = document.getElementById('totalRecords');
         if (totalRecords) {
-            const estimatedCount = filterOptions.total_evaluations || 0;
-            totalRecords.textContent = `~${estimatedCount.toLocaleString()} evaluations`;
-            totalRecords.title = 'Estimated based on database metadata';
+            if (filterOptions.total_evaluations) {
+                const estimatedCount = filterOptions.total_evaluations || 0;
+                totalRecords.textContent = `~${estimatedCount.toLocaleString()} evaluations`;
+                totalRecords.title = 'Estimated based on database metadata';
+            } else {
+                totalRecords.textContent = 'Ready for analysis';
+                totalRecords.title = 'Connect to database to see evaluation counts';
+            }
         }
     }
 }
@@ -1238,6 +1270,19 @@ function initializePage() {
     if (endCallDate) endCallDate.value = today.toISOString().split('T')[0];
     if (startCallDate) startCallDate.value = thirtyDaysAgo.toISOString().split('T')[0];
 
+    // Ensure welcome screen is visible and chat messages are hidden
+    const welcomeScreen = document.getElementById('welcomeScreen');
+    const chatMessages = document.getElementById('chatMessages');
+    
+    if (welcomeScreen) {
+        welcomeScreen.classList.remove('hidden');
+        console.log("✅ Welcome screen made visible");
+    }
+    if (chatMessages) {
+        chatMessages.classList.add('hidden');
+        console.log("✅ Chat messages hidden initially");
+    }
+
     // Auto-resize textarea with error handling
     const chatInput = document.getElementById('chatInput');
     if (chatInput) {
@@ -1249,6 +1294,7 @@ function initializePage() {
                 console.warn("⚠️ Chat input resize error:", error);
             }
         });
+        console.log("✅ Chat input auto-resize configured");
     }
 
     setupEventListeners();

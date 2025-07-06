@@ -3,6 +3,7 @@
     {
       "internalId": "685c1357ead65542bacfdc2c",
       "evaluationId": 14,
+      "weight_score": 92
       "template_id": "685c05eb3d1f4c023147e889",
       "template_name": "Ai Corporate SPTR - TEST",
       "partner": "iQor",
