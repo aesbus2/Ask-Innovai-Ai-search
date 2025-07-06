@@ -1,10 +1,10 @@
-// Enhanced main.js for Ask InnovAI Admin Interface v2.2.1
-// FIXED: Handle missing statistics data gracefully
-// Version: 2.2.1 - Fixed statistics error handling
+// Enhanced main.js for Ask InnovAI Admin Interface v2.2.2
+// FIXED: Bulletproof error handling for statistics and undefined values
+// Version: 2.2.2 - Fixed toLocaleString() errors with robust validation
 
 let pollInterval = null;
 
-console.log("✅ Ask InnovAI Admin v2.2.1 - Enhanced main.js with improved error handling loaded");
+console.log("✅ Ask InnovAI Admin v2.2.2 - Enhanced main.js with bulletproof error handling loaded");
 
 // Auto-refresh status every 30 seconds if not actively importing
 setInterval(() => {
@@ -18,7 +18,7 @@ setInterval(loadOpenSearchStats, 30000);
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("🚀 DOM loaded, initializing enhanced admin interface v2.2.1...");
+    console.log("🚀 DOM loaded, initializing enhanced admin interface v2.2.2...");
     refreshStatus();
     checkSystemHealth();
     checkLastImportInfo();
@@ -53,11 +53,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================================================
-// OPENSEARCH STATISTICS FUNCTIONS - ENHANCED WITH ERROR HANDLING
+// OPENSEARCH STATISTICS FUNCTIONS - BULLETPROOF ERROR HANDLING
 // ============================================================================
 
 async function loadOpenSearchStats() {
-    // Load comprehensive OpenSearch database statistics with improved error handling
+    // Load comprehensive OpenSearch database statistics with bulletproof error handling
     const container = document.getElementById('statisticsContainer');
     if (!container) return;
     
@@ -78,60 +78,134 @@ async function loadOpenSearchStats() {
         
         const result = await response.json();
         
-        if (result.status === 'success') {
+        if (result && result.status === 'success') {
             console.log("✅ Statistics loaded successfully", result.data);
-            displayStatistics(result.data, result.timestamp);
+            displayStatistics(result.data || {}, result.timestamp || new Date().toISOString());
         } else {
-            console.error("❌ Statistics error:", result.error);
+            const errorMsg = (result && result.error) ? result.error : 'Unknown error from server';
+            console.error("❌ Statistics error:", errorMsg);
             container.innerHTML = `
                 <div class="stats-error">
-                    <strong>❌ Error loading statistics:</strong> ${result.error}
+                    <strong>❌ Error loading statistics:</strong> ${errorMsg}
                     <br><small>Check OpenSearch connection and try again.</small>
+                    <br><button onclick="loadOpenSearchStats()" style="margin-top: 8px; padding: 4px 8px; background: #6e32a0; color: white; border: none; border-radius: 4px; cursor: pointer;">🔄 Retry</button>
                 </div>
             `;
         }
     } catch (error) {
         console.error('Failed to load statistics:', error);
+        
+        // More specific error handling
+        let errorMessage = error.message || 'Unknown error occurred';
+        
+        // Check if it's a JSON parsing error
+        if (errorMessage.includes('Unexpected token') || errorMessage.includes('JSON')) {
+            errorMessage = 'Server returned invalid response (not JSON)';
+        }
+        
         container.innerHTML = `
             <div class="stats-error">
-                <strong>❌ Failed to connect to server:</strong> ${error.message}
+                <strong>❌ Failed to connect to server:</strong> ${errorMessage}
                 <br><small>Verify the backend is running and try refreshing.</small>
+                <br><button onclick="loadOpenSearchStats()" style="margin-top: 8px; padding: 4px 8px; background: #6e32a0; color: white; border: none; border-radius: 4px; cursor: pointer;">🔄 Retry</button>
             </div>
         `;
     }
 }
 
 function displayStatistics(data, timestamp) {
-    // FIXED: Display comprehensive statistics with proper error handling
+    // BULLETPROOF: Display comprehensive statistics with robust error handling
     const container = document.getElementById('statisticsContainer');
     if (!container) return;
     
-    // FIXED: Safely handle potentially missing data with defaults
-    const safeData = {
-        total_evaluations: data?.total_evaluations || 0,
-        total_chunks: data?.total_chunks || 0,
-        evaluation_chunks: data?.evaluation_chunks || 0,
-        transcript_chunks: data?.transcript_chunks || 0,
-        evaluations_with_transcript: data?.evaluations_with_transcript || 0,
-        evaluations_without_transcript: data?.evaluations_without_transcript || 0,
-        template_counts: data?.template_counts || {},
-        lob_counts: data?.lob_counts || {},
-        partner_counts: data?.partner_counts || {},
-        site_counts: data?.site_counts || {},
-        language_counts: data?.language_counts || {},
-        indices: data?.indices || [],
-        structure_info: data?.structure_info || { document_type: 'unknown', collection_strategy: 'unknown' }
+    // Helper function to safely convert to number
+    const safeNumber = (value) => {
+        if (value === null || value === undefined) return 0;
+        const num = Number(value);
+        return isNaN(num) ? 0 : num;
     };
     
-    // Calculate some additional metrics safely
+    // Helper function to safely format with toLocaleString
+    const safeFormat = (value) => {
+        try {
+            const num = safeNumber(value);
+            return num.toLocaleString();
+        } catch (e) {
+            console.warn('toLocaleString failed for value:', value, 'error:', e);
+            return safeNumber(value).toString();
+        }
+    };
+    
+    // Helper function to safely format timestamp
+    const safeTimestamp = (ts) => {
+        try {
+            if (!ts) return new Date().toLocaleString();
+            const date = new Date(ts);
+            return isNaN(date.getTime()) ? new Date().toLocaleString() : date.toLocaleString();
+        } catch (e) {
+            console.warn('Date formatting failed for timestamp:', ts, 'error:', e);
+            return new Date().toLocaleString();
+        }
+    };
+    
+    // Helper function to safely handle objects
+    const safeObject = (obj) => {
+        try {
+            return obj && typeof obj === 'object' ? obj : {};
+        } catch (e) {
+            console.warn('Object validation failed:', obj, 'error:', e);
+            return {};
+        }
+    };
+    
+    // Helper function to safely handle arrays
+    const safeArray = (arr) => {
+        try {
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) {
+            console.warn('Array validation failed:', arr, 'error:', e);
+            return [];
+        }
+    };
+    
+    // BULLETPROOF: Safely handle potentially missing data with comprehensive defaults
+    const safeData = {
+        total_evaluations: safeNumber(data?.total_evaluations),
+        total_chunks: safeNumber(data?.total_chunks),
+        evaluation_chunks: safeNumber(data?.evaluation_chunks),
+        transcript_chunks: safeNumber(data?.transcript_chunks),
+        evaluations_with_transcript: safeNumber(data?.evaluations_with_transcript),
+        evaluations_without_transcript: safeNumber(data?.evaluations_without_transcript),
+        template_counts: safeObject(data?.template_counts),
+        lob_counts: safeObject(data?.lob_counts),
+        partner_counts: safeObject(data?.partner_counts),
+        site_counts: safeObject(data?.site_counts),
+        language_counts: safeObject(data?.language_counts),
+        indices: safeArray(data?.indices),
+        structure_info: safeObject(data?.structure_info)
+    };
+    
+    // Add default values for structure_info
+    if (!safeData.structure_info.document_type) {
+        safeData.structure_info.document_type = 'unknown';
+    }
+    if (!safeData.structure_info.collection_strategy) {
+        safeData.structure_info.collection_strategy = 'unknown';
+    }
+    
+    // Calculate additional metrics safely
     const avgChunksPerEval = safeData.total_evaluations > 0 ? 
         (safeData.total_chunks / safeData.total_evaluations).toFixed(1) : '0.0';
     
     const transcriptPercentage = safeData.total_evaluations > 0 ? 
         ((safeData.evaluations_with_transcript / safeData.total_evaluations) * 100).toFixed(1) : '0.0';
     
-    // FIXED: Check if we have any data at all
-    if (safeData.total_evaluations === 0 && safeData.total_chunks === 0 && Object.keys(safeData.template_counts).length === 0) {
+    // Check if we have any meaningful data
+    const hasData = safeData.total_evaluations > 0 || 
+                   safeData.total_chunks > 0 || 
+                   Object.keys(safeData.template_counts).length > 0;
+    
+    if (!hasData) {
         container.innerHTML = `
             <div class="stats-dashboard">
                 <div class="stats-card priority-metric">
@@ -163,19 +237,47 @@ function displayStatistics(data, timestamp) {
                 </div>
             </div>
             <div class="stats-last-updated">
-                📅 Last updated: ${new Date(timestamp).toLocaleString()} | 
+                📅 Last updated: ${safeTimestamp(timestamp)} | 
                 📊 Structure: Ready for enhanced import
             </div>
         `;
         return;
     }
     
+    // Helper function to safely process count entries
+    const processCountEntries = (counts, limit = 10) => {
+        try {
+            const entries = Object.entries(counts);
+            return entries
+                .sort(([,a], [,b]) => safeNumber(b) - safeNumber(a))
+                .slice(0, limit)
+                .map(([key, count]) => {
+                    const safeKey = key || 'Unknown';
+                    const safeCount = safeNumber(count);
+                    return `
+                        <div class="breakdown-item">
+                            <span class="breakdown-label" title="${safeKey}">${safeKey.length > 20 ? safeKey.substring(0, 20) + '...' : safeKey}</span>
+                            <span class="breakdown-value">${safeFormat(safeCount)}</span>
+                        </div>
+                    `;
+                }).join('');
+        } catch (e) {
+            console.warn('Failed to process count entries:', counts, 'error:', e);
+            return `
+                <div class="breakdown-item">
+                    <span class="breakdown-label">Error processing data</span>
+                    <span class="breakdown-value">-</span>
+                </div>
+            `;
+        }
+    };
+    
     const html = `
         <div class="stats-dashboard">
             <!-- PRIMARY METRIC: Evaluations Processed -->
             <div class="stats-card priority-metric">
                 <h3>🆔 Evaluations Processed</h3>
-                <div class="stats-number">${safeData.total_evaluations.toLocaleString()}</div>
+                <div class="stats-number">${safeFormat(safeData.total_evaluations)}</div>
                 <div class="stats-label">Unique EvaluationIDs</div>
                 <div class="stats-breakdown">
                     <div class="breakdown-item">
@@ -184,11 +286,11 @@ function displayStatistics(data, timestamp) {
                     </div>
                     <div class="breakdown-item">
                         <span class="breakdown-label">📝 With Transcript</span>
-                        <span class="breakdown-value">${safeData.evaluations_with_transcript.toLocaleString()} (${transcriptPercentage}%)</span>
+                        <span class="breakdown-value">${safeFormat(safeData.evaluations_with_transcript)} (${transcriptPercentage}%)</span>
                     </div>
                     <div class="breakdown-item">
                         <span class="breakdown-label">📋 Evaluation Only</span>
-                        <span class="breakdown-value">${safeData.evaluations_without_transcript.toLocaleString()}</span>
+                        <span class="breakdown-value">${safeFormat(safeData.evaluations_without_transcript)}</span>
                     </div>
                 </div>
             </div>
@@ -216,16 +318,16 @@ function displayStatistics(data, timestamp) {
             
             <div class="stats-card">
                 <h3>🧩 Total Chunks</h3>
-                <div class="stats-number">${safeData.total_chunks.toLocaleString()}</div>
+                <div class="stats-number">${safeFormat(safeData.total_chunks)}</div>
                 <div class="stats-label">All Content Pieces</div>
                 <div class="stats-breakdown">
                     <div class="breakdown-item">
                         <span class="breakdown-label">📝 Evaluation Chunks</span>
-                        <span class="breakdown-value">${safeData.evaluation_chunks.toLocaleString()}</span>
+                        <span class="breakdown-value">${safeFormat(safeData.evaluation_chunks)}</span>
                     </div>
                     <div class="breakdown-item">
                         <span class="breakdown-label">🎙️ Transcript Chunks</span>
-                        <span class="breakdown-value">${safeData.transcript_chunks.toLocaleString()}</span>
+                        <span class="breakdown-value">${safeFormat(safeData.transcript_chunks)}</span>
                     </div>
                 </div>
             </div>
@@ -236,23 +338,14 @@ function displayStatistics(data, timestamp) {
                 <div class="stats-number">${Object.keys(safeData.template_counts).length}</div>
                 <div class="stats-label">Unique Templates</div>
                 <div class="stats-breakdown">
-                    ${Object.entries(safeData.template_counts)
-                        .sort(([,a], [,b]) => b - a)
-                        .slice(0, 5)
-                        .map(([template, count]) => `
-                            <div class="breakdown-item">
-                                <span class="breakdown-label" title="${template}">${template.length > 20 ? template.substring(0, 20) + '...' : template}</span>
-                                <span class="breakdown-value">${count.toLocaleString()}</span>
-                            </div>
-                        `).join('')}
+                    ${processCountEntries(safeData.template_counts, 5) || 
+                        `<div class="breakdown-item">
+                            <span class="breakdown-label">No templates found</span>
+                            <span class="breakdown-value"></span>
+                        </div>`}
                     ${Object.keys(safeData.template_counts).length > 5 ? 
                         `<div class="breakdown-item">
                             <span class="breakdown-label">...and ${Object.keys(safeData.template_counts).length - 5} more</span>
-                            <span class="breakdown-value"></span>
-                        </div>` : ''}
-                    ${Object.keys(safeData.template_counts).length === 0 ? 
-                        `<div class="breakdown-item">
-                            <span class="breakdown-label">No templates found</span>
                             <span class="breakdown-value"></span>
                         </div>` : ''}
                 </div>
@@ -264,14 +357,7 @@ function displayStatistics(data, timestamp) {
                 <div class="stats-number">${Object.keys(safeData.lob_counts).length}</div>
                 <div class="stats-label">Unique LOBs</div>
                 <div class="stats-breakdown">
-                    ${Object.entries(safeData.lob_counts)
-                        .sort(([,a], [,b]) => b - a)
-                        .map(([lob, count]) => `
-                            <div class="breakdown-item">
-                                <span class="breakdown-label">${lob}</span>
-                                <span class="breakdown-value">${count.toLocaleString()}</span>
-                            </div>
-                        `).join('') || 
+                    ${processCountEntries(safeData.lob_counts) || 
                         `<div class="breakdown-item">
                             <span class="breakdown-label">No LOB data</span>
                             <span class="breakdown-value"></span>
@@ -285,14 +371,7 @@ function displayStatistics(data, timestamp) {
                 <div class="stats-number">${Object.keys(safeData.partner_counts).length}</div>
                 <div class="stats-label">Unique Partners</div>
                 <div class="stats-breakdown">
-                    ${Object.entries(safeData.partner_counts)
-                        .sort(([,a], [,b]) => b - a)
-                        .map(([partner, count]) => `
-                            <div class="breakdown-item">
-                                <span class="breakdown-label">${partner}</span>
-                                <span class="breakdown-value">${count.toLocaleString()}</span>
-                            </div>
-                        `).join('') || 
+                    ${processCountEntries(safeData.partner_counts) || 
                         `<div class="breakdown-item">
                             <span class="breakdown-label">No partner data</span>
                             <span class="breakdown-value"></span>
@@ -306,15 +385,7 @@ function displayStatistics(data, timestamp) {
                 <div class="stats-number">${Object.keys(safeData.site_counts).length}</div>
                 <div class="stats-label">Unique Sites</div>
                 <div class="stats-breakdown">
-                    ${Object.entries(safeData.site_counts)
-                        .sort(([,a], [,b]) => b - a)
-                        .slice(0, 6)
-                        .map(([site, count]) => `
-                            <div class="breakdown-item">
-                                <span class="breakdown-label">${site}</span>
-                                <span class="breakdown-value">${count.toLocaleString()}</span>
-                            </div>
-                        `).join('') || 
+                    ${processCountEntries(safeData.site_counts, 6) || 
                         `<div class="breakdown-item">
                             <span class="breakdown-label">No site data</span>
                             <span class="breakdown-value"></span>
@@ -333,14 +404,7 @@ function displayStatistics(data, timestamp) {
                 <div class="stats-number">${Object.keys(safeData.language_counts).length}</div>
                 <div class="stats-label">Languages Used</div>
                 <div class="stats-breakdown">
-                    ${Object.entries(safeData.language_counts)
-                        .sort(([,a], [,b]) => b - a)
-                        .map(([language, count]) => `
-                            <div class="breakdown-item">
-                                <span class="breakdown-label">${language}</span>
-                                <span class="breakdown-value">${count.toLocaleString()}</span>
-                            </div>
-                        `).join('') || 
+                    ${processCountEntries(safeData.language_counts) || 
                         `<div class="breakdown-item">
                             <span class="breakdown-label">No language data</span>
                             <span class="breakdown-value"></span>
@@ -354,12 +418,26 @@ function displayStatistics(data, timestamp) {
                 <div class="stats-number">${safeData.indices.length}</div>
                 <div class="stats-label">Active Indices</div>
                 <div class="stats-breakdown">
-                    ${safeData.indices.slice(0, 4).map(index => `
-                        <div class="breakdown-item">
-                            <span class="breakdown-label" title="${index.name}">${index.name.length > 15 ? index.name.substring(0, 15) + '...' : index.name}</span>
-                            <span class="breakdown-value">${index.size_mb.toFixed(1)}MB</span>
-                        </div>
-                    `).join('') || 
+                    ${safeData.indices.slice(0, 4).map(index => {
+                        try {
+                            const name = index?.name || 'Unknown';
+                            const sizeMb = safeNumber(index?.size_mb);
+                            return `
+                                <div class="breakdown-item">
+                                    <span class="breakdown-label" title="${name}">${name.length > 15 ? name.substring(0, 15) + '...' : name}</span>
+                                    <span class="breakdown-value">${sizeMb.toFixed(1)}MB</span>
+                                </div>
+                            `;
+                        } catch (e) {
+                            console.warn('Failed to process index:', index, 'error:', e);
+                            return `
+                                <div class="breakdown-item">
+                                    <span class="breakdown-label">Invalid index</span>
+                                    <span class="breakdown-value">-</span>
+                                </div>
+                            `;
+                        }
+                    }).join('') || 
                     `<div class="breakdown-item">
                         <span class="breakdown-label">No indices found</span>
                         <span class="breakdown-value"></span>
@@ -374,7 +452,7 @@ function displayStatistics(data, timestamp) {
         </div>
         
         <div class="stats-last-updated">
-            📅 Last updated: ${new Date(timestamp).toLocaleString()} | 
+            📅 Last updated: ${safeTimestamp(timestamp)} | 
             📊 Structure: ${safeData.structure_info.document_type} | 
             🏷️ Collections: ${safeData.structure_info.collection_strategy}
             <br>
@@ -386,7 +464,7 @@ function displayStatistics(data, timestamp) {
     `;
     
     container.innerHTML = html;
-    console.log("📊 Statistics dashboard updated with improved error handling");
+    console.log("📊 Statistics dashboard updated with bulletproof error handling");
 }
 
 // ============================================================================
@@ -700,6 +778,16 @@ function showResults(results) {
     
     let html = '';
     
+    // Helper function for safe number formatting
+    const safeFormat = (value) => {
+        try {
+            const num = Number(value);
+            return isNaN(num) ? 0 : num.toLocaleString();
+        } catch (e) {
+            return String(value);
+        }
+    };
+    
     // ENHANCED: Define key metrics with Evaluations Processed as priority #1
     const metrics = [
         { key: 'total_evaluations_indexed', label: 'Evaluations Processed', class: 'success', icon: '🆔', priority: 1 },
@@ -718,6 +806,8 @@ function showResults(results) {
             // Format import type
             if (metric.key === 'import_type') {
                 value = value.charAt(0).toUpperCase() + value.slice(1);
+            } else {
+                value = safeFormat(value);
             }
             
             // Add special styling for evaluations processed
@@ -783,7 +873,7 @@ function showResults(results) {
 }
 
 // ============================================================================
-// SYSTEM HEALTH AND MONITORING
+// SYSTEM HEALTH AND MONITORING - BULLETPROOF
 // ============================================================================
 
 async function checkSystemHealth() {
@@ -812,7 +902,7 @@ async function checkSystemHealth() {
         // Safely check for components
         if (health.components && typeof health.components === 'object') {
             Object.entries(health.components).forEach(([component, info]) => {
-                const status = info.status || 'unknown';
+                const status = info?.status || 'unknown';
                 const isHealthy = status === 'connected' || status === 'healthy' || status === 'configured';
                 const isWarning = status === 'not configured';
                 const cssClass = isHealthy ? '' : (isWarning ? 'warning' : 'unhealthy');
@@ -856,7 +946,7 @@ async function checkSystemHealth() {
             html += `
                 <div class="health-item">
                     <div class="health-label">🔄 STRUCTURE</div>
-                    <div class="health-value">${health.enhancements.document_structure}</div>
+                    <div class="health-value">${health.enhancements.document_structure || 'unknown'}</div>
                 </div>
             `;
         }
@@ -865,7 +955,7 @@ async function checkSystemHealth() {
         html += `
             <div class="health-item">
                 <div class="health-label">🚀 VERSION</div>
-                <div class="health-value">v2.2.1 Enhanced</div>
+                <div class="health-value">v2.2.2 Bulletproof</div>
             </div>
         `;
         
@@ -943,7 +1033,7 @@ async function clearImportTimestamp() {
 }
 
 // ============================================================================
-// UTILITY FUNCTIONS
+// UTILITY FUNCTIONS - BULLETPROOF
 // ============================================================================
 
 async function toggleLogs() {
@@ -959,7 +1049,7 @@ async function toggleLogs() {
             
             const response = await fetch('/logs');
             const data = await response.json();
-            const logs = data.logs || [];
+            const logs = data?.logs || [];
             
             // Show last 50 log entries
             content.textContent = logs.slice(-50).join('\n') || 'No logs available';
@@ -995,15 +1085,19 @@ async function testSearch() {
             if (resultCount > 0) {
                 html += '<div style="max-height: 200px; overflow-y: auto; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">';
                 data.results.slice(0, 3).forEach((result, index) => {
+                    const title = result?.title || 'Untitled';
+                    const text = result?.text || '';
+                    const score = result?.score;
+                    
                     html += `
                         <div style="margin: 10px 0; padding: 10px; background: #f9f9f9; border-radius: 4px; border-left: 3px solid #6e32a0;">
                             <div style="font-weight: bold; color: #6e32a0; margin-bottom: 5px;">
-                                ${index + 1}. ${result.title || 'Untitled'}
+                                ${index + 1}. ${title}
                             </div>
                             <div style="font-size: 0.9em; color: #666;">
-                                ${(result.text || '').substring(0, 150)}${result.text && result.text.length > 150 ? '...' : ''}
+                                ${text.substring(0, 150)}${text.length > 150 ? '...' : ''}
                             </div>
-                            ${result.score ? `<div style="font-size: 0.8em; color: #999; margin-top: 5px;">Score: ${Math.round(result.score * 100) / 100}</div>` : ''}
+                            ${score ? `<div style="font-size: 0.8em; color: #999; margin-top: 5px;">Score: ${Math.round(score * 100) / 100}</div>` : ''}
                         </div>
                     `;
                 });
@@ -1019,7 +1113,7 @@ async function testSearch() {
             html += '</div>';
             container.innerHTML = html;
         } else {
-            container.innerHTML = `<div class="status failed">❌ Search failed: ${data.error}</div>`;
+            container.innerHTML = `<div class="status failed">❌ Search failed: ${data.error || 'Unknown error'}</div>`;
         }
     } catch (error) {
         container.innerHTML = `<div class="status failed">❌ Search failed: ${error.message}</div>`;
@@ -1045,6 +1139,6 @@ window.testSearch = testSearch;
 window.openChatInterface = openChatInterface;
 window.loadOpenSearchStats = loadOpenSearchStats; // Enhanced statistics function
 
-console.log("✅ Ask InnovAI Admin enhanced main.js v2.2.1 loaded successfully");
-console.log("🔧 FIXED: Statistics error handling with safe data defaults");
-console.log("📊 All functions including enhanced statistics with improved error handling available");
+console.log("✅ Ask InnovAI Admin bulletproof main.js v2.2.2 loaded successfully");
+console.log("🛡️ BULLETPROOF: All toLocaleString() calls now have comprehensive error handling");
+console.log("📊 All functions including enhanced statistics with bulletproof error handling available");

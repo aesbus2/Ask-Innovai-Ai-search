@@ -2,7 +2,7 @@
 <html lang="en" xmlns:mso="urn:schemas-microsoft-com:office:office" xmlns:msdt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882">
 <head>
     <meta charset="UTF-8" />
-    <title>Metro AI Call Center Analytics v2.1.0</title>
+    <title>Metro AI Call Center Analytics v4.3.0 - Production</title>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
     <style>
         * {
@@ -46,6 +46,15 @@
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+
+        .version-badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.7em;
+            font-weight: 500;
+            margin-left: 8px;
         }
 
         .header-controls {
@@ -138,8 +147,25 @@
             font-size: 0.95rem;
             display: flex;
             align-items: center;
+            justify-content: space-between;
             gap: 8px;
         }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .data-status {
+            font-size: 0.7em;
+            opacity: 0.8;
+            font-weight: 500;
+        }
+
+        .data-status-ok { color: #28a745; }
+        .data-status-warning { color: #ffc107; }
+        .data-status-error { color: #dc3545; }
 
         .filter-content {
             padding: 16px;
@@ -154,11 +180,37 @@
         }
 
         .filter-label {
-            display: block;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             font-weight: 500;
             color: #555;
             margin-bottom: 6px;
             font-size: 0.9rem;
+        }
+
+        .count-indicator {
+            font-size: 0.7em;
+            font-weight: 600;
+            margin-left: 4px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+
+        .count-indicator.data-status-ok {
+            color: #28a745;
+            background: #d4edda;
+        }
+
+        .count-indicator.data-status-warning {
+            color: #856404;
+            background: #fff3cd;
+        }
+
+        .count-indicator.data-status-error {
+            color: #721c24;
+            background: #f8d7da;
         }
 
         .filter-input, .filter-select {
@@ -167,13 +219,27 @@
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 0.9rem;
-            transition: border-color 0.2s;
+            transition: all 0.2s;
         }
 
         .filter-input:focus, .filter-select:focus {
             outline: none;
             border-color: #6e32a0;
             box-shadow: 0 0 0 2px rgba(110, 50, 160, 0.1);
+        }
+
+        .filter-input:disabled, .filter-select:disabled {
+            background-color: #f5f5f5;
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .filter-help {
+            color: #666; 
+            font-size: 0.8em; 
+            margin-top: 4px; 
+            display: block;
+            line-height: 1.3;
         }
 
         .date-range, .input-grid {
@@ -192,6 +258,19 @@
             border-radius: 0 4px 4px 0;
         }
 
+        /* Loading States */
+        .loading-filter {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading-shimmer 1.5s infinite;
+        }
+
+        @keyframes loading-shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        /* Filter Actions */
         .filter-actions {
             padding: 16px;
             border-top: 1px solid #e1e8ed;
@@ -208,6 +287,10 @@
             transition: all 0.2s;
             margin-bottom: 8px;
             font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }
 
         .btn-primary {
@@ -271,6 +354,12 @@
             background: white;
             border-bottom: 1px solid #e1e8ed;
             display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .chat-header-top {
+            display: flex;
             align-items: center;
             justify-content: space-between;
         }
@@ -309,12 +398,143 @@
             opacity: 0.8;
         }
 
+        /* Header Filter Tags */
+        .chat-header-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            min-height: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .chat-header-filters.empty {
+            display: none;
+        }
+
+        .header-filter-label {
+            font-size: 0.85rem;
+            color: #6e32a0;
+            font-weight: 600;
+            margin-right: 6px;
+        }
+
+        .header-filter-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 14px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(110, 50, 160, 0.2);
+            animation: slideIn 0.3s ease;
+        }
+
+        .header-filter-tag .remove {
+            cursor: pointer;
+            opacity: 0.8;
+            font-size: 0.75rem;
+            margin-left: 4px;
+            transition: opacity 0.2s;
+        }
+
+        .header-filter-tag .remove:hover {
+            opacity: 1;
+        }
+
+        .clear-all-filters {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #f8f9fa;
+            color: #6e32a0;
+            border: 1px solid #e1e8ed;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .clear-all-filters:hover {
+            background: #e9ecef;
+            border-color: #6e32a0;
+        }
+
         /* Messages Area */
         .messages-container {
             flex: 1;
             overflow-y: auto;
             padding: 20px;
             background: #f8f9fa;
+        }
+
+        /* Chat Session Styles */
+        .chat-session {
+            margin-bottom: 20px;
+            border-radius: 12px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .chat-session.collapsed {
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+
+        .chat-session-header {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 12px 16px;
+            border-bottom: 1px solid #e1e8ed;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .chat-session-header:hover {
+            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+        }
+
+        .chat-session-title {
+            font-weight: 600;
+            color: #333;
+            font-size: 0.9rem;
+            flex: 1;
+        }
+
+        .chat-session-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .collapse-icon {
+            font-size: 1.2rem;
+            color: #6e32a0;
+            transition: transform 0.3s ease;
+        }
+
+        .chat-session.collapsed .collapse-icon {
+            transform: rotate(-90deg);
+        }
+
+        .chat-session-content {
+            padding: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .chat-session.collapsed .chat-session-content {
+            max-height: 0;
+            padding: 0 16px;
+            overflow: hidden;
         }
 
         .message {
@@ -539,40 +759,6 @@
             box-shadow: none;
         }
 
-        .hidden { display: none; }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .spinner {
-            width: 16px;
-            height: 16px;
-            border: 2px solid #fff;
-            border-top: 2px solid transparent;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        .loading-indicator {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .loading-indicator .spinner {
-            width: 24px;
-            height: 24px;
-            border: 3px solid #e1e8ed;
-            border-top: 3px solid #6e32a0;
-        }
-
         .sources-container {
             margin-top: 16px;
         }
@@ -616,6 +802,69 @@
             line-height: 1.5;
         }
 
+        .hidden { display: none; }
+
+        /* Production Error Styles */
+        .error-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .error-content {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #fff;
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-indicator {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .loading-indicator .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #e1e8ed;
+            border-top: 3px solid #6e32a0;
+        }
+
         /* Responsive Design */
         @media (max-width: 768px) {
             .sidebar {
@@ -652,6 +901,16 @@
                 flex-direction: column;
                 gap: 8px;
             }
+
+            .chat-header-filters {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .header-filter-tag {
+                font-size: 0.75rem;
+                padding: 3px 8px;
+            }
         }
     </style>
 
@@ -669,7 +928,8 @@
         <div class="header">
             <h1>
                 <span class="material-icons">analytics</span>
-                Metro AI Call Center Analytics v2.1.0
+                Metro AI Call Center Analytics
+                <span class="version-badge">v4.3.0 Production</span>
             </h1>
             <div class="header-controls">
                 <button class="header-btn" onclick="toggleSidebar()">
@@ -691,16 +951,18 @@
             <!-- Sidebar -->
             <div class="sidebar" id="sidebar">
                 <div class="sidebar-header">
-                    <h3>Call Center Analytics Filters</h3>
-                    <p>Filter evaluations using call metadata</p>
+                    <h3>Real-Time Analytics Filters</h3>
+                    <p>All options loaded from your live evaluation database</p>
                 </div>
 
                 <div class="filter-panel">
                     <!-- Date Filters -->
                     <div class="filter-section">
                         <h4>
-                            <span class="material-icons">date_range</span>
-                            Date & Time Filters
+                            <div class="section-title">
+                                <span class="material-icons">date_range</span>
+                                Date & Time Filters
+                            </div>
                         </h4>
                         <div class="filter-content">
                             <div class="filter-group">
@@ -716,47 +978,83 @@
                     <!-- Organizational Hierarchy -->
                     <div class="filter-section">
                         <h4>
-                            <span class="material-icons">account_tree</span>
-                            Organizational Hierarchy
+                            <div class="section-title">
+                                <span class="material-icons">account_tree</span>
+                                Organizational Hierarchy
+                            </div>
+                            <span id="hierarchyDataStatus" class="data-status">
+                                📊 Loading real data...
+                            </span>
                         </h4>
                         <div class="filter-content">
                             <div class="hierarchy-note">
-                                <strong>Filter Hierarchy:</strong> Program → Partner → Site → LOB
+                                <strong>📊 REAL DATA Filters:</strong> Template (evaluation form) → Program (business unit) → Partner → Site → LOB
+                                <br><small>All options loaded from your actual evaluation database</small>
                             </div>
 
                             <div class="filter-group">
-                                <label class="filter-label">Template</label>
-                                <select id="programFilter" class="filter-select" onchange="updateHierarchyFilters('template_id')">
-                                    <option value="">All Templates</option>
+                                <label class="filter-label">
+                                    Template (Evaluation Form)
+                                    <span id="templateCount" class="count-indicator"></span>
+                                </label>
+                                <select id="templateFilter" class="filter-select loading-filter" onchange="updateHierarchyFilters('template')" disabled>
+                                    <option value="">Loading templates...</option>
                                 </select>
+                                <small class="filter-help">
+                                    📋 Actual evaluation form names from your database
+                                </small>
                             </div>
                             
                             <div class="filter-group">
-                                <label class="filter-label">Program</label>
-                                <select id="programFilter" class="filter-select" onchange="updateHierarchyFilters('program')">
-                                    <option value="">All Programs</option>
+                                <label class="filter-label">
+                                    Program (Business Unit)
+                                    <span id="programCount" class="count-indicator"></span>
+                                </label>
+                                <select id="programFilter" class="filter-select loading-filter" onchange="updateHierarchyFilters('program')" disabled>
+                                    <option value="">Loading programs...</option>
                                 </select>
+                                <small class="filter-help">
+                                    🏢 Business programs from your evaluations (Metro, T-Mobile Prepaid, ASW)
+                                </small>
                             </div>
                             
                             <div class="filter-group">
-                                <label class="filter-label">Partner</label>
-                                <select id="partnerFilter" class="filter-select" onchange="updateHierarchyFilters('partner')">
-                                    <option value="">All Partners</option>
+                                <label class="filter-label">
+                                    Partner (Vendor)
+                                    <span id="partnerCount" class="count-indicator"></span>
+                                </label>
+                                <select id="partnerFilter" class="filter-select loading-filter" onchange="updateHierarchyFilters('partner')" disabled>
+                                    <option value="">Loading partners...</option>
                                 </select>
+                                <small class="filter-help">
+                                    🤝 Call center vendors from your data
+                                </small>
                             </div>
                             
                             <div class="filter-group">
-                                <label class="filter-label">Site</label>
-                                <select id="siteFilter" class="filter-select" onchange="updateHierarchyFilters('site')">
-                                    <option value="">All Sites</option>
+                                <label class="filter-label">
+                                    Site (Location)
+                                    <span id="siteCount" class="count-indicator"></span>
+                                </label>
+                                <select id="siteFilter" class="filter-select loading-filter" onchange="updateHierarchyFilters('site')" disabled>
+                                    <option value="">Loading sites...</option>
                                 </select>
+                                <small class="filter-help">
+                                    🏗️ Physical locations from your evaluations
+                                </small>
                             </div>
                             
                             <div class="filter-group">
-                                <label class="filter-label">Line of Business (LOB)</label>
-                                <select id="lobFilter" class="filter-select">
-                                    <option value="">All LOBs</option>
+                                <label class="filter-label">
+                                    Line of Business (LOB)
+                                    <span id="lobCount" class="count-indicator"></span>
+                                </label>
+                                <select id="lobFilter" class="filter-select loading-filter" disabled>
+                                    <option value="">Loading LOBs...</option>
                                 </select>
+                                <small class="filter-help">
+                                    📊 Service types from your evaluation data
+                                </small>
                             </div>
                         </div>
                     </div>
@@ -764,8 +1062,10 @@
                     <!-- Call Identifiers -->
                     <div class="filter-section">
                         <h4>
-                            <span class="material-icons">fingerprint</span>
-                            Call Identifiers
+                            <div class="section-title">
+                                <span class="material-icons">fingerprint</span>
+                                Call Identifiers
+                            </div>
                         </h4>
                         <div class="filter-content">
                             <div class="filter-group">
@@ -791,22 +1091,39 @@
                     <!-- Call Classification -->
                     <div class="filter-section">
                         <h4>
-                            <span class="material-icons">call</span>
-                            Call Classification
+                            <div class="section-title">
+                                <span class="material-icons">call</span>
+                                Call Classification
+                            </div>
+                            <span id="callDataStatus" class="data-status">
+                                📊 Loading real data...
+                            </span>
                         </h4>
                         <div class="filter-content">
                             <div class="filter-group">
-                                <label class="filter-label">Call Disposition</label>
-                                <select id="callDispositionFilter" class="filter-select" onchange="updateSubDispositions()">
-                                    <option value="">All Dispositions</option>
+                                <label class="filter-label">
+                                    Call Disposition
+                                    <span id="dispositionCount" class="count-indicator"></span>
+                                </label>
+                                <select id="callDispositionFilter" class="filter-select loading-filter" onchange="updateSubDispositions()" disabled>
+                                    <option value="">Loading dispositions...</option>
                                 </select>
+                                <small class="filter-help">
+                                    📞 Actual call dispositions from your evaluation data
+                                </small>
                             </div>
                             
                             <div class="filter-group">
-                                <label class="filter-label">Call Sub Disposition</label>
-                                <select id="callSubDispositionFilter" class="filter-select">
-                                    <option value="">All Sub-Dispositions</option>
+                                <label class="filter-label">
+                                    Call Sub Disposition
+                                    <span id="subDispositionCount" class="count-indicator"></span>
+                                </label>
+                                <select id="callSubDispositionFilter" class="filter-select loading-filter" disabled>
+                                    <option value="">Loading sub-dispositions...</option>
                                 </select>
+                                <small class="filter-help">
+                                    📞 Detailed call sub-dispositions from your data
+                                </small>
                             </div>
                             
                             <div class="filter-group">
@@ -817,6 +1134,9 @@
                                     <input type="number" id="maxDuration" class="filter-input" 
                                            placeholder="Max (e.g., 600)" min="0" max="7200">
                                 </div>
+                                <small class="filter-help">
+                                    ⏱️ Filter by call duration range
+                                </small>
                             </div>
                         </div>
                     </div>
@@ -824,15 +1144,41 @@
                     <!-- Agent Performance -->
                     <div class="filter-section">
                         <h4>
-                            <span class="material-icons">person</span>
-                            Agent Performance
+                            <div class="section-title">
+                                <span class="material-icons">person</span>
+                                Agent Performance
+                            </div>
+                            <span id="agentDataStatus" class="data-status">
+                                📊 Loading real data...
+                            </span>
                         </h4>
                         <div class="filter-content">
                             <div class="filter-group">
-                                <label class="filter-label">Agent Name</label>
+                                <label class="filter-label">
+                                    Agent Name
+                                    <span id="agentCount" class="count-indicator"></span>
+                                </label>
                                 <input type="text" id="agentNameFilter" class="filter-input" 
-                                       placeholder="e.g., Rey Mendoza" list="agentNamesList">
-                                <datalist id="agentNamesList"></datalist>
+                                       placeholder="Loading agents..." list="agentNamesList" disabled>
+                                <datalist id="agentNamesList">
+                                    <!-- Agent names will be populated from real data -->
+                                </datalist>
+                                <small class="filter-help">
+                                    👥 Agents from your actual evaluation data
+                                </small>
+                            </div>
+                            
+                            <div class="filter-group">
+                                <label class="filter-label">
+                                    Language
+                                    <span id="languageCount" class="count-indicator"></span>
+                                </label>
+                                <select id="languageFilter" class="filter-select loading-filter" disabled>
+                                    <option value="">Loading languages...</option>
+                                </select>
+                                <small class="filter-help">
+                                    🌐 Languages used in your evaluations
+                                </small>
                             </div>
                         </div>
                     </div>
@@ -856,19 +1202,26 @@
             <!-- Main Chat Area -->
             <div class="chat-area">
                 <div class="chat-header">
-                    <div>
-                        <div class="chat-title">Call Center Analytics Dashboard v2.1.0</div>
-                        <div class="chat-subtitle">AI-powered insights from call evaluation data</div>
+                    <div class="chat-header-top">
+                        <div>
+                            <div class="chat-title">Call Center Analytics Dashboard</div>
+                            <div class="chat-subtitle">Production AI-powered insights from real evaluation data</div>
+                        </div>
+                        <div class="chat-stats">
+                            <div class="stat-item">
+                                <span class="material-icons">dataset</span>
+                                <span id="totalRecords">Loading evaluations...</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="material-icons">filter_alt</span>
+                                <span id="activeFiltersCount">0 filters</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="chat-stats">
-                        <div class="stat-item">
-                            <span class="material-icons">dataset</span>
-                            <span id="totalRecords">0 evaluations</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="material-icons">filter_alt</span>
-                            <span id="activeFiltersCount">0 filters</span>
-                        </div>
+                    
+                    <!-- Header Filter Display -->
+                    <div class="chat-header-filters" id="chatHeaderFilters">
+                        <!-- Filter tags will be populated here -->
                     </div>
                 </div>
 
@@ -876,35 +1229,36 @@
                     <!-- Welcome Screen -->
                     <div class="welcome-screen" id="welcomeScreen">
                         <div class="welcome-icon">📞</div>
-                        <h2 class="welcome-title">Metro AI Call Center Analytics v2.1.0</h2>
+                        <h2 class="welcome-title">Metro AI Call Center Analytics</h2>
                         <p class="welcome-subtitle">
-                            Ask questions about call performance, agent effectiveness, 
-                            customer satisfaction, and operational insights. Use the filters to focus your analysis.
+                            Production-ready AI analytics using your live evaluation data. 
+                            Ask questions about call performance, agent effectiveness, customer satisfaction, and operational insights. 
+                            Use real-time filters to focus your analysis.
                         </p>
                         
                         <div class="example-questions">
                             <div class="example-card" onclick="askQuestion('Show all call dispositions and sub dispositions, included total number of calls, evaluation score average and coaching suggestions')">
                                 <h4>📊 Call Analysis</h4>
-                                <p>Show me all calls with disposition "Account" and sub-disposition "Rate Plan Or Plan Fit Analysis" from this week</p>
+                                <p>Analyze call dispositions, volumes, and performance patterns across your evaluation data</p>
                             </div>
-                            <div class="example-card" onclick="askQuestion('What is the call disposition for calls longer than 90 seconds?')">
+                            <div class="example-card" onclick="askQuestion('What is the call disposition for calls longer than 90 seconds? Show patterns and recommendations.')">
                                 <h4>📈 Performance Metrics</h4>
-                                <p>find the types of calls we received with AHT over 15 minutes. </p>
+                                <p>Deep dive into call duration analysis and performance optimization opportunities</p>
                             </div>
                             <div class="example-card" onclick="askQuestion('Find evaluations where the agent scored less than 50% on their QA weighted score')">
                                 <h4>🔍 Agent Analysis</h4>
-                                <p>Find all agents that scored below 50% on theit QA weighted score</p>
+                                <p>Identify coaching opportunities and performance improvement areas for agents</p>
                             </div>
                             <div class="example-card" onclick="askQuestion('Compare performance between different sites for Account dispositions, scores and provided a detail summary of the overall performance.')">
                                 <h4>🏢 Site Comparison</h4>
-                                <p>Compare performance for all sites</p>
+                                <p>Cross-location performance analysis and operational benchmarking</p>
                             </div>
                         </div>
                     </div>
 
                     <!-- Chat Messages -->
                     <div id="chatMessages" class="hidden">
-                        <!-- Messages will be populated here -->
+                        <!-- Chat sessions will be populated here -->
                     </div>
                 </div>
 
@@ -922,7 +1276,10 @@
                             Top performing agents
                         </button>
                         <button class="question-btn" onclick="askQuestion('What patterns do we see for calls that require troubleshooting?')">
-                            Troubleshooting call patterns
+                            Troubleshooting patterns
+                        </button>
+                        <button class="question-btn" onclick="askQuestion('Compare Metro vs T-Mobile Prepaid performance metrics')">
+                            Program comparison
                         </button>
                     </div>
                 </div>
@@ -933,7 +1290,7 @@
                         <textarea 
                             id="chatInput" 
                             class="chat-input" 
-                            placeholder="Ask specific questions about calls, dispositions, agents, performance metrics, or any evaluation data..."
+                            placeholder="Ask specific questions about calls, dispositions, agents, performance metrics, or any evaluation data from your live database..."
                             rows="1"
                             onkeydown="handleKeyPress(event)"
                         ></textarea>
@@ -946,6 +1303,101 @@
             </div>
         </div>
     </div>
+
+    <script>
+        // Production HTML integration functions for the enhanced filter system
+        function updateFilterCounts(filterOptions) {
+            const counts = [
+                { id: 'templateCount', data: filterOptions.templates, label: 'templates' },
+                { id: 'programCount', data: filterOptions.programs, label: 'programs' },
+                { id: 'partnerCount', data: filterOptions.partners, label: 'partners' },
+                { id: 'siteCount', data: filterOptions.sites, label: 'sites' },
+                { id: 'lobCount', data: filterOptions.lobs, label: 'LOBs' },
+                { id: 'dispositionCount', data: filterOptions.callDispositions, label: 'dispositions' },
+                { id: 'subDispositionCount', data: filterOptions.callSubDispositions, label: 'sub-dispositions' },
+                { id: 'agentCount', data: filterOptions.agentNames, label: 'agents' },
+                { id: 'languageCount', data: filterOptions.languages, label: 'languages' }
+            ];
+            
+            counts.forEach(({ id, data, label }) => {
+                const element = document.getElementById(id);
+                if (element) {
+                    const count = Array.isArray(data) ? data.length : 0;
+                    if (count > 0) {
+                        element.textContent = `(${count})`;
+                        element.className = 'count-indicator data-status-ok';
+                        element.title = `${count} ${label} found in database`;
+                    } else {
+                        element.textContent = '(0)';
+                        element.className = 'count-indicator data-status-warning';
+                        element.title = `No ${label} found in database`;
+                    }
+                }
+            });
+            
+            updateDataStatusIndicators(filterOptions);
+        }
+
+        function updateDataStatusIndicators(filterOptions) {
+            const statusElements = [
+                { id: 'hierarchyDataStatus', categories: ['templates', 'programs', 'partners', 'sites', 'lobs'] },
+                { id: 'callDataStatus', categories: ['callDispositions', 'callSubDispositions'] },
+                { id: 'agentDataStatus', categories: ['agentNames', 'languages'] }
+            ];
+            
+            statusElements.forEach(({ id, categories }) => {
+                const element = document.getElementById(id);
+                if (!element) return;
+                
+                const totalCategories = categories.length;
+                const populatedCategories = categories.filter(cat => 
+                    filterOptions[cat] && filterOptions[cat].length > 0
+                ).length;
+                
+                if (populatedCategories === totalCategories) {
+                    element.textContent = '✅ All data loaded';
+                    element.className = 'data-status data-status-ok';
+                } else if (populatedCategories > 0) {
+                    element.textContent = `⚠️ ${populatedCategories}/${totalCategories} loaded`;
+                    element.className = 'data-status data-status-warning';
+                } else {
+                    element.textContent = '❌ No data found';
+                    element.className = 'data-status data-status-error';
+                }
+            });
+        }
+
+        function onFilterOptionsLoaded(filterOptions) {
+            // Remove loading state from all selects and inputs
+            const selects = document.querySelectorAll('.filter-select, .filter-input');
+            selects.forEach(select => {
+                select.classList.remove('loading-filter');
+            });
+            
+            // Update agent input placeholder if enabled
+            const agentInput = document.getElementById('agentNameFilter');
+            if (agentInput && !agentInput.disabled) {
+                agentInput.placeholder = 'Start typing agent name...';
+            }
+            
+            console.log(`📊 Production UI update complete: ${Object.keys(filterOptions).length} filter categories processed`);
+        }
+
+        // Production initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("🚀 Production Chat Interface v4.3.0 initializing...");
+            
+            // Set initial loading state
+            const selects = document.querySelectorAll('.filter-select');
+            selects.forEach(select => {
+                select.classList.add('loading-filter');
+                select.disabled = true;
+            });
+            
+            // Track page load performance
+            window.pageLoadStart = performance.now();
+        });
+    </script>
 
     <script src="static/chat.js"></script>
 </body>
