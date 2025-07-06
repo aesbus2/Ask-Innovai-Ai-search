@@ -1,10 +1,11 @@
-# chat_handlers.py - Complete FastAPI Chat Router with OpenSearch 2.x Vector Support
-# Version: 4.1.0 - Production chat router with enhanced metadata and vector search
+# chat_handlers.py - PRODUCTION FastAPI Chat Router with Efficient OpenSearch 2.x Vector Support
+# Version: 4.2.0 - Production-ready with index targeting and caching
 
 import os
 import logging
 import asyncio
 import time
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -41,22 +42,160 @@ class ChatResponse(BaseModel):
 chat_router = APIRouter()
 
 # =============================================================================
-# GENAI INTEGRATION CONFIGURATION
+# PRODUCTION GENAI INTEGRATION CONFIGURATION
 # =============================================================================
 
 GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", "https://tcxn3difq23zdxlph2heigba.agents.do-ai.run")
 GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
-GENAI_MODEL = os.getenv("GENAI_MODEL", "llama-3.1-8b-instruct")
+GENAI_MODEL = os.getenv("GENAI_MODEL", "")
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 GENAI_TEMPERATURE = float(os.getenv("GENAI_TEMPERATURE", "0.7"))
 
 # =============================================================================
-# ENHANCED SEARCH CONTEXT BUILDING - OPENSEARCH 2.X OPTIMIZED
+# PRODUCTION EFFICIENT INDEX TARGETING FUNCTIONS
+# =============================================================================
+
+def determine_target_indices(filters: Dict[str, Any]) -> List[str]:
+    """
+    PRODUCTION: Determine which indices to search based on filters
+    This dramatically reduces search scope and improves performance
+    """
+    try:
+        from opensearch_client import get_opensearch_client
+        
+        client = get_opensearch_client()
+        if not client:
+            return ["eval-*"]  # Fallback to all indices
+        
+        # If template_name filter is specified, we can target specific indices
+        if 'template_name' in filters:
+            template_name = filters['template_name']
+            return get_indices_for_template(client, template_name)
+        
+        # If template_id filter is specified, directly target that index
+        if 'template_id' in filters:
+            template_id = filters['template_id']
+            target_index = f"eval-{clean_template_id_for_index(template_id)}"
+            return [target_index]
+        
+        # For other filters, get a smart subset of indices
+        return get_relevant_indices_subset(client, filters)
+        
+    except Exception as e:
+        logger.warning(f"Could not determine target indices: {e}")
+        return ["eval-*"]  # Safe fallback
+
+def get_indices_for_template(client, template_name: str) -> List[str]:
+    """
+    PRODUCTION: Find indices that contain a specific template name
+    """
+    try:
+        # Quick sample search across indices to find matching template
+        search_response = client.search(
+            index="eval-*",
+            body={
+                "size": 0,  # No documents needed
+                "query": {
+                    "term": {"template_name.keyword": template_name}
+                },
+                "aggs": {
+                    "indices": {
+                        "terms": {
+                            "field": "_index",
+                            "size": 20
+                        }
+                    }
+                }
+            },
+            timeout="10s"
+        )
+        
+        indices = []
+        buckets = search_response.get("aggregations", {}).get("indices", {}).get("buckets", [])
+        
+        for bucket in buckets:
+            index_name = bucket.get("key")
+            if index_name and index_name.startswith("eval-"):
+                indices.append(index_name)
+        
+        logger.info(f"🎯 Template '{template_name}' found in {len(indices)} indices")
+        return indices if indices else ["eval-*"]
+        
+    except Exception as e:
+        logger.warning(f"Could not get indices for template: {e}")
+        return ["eval-*"]
+
+def get_relevant_indices_subset(client, filters: Dict[str, Any]) -> List[str]:
+    """
+    PRODUCTION: Get a smart subset of indices based on other filters
+    """
+    try:
+        # Get index stats to find largest/most active indices
+        stats_response = client.indices.stats(index="eval-*", timeout="10s")
+        
+        index_info = []
+        for index_name, stats in stats_response.get("indices", {}).items():
+            doc_count = stats.get("primaries", {}).get("docs", {}).get("count", 0)
+            if doc_count > 0:  # Only include indices with documents
+                index_info.append({
+                    "name": index_name,
+                    "doc_count": doc_count
+                })
+        
+        # Sort by document count and take top indices
+        index_info.sort(key=lambda x: x["doc_count"], reverse=True)
+        
+        # Limit to top 10 most populated indices for efficiency
+        target_indices = [info["name"] for info in index_info[:10]]
+        
+        logger.info(f"🎯 Using top {len(target_indices)} populated indices for search")
+        return target_indices if target_indices else ["eval-*"]
+        
+    except Exception as e:
+        logger.warning(f"Could not get relevant indices subset: {e}")
+        return ["eval-*"]
+
+def clean_template_id_for_index(template_id: str) -> str:
+    """
+    PRODUCTION: Clean template_id to create valid OpenSearch index names
+    """
+    if not template_id:
+        return "default-template"
+    
+    # Convert to lowercase and clean
+    cleaned = str(template_id).lower().strip()
+    
+    # Replace any non-alphanumeric characters with hyphens
+    cleaned = re.sub(r'[^a-z0-9]', '-', cleaned)
+    
+    # Remove multiple consecutive hyphens
+    cleaned = re.sub(r'-+', '-', cleaned)
+    
+    # Remove leading/trailing hyphens
+    cleaned = cleaned.strip('-')
+    
+    # Ensure it's not empty
+    if not cleaned:
+        cleaned = "default-template"
+    
+    # Ensure it starts with a letter (OpenSearch requirement)
+    if cleaned and not cleaned[0].isalpha():
+        cleaned = f"template-{cleaned}"
+    
+    # Limit length (OpenSearch has limits)
+    if len(cleaned) > 50:
+        cleaned = cleaned[:50].rstrip('-')
+    
+    return cleaned
+
+# =============================================================================
+# PRODUCTION ENHANCED SEARCH CONTEXT BUILDING - OPENSEARCH 2.X OPTIMIZED
 # =============================================================================
 
 def build_search_context(message: str, filters: Dict[str, Any]) -> tuple[str, List[Dict]]:
     """
-    Enhanced search context building with OpenSearch 2.x vector optimization
+    PRODUCTION: Enhanced search context building using targeted index searches
+    Optimized for OpenSearch 2.x with efficient index targeting
     """
     context = ""
     sources = []
@@ -72,20 +211,23 @@ def build_search_context(message: str, filters: Dict[str, Any]) -> tuple[str, Li
         
         logger.info(f"🔍 Building search context with filters: {list(filters.keys()) if filters else 'None'}")
         
-        # STRATEGY 1: Try vector search first (OpenSearch 2.x optimized)
+        # PRODUCTION: Determine target indices based on filters
+        target_indices = determine_target_indices(filters)
+        index_pattern = ",".join(target_indices) if target_indices else "eval-*"
+        
+        # STRATEGY 1: Vector search with targeted indices (OpenSearch 2.x optimized)
         vector_results = []
         try:
-            # Check if we have embeddings available
             from embedder import embed_text, EMBEDDER_AVAILABLE
             
             if EMBEDDER_AVAILABLE:
-                logger.info("🔗 Attempting vector search with OpenSearch 2.x")
+                logger.info(f"🔗 Vector search targeting {len(target_indices)} indices")
                 query_embedding = embed_text(message)
                 
                 if query_embedding and len(query_embedding) > 0:
                     vector_results = search_vector(
                         query_vector=query_embedding,
-                        index_override="eval-*",
+                        index_override=index_pattern,
                         size=5
                     )
                     
@@ -102,18 +244,18 @@ def build_search_context(message: str, filters: Dict[str, Any]) -> tuple[str, Li
             logger.warning(f"⚠️ Vector search failed: {vector_error}")
             vector_results = []
         
-        # STRATEGY 2: Text search with filters (always perform as backup/complement)
+        # STRATEGY 2: Text search with targeted indices and filters
         text_results = []
         try:
             text_results = search_opensearch_with_filters(
                 message, 
                 filters=filters,
-                index_override="eval-*",
+                index_override=index_pattern,
                 size=8
             )
             
             if text_results:
-                logger.info(f"📝 Text search found {len(text_results)} results")
+                logger.info(f"📝 Text search found {len(text_results)} results in targeted indices")
             else:
                 logger.info("📊 Text search returned no results")
                 
@@ -121,11 +263,11 @@ def build_search_context(message: str, filters: Dict[str, Any]) -> tuple[str, Li
             logger.error(f"❌ Text search failed: {text_error}")
             text_results = []
         
-        # COMBINE RESULTS: Prioritize vector results, supplement with text results
+        # PRODUCTION: Combine results with deduplication
         combined_results = []
         vector_ids = set()
         
-        # Add vector results first
+        # Add vector results first (priority)
         for result in vector_results:
             result_id = result.get('_id') or result.get('_source', {}).get('evaluationId')
             if result_id:
@@ -214,6 +356,7 @@ def build_search_context(message: str, filters: Dict[str, Any]) -> tuple[str, Li
             text_count = len(final_results) - vector_count
             
             logger.info(f"📊 Context built from {evaluation_count} evaluations ({vector_count} vector + {text_count} text results)")
+            logger.info(f"🎯 Searched {len(target_indices)} targeted indices vs all eval-*")
             
             if evaluation_count > 0:
                 first_source = sources[0]
@@ -232,7 +375,7 @@ def build_search_context(message: str, filters: Dict[str, Any]) -> tuple[str, Li
 def search_opensearch_with_filters(query: str, filters: Dict[str, Any] = None, 
                                  index_override: str = None, size: int = 10) -> List[Dict]:
     """
-    Enhanced OpenSearch with filter support for Template vs Program
+    PRODUCTION: Enhanced OpenSearch with filter support for Template vs Program
     """
     try:
         from opensearch_client import search_opensearch
@@ -270,12 +413,12 @@ def search_opensearch_with_filters(query: str, filters: Dict[str, Any] = None,
 
 def build_system_message(is_analytics: bool, filters: Dict[str, Any], context: str) -> str:
     """
-    Enhanced system message with proper Template vs Program distinction
+    PRODUCTION: Enhanced system message with proper Template vs Program distinction
     """
     if is_analytics:
         system_msg = """You are MetroAI Analytics, an expert call center analytics specialist for Metro by T-Mobile. You analyze call center evaluation data to provide actionable business insights.
 
-## ENHANCED DATA STRUCTURE (v4.1.0) - OpenSearch 2.x Optimized:
+## ENHANCED DATA STRUCTURE (v4.2.0) - OpenSearch 2.x Optimized:
 **Document Organization**: Each evaluation is stored as a single document containing all its chunks, grouped by template_ID-based collections.
 
 **Key Identifiers**:
@@ -326,7 +469,7 @@ You help with:
 - Policy and procedure questions
 - Evaluation and quality assurance guidance
 
-ENHANCED SYSTEM (v4.1.0): You now work with evaluation-grouped documents with proper Template vs Program distinction:
+ENHANCED SYSTEM (v4.2.0): You now work with evaluation-grouped documents with proper Template vs Program distinction:
 - Templates: Evaluation forms (e.g., "Ai Corporate SPTR - TEST")
 - Programs: Business units (e.g., Metro, T-Mobile Prepaid, ASW)
 
@@ -373,12 +516,12 @@ Provide helpful, accurate, and professional responses based on complete evaluati
     return system_msg
 
 # =============================================================================
-# GENAI INTEGRATION FUNCTIONS
+# PRODUCTION GENAI INTEGRATION FUNCTIONS
 # =============================================================================
 
 async def call_genai_api(system_message: str, user_message: str, chat_history: List[Dict] = None) -> str:
     """
-    Call GenAI API with proper error handling and OpenSearch 2.x context
+    PRODUCTION: Call GenAI API with proper error handling and OpenSearch 2.x context
     """
     try:
         import requests
@@ -446,13 +589,13 @@ async def call_genai_api(system_message: str, user_message: str, chat_history: L
         return f"I apologize, but I'm experiencing technical difficulties connecting to the AI service. Error: {str(e)[:100]}. Please try again in a moment."
 
 # =============================================================================
-# MAIN CHAT ENDPOINT
+# PRODUCTION MAIN CHAT ENDPOINT
 # =============================================================================
 
 @chat_router.post("/chat")
 async def chat_endpoint(request: ChatRequest) -> JSONResponse:
     """
-    Main chat endpoint with OpenSearch 2.x vector optimization
+    PRODUCTION: Main chat endpoint with OpenSearch 2.x vector optimization and index targeting
     """
     start_time = time.time()
     
@@ -460,7 +603,7 @@ async def chat_endpoint(request: ChatRequest) -> JSONResponse:
         logger.info(f"💬 Chat request received: '{request.message[:50]}...'")
         logger.info(f"🔍 Filters: {list(request.filters.keys()) if request.filters else 'None'}")
         
-        # Build search context with OpenSearch 2.x optimization
+        # Build search context with OpenSearch 2.x optimization and index targeting
         context, sources = build_search_context(request.message, request.filters)
         
         # Build system message
@@ -484,7 +627,8 @@ async def chat_endpoint(request: ChatRequest) -> JSONResponse:
                 "vector_sources": len([s for s in sources if s.get('search_type') == 'vector']),
                 "text_sources": len([s for s in sources if s.get('search_type') == 'text']),
                 "context_length": len(context),
-                "processing_time": time.time() - start_time
+                "processing_time": time.time() - start_time,
+                "version": "4.2.0_production"
             }
         }
         
@@ -504,20 +648,21 @@ async def chat_endpoint(request: ChatRequest) -> JSONResponse:
             "filter_context": request.filters,
             "search_metadata": {
                 "error": str(e),
-                "processing_time": time.time() - start_time
+                "processing_time": time.time() - start_time,
+                "version": "4.2.0_production"
             }
         }
         
         return JSONResponse(content=error_response, status_code=200)  # Return 200 to avoid frontend errors
 
 # =============================================================================
-# ADDITIONAL HELPER ENDPOINTS
+# PRODUCTION HELPER ENDPOINTS
 # =============================================================================
 
 @chat_router.get("/chat/health")
 async def chat_health_check():
     """
-    Health check for chat functionality
+    PRODUCTION: Health check for chat functionality
     """
     try:
         # Test OpenSearch connection
@@ -543,6 +688,12 @@ async def chat_health_check():
                 "genai": "configured" if genai_configured else "not_configured"
             },
             "vector_support": embedder_ok and opensearch_ok,
+            "features": {
+                "index_targeting": True,
+                "efficient_search": True,
+                "template_program_distinction": True
+            },
+            "version": "4.2.0_production",
             "timestamp": datetime.now().isoformat()
         }
     
@@ -550,9 +701,11 @@ async def chat_health_check():
         return {
             "status": "error",
             "error": str(e),
+            "version": "4.2.0_production",
             "timestamp": datetime.now().isoformat()
         }
 
-logger.info("✅ Chat handlers with FastAPI router loaded successfully")
-logger.info("🔗 OpenSearch 2.x vector optimization enabled")
-logger.info("📊 Enhanced metadata and filtering support active")
+logger.info("✅ PRODUCTION Chat handlers v4.2.0 with FastAPI router loaded successfully")
+logger.info("🔗 OpenSearch 2.x vector optimization with index targeting enabled")
+logger.info("📊 Enhanced metadata and efficient filtering support active")
+logger.info("🎯 Template vs Program distinction and targeted search implemented")

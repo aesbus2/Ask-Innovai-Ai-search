@@ -1,5 +1,5 @@
-# opensearch_client.py - SMART: Auto-detects vector support and adapts
-# Version: 4.0.6 - Smart detection for OpenSearch 2.0+ with vector support
+# opensearch_client.py - PRODUCTION: OpenSearch 2.x Compatible with Simplified Vector Support
+# Version: 4.2.0 - Production-ready with conservative vector field mapping
 
 import os
 import logging
@@ -22,11 +22,14 @@ logger = logging.getLogger(__name__)
 # Global vector support detection
 _vector_support_detected = None
 _vector_support_tested = False
-_working_vector_config = None  # Store the working vector configuration
 
-# Your exact working client setup
+# Global client instance
+_client = None
+
 def get_client():
-    """Get OpenSearch client using YOUR exact working setup"""
+    """
+    PRODUCTION: Get OpenSearch client using exact working setup
+    """
     if not OPENSEARCH_AVAILABLE:
         logger.error("OpenSearch library not available")
         return None
@@ -39,26 +42,29 @@ def get_client():
             }],
             http_auth=(os.getenv("OPENSEARCH_USER"), os.getenv("OPENSEARCH_PASS")),
             use_ssl=True,
-            verify_certs=False
+            verify_certs=False,
+            timeout=30,
+            max_retries=3,
+            retry_on_timeout=True
         )
         return client
     except Exception as e:
         logger.error(f"Failed to create OpenSearch client: {e}")
         return None
 
-# Global client instance
-_client = None
-
 def get_opensearch_client():
-    """Get or create global client instance"""
+    """
+    PRODUCTION: Get or create global client instance
+    """
     global _client
     if _client is None:
         _client = get_client()
     return _client
 
-# Simple connection test
 def test_connection() -> bool:
-    """Test connection using your simple approach"""
+    """
+    PRODUCTION: Test connection using simple approach
+    """
     client = get_opensearch_client()
     if not client:
         return False
@@ -76,7 +82,9 @@ def test_connection() -> bool:
         return False
 
 def get_connection_status() -> Dict[str, Any]:
-    """Get simple connection status"""
+    """
+    PRODUCTION: Get simple connection status
+    """
     return {
         "connected": test_connection(),
         "host": os.getenv("OPENSEARCH_HOST"),
@@ -86,7 +94,9 @@ def get_connection_status() -> Dict[str, Any]:
     }
 
 def get_opensearch_config() -> Dict[str, Any]:
-    """Get OpenSearch configuration"""
+    """
+    PRODUCTION: Get OpenSearch configuration
+    """
     return {
         "host": os.getenv("OPENSEARCH_HOST", "not_configured"),
         "port": int(os.getenv("OPENSEARCH_PORT", "25060")),
@@ -96,11 +106,14 @@ def get_opensearch_config() -> Dict[str, Any]:
         "verify_certs": False
     }
 
-# SMART: Vector support detection functions
+# =============================================================================
+# PRODUCTION OPENSEARCH 2.X VECTOR SUPPORT - SIMPLIFIED AND CONSERVATIVE
+# =============================================================================
 
 def detect_vector_support(client) -> bool:
     """
-    SMART: Detect if OpenSearch cluster supports k-NN vectors with proper method testing
+    PRODUCTION: Conservative vector support detection for OpenSearch 2.x
+    Uses simple test approach to avoid complex configurations
     """
     global _vector_support_detected, _vector_support_tested
     
@@ -108,90 +121,52 @@ def detect_vector_support(client) -> bool:
         return _vector_support_detected
     
     try:
-        logger.info("🔍 Testing k-NN vector support on OpenSearch cluster...")
+        logger.info("🔍 Testing OpenSearch 2.x vector support...")
         
-        # Method 1: Check cluster info and plugins
-        try:
-            cluster_info = client.info()
-            version = cluster_info.get("version", {}).get("number", "unknown")
-            logger.info(f"📊 OpenSearch version: {version}")
-            
-            # Check for k-NN plugin
-            try:
-                plugins_info = client.cat.plugins(format="json")
-                if plugins_info:
-                    plugin_names = [plugin.get("name", "") for plugin in plugins_info]
-                    logger.info(f"🔌 Installed plugins: {plugin_names}")
-                    
-                    if any("knn" in name.lower() for name in plugin_names):
-                        logger.info("✅ k-NN plugin detected in cluster")
-                    else:
-                        logger.warning("⚠️ k-NN plugin not found in plugin list")
-            except Exception as e:
-                logger.debug(f"Could not check plugins: {e}")
+        # Simple test index name
+        test_index = f"vector-test-{int(time.time())}"
         
-        except Exception as e:
-            logger.debug(f"Could not get cluster info: {e}")
-        
-        # Method 2: Test vector field configurations systematically
-        test_index = f"knn-support-test-{int(time.time())}"
-        logger.info(f"🧪 Testing k-NN configurations with index: {test_index}")
-        
-        # Get all possible vector field configurations
-        configurations = get_vector_field_mapping_fallback()
-        
-        for i, vector_config in enumerate(configurations):
-            config_name = f"{vector_config['type']}"
-            if 'method' in vector_config:
-                method_info = vector_config['method']
-                config_name += f" ({method_info.get('name', 'unknown')}/{method_info.get('engine', 'unknown')})"
-            
-            logger.info(f"🧪 Testing configuration {i+1}/{len(configurations)}: {config_name}")
-            
-            test_mapping = {
-                "mappings": {
-                    "properties": {
-                        "test_vector": vector_config,
-                        "test_text": {"type": "text"}
+        # PRODUCTION: Use simple OpenSearch 2.x vector field configuration
+        test_mapping = {
+            "mappings": {
+                "properties": {
+                    "test_vector": {
+                        "type": "knn_vector",
+                        "dimension": 384
+                    },
+                    "test_text": {
+                        "type": "text"
                     }
                 }
             }
-            
-            try:
-                # Try to create index with this vector configuration
-                client.indices.create(index=test_index, body=test_mapping)
-                
-                # If successful, clean up and confirm support
-                client.indices.delete(index=test_index)
-                
-                logger.info(f"✅ k-NN vector support confirmed with: {config_name}")
-                _vector_support_detected = True
-                _vector_support_tested = True
-                
-                # Store the working configuration globally for reuse
-                global _working_vector_config
-                _working_vector_config = vector_config
-                
-                return True
-                
-            except Exception as config_error:
-                logger.debug(f"❌ Configuration {config_name} failed: {config_error}")
-                
-                # Clean up any partially created index
-                try:
-                    if client.indices.exists(index=test_index):
-                        client.indices.delete(index=test_index)
-                except:
-                    pass
-                
-                continue  # Try next configuration
+        }
         
-        # If we get here, none of the configurations worked
-        logger.warning("❌ No k-NN vector configurations worked")
-        logger.info("💡 This could mean:")
-        logger.info("   - k-NN plugin is not installed/enabled")
-        logger.info("   - Cluster doesn't support vector fields")
-        logger.info("   - Different syntax required for this version")
+        try:
+            # Try to create index with simple vector configuration
+            client.indices.create(index=test_index, body=test_mapping, timeout="30s")
+            
+            # If successful, clean up and confirm support
+            client.indices.delete(index=test_index, timeout="30s")
+            
+            logger.info("✅ OpenSearch 2.x vector support confirmed (simple knn_vector)")
+            _vector_support_detected = True
+            _vector_support_tested = True
+            
+            return True
+            
+        except Exception as config_error:
+            logger.warning(f"❌ Simple vector configuration failed: {config_error}")
+            
+            # Clean up any partially created index
+            try:
+                if client.indices.exists(index=test_index):
+                    client.indices.delete(index=test_index)
+            except:
+                pass
+        
+        # If simple config failed, vectors not supported
+        logger.warning("❌ OpenSearch 2.x vector support not available")
+        logger.info("💡 This cluster may not have k-NN plugin enabled")
         
         _vector_support_detected = False
         _vector_support_tested = True
@@ -205,94 +180,25 @@ def detect_vector_support(client) -> bool:
 
 def get_vector_field_mapping(dimension: int = 384) -> Dict[str, Any]:
     """
-    SMART: Get the correct vector field mapping for OpenSearch 2.x with proper k-NN configuration
+    PRODUCTION: Get simple OpenSearch 2.x compatible vector field mapping
     """
-    global _working_vector_config
-    
     client = get_opensearch_client()
     if not client or not detect_vector_support(client):
         return None
     
-    # If we have a working configuration from detection, use it with the requested dimension
-    if _working_vector_config:
-        config = _working_vector_config.copy()
-        
-        # Update dimension based on request
-        if config.get("type") == "knn_vector":
-            config["dimension"] = dimension
-        elif config.get("type") == "dense_vector":
-            config["dims"] = dimension
-            
-        logger.debug(f"🔗 Using detected working vector configuration: {config['type']}")
-        return config
-    
-    # Fallback: OpenSearch 2.x proper k-NN vector field configuration
+    # PRODUCTION: Simple OpenSearch 2.x vector field configuration
     return {
         "type": "knn_vector",
-        "dimension": dimension,
-        "method": {
-            "name": "hnsw",              # Hierarchical Navigable Small World
-            "space_type": "l2",          # Euclidean distance
-            "engine": "lucene",          # Native OpenSearch engine
-            "parameters": {
-                "ef_construction": 128,   # Build time parameter
-                "m": 24                   # Number of connections
-            }
-        }
+        "dimension": dimension
     }
 
-def get_vector_field_mapping_fallback(dimension: int = 384) -> Dict[str, Any]:
-    """
-    Fallback vector field mappings for different OpenSearch configurations
-    """
-    configurations = [
-        # OpenSearch 2.x with Lucene engine
-        {
-            "type": "knn_vector",
-            "dimension": dimension,
-            "method": {
-                "name": "hnsw",
-                "space_type": "l2",
-                "engine": "lucene",
-                "parameters": {
-                    "ef_construction": 128,
-                    "m": 24
-                }
-            }
-        },
-        # OpenSearch 2.x with Faiss engine
-        {
-            "type": "knn_vector", 
-            "dimension": dimension,
-            "method": {
-                "name": "hnsw",
-                "space_type": "l2", 
-                "engine": "faiss",
-                "parameters": {
-                    "ef_construction": 128,
-                    "m": 24
-                }
-            }
-        },
-        # Simple knn_vector without method (basic)
-        {
-            "type": "knn_vector",
-            "dimension": dimension
-        },
-        # Legacy dense_vector syntax
-        {
-            "type": "dense_vector",
-            "dims": dimension
-        }
-    ]
-    
-    return configurations
-
-# ENHANCED: Evaluation grouping functions with SMART vector detection
+# =============================================================================
+# PRODUCTION ENHANCED INDEX MANAGEMENT - OPENSEARCH 2.X OPTIMIZED
+# =============================================================================
 
 def ensure_evaluation_index_exists(client, index_name: str):
     """
-    SMART: Create index with evaluation grouping mapping WITH auto-detected vector support
+    PRODUCTION: Create index with evaluation grouping mapping and optional vector support
     """
     if client.indices.exists(index=index_name):
         return
@@ -328,7 +234,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
         chunk_properties["embedding"] = vector_field
         logger.info("✅ Added vector field to chunk mapping")
     
-    # Enhanced mapping with conditional vector support
+    # PRODUCTION: Enhanced mapping with conditional vector support
     mapping = {
         "settings": {
             "number_of_shards": 1,
@@ -369,13 +275,14 @@ def ensure_evaluation_index_exists(client, index_name: str):
                     "properties": chunk_properties
                 },
                 
-                # Metadata
+                # PRODUCTION: Enhanced metadata mapping
                 "metadata": {
                     "properties": {
                         "evaluationId": {"type": "keyword"},
                         "internalId": {"type": "keyword"},
                         "template_id": {"type": "keyword"},
                         "template_name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "program": {"type": "keyword"},  # Enhanced: Program field
                         "partner": {"type": "keyword"},
                         "site": {"type": "keyword"},
                         "lob": {"type": "keyword"},
@@ -386,7 +293,11 @@ def ensure_evaluation_index_exists(client, index_name: str):
                         "language": {"type": "keyword"},
                         "call_date": {"type": "date"},
                         "call_duration": {"type": "integer"},
-                        "created_on": {"type": "date"}
+                        "created_on": {"type": "date"},
+                        "phone_number": {"type": "keyword"},
+                        "contact_id": {"type": "keyword"},
+                        "ucid": {"type": "keyword"},
+                        "call_type": {"type": "keyword"}
                     }
                 },
                 
@@ -394,8 +305,10 @@ def ensure_evaluation_index_exists(client, index_name: str):
                 "source": {"type": "keyword"},
                 "indexed_at": {"type": "date"},
                 "collection_name": {"type": "keyword"},
+                "collection_source": {"type": "keyword"},
                 "_structure_version": {"type": "keyword"},
-                "_document_type": {"type": "keyword"}
+                "_document_type": {"type": "keyword"},
+                "version": {"type": "keyword"}
             }
         }
     }
@@ -406,7 +319,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
         logger.info("✅ Added document-level vector field")
     
     try:
-        client.indices.create(index=index_name, body=mapping)
+        client.indices.create(index=index_name, body=mapping, timeout="60s")
         vector_status = "WITH VECTORS" if has_vectors else "TEXT ONLY"
         logger.info(f"✅ Created evaluation index ({vector_status}): {index_name}")
     except Exception as e:
@@ -415,7 +328,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
 
 def index_document(doc_id: str, document: Dict[str, Any], index_override: str = None) -> bool:
     """
-    SMART: Index evaluation document with grouped chunks (conditional vector support)
+    PRODUCTION: Index evaluation document with grouped chunks and conditional vector support
     """
     client = get_opensearch_client()
     if not client:
@@ -425,7 +338,7 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
     index_name = index_override or "evaluations-grouped"
     
     try:
-        # Ensure index exists with smart vector detection
+        # Ensure index exists with vector detection
         ensure_evaluation_index_exists(client, index_name)
         
         # Check if we should clean vector fields
@@ -442,15 +355,16 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
         
         # Add system metadata
         clean_document["_indexed_at"] = datetime.now().isoformat()
-        clean_document["_structure_version"] = "4.0.6"
-        clean_document["_document_type"] = "evaluation_grouped_smart"
+        clean_document["_structure_version"] = "4.2.0"
+        clean_document["_document_type"] = "evaluation_grouped_production"
         
         # Index the document
         response = client.index(
             index=index_name,
             id=doc_id,
             body=clean_document,
-            refresh=True
+            refresh=True,
+            timeout="60s"
         )
         
         vector_status = "WITH VECTORS" if has_vectors else "TEXT ONLY"
@@ -466,7 +380,7 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
 
 def remove_vector_fields(document: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Remove all vector/embedding fields from document for non-vector clusters
+    PRODUCTION: Remove all vector/embedding fields from document for non-vector clusters
     """
     import copy
     clean_doc = copy.deepcopy(document)
@@ -495,10 +409,14 @@ def remove_vector_fields(document: Dict[str, Any]) -> Dict[str, Any]:
     
     return clean_doc
 
+# =============================================================================
+# PRODUCTION SEARCH FUNCTIONS - OPENSEARCH 2.X OPTIMIZED
+# =============================================================================
+
 def search_opensearch(query: str, index_override: str = None, 
                      filters: Dict[str, Any] = None, size: int = 10) -> List[Dict]:
     """
-    SMART: Search evaluations with automatic vector/text search selection
+    PRODUCTION: Search evaluations with enhanced filter support and error handling
     """
     client = get_opensearch_client()
     if not client:
@@ -552,7 +470,7 @@ def search_opensearch(query: str, index_override: str = None,
             }
         }
         
-        # Apply filters if provided
+        # PRODUCTION: Apply filters if provided
         if filters:
             filter_clauses = []
             
@@ -568,22 +486,41 @@ def search_opensearch(query: str, index_override: str = None,
                     "range": {"metadata.call_date": date_range}
                 })
             
-            # Keyword filters
+            # PRODUCTION: Enhanced keyword filters with proper field mapping
             keyword_filters = {
+                "template_name": "template_name.keyword",
                 "template_id": "template_id",
+                "program": "metadata.program",
                 "partner": "metadata.partner",
                 "site": "metadata.site",
                 "lob": "metadata.lob",
-                "agent_name": "metadata.agent",
+                "agent_name": "metadata.agent.keyword",
                 "disposition": "metadata.disposition",
-                "language": "metadata.language"
+                "sub_disposition": "metadata.sub_disposition",
+                "language": "metadata.language",
+                "call_type": "metadata.call_type",
+                "phone_number": "metadata.phone_number",
+                "contact_id": "metadata.contact_id",
+                "ucid": "metadata.ucid"
             }
             
             for filter_key, field_path in keyword_filters.items():
                 if filters.get(filter_key):
                     filter_clauses.append({
-                        "term": {f"{field_path}.keyword": filters[filter_key]}
+                        "term": {field_path: filters[filter_key]}
                     })
+            
+            # Duration filters
+            if filters.get("min_duration") or filters.get("max_duration"):
+                duration_range = {}
+                if filters.get("min_duration"):
+                    duration_range["gte"] = filters["min_duration"]
+                if filters.get("max_duration"):
+                    duration_range["lte"] = filters["max_duration"]
+                
+                filter_clauses.append({
+                    "range": {"metadata.call_duration": duration_range}
+                })
             
             if filter_clauses:
                 combined_query["bool"]["filter"] = filter_clauses
@@ -606,7 +543,8 @@ def search_opensearch(query: str, index_override: str = None,
         
         response = client.search(
             index=index_pattern,
-            body=search_body
+            body=search_body,
+            timeout="30s"
         )
         
         hits = response.get("hits", {}).get("hits", [])
@@ -645,7 +583,7 @@ def search_opensearch(query: str, index_override: str = None,
 def search_vector(query_vector: List[float], index_override: str = None, 
                  size: int = 10) -> List[Dict]:
     """
-    SMART: Vector search with proper OpenSearch 2.x k-NN query syntax
+    PRODUCTION: Vector search with OpenSearch 2.x k-NN query syntax
     """
     client = get_opensearch_client()
     if not client:
@@ -653,13 +591,13 @@ def search_vector(query_vector: List[float], index_override: str = None,
         return []
     
     if not detect_vector_support(client):
-        logger.warning("❌ Vector search not available - use search_opensearch() for text search")
+        logger.warning("❌ Vector search not available - cluster doesn't support vectors")
         return []
     
     index_pattern = index_override or "eval-*"
     
     try:
-        # OpenSearch 2.x proper k-NN query syntax
+        # PRODUCTION: OpenSearch 2.x k-NN query syntax (simple)
         search_body = {
             "query": {
                 "knn": {
@@ -673,11 +611,12 @@ def search_vector(query_vector: List[float], index_override: str = None,
             "_source": True
         }
         
-        logger.debug(f"🔍 Executing k-NN vector search (k={size})")
+        logger.debug(f"🔍 Executing OpenSearch 2.x k-NN vector search (k={size})")
         
         response = client.search(
             index=index_pattern,
-            body=search_body
+            body=search_body,
+            timeout="30s"
         )
         
         hits = response.get("hits", {}).get("hits", [])
@@ -707,95 +646,14 @@ def search_vector(query_vector: List[float], index_override: str = None,
         logger.debug(f"Query was: {search_body}")
         return []
 
-def search_evaluation_chunks(query: str, evaluation_id: str = None, 
-                           content_type: str = None) -> List[Dict]:
-    """
-    Search within chunks of evaluations using nested queries
-    """
-    client = get_opensearch_client()
-    if not client:
-        logger.warning("❌ OpenSearch client not available")
-        return []
-    
-    try:
-        # Build nested query to search within chunks
-        nested_query = {
-            "nested": {
-                "path": "chunks",
-                "query": {
-                    "bool": {
-                        "must": [{"match": {"chunks.text": query}}]
-                    }
-                },
-                "inner_hits": {
-                    "size": 10,
-                    "highlight": {"fields": {"chunks.text": {}}}
-                }
-            }
-        }
-        
-        # Add filters if specified
-        bool_query = {"bool": {"must": [nested_query]}}
-        
-        if evaluation_id:
-            bool_query["bool"]["must"].append({
-                "term": {"evaluationId": evaluation_id}
-            })
-        
-        if content_type:
-            nested_query["nested"]["query"]["bool"]["must"].append({
-                "term": {"chunks.content_type": content_type}
-            })
-        
-        search_body = {
-            "query": bool_query,
-            "size": 20
-        }
-        
-        response = client.search(
-            index="eval-*",
-            body=search_body
-        )
-        
-        # Process nested search results
-        results = []
-        
-        for hit in response.get("hits", {}).get("hits", []):
-            source = hit.get("_source", {})
-            inner_hits = hit.get("inner_hits", {}).get("chunks", {}).get("hits", [])
-            
-            for inner_hit in inner_hits:
-                chunk_source = inner_hit.get("_source", {})
-                
-                result = {
-                    "_id": f"{hit.get('_id')}-chunk-{chunk_source.get('chunk_index')}",
-                    "_score": inner_hit.get("_score", 0),
-                    "_index": hit.get("_index"),
-                    
-                    # Chunk information
-                    "text": chunk_source.get("text", ""),
-                    "content_type": chunk_source.get("content_type"),
-                    "chunk_index": chunk_source.get("chunk_index"),
-                    
-                    # Parent evaluation information
-                    "evaluationId": source.get("evaluationId"),
-                    "template_id": source.get("template_id"),
-                    "template_name": source.get("template_name"),
-                    "metadata": source.get("metadata", {}),
-                    
-                    "_source": chunk_source
-                }
-                results.append(result)
-        
-        logger.info(f"🔍 Found {len(results)} chunk matches")
-        return results
-        
-    except Exception as e:
-        logger.error(f"❌ Chunk search failed: {e}")
-        return []
+# =============================================================================
+# PRODUCTION UTILITY FUNCTIONS
+# =============================================================================
 
 def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
-    """Get a specific evaluation document by ID"""
+    """
+    PRODUCTION: Get a specific evaluation document by ID
+    """
     client = get_opensearch_client()
     if not client:
         return None
@@ -806,7 +664,8 @@ def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
             body={
                 "query": {"term": {"evaluationId": evaluation_id}},
                 "size": 1
-            }
+            },
+            timeout="10s"
         )
         
         hits = response.get("hits", {}).get("hits", [])
@@ -816,36 +675,10 @@ def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
         logger.error(f"❌ Failed to get evaluation {evaluation_id}: {e}")
         return None
 
-# For backward compatibility
-def get_opensearch_manager():
-    """Get manager for compatibility"""
-    class SimpleManager:
-        def test_connection(self):
-            return test_connection()
-        
-        def get_opensearch_config(self):
-            return get_opensearch_config()
-        
-        def get_connection_status(self):
-            return get_connection_status()
-    
-    return SimpleManager()
-
-def get_opensearch_stats() -> Dict[str, Any]:
-    """Get simple OpenSearch statistics with vector support info"""
-    client = get_opensearch_client()
-    has_vectors = detect_vector_support(client) if client else False
-    
-    return {
-        "connected": test_connection(),
-        "structure_version": "4.0.6",
-        "auth_method": "simple_proven_setup",
-        "client_type": "smart_vector_detection",
-        "vector_support": has_vectors
-    }
-
 def health_check() -> Dict[str, Any]:
-    """SMART: Health check with vector support detection"""
+    """
+    PRODUCTION: Health check with vector support detection
+    """
     try:
         client = get_opensearch_client()
         
@@ -872,11 +705,11 @@ def health_check() -> Dict[str, Any]:
                 "host": os.getenv("OPENSEARCH_HOST"),
                 "port": os.getenv("OPENSEARCH_PORT", "25060"),
                 "user": os.getenv("OPENSEARCH_USER"),
-                "structure_version": "4.0.6",
-                "document_structure": "evaluation_grouped_smart",
+                "structure_version": "4.2.0",
+                "document_structure": "evaluation_grouped_production",
                 "auth_method": "simple_proven_setup",
-                "client_type": "smart_vector_detection",
                 "vector_support": has_vectors,
+                "vector_type": "simple_knn_vector" if has_vectors else None,
                 "search_type": "hybrid" if has_vectors else "text_only"
             }
         else:
@@ -899,12 +732,48 @@ def health_check() -> Dict[str, Any]:
             "vector_support": None
         }
 
+# =============================================================================
+# BACKWARD COMPATIBILITY
+# =============================================================================
+
+def get_opensearch_manager():
+    """
+    PRODUCTION: Get manager for compatibility
+    """
+    class SimpleManager:
+        def test_connection(self):
+            return test_connection()
+        
+        def get_opensearch_config(self):
+            return get_opensearch_config()
+        
+        def get_connection_status(self):
+            return get_connection_status()
+    
+    return SimpleManager()
+
+def get_opensearch_stats() -> Dict[str, Any]:
+    """
+    PRODUCTION: Get simple OpenSearch statistics with vector support info
+    """
+    client = get_opensearch_client()
+    has_vectors = detect_vector_support(client) if client else False
+    
+    return {
+        "connected": test_connection(),
+        "structure_version": "4.2.0",
+        "auth_method": "simple_proven_setup",
+        "client_type": "production_opensearch_2x",
+        "vector_support": has_vectors,
+        "vector_type": "simple_knn_vector" if has_vectors else None
+    }
+
 if __name__ == "__main__":
-    # Test the SMART client
+    # PRODUCTION test
     logging.basicConfig(level=logging.INFO)
     
-    print("🧪 Testing SMART OpenSearch Client with Vector Detection")
-    print("Expected: YOUR exact working client + Smart vector support detection")
+    print("🧪 Testing PRODUCTION OpenSearch Client v4.2.0")
+    print("Expected: Production-ready with OpenSearch 2.x simple vector support")
     
     # Health check
     health = health_check()
@@ -914,15 +783,15 @@ if __name__ == "__main__":
         print(f"   Cluster: {health['cluster_name']}")
         print(f"   Version: {health['version']}")
         print(f"   User: {health['user']}")
-        print(f"   Client Type: {health['client_type']}")
         print(f"   Document Structure: {health['document_structure']}")
         print(f"   Vector Support: {health['vector_support']}")
+        print(f"   Vector Type: {health.get('vector_type', 'None')}")
         print(f"   Search Type: {health['search_type']}")
         
         if health['vector_support']:
-            print("\n✅ SMART client with VECTOR SUPPORT!")
+            print("\n✅ PRODUCTION client with SIMPLE VECTOR SUPPORT!")
         else:
-            print("\n✅ SMART client with TEXT-ONLY support!")
+            print("\n✅ PRODUCTION client with TEXT-ONLY support!")
         
     else:
         print(f"❌ Health check failed: {health.get('error', 'Unknown error')}")
@@ -931,7 +800,6 @@ if __name__ == "__main__":
     
     print("\n🏁 Testing complete!")
 else:
-    logger.info("🔌 SMART OpenSearch client v4.0.6 loaded")
-    logger.info("   Client: YOUR exact working setup")
-    logger.info("   Features: Smart vector detection + evaluation grouping")
-    logger.info("   Compatible: All OpenSearch versions")
+    logger.info("🔌 PRODUCTION OpenSearch client v4.2.0 loaded")
+    logger.info("   Features: Simple OpenSearch 2.x vector support + evaluation grouping")
+    logger.info("   Compatible: OpenSearch 2.x with conservative vector detection")

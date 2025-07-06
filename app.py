@@ -1,5 +1,5 @@
-# Enhanced Production App.py - Real Data Filter System with Evaluation Grouping
-# Version: 4.1.0 - Complete real data integration for production deployment
+# Enhanced Production App.py - Real Data Filter System with Efficient Metadata Loading
+# Version: 4.2.0 - Index-based metadata extraction with evaluation grouping
 
 import os
 import logging
@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from uuid import  uuid4
+from uuid import uuid4
 from chat_handlers import chat_router
 from collections import defaultdict
 
@@ -72,9 +72,9 @@ except ImportError as e:
 
 # Create FastAPI app
 app = FastAPI(
-    title="Ask InnovAI Production - Real Data Filter System",
-    description="AI-Powered Knowledge Assistant with Real-Time Data Filters",
-    version="4.1.0"
+    title="Ask InnovAI Production - Efficient Real Data Filter System",
+    description="AI-Powered Knowledge Assistant with Real-Time Data Filters and Efficient Metadata Loading",
+    version="4.2.0"
 )
 
 # Enable CORS
@@ -115,6 +115,13 @@ import_status = {
 # In-memory logs (last 100 entries)
 import_logs = []
 
+# Global cache for efficient filter metadata
+_filter_metadata_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl_seconds": 300  # 5 minutes cache
+}
+
 def log_import(message: str):
     """Add message to import logs with production formatting"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -138,281 +145,369 @@ def update_import_status(status: str, step: str = None, results: dict = None, er
         import_status["end_time"] = datetime.now().isoformat()
 
 # ============================================================================
-# REAL DATA FILTER SYSTEM - PRODUCTION ENDPOINTS
+# EFFICIENT METADATA LOADING SYSTEM - PRODUCTION VERSION
 # ============================================================================
 
 @app.get("/filter_options_metadata")
 async def filter_options_metadata():
     """
-    PRODUCTION: Get REAL filter options from OpenSearch - ONLY show data that actually exists
-    No hardcoded fallbacks, no placeholder data, no empty items
+    EFFICIENT: Get filter options using index mappings and targeted sampling
+    Much faster than aggregating all documents. Includes caching.
     """
     try:
+        # Check cache first
+        cached_data = get_cached_filter_metadata()
+        if cached_data:
+            logger.info(f"📋 Returning cached filter metadata (age: {cached_data.get('cache_age_seconds', 0):.1f}s)")
+            return cached_data
+        
         from opensearch_client import get_opensearch_client, test_connection
         
-        # Check if OpenSearch is available
         if not test_connection():
             logger.warning("OpenSearch not available for filter options")
-            return {
-                "templates": [],
-                "programs": [],
-                "partners": [],
-                "sites": [],
-                "lobs": [],
-                "callDispositions": [],
-                "callSubDispositions": [],
-                "agentNames": [],
-                "languages": [],
-                "callTypes": [],
-                "status": "opensearch_unavailable",
-                "message": "OpenSearch connection failed - no filter data available"
-            }
+            return create_empty_filter_response("opensearch_unavailable")
         
         client = get_opensearch_client()
         if not client:
             logger.error("Could not create OpenSearch client for filter options")
-            return {"error": "OpenSearch client unavailable"}
+            return create_empty_filter_response("client_unavailable")
         
-        # Build comprehensive aggregation query for PRODUCTION
-        agg_query = {
-            "size": 0,  # We only want aggregations, not documents
-            "aggs": {
-                # Template names (actual evaluation form names)
-                "template_names": {
-                    "terms": {
-                        "field": "template_name.keyword",
-                        "size": 200,
-                        "min_doc_count": 1,
-                        "order": {"_count": "desc"}
-                    }
-                },
-                
-                # Programs (business units) - from metadata
-                "programs": {
-                    "terms": {
-                        "field": "metadata.program.keyword",
-                        "size": 50,
-                        "min_doc_count": 1,
-                        "order": {"_count": "desc"}
-                    }
-                },
-                
-                # Partners (vendors)
-                "partners": {
-                    "terms": {
-                        "field": "metadata.partner.keyword",
-                        "size": 100,
-                        "min_doc_count": 1,
-                        "order": {"_count": "desc"}
-                    }
-                },
-                
-                # Sites (locations)
-                "sites": {
-                    "terms": {
-                        "field": "metadata.site.keyword",
-                        "size": 200,
-                        "min_doc_count": 1,
-                        "order": {"_count": "desc"}
-                    }
-                },
-                
-                # LOBs (lines of business)
-                "lobs": {
-                    "terms": {
-                        "field": "metadata.lob.keyword",
-                        "size": 100,
-                        "min_doc_count": 1,
-                        "order": {"_count": "desc"}
-                    }
-                },
-                
-                # Call dispositions
-                "call_dispositions": {
-                    "terms": {
-                        "field": "metadata.disposition.keyword",
-                        "size": 100,
-                        "min_doc_count": 1,
-                        "order": {"_count": "desc"}
-                    }
-                },
-                
-                # Call sub-dispositions
-                "call_sub_dispositions": {
-                    "terms": {
-                        "field": "metadata.sub_disposition.keyword",
-                        "size": 200,
-                        "min_doc_count": 1,
-                        "order": {"_count": "desc"}
-                    }
-                },
-                
-                # Agent names
-                "agent_names": {
-                    "terms": {
-                        "field": "metadata.agent.keyword",
-                        "size": 500,
-                        "min_doc_count": 1,
-                        "order": {"_count": "desc"}
-                    }
-                },
-                
-                # Languages
-                "languages": {
-                    "terms": {
-                        "field": "metadata.language.keyword",
-                        "size": 50,
-                        "min_doc_count": 1,
-                        "order": {"_count": "desc"}
-                    }
-                },
-                
-                # Call types
-                "call_types": {
-                    "terms": {
-                        "field": "metadata.call_type.keyword",
-                        "size": 50,
-                        "min_doc_count": 1,
-                        "order": {"_count": "desc"}
-                    }
-                },
-                
-                # Template IDs (for internal mapping)
-                "template_ids": {
-                    "terms": {
-                        "field": "template_id.keyword",
-                        "size": 200,
-                        "min_doc_count": 1
-                    }
-                }
-            }
-        }
+        logger.info("🚀 Loading filter metadata using efficient index-based approach...")
+        start_time = time.time()
         
-        logger.info("🔍 Executing PRODUCTION aggregation query for real filter data...")
+        # STEP 1: Get all evaluation indices efficiently
+        indices_info = await get_evaluation_indices_info(client)
+        if not indices_info:
+            return create_empty_filter_response("no_indices")
         
-        # Execute the aggregation query with timeout
-        response = client.search(
-            index="eval-*",
-            body=agg_query,
-            timeout="30s"
-        )
+        # STEP 2: Extract templates from index names (much faster than aggregation)
+        templates_from_indices = extract_templates_from_indices(indices_info)
         
-        aggs = response.get("aggregations", {})
-        total_evaluations = response.get("hits", {}).get("total", {})
+        # STEP 3: Get field mappings to understand available metadata fields
+        available_fields = await get_available_metadata_fields(client, indices_info)
         
-        # Handle different OpenSearch response formats for total
-        if isinstance(total_evaluations, dict):
-            total_count = total_evaluations.get("value", 0)
-        else:
-            total_count = total_evaluations
+        # STEP 4: Use targeted sampling per index for metadata values
+        metadata_values = await get_metadata_values_efficiently(client, indices_info, available_fields)
         
-        logger.info(f"📊 Processing aggregations from {total_count} evaluations...")
-        
-        # Extract and clean the real data - PRODUCTION quality
-        def extract_real_values(agg_name, exclude_patterns=None):
-            """Extract only real, meaningful values from aggregation results"""
-            if exclude_patterns is None:
-                exclude_patterns = [
-                    "unknown", "null", "undefined", "n/a", "na", "", " ",
-                    "not set", "not specified", "missing", "empty", "none",
-                    "test", "sample", "demo"  # Additional production exclusions
-                ]
-            
-            buckets = aggs.get(agg_name, {}).get("buckets", [])
-            values = []
-            
-            for bucket in buckets:
-                value = bucket.get("key", "").strip()
-                doc_count = bucket.get("doc_count", 0)
-                
-                # PRODUCTION: Only include if value is meaningful and has documents
-                if (value and 
-                    doc_count > 0 and 
-                    len(value) > 1 and  # Must be more than 1 character
-                    not any(pattern.lower() in value.lower() for pattern in exclude_patterns)):
-                    values.append(value)
-            
-            return sorted(values)
-        
-        # Extract all real filter options for PRODUCTION
+        # STEP 5: Build final response
         filter_options = {
-            # Core hierarchy - only real data
-            "templates": extract_real_values("template_names"),
-            "programs": extract_real_values("programs"),
-            "partners": extract_real_values("partners"),
-            "sites": extract_real_values("sites"),
-            "lobs": extract_real_values("lobs"),
+            # Templates from index structure (fastest)
+            "templates": templates_from_indices,
             
-            # Call data - only real data
-            "callDispositions": extract_real_values("call_dispositions"),
-            "callSubDispositions": extract_real_values("call_sub_dispositions"),
-            "agentNames": extract_real_values("agent_names"),
-            "languages": extract_real_values("languages"),
-            "callTypes": extract_real_values("call_types"),
+            # Metadata from efficient sampling
+            "programs": metadata_values.get("programs", []),
+            "partners": metadata_values.get("partners", []),
+            "sites": metadata_values.get("sites", []),
+            "lobs": metadata_values.get("lobs", []),
+            "callDispositions": metadata_values.get("dispositions", []),
+            "callSubDispositions": metadata_values.get("sub_dispositions", []),
+            "agentNames": metadata_values.get("agents", []),
+            "languages": metadata_values.get("languages", []),
+            "callTypes": metadata_values.get("call_types", []),
             
-            # Internal data for mapping
-            "template_ids": extract_real_values("template_ids"),
+            # Template IDs from index names
+            "template_ids": [info["template_id"] for info in indices_info],
             
-            # Metadata for PRODUCTION
-            "total_evaluations": total_count,
+            # Metadata
+            "total_evaluations": sum(info["doc_count"] for info in indices_info),
+            "total_indices": len(indices_info),
             "data_freshness": datetime.now().isoformat(),
             "status": "success",
-            "version": "4.1.0_production"
+            "version": "4.2.0_efficient",
+            "load_method": "index_structure_based",
+            "load_time_ms": round((time.time() - start_time) * 1000, 2),
+            "cached": False
         }
         
+        # Cache the result
+        cache_filter_metadata(filter_options)
+        
         # PRODUCTION logging
-        logger.info(f"✅ PRODUCTION filter data extracted:")
-        logger.info(f"   📋 Templates: {len(filter_options['templates'])} unique")
-        logger.info(f"   🏢 Programs: {len(filter_options['programs'])} unique")
-        logger.info(f"   🤝 Partners: {len(filter_options['partners'])} unique")
-        logger.info(f"   🏗️ Sites: {len(filter_options['sites'])} unique")
-        logger.info(f"   📊 LOBs: {len(filter_options['lobs'])} unique")
-        logger.info(f"   📞 Dispositions: {len(filter_options['callDispositions'])} unique")
-        logger.info(f"   📞 Sub-Dispositions: {len(filter_options['callSubDispositions'])} unique")
-        logger.info(f"   👥 Agents: {len(filter_options['agentNames'])} unique")
-        logger.info(f"   🌐 Languages: {len(filter_options['languages'])} unique")
-        logger.info(f"   📱 Call Types: {len(filter_options['callTypes'])} unique")
-        
-        # PRODUCTION: Warn if any critical category is empty
-        empty_categories = []
-        critical_categories = ['templates', 'programs', 'partners', 'sites', 'lobs', 'agentNames']
-        for category in critical_categories:
-            if not filter_options.get(category):
-                empty_categories.append(category)
-        
-        if empty_categories:
-            logger.warning(f"⚠️ PRODUCTION WARNING - Empty filter categories: {empty_categories}")
-            filter_options["warnings"] = f"No data found for: {', '.join(empty_categories)}"
-        
-        # Sample data for PRODUCTION verification
-        if filter_options['templates']:
-            logger.info(f"📋 Sample templates: {filter_options['templates'][:3]}")
-        if filter_options['programs']:
-            logger.info(f"🏢 Sample programs: {filter_options['programs'][:3]}")
-        if filter_options['partners']:
-            logger.info(f"🤝 Sample partners: {filter_options['partners'][:3]}")
+        logger.info(f"✅ EFFICIENT metadata loading completed in {filter_options['load_time_ms']}ms:")
+        logger.info(f"   📁 Indices analyzed: {len(indices_info)}")
+        logger.info(f"   📋 Templates: {len(templates_from_indices)} (from index names)")
+        logger.info(f"   🏢 Programs: {len(metadata_values.get('programs', []))}")
+        logger.info(f"   🤝 Partners: {len(metadata_values.get('partners', []))}")
+        logger.info(f"   📊 Total evaluations: {filter_options['total_evaluations']:,}")
         
         return filter_options
         
     except Exception as e:
-        logger.error(f"PRODUCTION: Failed to load real filter options from OpenSearch: {e}")
+        logger.error(f"EFFICIENT: Failed to load filter options: {e}")
+        return create_empty_filter_response("error", str(e))
+
+async def get_evaluation_indices_info(client):
+    """
+    Get information about all evaluation indices efficiently
+    """
+    try:
+        # Get index stats for eval-* pattern
+        stats_response = client.indices.stats(index="eval-*")
+        indices_info = []
         
-        # PRODUCTION: Return error state - no fallback data
+        for index_name, stats in stats_response.get("indices", {}).items():
+            # Extract template_id from index name (eval-template-123 -> template-123)
+            template_id = index_name.replace("eval-", "") if index_name.startswith("eval-") else "unknown"
+            
+            doc_count = stats.get("primaries", {}).get("docs", {}).get("count", 0)
+            size_bytes = stats.get("primaries", {}).get("store", {}).get("size_in_bytes", 0)
+            
+            indices_info.append({
+                "index_name": index_name,
+                "template_id": template_id,
+                "doc_count": doc_count,
+                "size_bytes": size_bytes
+            })
+        
+        logger.info(f"📊 Found {len(indices_info)} evaluation indices")
+        return indices_info
+        
+    except Exception as e:
+        logger.error(f"Failed to get indices info: {e}")
+        return []
+
+def extract_templates_from_indices(indices_info):
+    """
+    Extract template names efficiently by sampling one document per index
+    Much faster than aggregating all documents
+    """
+    templates = []
+    seen_templates = set()
+    
+    try:
+        from opensearch_client import get_opensearch_client
+        client = get_opensearch_client()
+        
+        for index_info in indices_info:
+            index_name = index_info["index_name"]
+            
+            # Sample one document from each index to get template_name
+            try:
+                sample_response = client.search(
+                    index=index_name,
+                    body={
+                        "size": 1,
+                        "query": {"match_all": {}},
+                        "_source": ["template_name", "template_id"]
+                    }
+                )
+                
+                hits = sample_response.get("hits", {}).get("hits", [])
+                if hits:
+                    source = hits[0].get("_source", {})
+                    template_name = source.get("template_name", f"Template {index_info['template_id']}")
+                    
+                    if template_name and template_name not in seen_templates:
+                        templates.append(template_name)
+                        seen_templates.add(template_name)
+                        
+            except Exception as e:
+                logger.debug(f"Could not sample from {index_name}: {e}")
+                # Fallback: create template name from index
+                fallback_name = f"Template {index_info['template_id']}"
+                if fallback_name not in seen_templates:
+                    templates.append(fallback_name)
+                    seen_templates.add(fallback_name)
+        
+        logger.info(f"📋 Extracted {len(templates)} templates from index sampling")
+        return sorted(templates)
+        
+    except Exception as e:
+        logger.error(f"Failed to extract templates from indices: {e}")
+        return []
+
+async def get_available_metadata_fields(client, indices_info):
+    """
+    Check index mappings to see what metadata fields are actually available
+    """
+    try:
+        # Get mapping for a representative index
+        sample_index = indices_info[0]["index_name"] if indices_info else "eval-*"
+        
+        mapping_response = client.indices.get_mapping(index=sample_index)
+        
+        available_fields = set()
+        
+        for index_name, mapping_data in mapping_response.items():
+            properties = mapping_data.get("mappings", {}).get("properties", {})
+            metadata_props = properties.get("metadata", {}).get("properties", {})
+            
+            # Collect available metadata fields
+            for field_name in metadata_props.keys():
+                available_fields.add(field_name)
+        
+        logger.info(f"🔍 Available metadata fields: {sorted(available_fields)}")
+        return list(available_fields)
+        
+    except Exception as e:
+        logger.warning(f"Could not check field mappings: {e}")
+        # Return expected fields as fallback
+        return ["program", "partner", "site", "lob", "agent", "disposition", 
+                "sub_disposition", "language", "call_type"]
+
+async def get_metadata_values_efficiently(client, indices_info, available_fields):
+    """
+    Get metadata values using targeted sampling instead of full aggregation
+    Sample from multiple indices and combine results
+    """
+    metadata_values = {
+        "programs": set(),
+        "partners": set(), 
+        "sites": set(),
+        "lobs": set(),
+        "dispositions": set(),
+        "sub_dispositions": set(),
+        "agents": set(),
+        "languages": set(),
+        "call_types": set()
+    }
+    
+    field_mapping = {
+        "program": "programs",
+        "partner": "partners",
+        "site": "sites", 
+        "lob": "lobs",
+        "disposition": "dispositions",
+        "sub_disposition": "sub_dispositions",
+        "agent": "agents",
+        "language": "languages",
+        "call_type": "call_types"
+    }
+    
+    try:
+        # Sample from each index (limited samples for speed)
+        samples_per_index = 10
+        
+        for index_info in indices_info[:10]:  # Limit to top 10 indices for speed
+            index_name = index_info["index_name"]
+            
+            try:
+                # Get sample documents with metadata
+                sample_response = client.search(
+                    index=index_name,
+                    body={
+                        "size": samples_per_index,
+                        "query": {"match_all": {}},
+                        "_source": ["metadata"],
+                        "sort": [{"_doc": {"order": "asc"}}]  # Fast sampling
+                    }
+                )
+                
+                hits = sample_response.get("hits", {}).get("hits", [])
+                
+                for hit in hits:
+                    metadata = hit.get("_source", {}).get("metadata", {})
+                    
+                    # Extract values for each field
+                    for opensearch_field, result_key in field_mapping.items():
+                        if opensearch_field in available_fields:
+                            value = metadata.get(opensearch_field)
+                            if value and isinstance(value, str) and value.strip():
+                                cleaned_value = value.strip()
+                                if cleaned_value.lower() not in ["unknown", "null", "", "n/a"]:
+                                    metadata_values[result_key].add(cleaned_value)
+                
+            except Exception as e:
+                logger.debug(f"Could not sample metadata from {index_name}: {e}")
+        
+        # Convert sets to sorted lists
+        result = {}
+        for key, value_set in metadata_values.items():
+            result[key] = sorted(list(value_set))
+            logger.info(f"   {key}: {len(result[key])} unique values")
+        
+        logger.info(f"📊 Metadata sampling completed from {len(indices_info)} indices")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to sample metadata efficiently: {e}")
+        return {key: [] for key in metadata_values.keys()}
+
+def get_cached_filter_metadata():
+    """
+    Get cached filter metadata if still valid
+    """
+    try:
+        cache = _filter_metadata_cache
+        
+        if not cache["data"] or not cache["timestamp"]:
+            return None
+        
+        # Check if cache is expired
+        cache_age = time.time() - cache["timestamp"]
+        if cache_age > cache["ttl_seconds"]:
+            logger.info(f"📋 Filter cache expired (age: {cache_age:.1f}s > {cache['ttl_seconds']}s)")
+            return None
+        
+        # Add cache metadata to response
+        cached_data = cache["data"].copy()
+        cached_data["cached"] = True
+        cached_data["cache_age_seconds"] = cache_age
+        cached_data["cache_expires_in_seconds"] = cache["ttl_seconds"] - cache_age
+        
+        return cached_data
+        
+    except Exception as e:
+        logger.warning(f"Cache retrieval failed: {e}")
+        return None
+
+def cache_filter_metadata(data):
+    """
+    Cache filter metadata for faster subsequent requests
+    """
+    try:
+        _filter_metadata_cache["data"] = data.copy()
+        _filter_metadata_cache["timestamp"] = time.time()
+        
+        logger.info(f"📋 Filter metadata cached for {_filter_metadata_cache['ttl_seconds']}s")
+        
+    except Exception as e:
+        logger.warning(f"Failed to cache filter metadata: {e}")
+
+def create_empty_filter_response(status="no_data", error_msg=""):
+    """
+    Create empty filter response for error cases
+    """
+    return {
+        "templates": [],
+        "programs": [],
+        "partners": [],
+        "sites": [],
+        "lobs": [],
+        "callDispositions": [],
+        "callSubDispositions": [],
+        "agentNames": [],
+        "languages": [],
+        "callTypes": [],
+        "template_ids": [],
+        "total_evaluations": 0,
+        "total_indices": 0,
+        "status": status,
+        "error": error_msg,
+        "message": f"No filter data available: {error_msg}" if error_msg else "No data available",
+        "version": "4.2.0_efficient",
+        "load_method": "fallback"
+    }
+
+@app.post("/clear_filter_cache")
+async def clear_filter_cache():
+    """
+    Clear the filter metadata cache (useful after data imports)
+    """
+    try:
+        _filter_metadata_cache["data"] = None
+        _filter_metadata_cache["timestamp"] = None
+        
         return {
-            "templates": [],
-            "programs": [],
-            "partners": [],
-            "sites": [],
-            "lobs": [],
-            "callDispositions": [],
-            "callSubDispositions": [],
-            "agentNames": [],
-            "languages": [],
-            "callTypes": [],
+            "status": "success",
+            "message": "Filter metadata cache cleared",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
             "status": "error",
             "error": str(e),
-            "message": "Could not load filter data from database",
-            "version": "4.1.0_production"
+            "timestamp": datetime.now().isoformat()
         }
 
 @app.get("/debug_filter_data")
@@ -466,11 +561,11 @@ async def debug_filter_data():
             "total_evaluations": response.get("hits", {}).get("total", {}),
             "sample_documents": samples,
             "message": "PRODUCTION: Use this to verify your data structure matches filter expectations",
-            "version": "4.1.0_production"
+            "version": "4.2.0_efficient"
         }
         
     except Exception as e:
-        return {"error": str(e), "version": "4.1.0_production"}
+        return {"error": str(e), "version": "4.2.0_efficient"}
 
 @app.get("/check_field_availability")
 async def check_field_availability():
@@ -529,11 +624,11 @@ async def check_field_availability():
             "status": "success",
             "field_availability": results,
             "message": "PRODUCTION: Field availability check for filter system",
-            "version": "4.1.0_production"
+            "version": "4.2.0_efficient"
         }
         
     except Exception as e:
-        return {"error": str(e), "version": "4.1.0_production"}
+        return {"error": str(e), "version": "4.2.0_efficient"}
 
 # ============================================================================
 # ENHANCED DATA PROCESSING - PRODUCTION QUALITY
@@ -1064,7 +1159,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             "indexed_at": datetime.now().isoformat(),
             "collection_name": collection,
             "collection_source": f"template_id_{template_id}",
-            "version": "4.1.0_production"
+            "version": "4.2.0_production"
         }
         
         # Add chunks with embeddings
@@ -1160,7 +1255,7 @@ async def fetch_evaluations(max_docs: int = None):
         headers = {
             API_AUTH_KEY: API_AUTH_VALUE,
             'Accept': 'application/json',
-            'User-Agent': 'Ask-InnovAI-Production/4.1.0'
+            'User-Agent': 'Ask-InnovAI-Production/4.2.0'
         }
         
         params = {}
@@ -1214,6 +1309,11 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
         update_import_status("running", "Starting PRODUCTION import with real data integration")
         log_import("🚀 Starting PRODUCTION import: Real data filter system + Evaluation grouping")
         
+        # Clear filter cache on import start
+        _filter_metadata_cache["data"] = None
+        _filter_metadata_cache["timestamp"] = None
+        log_import("🧹 Cleared filter metadata cache for fresh import data")
+        
         # Memory management settings
         BATCH_SIZE = batch_size or int(os.getenv("IMPORT_BATCH_SIZE", "5"))
         DELAY_BETWEEN_BATCHES = float(os.getenv("DELAY_BETWEEN_BATCHES", "2.0"))
@@ -1266,7 +1366,7 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
                 "total_chunks_indexed": 0, 
                 "import_type": "full",
                 "document_structure": "evaluation_grouped",
-                "version": "4.1.0_production"
+                "version": "4.2.0_production"
             }
             update_import_status("completed", results=results)
             return
@@ -1412,6 +1512,11 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
         log_import("🧹 Performing final memory cleanup")
         await cleanup_memory_after_batch()
         
+        # Clear filter cache after successful import to force refresh
+        _filter_metadata_cache["data"] = None
+        _filter_metadata_cache["timestamp"] = None
+        log_import("🧹 Cleared filter metadata cache - will refresh on next request")
+        
         # Final memory check
         final_memory = None
         memory_change = 0
@@ -1444,7 +1549,7 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
                 "final_memory_mb": final_memory,
                 "memory_change_mb": memory_change
             },
-            "version": "4.1.0_production"
+            "version": "4.2.0_production"
         }
         
         log_import(f"🎉 PRODUCTION import completed:")
@@ -1515,7 +1620,7 @@ async def get_opensearch_statistics():
                         "language_counts": {},
                         "indices": [],
                         "structure_info": {
-                            "version": "4.1.0_production",
+                            "version": "4.2.0_production",
                             "document_type": "evaluation_grouped",
                             "collection_strategy": "template_id_based",
                             "real_data_filters": True
@@ -1538,7 +1643,7 @@ async def get_opensearch_statistics():
                     "language_counts": {},
                     "indices": [],
                     "structure_info": {
-                        "version": "4.1.0_production",
+                        "version": "4.2.0_production",
                         "document_type": "evaluation_grouped",
                         "collection_strategy": "template_id_based",
                         "real_data_filters": True
@@ -1715,7 +1820,7 @@ async def get_opensearch_statistics():
                 "language_counts": language_counts,
                 "indices": indices_info,
                 "structure_info": {
-                    "version": "4.1.0_production",
+                    "version": "4.2.0_production",
                     "document_type": "evaluation_grouped",
                     "collection_strategy": "template_id_based",
                     "real_data_filters": True
@@ -1764,12 +1869,14 @@ async def ping():
         "status": "ok", 
         "timestamp": datetime.now().isoformat(),
         "service": "ask-innovai-production",
-        "version": "4.1.0",
+        "version": "4.2.0",
         "features": {
             "real_data_filters": True,
             "evaluation_grouping": True,
             "template_id_collections": True,
-            "program_extraction": True
+            "program_extraction": True,
+            "efficient_metadata_loading": True,
+            "filter_caching": True
         }
     }
 
@@ -1781,9 +1888,9 @@ async def get_index():
     except FileNotFoundError:
         return HTMLResponse(content="""
         <html><body>
-        <h1>🤖 Ask InnovAI Production v4.1.0</h1>
+        <h1>🤖 Ask InnovAI Production v4.2.0</h1>
         <p><strong>Status:</strong> Production Ready ✅</p>
-        <p><strong>Features:</strong> Real Data Filters + Evaluation Grouping</p>
+        <p><strong>Features:</strong> Real Data Filters + Efficient Metadata Loading + Evaluation Grouping</p>
         <p><strong>Structure:</strong> Template_ID Collections with Program Extraction</p>
         <p>Admin interface file not found. Please ensure static/index.html exists.</p>
         </body></html>
@@ -1797,7 +1904,7 @@ async def get_chat():
     except FileNotFoundError:
         return HTMLResponse(content="""
         <html><body>
-        <h1>🤖 Ask InnovAI Production Chat v4.1.0</h1>
+        <h1>🤖 Ask InnovAI Production Chat v4.2.0</h1>
         <p>Chat interface file not found. Please ensure static/chat.html exists.</p>
         <p><a href="/">← Back to Admin</a></p>
         </body></html>
@@ -1833,7 +1940,7 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
         log_import(f"   Import Type: {request.import_type}")
         log_import(f"   Max Docs: {request.max_docs or 'All'}")
         log_import(f"   Batch Size: {request.batch_size or 'Default'}")
-        log_import(f"   Version: 4.1.0_production")
+        log_import(f"   Version: 4.2.0_production")
         
         # Start background import
         background_tasks.add_task(
@@ -1850,8 +1957,8 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
             "max_docs": request.max_docs,
             "import_type": request.import_type,
             "structure": "evaluation_grouped",
-            "features": "real_data_filters",
-            "version": "4.1.0_production"
+            "features": "real_data_filters_efficient",
+            "version": "4.2.0_production"
         }
         
     except HTTPException:
@@ -1890,7 +1997,8 @@ async def health():
                     "port": config["port"],
                     "document_structure": "evaluation_grouped",
                     "collection_strategy": "template_id_based",
-                    "real_data_filters": True
+                    "real_data_filters": True,
+                    "efficient_metadata": True
                 }
             else:
                 components["opensearch"] = {
@@ -1924,6 +2032,21 @@ async def health():
         else:
             components["embeddings"] = {"status": "not available"}
         
+        # Filter cache status
+        cache = _filter_metadata_cache
+        cache_status = "empty"
+        if cache["data"] and cache["timestamp"]:
+            cache_age = time.time() - cache["timestamp"]
+            if cache_age <= cache["ttl_seconds"]:
+                cache_status = f"valid ({cache_age:.0f}s old)"
+            else:
+                cache_status = f"expired ({cache_age:.0f}s old)"
+        
+        components["filter_cache"] = {
+            "status": cache_status,
+            "ttl_seconds": cache["ttl_seconds"]
+        }
+        
         # Overall status
         overall_status = "ok"
         if components["opensearch"]["status"] == "connection_failed":
@@ -1936,13 +2059,15 @@ async def health():
                 "timestamp": datetime.now().isoformat(),
                 "components": components,
                 "import_status": import_status["status"],
-                "version": "4.1.0_production",
+                "version": "4.2.0_production",
                 "features": {
                     "real_data_filters": True,
                     "evaluation_grouping": True,
                     "template_id_collections": True,
                     "program_extraction": True,
-                    "comprehensive_metadata": True
+                    "comprehensive_metadata": True,
+                    "efficient_metadata_loading": True,
+                    "filter_caching": True
                 }
             }
         )
@@ -1963,10 +2088,11 @@ async def health():
 async def get_import_status():
     """Get import status with production information"""
     enhanced_status = import_status.copy()
-    enhanced_status["structure_version"] = "4.1.0_production"
+    enhanced_status["structure_version"] = "4.2.0_production"
     enhanced_status["document_strategy"] = "evaluation_grouped"
     enhanced_status["collection_strategy"] = "template_id_based"
     enhanced_status["real_data_filters"] = True
+    enhanced_status["efficient_metadata"] = True
     return enhanced_status
 
 @app.get("/logs")
@@ -1976,7 +2102,7 @@ async def get_logs():
         "status": "success",
         "logs": import_logs,
         "count": len(import_logs),
-        "version": "4.1.0_production"
+        "version": "4.2.0_production"
     }
 
 @app.post("/analytics/stats")
@@ -1991,7 +2117,7 @@ async def analytics_stats(request: dict):
             "totalRecords": 1200 + len(str(filters)),
             "filters_applied": filters,
             "timestamp": datetime.now().isoformat(),
-            "version": "4.1.0_production"
+            "version": "4.2.0_production"
         }
     except Exception as e:
         return {
@@ -2052,7 +2178,7 @@ async def get_opensearch_health_detailed():
                 "total_size": cluster_stats.get("indices", {}).get("store", {}).get("size_in_bytes", 0),
                 "total_documents": cluster_stats.get("indices", {}).get("docs", {}).get("count", 0)
             },
-            "version": "4.1.0_production",
+            "version": "4.2.0_production",
             "timestamp": datetime.now().isoformat()
         }
         
@@ -2085,7 +2211,7 @@ async def search_endpoint(q: str = Query(..., description="Search query")):
                 for result in results
             ],
             "count": len(results),
-            "version": "4.1.0_production"
+            "version": "4.2.0_production"
         }
     except Exception as e:
         return {
@@ -2101,11 +2227,13 @@ async def startup_event():
     """PRODUCTION: Enhanced startup with comprehensive logging"""
     try:
         logger.info("🚀 Ask InnovAI PRODUCTION starting...")
-        logger.info(f"   Version: 4.1.0_production")
-        logger.info(f"   Features: Real Data Filters + Evaluation Grouping")
+        logger.info(f"   Version: 4.2.0_production")
+        logger.info(f"   Features: Real Data Filters + Efficient Metadata Loading + Evaluation Grouping")
         logger.info(f"   Collection Strategy: Template_ID-based")
         logger.info(f"   Document Strategy: Evaluation-grouped")
         logger.info(f"   Program Extraction: Enhanced pattern matching")
+        logger.info(f"   Metadata Loading: Index-based efficient sampling")
+        logger.info(f"   Filter Caching: {_filter_metadata_cache['ttl_seconds']}s TTL")
         logger.info(f"   Port: {os.getenv('PORT', '8080')}")
         logger.info(f"   Memory Monitoring: {'✅ Available' if PSUTIL_AVAILABLE else '❌ Disabled'}")
         
@@ -2127,8 +2255,9 @@ async def startup_event():
                 logger.warning(f"⚠️ Embedding preload failed: {e}")
         
         logger.info("🎉 PRODUCTION startup complete")
-        logger.info("📊 Ready for real data filter system with evaluation grouping")
+        logger.info("📊 Ready for real data filter system with efficient metadata loading")
         logger.info("🏷️ Collections: Template_ID-based | Documents: Evaluation-grouped")
+        logger.info("⚡ Performance: Index-based metadata extraction with caching")
         
     except Exception as e:
         logger.error(f"❌ PRODUCTION startup error: {e}")
@@ -2139,8 +2268,9 @@ if __name__ == "__main__":
     
     port = int(os.getenv("PORT", 8080))
     logger.info(f"🚀 Starting Ask InnovAI PRODUCTION on port {port}")
-    logger.info("🎯 Features: Real Data Filters + Template_ID Collections + Program Extraction")
+    logger.info("🎯 Features: Real Data Filters + Template_ID Collections + Program Extraction + Efficient Metadata Loading")
     logger.info(f"💾 Memory monitoring: {'✅ Enabled' if PSUTIL_AVAILABLE else '❌ Disabled'}")
+    logger.info(f"⚡ Performance: Index-based metadata extraction with {_filter_metadata_cache['ttl_seconds']}s caching")
     
     uvicorn.run(
         app, 
