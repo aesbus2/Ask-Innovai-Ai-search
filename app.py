@@ -1,5 +1,5 @@
 # Enhanced App.py - Template_ID Based Collections with Evaluation Grouping (FIXED)
-# Version: 4.0.1 - Fixed import endpoint and OpenSearch issues
+# Version: 4.0.2 - Fixed PSUTIL_AVAILABLE variable definition
 
 import os
 import logging
@@ -10,8 +10,16 @@ import sys
 import re
 import time
 import gc
-import os
-import psutil   
+
+# FIXED: Properly define PSUTIL_AVAILABLE
+PSUTIL_AVAILABLE = False
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+    logging.info("✅ psutil available for memory monitoring")
+except ImportError:
+    logging.warning("⚠️ psutil not available - memory monitoring disabled")
+
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, Query
@@ -68,7 +76,7 @@ except ImportError as e:
 app = FastAPI(
     title="Ask InnovAI Production - Evaluation Grouped",
     description="AI-Powered Knowledge Assistant with Evaluation-Based Document Structure",
-    version="4.0.1"
+    version="4.0.2"
 )
 
 # Enable CORS
@@ -210,7 +218,7 @@ class AgentSearchRequest(BaseModel):
     limit: Optional[int] = 10
 
 # ============================================================================
-# MEMORY MANAGEMENT FUNCTIONS (Keeping existing)
+# MEMORY MANAGEMENT FUNCTIONS (FIXED)
 # ============================================================================
 
 async def cleanup_memory_after_batch():
@@ -613,7 +621,7 @@ async def get_opensearch_statistics():
                 "language_counts": language_counts,
                 "indices": indices_info,
                 "structure_info": {
-                    "version": "4.0.1",
+                    "version": "4.0.2",
                     "document_type": "evaluation_grouped",
                     "collection_strategy": "template_id_based"
                 }
@@ -947,7 +955,7 @@ async def fetch_evaluations(max_docs: int = None):
         headers = {
             API_AUTH_KEY: API_AUTH_VALUE,
             'Accept': 'application/json',
-            'User-Agent': 'Ask-InnovAI-Production/4.0.1'
+            'User-Agent': 'Ask-InnovAI-Production/4.0.2'
         }
         
         params = {}
@@ -995,7 +1003,7 @@ async def fetch_evaluations(max_docs: int = None):
 
 async def run_production_import(collection: str = "all", max_docs: int = None, batch_size: int = None):
     """
-    ENHANCED: Production import process with evaluation grouping
+    ENHANCED: Production import process with evaluation grouping (FIXED PSUTIL_AVAILABLE)
     Now creates one document per evaluation instead of per chunk
     """
      
@@ -1016,7 +1024,7 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
         log_import(f"   ⏱️ Delay between batches: {DELAY_BETWEEN_BATCHES}s")
         log_import(f"   🧹 Memory cleanup interval: {MEMORY_CLEANUP_INTERVAL} batches")
         
-        # Get initial memory usage
+        # FIXED: Get initial memory usage with proper variable
         initial_memory = None
         if PSUTIL_AVAILABLE:
             try:
@@ -1025,7 +1033,6 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
                 log_import(f"💾 Initial memory usage: {initial_memory:.1f} MB")
             except Exception as e:
                 log_import(f"⚠️ Memory monitoring failed: {e}")
-                PSUTIL_AVAILABLE = False
         
         # Check OpenSearch connectivity first
         update_import_status("running", "Checking OpenSearch connectivity")
@@ -1080,10 +1087,11 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
             log_import(f"📦 Processing batch {batch_count}/{(len(evaluations) + BATCH_SIZE - 1)//BATCH_SIZE} ({len(batch)} evaluations)")
             update_import_status("running", f"Processing batch {batch_count}: evaluations {batch_start + 1}-{batch_end}/{len(evaluations)}")
             
-            # Memory check before batch
+            # Memory check before batch (FIXED)
             current_memory = None
             if PSUTIL_AVAILABLE:
                 try:
+                    process = psutil.Process(os.getpid())
                     current_memory = process.memory_info().rss / 1024 / 1024  # MB
                     log_import(f"💾 Memory before batch {batch_count}: {current_memory:.1f} MB")
                 except Exception:
@@ -1171,9 +1179,10 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
                 log_import(f"🧹 Performing memory cleanup after batch {batch_count}")
                 await cleanup_memory_after_batch()
                 
-                # Check memory after cleanup
+                # Check memory after cleanup (FIXED)
                 if PSUTIL_AVAILABLE:
                     try:
+                        process = psutil.Process(os.getpid())
                         memory_after_cleanup = process.memory_info().rss / 1024 / 1024  # MB
                         memory_saved = current_memory - memory_after_cleanup if current_memory else 0
                         log_import(f"💾 Memory after cleanup: {memory_after_cleanup:.1f} MB (saved: {memory_saved:.1f} MB)")
@@ -1197,11 +1206,12 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
         log_import("🧹 Performing final memory cleanup")
         await cleanup_memory_after_batch()
         
-        # Final memory check
+        # Final memory check (FIXED)
         final_memory = None
         memory_change = 0
         if PSUTIL_AVAILABLE:
             try:
+                process = psutil.Process(os.getpid())
                 final_memory = process.memory_info().rss / 1024 / 1024  # MB
                 memory_change = final_memory - initial_memory if initial_memory else 0
                 log_import(f"💾 Final memory usage: {final_memory:.1f} MB (change: {memory_change:+.1f} MB)")
@@ -1270,7 +1280,7 @@ async def ping():
         "status": "ok", 
         "timestamp": datetime.now().isoformat(),
         "service": "ask-innovai-enhanced",
-        "version": "4.0.1",
+        "version": "4.0.2",
         "document_structure": "evaluation_grouped",
         "collection_strategy": "template_id_based"
     }
@@ -1285,7 +1295,7 @@ async def get_index():
         <html><body>
         <h1>🤖 Ask InnovAI Enhanced</h1>
         <p><strong>Status:</strong> Enhanced Production Ready ✅</p>
-        <p><strong>Version:</strong> 4.0.1</p>
+        <p><strong>Version:</strong> 4.0.2</p>
         <p><strong>New Structure:</strong> Template_ID Collections + Evaluation Grouping</p>
         <p><strong>Document Model:</strong> One document per evaluation with grouped chunks</p>
         <p>Admin interface file not found. Please ensure static/index.html exists.</p>
@@ -1462,7 +1472,7 @@ async def health():
                 "timestamp": datetime.now().isoformat(),
                 "components": components,
                 "import_status": import_status["status"],
-                "version": "4.0.1",
+                "version": "4.0.2",
                 "enhancements": {
                     "document_structure": "evaluation_grouped",
                     "collection_strategy": "template_id_based",
@@ -1552,7 +1562,7 @@ async def test_enhanced_structure():
 async def get_import_status():
     """Get import status with enhanced structure information"""
     enhanced_status = import_status.copy()
-    enhanced_status["structure_version"] = "4.0.1"
+    enhanced_status["structure_version"] = "4.0.2"
     enhanced_status["document_strategy"] = "evaluation_grouped"
     enhanced_status["collection_strategy"] = "template_id_based"
     return enhanced_status
@@ -1641,10 +1651,11 @@ async def startup_event():
     """Enhanced startup with new structure information"""
     try:
         logger.info("🚀 Ask InnovAI Enhanced starting...")
-        logger.info(f"   Version: 4.0.1")
+        logger.info(f"   Version: 4.0.2 (FIXED psutil)")
         logger.info(f"   Document Structure: Evaluation-grouped")
         logger.info(f"   Collection Strategy: Template_ID-based")
         logger.info(f"   Port: {os.getenv('PORT', '8080')}")
+        logger.info(f"   Memory Monitoring: {'✅ Available' if PSUTIL_AVAILABLE else '❌ Disabled'}")
         
         # Log structure changes
         logger.info("🔄 Structure Enhancements:")
@@ -1689,6 +1700,7 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
     logger.info(f"🚀 Starting Ask InnovAI Enhanced on port {port}")
     logger.info("🔄 Using: Template_ID collections + Evaluation grouping")
+    logger.info(f"💾 Memory monitoring: {'✅ Enabled' if PSUTIL_AVAILABLE else '❌ Disabled'}")
     
     uvicorn.run(
         app, 
