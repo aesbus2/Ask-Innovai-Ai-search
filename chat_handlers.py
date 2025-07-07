@@ -45,9 +45,9 @@ chat_router = APIRouter()
 # PRODUCTION GENAI INTEGRATION CONFIGURATION
 # =============================================================================
 
-GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", "https://tcxn3difq23zdxlph2heigba.agents.do-ai.run")
+GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", + "/api/v1")
 GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
-GENAI_MODEL = os.getenv("GENAI_MODEL", "")
+GENAI_MODEL = os.getenv("GENAI_MODEL", "n/a")
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 GENAI_TEMPERATURE = float(os.getenv("GENAI_TEMPERATURE", "0.7"))
 
@@ -426,39 +426,43 @@ def build_system_message(is_analytics: bool, filters: Dict[str, Any], context: s
 - **template_id**: Template identifier (determines collection/index)  
 - **template_name**: Human-readable template name (evaluation form name)
 - **program**: Business program (Metro, T-Mobile Prepaid, ASW, Corporate)
+- **weight_score**: QA weighted score percentage (0-100) for quality analysis
 
-**Organizational Hierarchy**:
-- **Template** (evaluation form) → **Program** (business unit) → **Partner** (vendor) → **Site** (location) → **LOB** (line of business)
+**Quality Analysis with Weight Scores**:
+- Use weight_score for performance analysis (e.g., "calls with score below 80%")
+- Compare scores across agents, sites, programs, and time periods
+- Identify coaching opportunities and top performers
+- Calculate averages, trends, and improvement areas
+- Weight scores represent overall quality assessment (0-100%)
 
 **Enhanced Analysis Capabilities**:
 1. **Template Analysis**: Compare different evaluation forms and their effectiveness
 2. **Program Analysis**: Analyze performance across business programs (Metro vs T-Mobile Prepaid vs ASW)
-3. **Agent Performance**: Track agent performance across evaluations and programs
-4. **Partner/Site Analysis**: Compare vendor and location performance
-5. **Call Pattern Analysis**: Identify patterns in call dispositions and outcomes
-6. **Quality Trends**: Monitor evaluation scores and feedback over time
+3. **Quality Analysis**: Use weight_score for performance insights and coaching opportunities
+4. **Agent Performance**: Track agent performance across evaluations and programs
+5. **Partner/Site Analysis**: Compare vendor and location performance
+6. **Call Pattern Analysis**: Identify patterns in call dispositions and outcomes
 
 ## Your Expertise:
 - **Performance Analysis**: Evaluation-level metrics, agent scoring, quality trends
+- **Quality Coaching**: Use weight_score to identify improvement opportunities
 - **Business Program Analysis**: Compare performance across Metro, T-Mobile Prepaid, ASW programs
 - **Template Effectiveness**: Analyze which evaluation forms provide better insights
 - **Partner/Site Optimization**: Identify best-performing vendors and locations
 - **Agent Development**: Individual coaching opportunities, skill gaps, strengths
-- **Operational Intelligence**: Resource optimization, process improvements
 
 ## Analysis Instructions:
-1. **Distinguish Templates from Programs**: Templates are evaluation forms, Programs are business units
-2. **Use Template Context**: Reference template_name for evaluation form clarity
-3. **Analyze by Program**: Compare Metro vs T-Mobile Prepaid vs ASW performance
-4. **Provide Evaluation-Level Insights**: Analyze complete interactions, not just fragments
-5. **Reference Specific Evaluations**: Use evaluationId when citing examples
-6. **Consider Business Hierarchy**: Template → Program → Partner → Site → LOB
+1. **Use Weight Scores**: When asked about performance, reference weight_score field
+2. **Distinguish Templates from Programs**: Templates are evaluation forms, Programs are business units
+3. **Quality Analysis**: Use weight_score for coaching insights and performance comparisons
+4. **Provide Specific Examples**: Use evaluationId when citing examples
+5. **Reference Complete Evaluations**: Analyze full interactions, not just fragments
 
 ## Response Format:
-- Start with key evaluation-level findings across business programs
-- Provide specific evaluation examples with IDs and programs
-- Reference template names and programs for context
-- End with actionable recommendations based on business program performance"""
+- Start with key evaluation-level findings including quality metrics
+- Use weight_score data for performance insights and coaching recommendations
+- Provide specific evaluation examples with IDs and scores
+- End with actionable recommendations based on quality analysis"""
     else:
         system_msg = """You are MetroAI, an intelligent assistant for Metro by T-Mobile customer service operations. 
 

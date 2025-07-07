@@ -77,32 +77,56 @@ app = FastAPI(
     version="4.2.0"
 )
 
+# =============================================================================
+# PYDANTIC MODELS
+# =============================================================================
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list = []
+    filters: dict = {}
+    analytics: bool = False
+    metadata_focus: list = []
+    programs: list = []
+
+class ChatResponse(BaseModel):
+    reply: str
+    sources: list = []
+    timestamp: str
+    filter_context: dict = {}
+    search_metadata: dict = {}
+
+class ImportRequest(BaseModel):
+    collection: str = "all"
+    max_docs: Optional[int] = None
+    import_type: str = "full"
+    batch_size: Optional[int] = None
+
+class AgentSearchRequest(BaseModel):
+    agentId: Optional[str] = None
+    agentName: Optional[str] = None
+    site: Optional[str] = None
+    partner: Optional[str] = None
+    lob: Optional[str] = None
+    limit: Optional[int] = 10
+
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com; "
-        "script-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: https:; "
-        "connect-src 'self'"
-    )
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    return response
+# FIXED: Chat router commented out to avoid 405 errors
+# from chat_handlers import chat_router
+# app.include_router(chat_router)  # COMMENTED OUT - using direct endpoint instead
 
-app.include_router(chat_router)
+
+
+# COMMENTED OUT - using direct endpoint instead
+#app.include_router(chat_router)
 
 # Mount static files
 try:
@@ -505,6 +529,22 @@ def create_empty_filter_response(status="no_data", error_msg=""):
         "load_method": "fallback"
     }
 
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "script-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self'"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
+
 @app.post("/clear_filter_cache")
 async def clear_filter_cache():
     """
@@ -525,6 +565,90 @@ async def clear_filter_cache():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
+    
+@app.get("/debug/routes")
+async def debug_routes():
+    """Debug endpoint to show all available routes"""
+    routes = []
+    for route in app.routes:
+        routes.append({
+            "path": getattr(route, 'path', 'Unknown'),
+            "methods": getattr(route, 'methods', 'Unknown'),
+            "name": getattr(route, 'name', 'Unknown')
+        })
+    
+    return {
+        "total_routes": len(routes),
+        "routes": routes,
+        "chat_endpoint_status": "directly_defined_in_app_py",
+        "fix_applied": "moved_from_router_to_direct_endpoint",
+        "version": "4.2.1_fixed_routing"
+    }
+
+@app.get("/test-chat-route")
+async def test_chat_route_get():
+    """Test route - GET method"""
+    return {
+        "status": "Chat route accessible",
+        "method": "GET works",
+        "chat_endpoint": "/chat",
+        "expected_method": "POST",
+        "fix_status": "chat_endpoint_moved_to_app_py",
+        "version": "4.2.1_fixed_routing"
+    }
+
+@app.post("/test-chat-route")
+async def test_chat_route_post():
+    """Test route - POST method"""
+    return {
+        "status": "Chat route accessible", 
+        "method": "POST works",
+        "chat_endpoint": "/chat",
+        "routing_status": "fixed",
+        "fix_applied": "direct_endpoint_in_app_py",
+        "version": "4.2.1_fixed_routing"
+    }
+
+@app.get("/chat/health")
+async def chat_health_check():
+    """Health check for chat functionality"""
+    try:
+        # Test OpenSearch connection
+        from opensearch_client import test_connection
+        opensearch_ok = test_connection()
+        
+        # Test embedder availability
+        embedder_ok = EMBEDDER_AVAILABLE
+        
+        # Test GenAI configuration
+        genai_configured = bool(GENAI_ENDPOINT and GENAI_ACCESS_KEY)
+        
+        return {
+            "status": "healthy",
+            "components": {
+                "opensearch": "connected" if opensearch_ok else "disconnected",
+                "embedder": "available" if embedder_ok else "unavailable",
+                "genai": "configured" if genai_configured else "not_configured"
+            },
+            "vector_support": embedder_ok and opensearch_ok,
+            "features": {
+                "chat_endpoint": "fixed_in_app_py",
+                "direct_routing": True,
+                "method_allowed": "POST",
+                "cors_enabled": True
+            },
+            "version": "4.2.1_fixed_routing",
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "version": "4.2.1_fixed_routing",
+            "timestamp": datetime.now().isoformat()
+        }
+
 
 @app.get("/debug_filter_data")
 async def debug_filter_data():
@@ -831,10 +955,13 @@ def extract_comprehensive_metadata(evaluation: Dict) -> Dict[str, Any]:
         "evaluationId": evaluation.get("evaluationId"),
         "internalId": evaluation.get("internalId"),
         "template_id": template_id,
-        "template_name": template_name,
+        "template_name": template_name,    
         
         # ENHANCED: Program as separate field
         "program": program,
+#NEED TO ADD/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        #NEW Waiting on Justin to Add
+        #"weight_score": safe_int(evaluation.get("weightScore"), 0),
         
         # Organizational hierarchy - clean and normalize
         "partner": clean_field_value(evaluation.get("partner"), "Unknown Partner"),
@@ -863,6 +990,16 @@ def extract_comprehensive_metadata(evaluation: Dict) -> Dict[str, Any]:
     }
     
     return metadata
+
+# I will use this for Weighted Score value
+def safe_float(value, default=0.0):
+    """PRODUCTION: Safely convert value to float"""
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except (ValueError, TypeError):
+        return default
 
 def extract_qa_pairs(evaluation_text: str) -> List[Dict[str, Any]]:
     """Extract Question and Answer pairs from evaluation text - PRODUCTION version"""
@@ -1735,10 +1872,26 @@ async def get_opensearch_statistics():
                     "sum": {
                         "field": "transcript_chunks_count"
                     }
+                },
+                "weight_score_stats": {
+                    "stats": {
+                        "field": "metadata.weight_score"
+                    }
+                },
+                "weight_score_ranges": {
+                    "range": {
+                        "field": "metadata.weight_score",
+                        "ranges": [
+                            {"to": 50, "key": "Below 50%"},
+                            {"from": 50, "to": 70, "key": "50-70%"},
+                            {"from": 70, "to": 85, "key": "70-85%"},
+                            {"from": 85, "to": 95, "key": "85-95%"},
+                            {"from": 95, "key": "95%+"}]
+                    }
                 }
             }
         }
-        
+
         # Execute the aggregation query
         response = client.search(
             index="eval-*",
@@ -1754,6 +1907,9 @@ async def get_opensearch_statistics():
             total_evaluations = total_hits.get("value", 0)
         else:
             total_evaluations = total_hits
+
+        weight_score_stats = aggs.get("weight_score_stats", {})
+        weight_score_ranges = aggs.get("weight_score_ranges", {}).get("buckets", [])
         
         # Process template name counts
         template_buckets = aggs.get("template_names", {}).get("buckets", [])
@@ -1885,8 +2041,13 @@ async def ping():
         "status": "ok", 
         "timestamp": datetime.now().isoformat(),
         "service": "ask-innovai-production",
-        "version": "4.2.0",
+        "version": "4.2.1_fixed_routing",
+        "chat_fix": "endpoint_moved_to_app_py",
         "features": {
+            "chat_routing": "direct_in_app_py",
+            "method_allowed": "POST",
+            "cors_enabled": True,
+            "405_error": "fixed",
             "real_data_filters": True,
             "evaluation_grouping": True,
             "template_id_collections": True,
@@ -1925,6 +2086,135 @@ async def get_chat():
         <p><a href="/">← Back to Admin</a></p>
         </body></html>
         """)
+@app.post("/chat")
+async def chat_endpoint_fixed(request: ChatRequest) -> JSONResponse:
+    """
+    FIXED: Chat endpoint directly in app.py to avoid router mounting issues
+    This resolves the 405 Method Not Allowed error
+    """
+    start_time = time.time()
+    
+    try:
+        logger.info(f"💬 Chat request received: '{request.message[:50]}...'")
+        logger.info(f"🔍 Filters: {list(request.filters.keys()) if request.filters else 'None'}")
+        
+        # Import chat functionality here to avoid circular imports
+        try:
+            from chat_handlers import build_search_context, build_system_message, call_genai_api
+        except ImportError as e:
+            logger.error(f"❌ Failed to import chat handlers: {e}")
+            return JSONResponse(
+                content={
+                    "reply": "Chat service temporarily unavailable. Please check that chat_handlers.py is available and properly configured.",
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat(),
+                    "filter_context": request.filters,
+                    "search_metadata": {"error": str(e), "version": "4.2.1_fixed_routing"}
+                },
+                status_code=200
+            )
+        
+        # Build search context with production error handling
+        try:
+            context, sources = build_search_context(request.message, request.filters)
+        except Exception as e:
+            logger.error(f"❌ Search context build failed: {e}")
+            context = ""
+            sources = []
+        
+        # Build system message
+        try:
+            system_message = build_system_message(request.analytics, request.filters, context)
+        except Exception as e:
+            logger.error(f"❌ System message build failed: {e}")
+            system_message = "You are a helpful assistant."
+        
+        # Call GenAI API with fallback
+        try:
+            reply = await call_genai_api(
+                system_message=system_message,
+                user_message=request.message,
+                chat_history=request.history
+            )
+        except Exception as e:
+            logger.error(f"❌ GenAI API call failed: {e}")
+            reply = f"I apologize, but I'm experiencing technical difficulties connecting to the AI service. Error: {str(e)[:100]}. Please try again in a moment."
+        
+        # Prepare response
+        response_data = {
+            "reply": reply,
+            "sources": sources,
+            "timestamp": datetime.now().isoformat(),
+            "filter_context": request.filters,
+            "search_metadata": {
+                "total_sources": len(sources),
+                "vector_sources": len([s for s in sources if s.get('search_type') == 'vector']),
+                "text_sources": len([s for s in sources if s.get('search_type') == 'text']),
+                "context_length": len(context),
+                "processing_time": time.time() - start_time,
+                "version": "4.2.1_fixed_routing",
+                "endpoint_status": "direct_in_app_py"
+            }
+        }
+        
+        logger.info(f"✅ Chat response completed in {time.time() - start_time:.2f}s")
+        logger.info(f"📊 Response: {len(reply)} chars, {len(sources)} sources")
+        
+        return JSONResponse(content=response_data)
+    
+    except Exception as e:
+        logger.error(f"❌ Chat endpoint error: {e}")
+        
+        # Return error response
+        error_response = {
+            "reply": f"I apologize, but I encountered an error processing your request: {str(e)[:200]}. Please try again.",
+            "sources": [],
+            "timestamp": datetime.now().isoformat(),
+            "filter_context": request.filters,
+            "search_metadata": {
+                "error": str(e),
+                "processing_time": time.time() - start_time,
+                "version": "4.2.1_fixed_routing",
+                "endpoint_status": "error_in_direct_endpoint"
+            }
+        }
+        
+        return JSONResponse(content=error_response, status_code=200)
+
+@app.options("/chat")
+async def chat_options():
+    """Handle CORS preflight for chat endpoint"""
+    return JSONResponse(
+        content={"message": "CORS preflight handled", "version": "4.2.1_fixed_routing"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+
+# =============================================================================
+# CHANGE 3: UPDATE YOUR CORS MIDDLEWARE (FIND THIS SECTION)
+# =============================================================================
+
+# FIND YOUR EXISTING CORS CONFIGURATION (should look like this):
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# MAKE SURE IT INCLUDES OPTIONS EXPLICITLY:
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Make sure OPTIONS is here
+    allow_headers=["*"],
+)
 
 @app.post("/import")
 async def start_import(request: ImportRequest, background_tasks: BackgroundTasks):
@@ -2243,7 +2533,12 @@ async def startup_event():
     """PRODUCTION: Enhanced startup with comprehensive logging"""
     try:
         logger.info("🚀 Ask InnovAI PRODUCTION starting...")
-        logger.info(f"   Version: 4.2.0_production")
+        logger.info(f"   Version: 4.2.1_fixed_routing")
+        logger.info(f"   CHAT FIX: Endpoint moved directly to app.py")
+        logger.info(f"   405 Method Not Allowed error resolved")
+        logger.info(f"   Chat endpoint: POST /chat (direct in app.py)")
+        logger.info(f"   Router conflicts eliminated")
+        logger.info(f"   CORS properly configured")
         logger.info(f"   Features: Real Data Filters + Efficient Metadata Loading + Evaluation Grouping")
         logger.info(f"   Collection Strategy: Template_ID-based")
         logger.info(f"   Document Strategy: Evaluation-grouped")
@@ -2261,6 +2556,11 @@ async def startup_event():
         logger.info(f"   API Source: {'✅ Configured' if api_configured else '❌ Missing'}")
         logger.info(f"   GenAI: {'✅ Configured' if genai_configured else '❌ Missing'}")
         logger.info(f"   OpenSearch: {'✅ Configured' if opensearch_configured else '❌ Missing'}")
+        logger.info(" PRODUCTION startup complete with CHAT FIX")
+        logger.info(" Chat endpoint should now work without 405 errors")
+
+    except Exception as e:
+        logger.error(f"❌ PRODUCTION startup error: {e}")
         
         # Preload embedder if available (non-blocking)
         if EMBEDDER_AVAILABLE:

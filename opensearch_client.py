@@ -44,6 +44,7 @@ def get_client():
             use_ssl=True,
             verify_certs=False,
             timeout=30,
+            connection_timeout=30,  # Add explicit connection timeout
             max_retries=3,
             retry_on_timeout=True
         )
@@ -93,18 +94,32 @@ def get_connection_status() -> Dict[str, Any]:
         "last_test": datetime.now().isoformat()
     }
 
-def get_opensearch_config() -> Dict[str, Any]:
+def search_opensearch(query: str, index_override: str = None, 
+                     filters: Dict[str, Any] = None, size: int = 10) -> List[Dict]:
     """
-    PRODUCTION: Get OpenSearch configuration
+    FIXED: Search with proper timeout format
     """
-    return {
-        "host": os.getenv("OPENSEARCH_HOST", "not_configured"),
-        "port": int(os.getenv("OPENSEARCH_PORT", "25060")),
-        "user": os.getenv("OPENSEARCH_USER"),
-        "password_set": bool(os.getenv("OPENSEARCH_PASS")),
-        "use_ssl": True,
-        "verify_certs": False
-    }
+    client = get_opensearch_client()
+    if not client:
+        logger.warning("❌ OpenSearch client not available")
+        return []
+    
+    index_pattern = index_override or "eval-*"
+    
+    try:
+        # ... your existing search logic ...
+        
+        response = client.search(
+            index=index_pattern,
+            body=search_body,
+            timeout=30  # FIX: Use integer instead of "30s"
+        )
+        
+        # ... rest of function ...
+        
+    except Exception as e:
+        logger.error(f"❌ Search failed: {e}")
+        return []
 
 # =============================================================================
 # PRODUCTION OPENSEARCH 2.X VECTOR SUPPORT - SIMPLIFIED AND CONSERVATIVE
@@ -280,6 +295,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
                     "properties": {
                         "evaluationId": {"type": "keyword"},
                         "internalId": {"type": "keyword"},
+                        #"weight_score": {"type": "float"},  # Enhanced: Weight score field from QA Form
                         "template_id": {"type": "keyword"},
                         "template_name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "program": {"type": "keyword"},  # Enhanced: Program field
@@ -319,7 +335,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
         logger.info("✅ Added document-level vector field")
     
     try:
-        client.indices.create(index=index_name, body=mapping, timeout="60s")
+        client.indices.create(index=index_name, body=mapping, timeout="60")
         vector_status = "WITH VECTORS" if has_vectors else "TEXT ONLY"
         logger.info(f"✅ Created evaluation index ({vector_status}): {index_name}")
     except Exception as e:

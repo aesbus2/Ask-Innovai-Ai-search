@@ -742,28 +742,48 @@ async function sendMessage() {
         
         console.log("🔄 PRODUCTION: Sending chat request...");
         
-        // Production chat request with timeout and retry
-        const response = await fetchWithRetry('/chat', {
+        // FIX: Enhanced request with better error handling
+        const requestBody = {
+            message: message,
+            history: chatHistory,
+            filters: currentFilters,
+            analytics: true,
+            metadata_focus: [
+                'evaluationId', 'internalId', 'template_id', 'template_name',
+                'partner', 'site', 'lob', 'agentName', 'call_date',
+                'disposition', 'subDisposition', 'call_duration', 'language'
+            ]
+        };
+        
+        console.log("📤 Request payload:", JSON.stringify(requestBody, null, 2));
+        
+        // FIX: Use standard fetch with explicit error handling
+        const response = await fetch('/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                // FIX: Add explicit origin header if needed
+                'Origin': window.location.origin
             },
-            body: JSON.stringify({
-                message: message,
-                history: chatHistory,
-                filters: currentFilters,
-                analytics: true,
-                metadata_focus: [
-                    'evaluationId', 'internalId', 'template_id', 'template_name',
-                    'partner', 'site', 'lob', 'agentName', 'call_date',
-                    'disposition', 'subDisposition', 'call_duration', 'language'
-                ]
-            }),
-            timeout: PRODUCTION_CONFIG.CHAT_REQUEST_TIMEOUT
+            body: JSON.stringify(requestBody),
+            // FIX: Remove custom timeout property that might cause issues
+            // timeout: PRODUCTION_CONFIG.CHAT_REQUEST_TIMEOUT
         });
         
+        console.log("📥 Response status:", response.status);
+        console.log("📥 Response headers:", response.headers);
+        
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            // Enhanced error logging
+            const responseText = await response.text();
+            console.error("❌ Response not OK:", {
+                status: response.status,
+                statusText: response.statusText,
+                headers: Object.fromEntries(response.headers.entries()),
+                body: responseText
+            });
+            throw new Error(`HTTP ${response.status}: ${response.statusText} - ${responseText}`);
         }
         
         const data = await response.json();
@@ -791,9 +811,12 @@ async function sendMessage() {
         
         removeLoadingMessage();
         performanceMetrics.errorCount++;
-        logProductionError('chat_request_error', error, {
-            message: message,
-            filterCount: Object.keys(currentFilters).length
+        
+        // Enhanced error logging
+        console.error("🔍 Detailed error:", {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
         });
         
         // Production error handling with user-friendly messages
@@ -805,6 +828,39 @@ async function sendMessage() {
         updateSendButton();
     }
 }
+
+window.testChatEndpoint = async function() {
+    console.log("🧪 Testing chat endpoint...");
+    
+    try {
+        const response = await fetch('/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                message: "test",
+                history: [],
+                filters: {},
+                analytics: true,
+                metadata_focus: []
+            })
+        });
+        
+        console.log("Test response:", response.status, response.statusText);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log("Test data:", data);
+        } else {
+            const errorText = await response.text();
+            console.error("Test error:", errorText);
+        }
+        
+    } catch (error) {
+        console.error("Test failed:", error);
+    }
+};
 
 function getProductionChatErrorMessage(error) {
     const errorMessage = error.message.toLowerCase();
