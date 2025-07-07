@@ -64,7 +64,18 @@ async def relay_chat_rag(request: Request):
         context, sources = build_search_context(req.message, req.filters)
 
         # Step 2: Inject context into system message
-        system_message = f"""You are a helpful assistant. Use the following context to answer the user's question.\n\n{context}\n\nOnly answer based on the context above if relevant. Otherwise, use general knowledge."""
+        system_message = f"""You are a helpful assistant. Use the following context to answer the user's question.
+
+            Format your response in a clean, readable way using bullet points, numbered steps, or Markdown formatting (e.g., **bold**, tables, or sections) if appropriate.
+
+            Respond using only the facts in the context provided unless asked for general information.
+
+            Context:
+            {context}
+
+            Only answer based on the context above if relevant. Otherwise, use general knowledge.
+            """
+
 
         # Step 3: Construct structured chat payload (chat-capable agent)
         do_payload = {
