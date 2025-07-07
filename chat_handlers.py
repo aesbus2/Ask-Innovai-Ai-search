@@ -13,7 +13,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from opensearch_client import search_opensearch, search_vector
-from chat_handlers import determine_target_indices, build_search_context
+from chat_handlers import build_search_context
+
 
 logger = logging.getLogger(__name__)
 
