@@ -758,7 +758,7 @@ async function sendMessage() {
         console.log("📤 Request payload:", JSON.stringify(requestBody, null, 2));
         
         // FIX: Use standard fetch with explicit error handling
-        const response = await fetch('/chat', {
+        const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -833,7 +833,7 @@ window.testChatEndpoint = async function() {
     console.log("🧪 Testing chat endpoint...");
     
     try {
-        const response = await fetch('/chat', {
+        const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1166,6 +1166,8 @@ function addSourcesMessage(sources) {
 async function updateStats() {
     try {
         const response = await fetchWithRetry('/analytics/stats', {
+        //const response = await fetch(`${window.location.origin}/api/chat`, {  (DYNAMIC ENDPOINT FOR LATER)
+
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
