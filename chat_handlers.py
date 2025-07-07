@@ -45,7 +45,7 @@ chat_router = APIRouter()
 # PRODUCTION GENAI INTEGRATION CONFIGURATION
 # =============================================================================
 
-GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", + "/api/v1")
+GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT","")
 GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
 GENAI_MODEL = os.getenv("GENAI_MODEL", "n/a")
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
