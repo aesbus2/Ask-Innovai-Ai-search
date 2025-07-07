@@ -1,6 +1,6 @@
 // Enhanced Metro AI Call Center Analytics Chat - COMPLETE PRODUCTION VERSION
-// Version: 4.3.1 - Production-ready with real data filters and comprehensive error handling
-// in cludes metadata loading and pre-created pormpts
+// Version: 4.3.2 - Production-ready with enhanced debugging and comprehensive error handling
+// FULL FILE - Copy and replace your existing chat.js
 
 // =============================================================================
 // PRODUCTION CONFIGURATION & GLOBAL STATE
@@ -47,7 +47,7 @@ const performanceMetrics = {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log("🚀 Metro AI Analytics v4.3.0 - Production Chat Interface Starting...");
+    console.log("🚀 Metro AI Analytics v4.3.2 - Enhanced Production Chat Interface Starting...");
     
     // Initialize performance monitoring
     const startTime = performance.now();
@@ -538,7 +538,7 @@ function populateSelectOptionsWithRealData(selectId, options, categoryName) {
 }
 
 // =============================================================================
-// PRODUCTION FILTER MANAGEMENT
+// ENHANCED FILTER MANAGEMENT WITH DEBUGGING
 // =============================================================================
 
 function collectAlignedFilters() {
@@ -551,9 +551,11 @@ function collectAlignedFilters() {
         
         if (startCallDate && isValidDate(startCallDate)) {
             filters.call_date_start = startCallDate;
+            console.log("📅 Added start date filter:", startCallDate);
         }
         if (endCallDate && isValidDate(endCallDate)) {
             filters.call_date_end = endCallDate;
+            console.log("📅 Added end date filter:", endCallDate);
         }
 
         // Organizational hierarchy filters with production validation
@@ -575,6 +577,7 @@ function collectAlignedFilters() {
             
             if (value && value !== '') {
                 filters[filterKey] = value;
+                console.log(`🏷️ Added ${filterKey} filter:`, value);
             }
         });
 
@@ -589,6 +592,7 @@ function collectAlignedFilters() {
             const value = document.getElementById(inputId)?.value?.trim();
             if (value && value !== '') {
                 filters[filterKey] = value;
+                console.log(`📞 Added ${filterKey} filter:`, value);
             }
         });
 
@@ -598,10 +602,15 @@ function collectAlignedFilters() {
         
         if (minDuration && isValidInteger(minDuration, 0)) {
             filters.min_duration = parseInt(minDuration);
+            console.log("⏱️ Added min duration filter:", minDuration);
         }
         if (maxDuration && isValidInteger(maxDuration, 0)) {
             filters.max_duration = parseInt(maxDuration);
+            console.log("⏱️ Added max duration filter:", maxDuration);
         }
+
+        console.log("🔍 FINAL FILTERS COLLECTED:", filters);
+        console.log("📊 Total filters:", Object.keys(filters).length);
 
         if (PRODUCTION_CONFIG.DEBUG_MODE) {
             console.log("🔍 PRODUCTION: Collected filters:", filters);
@@ -692,7 +701,7 @@ function clearFilters() {
 }
 
 // =============================================================================
-// PRODUCTION CHAT FUNCTIONALITY
+// ENHANCED CHAT FUNCTIONALITY WITH COMPREHENSIVE DEBUGGING
 // =============================================================================
 
 async function sendMessage() {
@@ -742,11 +751,16 @@ async function sendMessage() {
         
         console.log("🔄 PRODUCTION: Sending chat request...");
         
-        // FIX: Enhanced request with better error handling
+        // ENHANCED: Get filters with debugging
+        const filters = collectAlignedFilters();
+        console.log("🏷️ FILTERS COLLECTED:", filters);
+        console.log("🔍 FILTER COUNT:", Object.keys(filters).length);
+        
+        // Enhanced request with better error handling and debugging
         const requestBody = {
             message: message,
             history: chatHistory,
-            filters: currentFilters,
+            filters: filters,
             analytics: true,
             metadata_focus: [
                 'evaluationId', 'internalId', 'template_id', 'template_name',
@@ -755,49 +769,71 @@ async function sendMessage() {
             ]
         };
         
-        console.log("📤 Request payload:", JSON.stringify(requestBody, null, 2));
+        // DEBUG: Log full request
+        if (PRODUCTION_CONFIG.DEBUG_MODE) {
+            console.log("📤 FULL REQUEST PAYLOAD:", JSON.stringify(requestBody, null, 2));
+        }
         
-        // FIX: Use standard fetch with explicit error handling
+        // Enhanced fetch with explicit error handling
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                // FIX: Add explicit origin header if needed
-                'Origin': window.location.origin
+                'Accept': 'application/json'
             },
-            body: JSON.stringify(requestBody),
-            // FIX: Remove custom timeout property that might cause issues
-            // timeout: PRODUCTION_CONFIG.CHAT_REQUEST_TIMEOUT
+            body: JSON.stringify(requestBody)
         });
         
-        console.log("📥 Response status:", response.status);
-        console.log("📥 Response headers:", response.headers);
+        console.log("📥 RESPONSE STATUS:", response.status);
+        console.log("📥 RESPONSE OK:", response.ok);
         
         if (!response.ok) {
-            // Enhanced error logging
             const responseText = await response.text();
-            console.error("❌ Response not OK:", {
+            console.error("❌ RESPONSE ERROR:", {
                 status: response.status,
                 statusText: response.statusText,
-                headers: Object.fromEntries(response.headers.entries()),
                 body: responseText
             });
-            throw new Error(`HTTP ${response.status}: ${response.statusText} - ${responseText}`);
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
         
+        if (PRODUCTION_CONFIG.DEBUG_MODE) {
+            console.log("📊 RESPONSE DATA:", data);
+        }
+        
         // Remove loading message
         removeLoadingMessage();
         
-        // Process response with production validation
+        // Process response with enhanced validation
         const reply = data.reply || 'Sorry, I couldn\'t process your request.';
-        addMessage('assistant', reply);
+        
+        // ENHANCED: Check search metadata for debugging
+        const searchMetadata = data.search_metadata || {};
+        console.log("🔍 SEARCH METADATA:", searchMetadata);
+        
+        // Add debugging info to the response if no context was found
+        let enhancedReply = reply;
+        if (!searchMetadata.context_found && PRODUCTION_CONFIG.DEBUG_MODE) {
+            enhancedReply += `\n\n[DEBUG INFO: No context found from search. Sources: ${searchMetadata.total_sources || 0}, Context length: ${searchMetadata.context_length || 0}]`;
+        }
+        
+        addMessage('assistant', enhancedReply);
         
         // Show sources if available
         if (data.sources && Array.isArray(data.sources) && data.sources.length > 0) {
+            console.log("📄 SOURCES FOUND:", data.sources.length);
             addSourcesMessage(data.sources);
+        } else {
+            console.warn("⚠️ NO SOURCES in response");
+            if (PRODUCTION_CONFIG.DEBUG_MODE) {
+                console.warn("🔍 This may indicate:");
+                console.warn("   1. No data imported to OpenSearch");
+                console.warn("   2. Search terms don't match indexed content");
+                console.warn("   3. Filters are too restrictive");
+                console.warn("   4. OpenSearch connection issues");
+            }
         }
         
         // Track performance
@@ -805,6 +841,18 @@ async function sendMessage() {
         performanceMetrics.chatResponseTimes.push(responseTime);
         
         console.log(`✅ PRODUCTION: Chat response completed in ${responseTime.toFixed(2)}ms`);
+        console.log(`🔍 Search results: ${searchMetadata.total_sources || 0} sources, context: ${searchMetadata.context_found ? 'YES' : 'NO'}`);
+        
+        // ENHANCED: Add debugging info for troubleshooting
+        if (searchMetadata.total_sources === 0) {
+            console.warn("🚨 TROUBLESHOOTING: No search results found");
+            console.warn("   Possible causes:");
+            console.warn("   1. No data imported to OpenSearch");
+            console.warn("   2. Search terms don't match indexed content");
+            console.warn("   3. Filters are too restrictive");
+            console.warn("   4. OpenSearch connection issues");
+            console.warn("   Try visiting /debug to diagnose");
+        }
         
     } catch (error) {
         console.error("❌ PRODUCTION: Chat request failed:", error);
@@ -819,8 +867,14 @@ async function sendMessage() {
             stack: error.stack
         });
         
-        // Production error handling with user-friendly messages
-        const errorMessage = getProductionChatErrorMessage(error);
+        // Production error handling with debugging hints
+        let errorMessage = getProductionChatErrorMessage(error);
+        
+        // Add debugging suggestions in debug mode
+        if (PRODUCTION_CONFIG.DEBUG_MODE) {
+            errorMessage += `\n\n[DEBUG SUGGESTIONS: Try visiting /debug to test your system, or check browser console for detailed error information]`;
+        }
+        
         addMessage('assistant', errorMessage);
         
     } finally {
@@ -828,39 +882,6 @@ async function sendMessage() {
         updateSendButton();
     }
 }
-
-window.testChatEndpoint = async function() {
-    console.log("🧪 Testing chat endpoint...");
-    
-    try {
-        const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                message: "test",
-                history: [],
-                filters: {},
-                analytics: true,
-                metadata_focus: []
-            })
-        });
-        
-        console.log("Test response:", response.status, response.statusText);
-        
-        if (response.ok) {
-            const data = await response.json();
-            console.log("Test data:", data);
-        } else {
-            const errorText = await response.text();
-            console.error("Test error:", errorText);
-        }
-        
-    } catch (error) {
-        console.error("Test failed:", error);
-    }
-};
 
 function getProductionChatErrorMessage(error) {
     const errorMessage = error.message.toLowerCase();
@@ -875,6 +896,8 @@ function getProductionChatErrorMessage(error) {
         return 'Authentication error. Please refresh the page and try again.';
     } else if (errorMessage.includes('429')) {
         return 'Too many requests. Please wait a moment before trying again.';
+    } else if (errorMessage.includes('405')) {
+        return 'System configuration issue. Please contact support or try refreshing the page.';
     } else {
         return 'Sorry, there was an error processing your request. Please try again or contact support if the issue persists.';
     }
@@ -1138,8 +1161,8 @@ function addSourcesMessage(sources) {
                     <div class="source-title">Source ${index + 1}: ${source.template_name || 'Unknown Template'}</div>
                 </div>
                 <div class="source-meta">
-                    Evaluation ID: ${source.evaluation_id || 'Unknown'} | 
-                    Program: ${source.program || 'Unknown'} | 
+                    Evaluation ID: ${source.evaluationId || 'Unknown'} | 
+                    Program: ${source.metadata?.program || 'Unknown'} | 
                     Agent: ${source.metadata?.agent || 'Unknown'}
                 </div>
                 <div class="source-text">${source.text || 'No content available'}</div>
@@ -1166,8 +1189,6 @@ function addSourcesMessage(sources) {
 async function updateStats() {
     try {
         const response = await fetchWithRetry('/analytics/stats', {
-        //const response = await fetch(`${window.location.origin}/api/chat`, {  (DYNAMIC ENDPOINT FOR LATER)
-
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1400,7 +1421,7 @@ function setupIdFieldValidation() {
 }
 
 // =============================================================================
-// MISSING FUNCTIONS THAT ARE CALLED FROM HTML
+// FUNCTIONS CALLED FROM HTML
 // =============================================================================
 
 function toggleSidebar() {
@@ -1568,6 +1589,72 @@ function onFilterOptionsLoaded(filterOptions) {
 }
 
 // =============================================================================
+// ENHANCED DEBUG FUNCTIONS
+// =============================================================================
+
+// Add debugging function to global scope
+window.debugChatSystem = async function() {
+    console.log("🔧 DEBUG: Testing chat system...");
+    
+    try {
+        // Test filter collection
+        const filters = collectAlignedFilters();
+        console.log("✅ Filter collection test:", filters);
+        
+        // Test API connectivity
+        const testResponse = await fetch('/debug/test_chat_context?q=test');
+        if (testResponse.ok) {
+            const testData = await testResponse.json();
+            console.log("✅ API connectivity test:", testData);
+        } else {
+            console.error("❌ API connectivity test failed:", testResponse.status);
+        }
+        
+        // Test search
+        const searchResponse = await fetch('/debug/test_search?q=customer service');
+        if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            console.log("✅ Search test:", searchData);
+        } else {
+            console.error("❌ Search test failed:", searchResponse.status);
+        }
+        
+        alert("Debug tests completed. Check browser console for results.");
+        
+    } catch (error) {
+        console.error("❌ Debug test failed:", error);
+        alert("Debug test failed. Check browser console for details.");
+    }
+};
+
+// Add enhanced debugging to global scope
+window.getDebugInfo = function() {
+    return {
+        currentFilters: currentFilters,
+        chatHistory: chatHistory,
+        chatSessions: chatSessions,
+        filterOptions: filterOptions,
+        performanceMetrics: performanceMetrics,
+        isLoading: isLoading,
+        config: PRODUCTION_CONFIG
+    };
+};
+
+// Test search function for debugging
+window.testSearch = async function(query = "customer service", filters = {}) {
+    try {
+        const url = `/debug/test_search?q=${encodeURIComponent(query)}&filters=${encodeURIComponent(JSON.stringify(filters))}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        console.log("🔍 Search test result:", data);
+        return data;
+    } catch (error) {
+        console.error("❌ Search test failed:", error);
+        return { error: error.message };
+    }
+};
+
+// =============================================================================
 // GLOBAL FUNCTION EXPOSURE FOR PRODUCTION
 // =============================================================================
 
@@ -1589,8 +1676,9 @@ window.toggleChatSession = toggleChatSession;
 window.getProductionMetrics = () => performanceMetrics;
 window.getProductionConfig = () => PRODUCTION_CONFIG;
 
-console.log("✅ PRODUCTION: Metro AI Analytics Chat v4.3.0 loaded successfully");
-console.log("🔧 Production debugging: getProductionMetrics(), getProductionConfig()");
+console.log("✅ ENHANCED: Metro AI Analytics Chat v4.3.2 loaded successfully");
+console.log("🔧 Production debugging: debugChatSystem(), getDebugInfo(), testSearch()");
 console.log("📊 Real data filters: Only shows data that exists in evaluation database");
 console.log("🛡️ Error handling: Comprehensive production-ready error management");
 console.log("⚡ Performance: Monitoring and optimization built-in");
+console.log("🔍 Debug mode:", PRODUCTION_CONFIG.DEBUG_MODE ? "ENABLED" : "DISABLED");

@@ -2318,6 +2318,429 @@ async def search_endpoint(q: str = Query(..., description="Search query")):
             "query": q,
             "results": []
         }
+    
+# Add these debugging endpoints to your existing app.py file
+# These will help diagnose chat and filter issues
+
+@app.get("/debug/opensearch_data")
+async def debug_opensearch_data():
+    """DEBUG: Check what data is actually in OpenSearch"""
+    try:
+        from opensearch_client import get_opensearch_client, debug_search_simple
+        
+        client = get_opensearch_client()
+        if not client:
+            return {"error": "OpenSearch client not available"}
+        
+        # Get basic stats
+        simple_result = debug_search_simple()
+        
+        # Get sample documents with full structure
+        try:
+            response = client.search(
+                index="eval-*",
+                body={
+                    "query": {"match_all": {}},
+                    "size": 3,
+                    "_source": True
+                }
+            )
+            
+            hits = response.get("hits", {}).get("hits", [])
+            sample_docs = []
+            
+            for hit in hits:
+                source = hit.get("_source", {})
+                doc_summary = {
+                    "index": hit.get("_index"),
+                    "id": hit.get("_id"),
+                    "evaluationId": source.get("evaluationId"),
+                    "template_name": source.get("template_name"),
+                    "template_id": source.get("template_id"),
+                    "has_full_text": bool(source.get("full_text")),
+                    "has_evaluation_text": bool(source.get("evaluation_text")),
+                    "has_transcript_text": bool(source.get("transcript_text")),
+                    "total_chunks": source.get("total_chunks", 0),
+                    "chunks_count": len(source.get("chunks", [])),
+                    "metadata_keys": list(source.get("metadata", {}).keys()),
+                    "metadata_sample": {
+                        "program": source.get("metadata", {}).get("program"),
+                        "partner": source.get("metadata", {}).get("partner"),
+                        "site": source.get("metadata", {}).get("site"),
+                        "lob": source.get("metadata", {}).get("lob"),
+                        "agent": source.get("metadata", {}).get("agent"),
+                        "disposition": source.get("metadata", {}).get("disposition"),
+                        "language": source.get("metadata", {}).get("language")
+                    },
+                    "content_preview": {
+                        "full_text": source.get("full_text", "")[:200],
+                        "evaluation_text": source.get("evaluation_text", "")[:200],
+                        "first_chunk": source.get("chunks", [{}])[0].get("text", "")[:200] if source.get("chunks") else ""
+                    }
+                }
+                sample_docs.append(doc_summary)
+            
+            return {
+                "status": "success",
+                "simple_search_result": simple_result,
+                "sample_documents": sample_docs,
+                "total_indices": len(response.get("hits", {}).get("hits", [])),
+                "message": "Use this to verify your data structure and content",
+                "version": "4.3.2_debug"
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error", 
+                "error": str(e),
+                "simple_search_result": simple_result,
+                "version": "4.3.2_debug"
+            }
+            
+    except Exception as e:
+        return {"error": str(e), "version": "4.3.2_debug"}
+
+@app.get("/debug/test_search")
+async def debug_test_search(q: str = "customer service", filters: str = "{}"):
+    """DEBUG: Test search functionality with filters"""
+    try:
+        import json
+        from opensearch_client import search_opensearch
+        
+        # Parse filters
+        try:
+            parsed_filters = json.loads(filters) if filters != "{}" else {}
+        except:
+            parsed_filters = {}
+        
+        logger.info(f"🔍 DEBUG SEARCH: query='{q}', filters={parsed_filters}")
+        
+        # Perform search
+        results = search_opensearch(q, filters=parsed_filters, size=5)
+        
+        # Summarize results
+        result_summary = []
+        for i, result in enumerate(results):
+            summary = {
+                "index": i + 1,
+                "id": result.get("_id"),
+                "score": result.get("_score"),
+                "evaluationId": result.get("evaluationId"),
+                "template_name": result.get("template_name"),
+                "has_content": bool(result.get("text")),
+                "content_length": len(result.get("text", "")),
+                "content_preview": result.get("text", "")[:100],
+                "metadata": result.get("metadata", {}),
+                "search_index": result.get("_index")
+            }
+            result_summary.append(summary)
+        
+        return {
+            "status": "success",
+            "query": q,
+            "filters_applied": parsed_filters,
+            "total_results": len(results),
+            "results_summary": result_summary,
+            "message": "Search test completed - check if results contain expected data",
+            "version": "4.3.2_debug"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ DEBUG SEARCH FAILED: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "query": q,
+            "filters": filters,
+            "version": "4.3.2_debug"
+        }
+
+@app.get("/debug/test_chat_context")
+async def debug_test_chat_context(q: str = "What are the most common call dispositions?"):
+    """DEBUG: Test chat context building"""
+    try:
+        from chat_handlers import build_search_context
+        
+        # Test with no filters
+        logger.info(f"🔍 DEBUG CHAT CONTEXT: query='{q}'")
+        
+        context, sources = build_search_context(q, {})
+        
+        return {
+            "status": "success",
+            "query": q,
+            "context_length": len(context),
+            "context_preview": context[:500] + ("..." if len(context) > 500 else ""),
+            "sources_count": len(sources),
+            "sources_summary": [
+                {
+                    "evaluationId": s.get("evaluationId"),
+                    "search_type": s.get("search_type"),
+                    "content_type": s.get("content_type"),
+                    "text_length": len(s.get("text", "")),
+                    "score": s.get("score"),
+                    "template_name": s.get("template_name"),
+                    "metadata": s.get("metadata", {})
+                }
+                for s in sources[:3]
+            ],
+            "has_context": bool(context),
+            "message": "Chat context test - verify if context is built from your data",
+            "version": "4.3.2_debug"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ DEBUG CHAT CONTEXT FAILED: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "query": q,
+            "version": "4.3.2_debug"
+        }
+
+@app.get("/debug/test_filters")
+async def debug_test_filters():
+    """DEBUG: Test filter options and search with filters"""
+    try:
+        from opensearch_client import search_opensearch
+        
+        # Test different filter combinations
+        test_cases = [
+            {"description": "No filters", "filters": {}},
+            {"description": "Program filter", "filters": {"program": "Metro"}},
+            {"description": "Partner filter", "filters": {"partner": "Advanced Solutions"}},
+            {"description": "LOB filter", "filters": {"lob": "Customer Service"}},
+            {"description": "Template filter", "filters": {"template_name": "CSR Quality"}},
+            {"description": "Multiple filters", "filters": {"program": "Metro", "lob": "Customer Service"}}
+        ]
+        
+        results = {}
+        
+        for test_case in test_cases:
+            try:
+                search_results = search_opensearch(
+                    "customer service", 
+                    filters=test_case["filters"], 
+                    size=3
+                )
+                
+                results[test_case["description"]] = {
+                    "filters": test_case["filters"],
+                    "results_count": len(search_results),
+                    "sample_results": [
+                        {
+                            "evaluationId": r.get("evaluationId"),
+                            "template_name": r.get("template_name"),
+                            "metadata": r.get("metadata", {}),
+                            "score": r.get("_score")
+                        }
+                        for r in search_results[:2]
+                    ] if search_results else []
+                }
+                
+            except Exception as e:
+                results[test_case["description"]] = {
+                    "filters": test_case["filters"],
+                    "error": str(e)
+                }
+        
+        return {
+            "status": "success",
+            "filter_tests": results,
+            "message": "Filter test completed - check which filters work and return results",
+            "version": "4.3.2_debug"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "version": "4.3.2_debug"
+        }
+
+@app.post("/debug/test_chat_full")
+async def debug_test_chat_full(request: dict):
+    """DEBUG: Test full chat flow with debugging"""
+    try:
+        message = request.get("message", "What are the most common call dispositions?")
+        filters = request.get("filters", {})
+        
+        logger.info(f"🔍 DEBUG FULL CHAT: message='{message}', filters={filters}")
+        
+        # Step 1: Test search context
+        from chat_handlers import build_search_context
+        context, sources = build_search_context(message, filters)
+        
+        # Step 2: Create test response without calling GenAI
+        if context:
+            test_response = f"[DEBUG RESPONSE] Based on the data found, I can see {len(sources)} relevant evaluations. Here's what the context contains: {context[:200]}..."
+        else:
+            test_response = "[DEBUG RESPONSE] No relevant data found in the search results. This could mean: 1) No data is imported, 2) Search terms don't match content, 3) Filters are too restrictive."
+        
+        return {
+            "status": "success",
+            "debug_info": {
+                "message": message,
+                "filters_applied": filters,
+                "context_found": bool(context),
+                "context_length": len(context),
+                "sources_count": len(sources),
+                "search_worked": len(sources) > 0
+            },
+            "context_preview": context[:300] + ("..." if len(context) > 300 else ""),
+            "sources_preview": [
+                {
+                    "evaluationId": s.get("evaluationId"),
+                    "template_name": s.get("template_name"),
+                    "search_type": s.get("search_type"),
+                    "score": s.get("score")
+                }
+                for s in sources[:3]
+            ],
+            "test_response": test_response,
+            "next_steps": [
+                "If context_found is False, check if data is imported",
+                "If sources_count is 0, try broader search terms",
+                "If search_worked is False, check OpenSearch connection",
+                "Check the context_preview to see if it contains relevant data"
+            ],
+            "version": "4.3.2_debug"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ DEBUG FULL CHAT FAILED: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "message": message,
+            "filters": filters,
+            "version": "4.3.2_debug"
+        }
+
+@app.get("/debug/check_indices")
+async def debug_check_indices():
+    """DEBUG: Check what indices exist and their basic stats"""
+    try:
+        from opensearch_client import get_opensearch_client
+        
+        client = get_opensearch_client()
+        if not client:
+            return {"error": "OpenSearch client not available"}
+        
+        # Get all indices
+        try:
+            all_indices = client.indices.get(index="*")
+            eval_indices = {k: v for k, v in all_indices.items() if k.startswith("eval-")}
+            
+            # Get stats for eval indices
+            if eval_indices:
+                stats_response = client.indices.stats(index="eval-*")
+                
+                indices_info = []
+                for index_name in eval_indices.keys():
+                    stats = stats_response.get("indices", {}).get(index_name, {})
+                    doc_count = stats.get("primaries", {}).get("docs", {}).get("count", 0)
+                    size_bytes = stats.get("primaries", {}).get("store", {}).get("size_in_bytes", 0)
+                    
+                    indices_info.append({
+                        "name": index_name,
+                        "document_count": doc_count,
+                        "size_mb": round(size_bytes / (1024 * 1024), 2),
+                        "template_id": index_name.replace("eval-", "") if index_name.startswith("eval-") else "unknown"
+                    })
+                
+                return {
+                    "status": "success",
+                    "total_eval_indices": len(eval_indices),
+                    "total_documents": sum(info["document_count"] for info in indices_info),
+                    "indices": indices_info,
+                    "message": "Check if you have evaluation indices with documents",
+                    "version": "4.3.2_debug"
+                }
+            else:
+                return {
+                    "status": "warning",
+                    "message": "No evaluation indices found - data may not be imported yet",
+                    "all_indices": list(all_indices.keys()),
+                    "version": "4.3.2_debug"
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "version": "4.3.2_debug"
+            }
+            
+    except Exception as e:
+        return {"error": str(e), "version": "4.3.2_debug"}
+
+# Add this route to test the debug endpoints
+@app.get("/debug")
+async def debug_dashboard():
+    """DEBUG: Simple HTML dashboard for testing"""
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Ask InnovAI Debug Dashboard</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .test-button { 
+                display: inline-block; 
+                margin: 10px; 
+                padding: 10px 20px; 
+                background: #007bff; 
+                color: white; 
+                text-decoration: none; 
+                border-radius: 5px; 
+            }
+            .test-button:hover { background: #0056b3; }
+            .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        </style>
+    </head>
+    <body>
+        <h1>🔍 Ask InnovAI Debug Dashboard</h1>
+        
+        <div class="section">
+            <h2>Data Verification</h2>
+            <a href="/debug/opensearch_data" class="test-button">Check OpenSearch Data</a>
+            <a href="/debug/check_indices" class="test-button">Check Indices</a>
+        </div>
+        
+        <div class="section">
+            <h2>Search Testing</h2>
+            <a href="/debug/test_search?q=customer service" class="test-button">Test Basic Search</a>
+            <a href="/debug/test_search?q=customer service&filters={\"program\":\"Metro\"}" class="test-button">Test With Filters</a>
+            <a href="/debug/test_filters" class="test-button">Test All Filters</a>
+        </div>
+        
+        <div class="section">
+            <h2>Chat System Testing</h2>
+            <a href="/debug/test_chat_context?q=What are the most common call dispositions?" class="test-button">Test Chat Context</a>
+        </div>
+        
+        <div class="section">
+            <h2>Manual Tests</h2>
+            <p><strong>Test Chat Full:</strong> POST to /debug/test_chat_full with body: {"message": "your question", "filters": {}}</p>
+            <p><strong>Filter Metadata:</strong> GET /filter_options_metadata</p>
+            <p><strong>Health Check:</strong> GET /health</p>
+        </div>
+        
+        <div class="section">
+            <h2>Instructions</h2>
+            <ol>
+                <li>First check "Check OpenSearch Data" to see if data exists</li>
+                <li>Then try "Test Basic Search" to see if search works</li>
+                <li>Test filters to see which ones work</li>
+                <li>Test chat context to see if it builds properly</li>
+            </ol>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return HTMLResponse(content=html_content)
 
 # Add startup event
 @app.on_event("startup")

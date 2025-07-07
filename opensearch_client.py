@@ -1,5 +1,5 @@
-# opensearch_client.py - PRODUCTION: OpenSearch 2.x Compatible with Simplified Vector Support
-# Version: 4.2.0 - Production-ready with conservative vector field mapping
+# opensearch_client.py - FIXED: Enhanced search with proper debugging and filter application
+# Version: 4.3.2 - DEBUGGING ENABLED + PROPER SEARCH FUNCTIONALITY
 
 import os
 import logging
@@ -44,7 +44,7 @@ def get_client():
             use_ssl=True,
             verify_certs=False,
             timeout=30,
-            connection_timeout=30,  # Add explicit connection timeout
+            connection_timeout=30,
             max_retries=3,
             retry_on_timeout=True
         )
@@ -82,6 +82,16 @@ def test_connection() -> bool:
         logger.error(f"❌ OpenSearch connection failed: {e}")
         return False
 
+def get_opensearch_config():
+    """Get OpenSearch configuration for debugging"""
+    return {
+        "host": os.getenv("OPENSEARCH_HOST", "not_configured"),
+        "port": os.getenv("OPENSEARCH_PORT", "25060"),
+        "user": os.getenv("OPENSEARCH_USER", "not_configured"),
+        "ssl": True,
+        "verify_certs": False
+    }
+
 def get_connection_status() -> Dict[str, Any]:
     """
     PRODUCTION: Get simple connection status
@@ -94,41 +104,411 @@ def get_connection_status() -> Dict[str, Any]:
         "last_test": datetime.now().isoformat()
     }
 
+# =============================================================================
+# ENHANCED SEARCH FUNCTIONS WITH DEBUGGING
+# =============================================================================
+
 def search_opensearch(query: str, index_override: str = None, 
                      filters: Dict[str, Any] = None, size: int = 10) -> List[Dict]:
     """
-    FIXED: Search with proper timeout format
+    ENHANCED: Search evaluations with comprehensive debugging and proper filter support
     """
     client = get_opensearch_client()
     if not client:
-        logger.warning("❌ OpenSearch client not available")
+        logger.error("❌ OpenSearch client not available for search")
         return []
     
+    # Determine index pattern
     index_pattern = index_override or "eval-*"
+    logger.info(f"🔍 SEARCHING: index='{index_pattern}', query='{query}', size={size}")
+    logger.info(f"🏷️ FILTERS: {filters}")
     
     try:
-        # ... your existing search logic ...
+        # STEP 1: Check if any indices exist
+        try:
+            indices_response = client.indices.get(index=index_pattern)
+            available_indices = list(indices_response.keys())
+            logger.info(f"📊 AVAILABLE INDICES: {len(available_indices)} ({available_indices[:3]}...)")
+        except Exception as e:
+            logger.error(f"❌ NO INDICES FOUND for pattern '{index_pattern}': {e}")
+            return []
+        
+        # STEP 2: Build comprehensive search query
+        
+        # Base text query with multiple fields
+        text_query = {
+            "multi_match": {
+                "query": query,
+                "fields": [
+                    "full_text^3",           # Highest priority
+                    "evaluation_text^2",     # Second priority  
+                    "transcript_text^1.5",   # Third priority
+                    "template_name^2",       # Template names important
+                    "chunks.text^1.8",       # Chunk content
+                    "chunks.question^1.5",   # QA questions
+                    "chunks.answer^1.5",     # QA answers
+                    "metadata.disposition^1.2",
+                    "metadata.agent^1.1"
+                ],
+                "type": "best_fields",
+                "fuzziness": "AUTO",
+                "minimum_should_match": "75%"
+            }
+        }
+        
+        # Enhanced nested query for chunks
+        nested_query = {
+            "nested": {
+                "path": "chunks",
+                "query": {
+                    "bool": {
+                        "should": [
+                            {
+                                "multi_match": {
+                                    "query": query,
+                                    "fields": [
+                                        "chunks.text^2",
+                                        "chunks.question^1.5",
+                                        "chunks.answer^1.5"
+                                    ],
+                                    "fuzziness": "AUTO"
+                                }
+                            },
+                            {
+                                "match_phrase": {
+                                    "chunks.text": {
+                                        "query": query,
+                                        "boost": 2
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                },
+                "score_mode": "max",
+                "inner_hits": {
+                    "size": 3,
+                    "_source": ["text", "content_type"]
+                }
+            }
+        }
+        
+        # Combine queries
+        combined_query = {
+            "bool": {
+                "should": [text_query, nested_query],
+                "minimum_should_match": 1
+            }
+        }
+        
+        # STEP 3: Apply filters with enhanced field mapping
+        if filters and any(filters.values()):
+            logger.info(f"🔧 APPLYING FILTERS: {filters}")
+            filter_clauses = []
+            
+            # Date filters
+            if filters.get("call_date_start") or filters.get("call_date_end"):
+                date_range = {}
+                if filters.get("call_date_start"):
+                    date_range["gte"] = filters["call_date_start"]
+                if filters.get("call_date_end"):
+                    date_range["lte"] = filters["call_date_end"]
+                
+                filter_clauses.append({
+                    "range": {"metadata.call_date": date_range}
+                })
+                logger.info(f"📅 Date filter applied: {date_range}")
+            
+            # Enhanced keyword filters with fallbacks
+            keyword_filters = {
+                # Frontend filter key -> OpenSearch field path
+                "template_name": ["template_name.keyword", "template_name"],
+                "template_id": ["template_id"],
+                "program": ["metadata.program.keyword", "metadata.program"],
+                "partner": ["metadata.partner.keyword", "metadata.partner"], 
+                "site": ["metadata.site.keyword", "metadata.site"],
+                "lob": ["metadata.lob.keyword", "metadata.lob"],
+                "agent_name": ["metadata.agent.keyword", "metadata.agent"],
+                "agent": ["metadata.agent.keyword", "metadata.agent"],
+                "disposition": ["metadata.disposition.keyword", "metadata.disposition"],
+                "sub_disposition": ["metadata.sub_disposition.keyword", "metadata.sub_disposition"],
+                "language": ["metadata.language.keyword", "metadata.language"],
+                "call_type": ["metadata.call_type.keyword", "metadata.call_type"],
+                "phone_number": ["metadata.phone_number"],
+                "contact_id": ["metadata.contact_id"],
+                "ucid": ["metadata.ucid"]
+            }
+            
+            for filter_key, field_paths in keyword_filters.items():
+                filter_value = filters.get(filter_key)
+                if filter_value and str(filter_value).strip():
+                    # Try multiple field paths (with and without .keyword)
+                    field_queries = []
+                    for field_path in field_paths:
+                        field_queries.append({"term": {field_path: filter_value}})
+                    
+                    if len(field_queries) == 1:
+                        filter_clauses.append(field_queries[0])
+                    else:
+                        filter_clauses.append({
+                            "bool": {
+                                "should": field_queries
+                            }
+                        })
+                    
+                    logger.info(f"🏷️ Filter applied: {filter_key}='{filter_value}' -> {field_paths}")
+            
+            # Duration filters
+            if filters.get("min_duration") or filters.get("max_duration"):
+                duration_range = {}
+                if filters.get("min_duration"):
+                    duration_range["gte"] = int(filters["min_duration"])
+                if filters.get("max_duration"):
+                    duration_range["lte"] = int(filters["max_duration"])
+                
+                filter_clauses.append({
+                    "range": {"metadata.call_duration": duration_range}
+                })
+                logger.info(f"⏱️ Duration filter applied: {duration_range}")
+            
+            # Apply filters to query
+            if filter_clauses:
+                combined_query["bool"]["filter"] = filter_clauses
+                logger.info(f"✅ TOTAL FILTERS APPLIED: {len(filter_clauses)}")
+        
+        # STEP 4: Build final search body
+        search_body = {
+            "query": combined_query,
+            "size": size,
+            "sort": [
+                {"_score": {"order": "desc"}},
+                {"metadata.call_date": {"order": "desc", "missing": "_last"}}
+            ],
+            "highlight": {
+                "fields": {
+                    "full_text": {
+                        "fragment_size": 200,
+                        "number_of_fragments": 2
+                    },
+                    "evaluation_text": {
+                        "fragment_size": 200, 
+                        "number_of_fragments": 1
+                    },
+                    "chunks.text": {
+                        "fragment_size": 150,
+                        "number_of_fragments": 1
+                    }
+                }
+            },
+            "_source": {
+                "includes": [
+                    "evaluationId", "internalId", "template_id", "template_name",
+                    "full_text", "evaluation_text", "transcript_text",
+                    "total_chunks", "chunks", "metadata", "indexed_at"
+                ]
+            }
+        }
+        
+        # STEP 5: Execute search with detailed logging
+        logger.info(f"🚀 EXECUTING SEARCH...")
+        logger.debug(f"📋 SEARCH BODY: {json.dumps(search_body, indent=2)}")
         
         response = client.search(
             index=index_pattern,
             body=search_body,
-            timeout=30  # FIX: Use integer instead of "30s"
+            timeout="30s"
         )
         
-        # ... rest of function ...
+        # STEP 6: Process results
+        hits = response.get("hits", {}).get("hits", [])
+        total_hits = response.get("hits", {}).get("total", {})
+        
+        # Handle different total formats
+        if isinstance(total_hits, dict):
+            total_count = total_hits.get("value", 0)
+        else:
+            total_count = total_hits
+        
+        logger.info(f"✅ SEARCH COMPLETED: {len(hits)} hits returned, {total_count} total matches")
+        
+        # STEP 7: Build result objects
+        results = []
+        for i, hit in enumerate(hits):
+            try:
+                source = hit.get("_source", {})
+                
+                result = {
+                    "_id": hit.get("_id"),
+                    "_score": hit.get("_score", 0),
+                    "_index": hit.get("_index"),
+                    "_source": source,
+                    
+                    # Key fields for easy access
+                    "evaluationId": source.get("evaluationId"),
+                    "internalId": source.get("internalId"),
+                    "template_id": source.get("template_id"),
+                    "template_name": source.get("template_name"),
+                    "total_chunks": source.get("total_chunks", 0),
+                    "metadata": source.get("metadata", {}),
+                    
+                    # Content for context building
+                    "text": source.get("full_text", "")[:500],
+                    "full_text": source.get("full_text", ""),
+                    "evaluation_text": source.get("evaluation_text", ""),
+                    "transcript_text": source.get("transcript_text", ""),
+                    "chunks": source.get("chunks", []),
+                    
+                    # Highlighting
+                    "highlight": hit.get("highlight", {}),
+                    "inner_hits": hit.get("inner_hits", {})
+                }
+                
+                results.append(result)
+                
+                logger.info(f"📄 RESULT {i+1}: {result['evaluationId']} (score: {result['_score']:.3f})")
+                
+            except Exception as e:
+                logger.error(f"❌ Failed to process hit {i}: {e}")
+        
+        logger.info(f"🎯 SEARCH SUMMARY: {len(results)} processed results")
+        return results
         
     except Exception as e:
-        logger.error(f"❌ Search failed: {e}")
+        logger.error(f"❌ SEARCH FAILED: {e}")
+        logger.error(f"🔍 Query: '{query}'")
+        logger.error(f"🏷️ Filters: {filters}")
+        logger.error(f"📍 Index: '{index_pattern}'")
+        return []
+
+def search_vector(query_vector: List[float], index_override: str = None, 
+                 size: int = 10) -> List[Dict]:
+    """
+    ENHANCED: Vector search with proper debugging
+    """
+    client = get_opensearch_client()
+    if not client:
+        logger.error("❌ OpenSearch client not available for vector search")
+        return []
+    
+    if not detect_vector_support(client):
+        logger.warning("❌ Vector search not available - cluster doesn't support vectors")
+        return []
+    
+    index_pattern = index_override or "eval-*"
+    logger.info(f"🔮 VECTOR SEARCH: index='{index_pattern}', vector_dim={len(query_vector)}, k={size}")
+    
+    try:
+        # OpenSearch 2.x k-NN query syntax
+        search_body = {
+            "query": {
+                "knn": {
+                    "document_embedding": {
+                        "vector": query_vector,
+                        "k": size
+                    }
+                }
+            },
+            "size": size,
+            "_source": {
+                "includes": [
+                    "evaluationId", "internalId", "template_id", "template_name",
+                    "full_text", "evaluation_text", "transcript_text",
+                    "total_chunks", "chunks", "metadata"
+                ]
+            }
+        }
+        
+        logger.info(f"🚀 EXECUTING VECTOR SEARCH...")
+        
+        response = client.search(
+            index=index_pattern,
+            body=search_body,
+            timeout="30s"
+        )
+        
+        hits = response.get("hits", {}).get("hits", [])
+        
+        results = []
+        for i, hit in enumerate(hits):
+            try:
+                source = hit.get("_source", {})
+                result = {
+                    "_id": hit.get("_id"),
+                    "_score": hit.get("_score", 0),
+                    "_index": hit.get("_index"),
+                    "_source": source,
+                    "evaluationId": source.get("evaluationId"),
+                    "template_id": source.get("template_id"),
+                    "template_name": source.get("template_name"),
+                    "total_chunks": source.get("total_chunks", 0),
+                    "metadata": source.get("metadata", {}),
+                    "text": source.get("full_text", "")[:500],
+                    "search_type": "vector"
+                }
+                results.append(result)
+                
+                logger.info(f"🔮 VECTOR RESULT {i+1}: {result['evaluationId']} (score: {result['_score']:.3f})")
+                
+            except Exception as e:
+                logger.error(f"❌ Failed to process vector hit {i}: {e}")
+        
+        logger.info(f"✅ VECTOR SEARCH COMPLETED: {len(results)} results")
+        return results
+        
+    except Exception as e:
+        logger.error(f"❌ VECTOR SEARCH FAILED: {e}")
         return []
 
 # =============================================================================
-# PRODUCTION OPENSEARCH 2.X VECTOR SUPPORT - SIMPLIFIED AND CONSERVATIVE
+# DEBUG FUNCTIONS
+# =============================================================================
+
+def debug_search_simple(query: str = "test") -> Dict[str, Any]:
+    """
+    DEBUG: Simple search test to verify basic functionality
+    """
+    client = get_opensearch_client()
+    if not client:
+        return {"error": "No client available"}
+    
+    try:
+        # Simple match_all query first
+        response = client.search(
+            index="eval-*",
+            body={
+                "query": {"match_all": {}},
+                "size": 3,
+                "_source": ["evaluationId", "template_name", "metadata.program"]
+            }
+        )
+        
+        hits = response.get("hits", {}).get("hits", [])
+        total = response.get("hits", {}).get("total", {})
+        
+        return {
+            "status": "success",
+            "total_documents": total.get("value", 0) if isinstance(total, dict) else total,
+            "sample_results": [
+                {
+                    "id": hit.get("_id"),
+                    "evaluationId": hit.get("_source", {}).get("evaluationId"),
+                    "template": hit.get("_source", {}).get("template_name"),
+                    "program": hit.get("_source", {}).get("metadata", {}).get("program")
+                }
+                for hit in hits
+            ]
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+# =============================================================================
+# VECTOR SUPPORT FUNCTIONS (KEEPING EXISTING)
 # =============================================================================
 
 def detect_vector_support(client) -> bool:
     """
     PRODUCTION: Conservative vector support detection for OpenSearch 2.x
-    Uses simple test approach to avoid complex configurations
     """
     global _vector_support_detected, _vector_support_tested
     
@@ -138,10 +518,8 @@ def detect_vector_support(client) -> bool:
     try:
         logger.info("🔍 Testing OpenSearch 2.x vector support...")
         
-        # Simple test index name
         test_index = f"vector-test-{int(time.time())}"
         
-        # PRODUCTION: Use simple OpenSearch 2.x vector field configuration
         test_mapping = {
             "mappings": {
                 "properties": {
@@ -157,32 +535,24 @@ def detect_vector_support(client) -> bool:
         }
         
         try:
-            # Try to create index with simple vector configuration
             client.indices.create(index=test_index, body=test_mapping, timeout="30s")
-            
-            # If successful, clean up and confirm support
             client.indices.delete(index=test_index, timeout="30s")
             
-            logger.info("✅ OpenSearch 2.x vector support confirmed (simple knn_vector)")
+            logger.info("✅ OpenSearch 2.x vector support confirmed")
             _vector_support_detected = True
             _vector_support_tested = True
-            
             return True
             
         except Exception as config_error:
-            logger.warning(f"❌ Simple vector configuration failed: {config_error}")
+            logger.warning(f"❌ Vector configuration failed: {config_error}")
             
-            # Clean up any partially created index
             try:
                 if client.indices.exists(index=test_index):
                     client.indices.delete(index=test_index)
             except:
                 pass
         
-        # If simple config failed, vectors not supported
         logger.warning("❌ OpenSearch 2.x vector support not available")
-        logger.info("💡 This cluster may not have k-NN plugin enabled")
-        
         _vector_support_detected = False
         _vector_support_tested = True
         return False
@@ -193,63 +563,50 @@ def detect_vector_support(client) -> bool:
         _vector_support_tested = True
         return False
 
+# =============================================================================
+# EXISTING FUNCTIONS (keeping for compatibility)
+# =============================================================================
+
 def get_vector_field_mapping(dimension: int = 384) -> Dict[str, Any]:
-    """
-    PRODUCTION: Get simple OpenSearch 2.x compatible vector field mapping
-    """
+    """Get simple OpenSearch 2.x compatible vector field mapping"""
     client = get_opensearch_client()
     if not client or not detect_vector_support(client):
         return None
     
-    # PRODUCTION: Simple OpenSearch 2.x vector field configuration
     return {
         "type": "knn_vector",
         "dimension": dimension
     }
 
-# =============================================================================
-# PRODUCTION ENHANCED INDEX MANAGEMENT - OPENSEARCH 2.X OPTIMIZED
-# =============================================================================
-
 def ensure_evaluation_index_exists(client, index_name: str):
-    """
-    PRODUCTION: Create index with evaluation grouping mapping and optional vector support
-    """
+    """Create index with evaluation grouping mapping and optional vector support"""
     if client.indices.exists(index=index_name):
         return
     
-    # Detect vector support
     has_vectors = detect_vector_support(client)
     vector_field = get_vector_field_mapping() if has_vectors else None
     
     logger.info(f"🏗️ Creating index {index_name} with vector support: {has_vectors}")
     
-    # Build mapping with conditional vector fields
     chunk_properties = {
         "chunk_index": {"type": "integer"},
         "text": {"type": "text", "analyzer": "evaluation_analyzer"},
         "content_type": {"type": "keyword"},
         "length": {"type": "integer"},
-        
-        # QA-specific fields
         "section": {"type": "keyword"},
         "question": {"type": "text", "analyzer": "evaluation_analyzer"},
         "answer": {"type": "text", "analyzer": "evaluation_analyzer"},
         "qa_pair_index": {"type": "integer"},
-        
-        # Transcript-specific fields
         "speakers": {"type": "keyword"},
         "timestamps": {"type": "keyword"},
         "speaker_count": {"type": "integer"},
         "transcript_chunk_index": {"type": "integer"}
     }
     
-    # Add vector field to chunks if supported
     if vector_field:
         chunk_properties["embedding"] = vector_field
         logger.info("✅ Added vector field to chunk mapping")
     
-    # PRODUCTION: Enhanced mapping with conditional vector support
     mapping = {
         "settings": {
             "number_of_shards": 1,
@@ -266,39 +623,33 @@ def ensure_evaluation_index_exists(client, index_name: str):
         },
         "mappings": {
             "properties": {
-                # Primary identifiers
                 "evaluationId": {"type": "keyword"},
                 "internalId": {"type": "keyword"},
                 "template_id": {"type": "keyword"},
                 "template_name": {"type": "text", "analyzer": "evaluation_analyzer", 
                                 "fields": {"keyword": {"type": "keyword"}}},
                 
-                # Document structure
                 "document_type": {"type": "keyword"},
                 "total_chunks": {"type": "integer"},
                 "evaluation_chunks_count": {"type": "integer"},
                 "transcript_chunks_count": {"type": "integer"},
                 
-                # Full content for search
                 "full_text": {"type": "text", "analyzer": "evaluation_analyzer"},
                 "evaluation_text": {"type": "text", "analyzer": "evaluation_analyzer"},
                 "transcript_text": {"type": "text", "analyzer": "evaluation_analyzer"},
                 
-                # Chunks array with nested mapping
                 "chunks": {
                     "type": "nested",
                     "properties": chunk_properties
                 },
                 
-                # PRODUCTION: Enhanced metadata mapping
                 "metadata": {
                     "properties": {
                         "evaluationId": {"type": "keyword"},
                         "internalId": {"type": "keyword"},
-                        #"weight_score": {"type": "float"},  # Enhanced: Weight score field from QA Form
                         "template_id": {"type": "keyword"},
                         "template_name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "program": {"type": "keyword"},  # Enhanced: Program field
+                        "program": {"type": "keyword"},
                         "partner": {"type": "keyword"},
                         "site": {"type": "keyword"},
                         "lob": {"type": "keyword"},
@@ -317,7 +668,6 @@ def ensure_evaluation_index_exists(client, index_name: str):
                     }
                 },
                 
-                # System fields
                 "source": {"type": "keyword"},
                 "indexed_at": {"type": "date"},
                 "collection_name": {"type": "keyword"},
@@ -329,7 +679,6 @@ def ensure_evaluation_index_exists(client, index_name: str):
         }
     }
     
-    # Add document-level vector field if supported
     if vector_field:
         mapping["mappings"]["properties"]["document_embedding"] = vector_field
         logger.info("✅ Added document-level vector field")
@@ -343,9 +692,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
         raise
 
 def index_document(doc_id: str, document: Dict[str, Any], index_override: str = None) -> bool:
-    """
-    PRODUCTION: Index evaluation document with grouped chunks and conditional vector support
-    """
+    """Index evaluation document with grouped chunks and conditional vector support"""
     client = get_opensearch_client()
     if not client:
         logger.error("❌ OpenSearch client not available")
@@ -354,27 +701,21 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
     index_name = index_override or "evaluations-grouped"
     
     try:
-        # Ensure index exists with vector detection
         ensure_evaluation_index_exists(client, index_name)
         
-        # Check if we should clean vector fields
         has_vectors = detect_vector_support(client)
         
-        # Prepare document for indexing
         if not has_vectors:
-            # Remove vector fields if not supported
             clean_document = remove_vector_fields(document)
             logger.debug("🧹 Removed vector fields (not supported)")
         else:
             clean_document = document
             logger.debug("🔗 Keeping vector fields (supported)")
         
-        # Add system metadata
         clean_document["_indexed_at"] = datetime.now().isoformat()
-        clean_document["_structure_version"] = "4.2.0"
-        clean_document["_document_type"] = "evaluation_grouped_production"
+        clean_document["_structure_version"] = "4.3.2"
+        clean_document["_document_type"] = "evaluation_grouped_enhanced"
         
-        # Index the document
         response = client.index(
             index=index_name,
             id=doc_id,
@@ -385,8 +726,6 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
         
         vector_status = "WITH VECTORS" if has_vectors else "TEXT ONLY"
         logger.info(f"✅ Indexed evaluation {doc_id} in {index_name} ({vector_status})")
-        logger.info(f"   📄 Chunks: {clean_document.get('total_chunks', 0)}")
-        logger.info(f"   📋 Template: {clean_document.get('template_name', 'Unknown')}")
         
         return True
         
@@ -395,13 +734,10 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
         return False
 
 def remove_vector_fields(document: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    PRODUCTION: Remove all vector/embedding fields from document for non-vector clusters
-    """
+    """Remove all vector/embedding fields from document for non-vector clusters"""
     import copy
     clean_doc = copy.deepcopy(document)
     
-    # Remove document-level embedding fields
     vector_fields_to_remove = [
         "document_embedding",
         "embedding", 
@@ -414,7 +750,6 @@ def remove_vector_fields(document: Dict[str, Any]) -> Dict[str, Any]:
             del clean_doc[field]
             logger.debug(f"🧹 Removed vector field: {field}")
     
-    # Remove embedding fields from chunks
     if "chunks" in clean_doc and isinstance(clean_doc["chunks"], list):
         for chunk in clean_doc["chunks"]:
             if isinstance(chunk, dict):
@@ -425,251 +760,8 @@ def remove_vector_fields(document: Dict[str, Any]) -> Dict[str, Any]:
     
     return clean_doc
 
-# =============================================================================
-# PRODUCTION SEARCH FUNCTIONS - OPENSEARCH 2.X OPTIMIZED
-# =============================================================================
-
-def search_opensearch(query: str, index_override: str = None, 
-                     filters: Dict[str, Any] = None, size: int = 10) -> List[Dict]:
-    """
-    PRODUCTION: Search evaluations with enhanced filter support and error handling
-    """
-    client = get_opensearch_client()
-    if not client:
-        logger.warning("❌ OpenSearch client not available")
-        return []
-    
-    index_pattern = index_override or "eval-*"
-    
-    try:
-        # Build search query for evaluation documents
-        text_query = {
-            "multi_match": {
-                "query": query,
-                "fields": [
-                    "full_text^2",
-                    "evaluation_text^1.5",
-                    "transcript_text",
-                    "template_name^1.2",
-                    "metadata.disposition^1.1",
-                    "metadata.agent^1.1"
-                ],
-                "type": "best_fields",
-                "fuzziness": "AUTO"
-            }
-        }
-        
-        # Also search within chunks using nested query
-        nested_query = {
-            "nested": {
-                "path": "chunks",
-                "query": {
-                    "multi_match": {
-                        "query": query,
-                        "fields": [
-                            "chunks.text^1.5",
-                            "chunks.question",
-                            "chunks.answer"
-                        ],
-                        "fuzziness": "AUTO"
-                    }
-                },
-                "score_mode": "max"
-            }
-        }
-        
-        # Combine queries
-        combined_query = {
-            "bool": {
-                "should": [text_query, nested_query],
-                "minimum_should_match": 1
-            }
-        }
-        
-        # PRODUCTION: Apply filters if provided
-        if filters:
-            filter_clauses = []
-            
-            # Date filters
-            if filters.get("call_date_start") or filters.get("call_date_end"):
-                date_range = {}
-                if filters.get("call_date_start"):
-                    date_range["gte"] = filters["call_date_start"]
-                if filters.get("call_date_end"):
-                    date_range["lte"] = filters["call_date_end"]
-                
-                filter_clauses.append({
-                    "range": {"metadata.call_date": date_range}
-                })
-            
-            # PRODUCTION: Enhanced keyword filters with proper field mapping
-            keyword_filters = {
-                "template_name": "template_name.keyword",
-                "template_id": "template_id",
-                "program": "metadata.program",
-                "partner": "metadata.partner",
-                "site": "metadata.site",
-                "lob": "metadata.lob",
-                "agent_name": "metadata.agent.keyword",
-                "disposition": "metadata.disposition",
-                "sub_disposition": "metadata.sub_disposition",
-                "language": "metadata.language",
-                "call_type": "metadata.call_type",
-                "phone_number": "metadata.phone_number",
-                "contact_id": "metadata.contact_id",
-                "ucid": "metadata.ucid"
-            }
-            
-            for filter_key, field_path in keyword_filters.items():
-                if filters.get(filter_key):
-                    filter_clauses.append({
-                        "term": {field_path: filters[filter_key]}
-                    })
-            
-            # Duration filters
-            if filters.get("min_duration") or filters.get("max_duration"):
-                duration_range = {}
-                if filters.get("min_duration"):
-                    duration_range["gte"] = filters["min_duration"]
-                if filters.get("max_duration"):
-                    duration_range["lte"] = filters["max_duration"]
-                
-                filter_clauses.append({
-                    "range": {"metadata.call_duration": duration_range}
-                })
-            
-            if filter_clauses:
-                combined_query["bool"]["filter"] = filter_clauses
-        
-        # Build search body
-        search_body = {
-            "query": combined_query,
-            "size": size,
-            "sort": [
-                {"_score": {"order": "desc"}},
-                {"metadata.call_date": {"order": "desc"}}
-            ],
-            "highlight": {
-                "fields": {
-                    "full_text": {"fragment_size": 150, "number_of_fragments": 2},
-                    "evaluation_text": {"fragment_size": 150, "number_of_fragments": 1}
-                }
-            }
-        }
-        
-        response = client.search(
-            index=index_pattern,
-            body=search_body,
-            timeout="30s"
-        )
-        
-        hits = response.get("hits", {}).get("hits", [])
-        
-        # Process results to return evaluation-level information
-        results = []
-        for hit in hits:
-            source = hit.get("_source", {})
-            result = {
-                "_id": hit.get("_id"),
-                "_score": hit.get("_score", 0),
-                "_index": hit.get("_index"),
-                "_source": source,
-                
-                # Evaluation-level fields for easy access
-                "evaluationId": source.get("evaluationId"),
-                "template_id": source.get("template_id"),
-                "template_name": source.get("template_name"),
-                "total_chunks": source.get("total_chunks", 0),
-                "metadata": source.get("metadata", {}),
-                
-                # For backward compatibility
-                "text": source.get("full_text", "")[:500]
-            }
-            results.append(result)
-        
-        has_vectors = detect_vector_support(client)
-        search_type = "HYBRID (text + vectors)" if has_vectors else "TEXT ONLY"
-        logger.info(f"🔍 Found {len(results)} evaluations ({search_type})")
-        return results
-        
-    except Exception as e:
-        logger.error(f"❌ Search failed: {e}")
-        return []
-
-def search_vector(query_vector: List[float], index_override: str = None, 
-                 size: int = 10) -> List[Dict]:
-    """
-    PRODUCTION: Vector search with OpenSearch 2.x k-NN query syntax
-    """
-    client = get_opensearch_client()
-    if not client:
-        logger.warning("❌ OpenSearch client not available")
-        return []
-    
-    if not detect_vector_support(client):
-        logger.warning("❌ Vector search not available - cluster doesn't support vectors")
-        return []
-    
-    index_pattern = index_override or "eval-*"
-    
-    try:
-        # PRODUCTION: OpenSearch 2.x k-NN query syntax (simple)
-        search_body = {
-            "query": {
-                "knn": {
-                    "document_embedding": {
-                        "vector": query_vector,
-                        "k": size
-                    }
-                }
-            },
-            "size": size,
-            "_source": True
-        }
-        
-        logger.debug(f"🔍 Executing OpenSearch 2.x k-NN vector search (k={size})")
-        
-        response = client.search(
-            index=index_pattern,
-            body=search_body,
-            timeout="30s"
-        )
-        
-        hits = response.get("hits", {}).get("hits", [])
-        
-        results = []
-        for hit in hits:
-            source = hit.get("_source", {})
-            result = {
-                "_id": hit.get("_id"),
-                "_score": hit.get("_score", 0),
-                "_index": hit.get("_index"),
-                "_source": source,
-                "evaluationId": source.get("evaluationId"),
-                "template_id": source.get("template_id"),
-                "template_name": source.get("template_name"),
-                "total_chunks": source.get("total_chunks", 0),
-                "metadata": source.get("metadata", {}),
-                "text": source.get("full_text", "")[:500]
-            }
-            results.append(result)
-        
-        logger.info(f"🔍 k-NN vector search found {len(results)} evaluations")
-        return results
-        
-    except Exception as e:
-        logger.error(f"❌ k-NN vector search failed: {e}")
-        logger.debug(f"Query was: {search_body}")
-        return []
-
-# =============================================================================
-# PRODUCTION UTILITY FUNCTIONS
-# =============================================================================
-
 def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
-    """
-    PRODUCTION: Get a specific evaluation document by ID
-    """
+    """Get a specific evaluation document by ID"""
     client = get_opensearch_client()
     if not client:
         return None
@@ -692,9 +784,7 @@ def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
         return None
 
 def health_check() -> Dict[str, Any]:
-    """
-    PRODUCTION: Health check with vector support detection
-    """
+    """Health check with vector support detection"""
     try:
         client = get_opensearch_client()
         
@@ -705,12 +795,8 @@ def health_check() -> Dict[str, Any]:
                 "provider": "unknown"
             }
         
-        # Test connection
         if test_connection():
-            # Detect vector support
             has_vectors = detect_vector_support(client)
-            
-            # Get cluster info
             info = client.info()
             
             return {
@@ -721,12 +807,13 @@ def health_check() -> Dict[str, Any]:
                 "host": os.getenv("OPENSEARCH_HOST"),
                 "port": os.getenv("OPENSEARCH_PORT", "25060"),
                 "user": os.getenv("OPENSEARCH_USER"),
-                "structure_version": "4.2.0",
-                "document_structure": "evaluation_grouped_production",
+                "structure_version": "4.3.2",
+                "document_structure": "evaluation_grouped_enhanced",
                 "auth_method": "simple_proven_setup",
                 "vector_support": has_vectors,
                 "vector_type": "simple_knn_vector" if has_vectors else None,
-                "search_type": "hybrid" if has_vectors else "text_only"
+                "search_type": "hybrid" if has_vectors else "text_only",
+                "debug_features": "enabled"
             }
         else:
             return {
@@ -748,14 +835,8 @@ def health_check() -> Dict[str, Any]:
             "vector_support": None
         }
 
-# =============================================================================
-# BACKWARD COMPATIBILITY
-# =============================================================================
-
 def get_opensearch_manager():
-    """
-    PRODUCTION: Get manager for compatibility
-    """
+    """Get manager for compatibility"""
     class SimpleManager:
         def test_connection(self):
             return test_connection()
@@ -769,53 +850,52 @@ def get_opensearch_manager():
     return SimpleManager()
 
 def get_opensearch_stats() -> Dict[str, Any]:
-    """
-    PRODUCTION: Get simple OpenSearch statistics with vector support info
-    """
+    """Get simple OpenSearch statistics with vector support info"""
     client = get_opensearch_client()
     has_vectors = detect_vector_support(client) if client else False
     
     return {
         "connected": test_connection(),
-        "structure_version": "4.2.0",
+        "structure_version": "4.3.2",
         "auth_method": "simple_proven_setup",
-        "client_type": "production_opensearch_2x",
+        "client_type": "enhanced_opensearch_2x",
         "vector_support": has_vectors,
-        "vector_type": "simple_knn_vector" if has_vectors else None
+        "vector_type": "simple_knn_vector" if has_vectors else None,
+        "debug_features": "enabled"
     }
 
 if __name__ == "__main__":
-    # PRODUCTION test
     logging.basicConfig(level=logging.INFO)
     
-    print("🧪 Testing PRODUCTION OpenSearch Client v4.2.0")
-    print("Expected: Production-ready with OpenSearch 2.x simple vector support")
+    print("🧪 Testing ENHANCED OpenSearch Client v4.3.2")
+    print("Expected: Enhanced search with proper debugging")
     
-    # Health check
     health = health_check()
     print(f"\n🏥 Health check: {health['status']}")
     
     if health["status"] == "healthy":
         print(f"   Cluster: {health['cluster_name']}")
         print(f"   Version: {health['version']}")
-        print(f"   User: {health['user']}")
-        print(f"   Document Structure: {health['document_structure']}")
         print(f"   Vector Support: {health['vector_support']}")
-        print(f"   Vector Type: {health.get('vector_type', 'None')}")
-        print(f"   Search Type: {health['search_type']}")
+        print(f"   Debug Features: {health['debug_features']}")
         
-        if health['vector_support']:
-            print("\n✅ PRODUCTION client with SIMPLE VECTOR SUPPORT!")
-        else:
-            print("\n✅ PRODUCTION client with TEXT-ONLY support!")
+        # Test simple search
+        print("\n🔍 Testing simple search...")
+        debug_result = debug_search_simple()
+        print(f"   Status: {debug_result.get('status', 'failed')}")
+        print(f"   Total docs: {debug_result.get('total_documents', 0)}")
+        
+        if debug_result.get("sample_results"):
+            print("   Sample results:")
+            for i, result in enumerate(debug_result["sample_results"][:3]):
+                print(f"     {i+1}. {result['evaluationId']} - {result['template']}")
+        
+        print("\n✅ ENHANCED client with debugging ready!")
         
     else:
         print(f"❌ Health check failed: {health.get('error', 'Unknown error')}")
-        print("\n🔧 Check your environment variables:")
-        print("   OPENSEARCH_HOST, OPENSEARCH_PORT, OPENSEARCH_USER, OPENSEARCH_PASS")
     
     print("\n🏁 Testing complete!")
 else:
-    logger.info("🔌 PRODUCTION OpenSearch client v4.2.0 loaded")
-    logger.info("   Features: Simple OpenSearch 2.x vector support + evaluation grouping")
-    logger.info("   Compatible: OpenSearch 2.x with conservative vector detection")
+    logger.info("🔌 ENHANCED OpenSearch client v4.3.2 loaded")
+    logger.info("   Features: Enhanced search + comprehensive debugging + proper filters")
