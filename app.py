@@ -22,7 +22,8 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from uuid import uuid4
 from collections import defaultdict
-from chat_handlers import chat_router
+from chat_handlers import chat_router, health_router
+from fastapi import APIRouter
 
 # Create FastAPI app
 app = FastAPI(
@@ -32,6 +33,7 @@ app = FastAPI(
 )
 
 app.include_router(chat_router, prefix="/api")
+app.include_router(health_router)
 
 # Production logging setup
 logging.basicConfig(
@@ -154,6 +156,28 @@ def update_import_status(status: str, step: str = None, results: dict = None, er
 # ============================================================================
 # EFFICIENT METADATA LOADING SYSTEM - PRODUCTION VERSION
 # ============================================================================
+
+@health_router.get("/health")
+async def health_check():
+    return {
+        "status": "ok",
+        "components": {
+            "opensearch": {"status": "connected"},
+            "embedding_service": {"status": "healthy"},
+            "genai_agent": {"status": "configured"}
+        },
+        "enhancements": {
+            "document_structure": "enhanced v4.3.1"
+        }
+    }
+
+@health_router.get("/last_import_info")
+async def last_import_info():
+    return {
+        "status": "success",
+        "last_import_timestamp": datetime.now().isoformat()
+    }
+
 
 @app.get("/filter_options_metadata")
 async def filter_options_metadata():

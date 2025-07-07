@@ -17,6 +17,7 @@ from embedder import embed_text
 
 logger = logging.getLogger(__name__)
 chat_router = APIRouter()
+health_router = APIRouter()
 
 # =============================================================================
 # CONFIGURATION
@@ -82,7 +83,7 @@ async def relay_chat_rag(request: Request):
             "Content-Type": "application/json"
         }
 
-        do_url = f"{GENAI_ENDPOINT.rstrip('/')}/chat/completions"
+        do_url = f"{GENAI_ENDPOINT.rstrip('/')}/v1/chat/completions"
         logger.info(f"➡️ Forwarding to: {do_url}")
 
         response = requests.post(
