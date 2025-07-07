@@ -110,6 +110,16 @@ async def relay_chat_rag(request: Request):
         else:
             logger.error(f"❌ GenAI response missing 'choices': {result}")
 
+        unique_sources = []
+        seen_ids = set()
+
+        for s in sources:
+            eid = s.get("evaluation_id")
+            if eid and eid not in seen_ids:
+                unique_sources.append(s)
+                seen_ids.add(eid)
+
+
         return JSONResponse(content={
             "reply": reply_text,
             "sources": sources,
@@ -183,11 +193,17 @@ def build_search_context(query: str, filters: dict) -> tuple[str, List[dict]]:
                     "template_id": doc.get("template_id"),
                     "template_name": doc.get("template_name"),
                     "program": doc.get("metadata", {}).get("program"),
-                    "evaluation_id": doc.get("evaluationId"),
-                    "score": score,
-                    "search_type": "vector" if hit in vector_hits else "text",
-                    "source_id": hit.get("_id"),
-                    "collection": hit.get("_index")
+                    "evaluationId": doc.get("evaluationId"),
+                    "internalId": doc.get("internalId"),
+                    "call_date": doc.get("call_date"),
+                    "call_duration": doc.get("call_duration"),
+                    "agentId": doc.get("agentId"),
+                    "agentName": doc.get("agentName"),
+                    "disposition": doc.get("disposition"),
+                    "subDisposition": doc.get("subDisposition"),
+                    "language": doc.get("language"),
+                    "url": doc.get("url"),
+
                 })
 
     except Exception as e:
