@@ -2263,6 +2263,12 @@ async def get_opensearch_health_detailed():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
+from fastapi.responses import FileResponse
+
+@app.get("/chat", response_class=FileResponse)
+async def serve_chat_ui():
+    return FileResponse("static/chat.html")
+
 
 @app.get("/search")
 async def search_endpoint(q: str = Query(..., description="Search query")):
