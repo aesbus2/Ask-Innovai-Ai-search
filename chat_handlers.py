@@ -82,7 +82,7 @@ async def relay_chat_rag(request: Request):
             "Content-Type": "application/json"
         }
 
-        do_url = f"{GENAI_ENDPOINT.rstrip('/')}/v1/chat/completions"
+        do_url = f"{GENAI_ENDPOINT.rstrip('/')}/api/v1/chat/completions"
         logger.info(f"➡️ Forwarding to: {do_url}")
 
         # Optional debug logging
