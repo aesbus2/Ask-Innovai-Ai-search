@@ -31,7 +31,7 @@ app = FastAPI(
     version="4.2.0"
 )
 
-app.include_router(chat_router)
+app.include_router(chat_router, prefix="/api")
 
 # Production logging setup
 logging.basicConfig(
