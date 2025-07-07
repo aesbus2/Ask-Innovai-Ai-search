@@ -84,6 +84,9 @@ async def relay_chat_rag(request: Request):
 
         do_url = f"{GENAI_ENDPOINT.rstrip('/')}/api/v1/chat/completions"
         logger.info(f"➡️ Forwarding to: {do_url}")
+        logger.debug(f"📤 Requesting: {do_url}")
+        logger.debug(f"📦 Payload: {json.dumps(do_payload)}")
+        logger.debug(f"🔑 Headers: {headers}")
 
         # Optional debug logging
         logger.debug(f"🧠 Sending payload: {json.dumps(do_payload)[:500]}...")
@@ -95,8 +98,11 @@ async def relay_chat_rag(request: Request):
             timeout=30
         )
 
+        logger.debug(f"🧠 GenAI response raw: {response.text[:1000]}")
+
         response.raise_for_status()
         result = response.json()
+        reply_text = "(No response)"
 
         reply_text = "(No response)"
         if "choices" in result and result["choices"]:
