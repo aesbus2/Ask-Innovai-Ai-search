@@ -94,6 +94,12 @@ async def relay_chat_rag(request: Request):
 
         response.raise_for_status()
         result = response.json()
+        reply_text = "(No response)"
+
+        if "choices" in result and result["choices"]:
+            reply_text = result["choices"][0]["message"]["content"]
+        else:
+            logger.error(f"❌ GenAI response missing 'choices': {result}")
 
         return JSONResponse(content={
             "reply": result["choices"][0]["message"]["content"],
