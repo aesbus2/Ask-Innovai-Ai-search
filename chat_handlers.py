@@ -1,12 +1,12 @@
 # chat_handlers.py - PRODUCTION FastAPI Chat Router with Efficient OpenSearch 2.x Vector Support
-# Version: 4.3.0 - RAG-enhanced with DO Agent Relay
+# Version: 4.3.1 - FIXED history schema to accept full chat message dicts
 
 import os
 import logging
 import requests
 import time
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Literal
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -32,9 +32,13 @@ GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 # PYDANTIC INPUT SCHEMA
 # =============================================================================
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
 class ChatRequest(BaseModel):
     message: str
-    history: List[str] = []
+    history: List[ChatTurn] = []
     filters: Dict[str, Any] = {}
     analytics: bool = False
     metadata_focus: List[str] = []
@@ -57,20 +61,14 @@ async def relay_chat_rag(request: Request):
         # Step 1: Build context from OpenSearch
         context, sources = build_search_context(req.message, req.filters)
 
-        # Step 2: Convert history to OpenAI-style format
-        history_messages = [
-            {"role": "user" if i % 2 == 0 else "assistant", "content": msg}
-            for i, msg in enumerate(req.history)
-        ]
-
-        # Step 3: Inject RAG context
+        # Step 2: Inject RAG context
         system_message = f"""You are a helpful assistant. Use the following context to answer the user's question.\n\n{context}\n\nOnly answer based on the context above if relevant. Otherwise, use general knowledge."""
 
-        # Step 4: Construct DO Agent payload
+        # Step 3: Construct DO Agent payload
         do_payload = {
             "messages": [
                 {"role": "system", "content": system_message},
-                *history_messages,
+                *[turn.dict() for turn in req.history],
                 {"role": "user", "content": req.message}
             ],
             "stream": False,
@@ -107,7 +105,7 @@ async def relay_chat_rag(request: Request):
                 "text_sources": len([s for s in sources if s.get("search_type") == "text"]),
                 "context_length": len(context),
                 "processing_time": round(time.time() - start_time, 2),
-                "version": "4.3.0_rag"
+                "version": "4.3.1_rag"
             }
         })
 
@@ -123,7 +121,7 @@ async def relay_chat_rag(request: Request):
                 "search_metadata": {
                     "error": str(e),
                     "context_length": 0,
-                    "version": "4.3.0_rag"
+                    "version": "4.3.1_rag"
                 }
             }
         )
