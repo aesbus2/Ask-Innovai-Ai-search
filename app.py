@@ -79,12 +79,6 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️ embedder import failed: {e} - will run without embeddings")
 
-# Create FastAPI app
-app = FastAPI(
-    title="Ask InnovAI Production - Efficient Real Data Filter System",
-    description="AI-Powered Knowledge Assistant with Real-Time Data Filters and Efficient Metadata Loading",
-    version="4.2.0"
-)
 
 class ImportRequest(BaseModel):
     collection: str = "all"
