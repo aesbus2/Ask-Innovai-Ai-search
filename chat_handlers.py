@@ -35,9 +35,6 @@ class ChatResponse(BaseModel):
     filter_context: dict = {}
     search_metadata: dict = {}
 
-# =============================================================================
-# FASTAPI ROUTER SETUP
-# =============================================================================
 
 chat_router = APIRouter()
 

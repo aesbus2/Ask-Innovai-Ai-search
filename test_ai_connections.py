@@ -60,42 +60,41 @@ def test_do_ai_agent():
         
         # Test basic completion
         print("\n🔄 Testing basic completion...")
-        response = client.chat.completions.create(
-            model="n/a",  # DO agents use "n/a" as model
-            messages=[{
-                "role": "user", 
-                "content": "Say 'Hello from Digital Ocean AI' and nothing else."
-            }],
+
+        response = client.completions.create(
+            model="n/a",
+            prompt="Say 'Hello from Digital Ocean AI' and nothing else.",
             max_tokens=50,
             temperature=0.1
         )
         
-        print("✅ Basic completion successful!")
-        print(f"Response: {response.choices[0].message.content}")
-        
-        # Test with retrieval info (DO specific feature)
-        print("\n🔄 Testing with retrieval info...")
-        response_with_retrieval = client.chat.completions.create(
-            model="n/a",
-            messages=[{
-                "role": "user", 
-                "content": "What is Metro by T-Mobile?"
-            }],
-            extra_body={"include_retrieval_info": True}
-        )
-        
-        print("✅ Retrieval completion successful!")
-        for choice in response_with_retrieval.choices:
-            print(f"Content: {choice.message.content}")
-        
-        # Print retrieval info if available
-        response_dict = response_with_retrieval.to_dict()
-        if "retrieval" in response_dict:
-            print("\n📚 Retrieval Information:")
-            print(json.dumps(response_dict["retrieval"], indent=2))
-        
-        return True
-        
+        if response.choices:    
+            print("✅ Basic completion successful!")
+            print(f"Response: {response.choices[0].message.content}")
+            
+            # Test with retrieval info (DO specific feature)
+            print("\n🔄 Testing with retrieval info...")
+            response_with_retrieval = client.chat.completions.create(
+                model="n/a",
+                messages=[{
+                    "role": "user", 
+                    "content": "What is Metro by T-Mobile?"
+                }],
+                extra_body={"include_retrieval_info": True}
+            )
+            
+            print("✅ Retrieval completion successful!")
+            for choice in response_with_retrieval.choices:
+                print(f"Content: {choice.message.content}")
+            
+            # Print retrieval info if available
+            response_dict = response_with_retrieval.to_dict()
+            if "retrieval" in response_dict:
+                print("\n📚 Retrieval Information:")
+                print(json.dumps(response_dict["retrieval"], indent=2))
+            
+            return True
+
     except Exception as e:
         print(f"❌ Error: {str(e)}")
         print(f"Error type: {type(e).__name__}")
