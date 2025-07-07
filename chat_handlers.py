@@ -5,6 +5,7 @@ import os
 import logging
 import requests
 import time
+import json
 from datetime import datetime
 from typing import Dict, Any, List, Literal
 
@@ -59,23 +60,21 @@ async def relay_chat_rag(request: Request):
         logger.info(f"💬 Chat received: {req.message[:60]}")
         logger.info(f"🔎 Filters: {list(req.filters.keys()) if req.filters else 'None'}")
 
-        # Step 1: Build context from OpenSearch
+        # Step 1: Build context from OpenSearch using filters
         context, sources = build_search_context(req.message, req.filters)
 
-        # Step 2: Inject RAG context
+        # Step 2: Inject context into system message
         system_message = f"""You are a helpful assistant. Use the following context to answer the user's question.\n\n{context}\n\nOnly answer based on the context above if relevant. Otherwise, use general knowledge."""
 
-        # Step 3: Construct DO Agent payload
+        # Step 3: Construct structured chat payload (chat-capable agent)
         do_payload = {
             "messages": [
                 {"role": "system", "content": system_message},
                 *[turn.dict() for turn in req.history],
                 {"role": "user", "content": req.message}
             ],
-            "stream": False,
-            "include_functions_info": False,
-            "include_retrieval_info": False,
-            "include_guardrails_info": False
+            "temperature": GENAI_TEMPERATURE,
+            "max_tokens": GENAI_MAX_TOKENS
         }
 
         headers = {
@@ -86,6 +85,9 @@ async def relay_chat_rag(request: Request):
         do_url = f"{GENAI_ENDPOINT.rstrip('/')}/v1/chat/completions"
         logger.info(f"➡️ Forwarding to: {do_url}")
 
+        # Optional debug logging
+        logger.debug(f"🧠 Sending payload: {json.dumps(do_payload)[:500]}...")
+
         response = requests.post(
             do_url,
             headers=headers,
@@ -95,15 +97,15 @@ async def relay_chat_rag(request: Request):
 
         response.raise_for_status()
         result = response.json()
-        reply_text = "(No response)"
 
+        reply_text = "(No response)"
         if "choices" in result and result["choices"]:
-            reply_text = result["choices"][0]["message"]["content"]
+            reply_text = result["choices"][0]["message"]["content"][:1000].strip()
         else:
             logger.error(f"❌ GenAI response missing 'choices': {result}")
 
         return JSONResponse(content={
-            "reply": result["choices"][0]["message"]["content"],
+            "reply": reply_text,
             "sources": sources,
             "timestamp": datetime.now().isoformat(),
             "filter_context": req.filters,
@@ -112,7 +114,7 @@ async def relay_chat_rag(request: Request):
                 "text_sources": len([s for s in sources if s.get("search_type") == "text"]),
                 "context_length": len(context),
                 "processing_time": round(time.time() - start_time, 2),
-                "version": "4.3.1_rag"
+                "version": "4.3.2_rag"
             }
         })
 
@@ -128,10 +130,11 @@ async def relay_chat_rag(request: Request):
                 "search_metadata": {
                     "error": str(e),
                     "context_length": 0,
-                    "version": "4.3.1_rag"
+                    "version": "4.3.2_rag"
                 }
             }
         )
+
 
 # =============================================================================
 # RAG CONTEXT HELPER FUNCTION
