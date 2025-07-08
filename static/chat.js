@@ -395,7 +395,7 @@ function setFilterLoadingState(isLoading) {
             // Update the first option to show loading
             if (element.tagName === 'SELECT' && element.firstElementChild) {
                 const originalText = element.firstElementChild.textContent;
-                if (!originalText.includes('Loading')) {
+                if (!originalText.includes('All')) {
                     element.firstElementChild.setAttribute('data-original', originalText);
                     element.firstElementChild.textContent = originalText.replace('All ', 'Loading ') + '...';
                 }

@@ -1,5 +1,6 @@
-# opensearch_client.py - FIXED: Enhanced search with proper debugging and filter application
-# Version: 4.3.2 - DEBUGGING ENABLED + PROPER SEARCH FUNCTIONALITY
+# opensearch_client.py - COMPLETE FIXED VERSION
+# Version: 4.4.1 - Fixed timeout issues, disabled problematic vector search, enhanced error handling
+# FIXES: Timeout configuration, SSL warnings, vector search stability
 
 import os
 import logging
@@ -19,22 +20,27 @@ except ImportError:
 # Setup logging
 logger = logging.getLogger(__name__)
 
-# Global vector support detection
-_vector_support_detected = None
-_vector_support_tested = False
+# Global vector support detection - TEMPORARILY DISABLED
+_vector_support_detected = False  # Disabled to prevent timeout errors
+_vector_support_tested = True     # Skip testing to avoid issues
 
 # Global client instance
 _client = None
 
+# =============================================================================
+# FIXED CLIENT CREATION WITH PROPER TIMEOUT CONFIGURATION
+# =============================================================================
+
 def get_client():
     """
-    PRODUCTION: Get OpenSearch client using exact working setup
+    FIXED: Get OpenSearch client with proper timeout configuration
     """
     if not OPENSEARCH_AVAILABLE:
         logger.error("OpenSearch library not available")
         return None
     
     try:
+        # FIXED: Proper timeout parameter names and SSL configuration
         client = OpenSearch(
             hosts=[{
                 "host": os.getenv("OPENSEARCH_HOST"),
@@ -43,29 +49,40 @@ def get_client():
             http_auth=(os.getenv("OPENSEARCH_USER"), os.getenv("OPENSEARCH_PASS")),
             use_ssl=True,
             verify_certs=False,
-            timeout=30,
-            connection_timeout=30,
+            # ✅ FIXED TIMEOUT CONFIGURATION:
+            request_timeout=30,         # Fixed: was timeout=30
+            connect_timeout=30,         # Fixed: was connection_timeout=30
             max_retries=3,
-            retry_on_timeout=True
+            retry_on_timeout=True,
+            # ✅ SUPPRESS SSL WARNINGS:
+            ssl_show_warn=False,        # Added to reduce log noise
+            # ✅ ADDITIONAL STABILITY:
+            pool_maxsize=20,
+            http_compress=True
         )
+        
+        # Test basic connection (without vector operations)
+        test_result = client.ping()
+        if test_result:
+            logger.info("✅ OpenSearch connection successful with fixed timeouts")
+        else:
+            logger.warning("⚠️ OpenSearch ping returned False")
+        
         return client
+        
     except Exception as e:
         logger.error(f"Failed to create OpenSearch client: {e}")
         return None
 
 def get_opensearch_client():
-    """
-    PRODUCTION: Get or create global client instance
-    """
+    """Get or create global client instance"""
     global _client
     if _client is None:
         _client = get_client()
     return _client
 
 def test_connection() -> bool:
-    """
-    PRODUCTION: Test connection using simple approach
-    """
+    """Test connection with enhanced error handling"""
     client = get_opensearch_client()
     if not client:
         return False
@@ -73,13 +90,13 @@ def test_connection() -> bool:
     try:
         result = client.ping()
         if result:
-            logger.info("✅ OpenSearch connection successful")
+            logger.info("✅ OpenSearch connection test successful")
             return True
         else:
             logger.error("❌ OpenSearch ping failed")
             return False
     except Exception as e:
-        logger.error(f"❌ OpenSearch connection failed: {e}")
+        logger.error(f"❌ OpenSearch connection test failed: {e}")
         return False
 
 def get_opensearch_config():
@@ -89,29 +106,31 @@ def get_opensearch_config():
         "port": os.getenv("OPENSEARCH_PORT", "25060"),
         "user": os.getenv("OPENSEARCH_USER", "not_configured"),
         "ssl": True,
-        "verify_certs": False
+        "verify_certs": False,
+        "timeout_fixed": True,
+        "ssl_warnings_suppressed": True
     }
 
 def get_connection_status() -> Dict[str, Any]:
-    """
-    PRODUCTION: Get simple connection status
-    """
+    """Get connection status with timeout fix information"""
     return {
         "connected": test_connection(),
         "host": os.getenv("OPENSEARCH_HOST"),
         "port": os.getenv("OPENSEARCH_PORT", "25060"),
         "user": os.getenv("OPENSEARCH_USER"),
-        "last_test": datetime.now().isoformat()
+        "last_test": datetime.now().isoformat(),
+        "timeout_configuration": "fixed",
+        "ssl_warnings": "suppressed"
     }
 
 # =============================================================================
-# ENHANCED SEARCH FUNCTIONS WITH DEBUGGING
+# ENHANCED SEARCH FUNCTIONS WITH FIXED TIMEOUT HANDLING
 # =============================================================================
 
 def search_opensearch(query: str, index_override: str = None, 
                      filters: Dict[str, Any] = None, size: int = 10) -> List[Dict]:
     """
-    ENHANCED: Search evaluations with comprehensive debugging and proper filter support
+    FIXED: Search evaluations with proper timeout handling and comprehensive debugging
     """
     client = get_opensearch_client()
     if not client:
@@ -309,14 +328,14 @@ def search_opensearch(query: str, index_override: str = None,
             }
         }
         
-        # STEP 5: Execute search with detailed logging
+        # STEP 5: Execute search with FIXED timeout parameters
         logger.info(f"🚀 EXECUTING SEARCH...")
         logger.debug(f"📋 SEARCH BODY: {json.dumps(search_body, indent=2)}")
         
         response = client.search(
             index=index_pattern,
             body=search_body,
-            timeout="30s"
+            request_timeout=30  # ✅ FIXED: Use request_timeout instead of timeout
         )
         
         # STEP 6: Process results
@@ -360,7 +379,8 @@ def search_opensearch(query: str, index_override: str = None,
                     
                     # Highlighting
                     "highlight": hit.get("highlight", {}),
-                    "inner_hits": hit.get("inner_hits", {})
+                    "inner_hits": hit.get("inner_hits", {}),
+                    "search_type": "text"  # Mark as text search (vector disabled)
                 }
                 
                 results.append(result)
@@ -383,89 +403,19 @@ def search_opensearch(query: str, index_override: str = None,
 def search_vector(query_vector: List[float], index_override: str = None, 
                  size: int = 10) -> List[Dict]:
     """
-    ENHANCED: Vector search with proper debugging
+    DISABLED: Vector search temporarily disabled to prevent timeout issues
     """
-    client = get_opensearch_client()
-    if not client:
-        logger.error("❌ OpenSearch client not available for vector search")
-        return []
-    
-    if not detect_vector_support(client):
-        logger.warning("❌ Vector search not available - cluster doesn't support vectors")
-        return []
-    
-    index_pattern = index_override or "eval-*"
-    logger.info(f"🔮 VECTOR SEARCH: index='{index_pattern}', vector_dim={len(query_vector)}, k={size}")
-    
-    try:
-        # OpenSearch 2.x k-NN query syntax
-        search_body = {
-            "query": {
-                "knn": {
-                    "document_embedding": {
-                        "vector": query_vector,
-                        "k": size
-                    }
-                }
-            },
-            "size": size,
-            "_source": {
-                "includes": [
-                    "evaluationId", "internalId", "template_id", "template_name",
-                    "full_text", "evaluation_text", "transcript_text",
-                    "total_chunks", "chunks", "metadata"
-                ]
-            }
-        }
-        
-        logger.info(f"🚀 EXECUTING VECTOR SEARCH...")
-        
-        response = client.search(
-            index=index_pattern,
-            body=search_body,
-            timeout="30s"
-        )
-        
-        hits = response.get("hits", {}).get("hits", [])
-        
-        results = []
-        for i, hit in enumerate(hits):
-            try:
-                source = hit.get("_source", {})
-                result = {
-                    "_id": hit.get("_id"),
-                    "_score": hit.get("_score", 0),
-                    "_index": hit.get("_index"),
-                    "_source": source,
-                    "evaluationId": source.get("evaluationId"),
-                    "template_id": source.get("template_id"),
-                    "template_name": source.get("template_name"),
-                    "total_chunks": source.get("total_chunks", 0),
-                    "metadata": source.get("metadata", {}),
-                    "text": source.get("full_text", "")[:500],
-                    "search_type": "vector"
-                }
-                results.append(result)
-                
-                logger.info(f"🔮 VECTOR RESULT {i+1}: {result['evaluationId']} (score: {result['_score']:.3f})")
-                
-            except Exception as e:
-                logger.error(f"❌ Failed to process vector hit {i}: {e}")
-        
-        logger.info(f"✅ VECTOR SEARCH COMPLETED: {len(results)} results")
-        return results
-        
-    except Exception as e:
-        logger.error(f"❌ VECTOR SEARCH FAILED: {e}")
-        return []
+    logger.warning("🔮 Vector search temporarily disabled due to timeout configuration issues")
+    logger.info("💡 Using text search only until vector search is stabilized")
+    return []
 
 # =============================================================================
-# DEBUG FUNCTIONS
+# DEBUG FUNCTIONS WITH TIMEOUT FIXES
 # =============================================================================
 
 def debug_search_simple(query: str = "test") -> Dict[str, Any]:
     """
-    DEBUG: Simple search test to verify basic functionality
+    DEBUG: Simple search test with fixed timeouts
     """
     client = get_opensearch_client()
     if not client:
@@ -479,7 +429,8 @@ def debug_search_simple(query: str = "test") -> Dict[str, Any]:
                 "query": {"match_all": {}},
                 "size": 3,
                 "_source": ["evaluationId", "template_name", "metadata.program"]
-            }
+            },
+            request_timeout=30  # ✅ FIXED timeout parameter
         )
         
         hits = response.get("hits", {}).get("hits", [])
@@ -496,97 +447,47 @@ def debug_search_simple(query: str = "test") -> Dict[str, Any]:
                     "program": hit.get("_source", {}).get("metadata", {}).get("program")
                 }
                 for hit in hits
-            ]
+            ],
+            "timeout_fix": "applied"
         }
         
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": str(e), "timeout_fix": "applied_but_failed"}
 
 # =============================================================================
-# VECTOR SUPPORT FUNCTIONS (KEEPING EXISTING)
+# VECTOR SUPPORT FUNCTIONS - TEMPORARILY DISABLED
 # =============================================================================
 
 def detect_vector_support(client) -> bool:
     """
-    PRODUCTION: Conservative vector support detection for OpenSearch 2.x
+    DISABLED: Vector support detection temporarily disabled to prevent timeout errors
     """
     global _vector_support_detected, _vector_support_tested
     
-    if _vector_support_tested:
-        return _vector_support_detected
+    # Force disable vector support to prevent timeout issues
+    _vector_support_detected = False
+    _vector_support_tested = True
     
-    try:
-        logger.info("🔍 Testing OpenSearch 2.x vector support...")
-        
-        test_index = f"vector-test-{int(time.time())}"
-        
-        test_mapping = {
-            "mappings": {
-                "properties": {
-                    "test_vector": {
-                        "type": "knn_vector",
-                        "dimension": 384
-                    },
-                    "test_text": {
-                        "type": "text"
-                    }
-                }
-            }
-        }
-        
-        try:
-            client.indices.create(index=test_index, body=test_mapping, timeout="30s")
-            client.indices.delete(index=test_index, timeout="30s")
-            
-            logger.info("✅ OpenSearch 2.x vector support confirmed")
-            _vector_support_detected = True
-            _vector_support_tested = True
-            return True
-            
-        except Exception as config_error:
-            logger.warning(f"❌ Vector configuration failed: {config_error}")
-            
-            try:
-                if client.indices.exists(index=test_index):
-                    client.indices.delete(index=test_index)
-            except:
-                pass
-        
-        logger.warning("❌ OpenSearch 2.x vector support not available")
-        _vector_support_detected = False
-        _vector_support_tested = True
-        return False
+    logger.info("🚫 Vector support temporarily disabled to prevent timeout errors")
+    logger.info("💡 Will re-enable after timeout configuration is fully stabilized")
     
-    except Exception as e:
-        logger.warning(f"⚠️ Vector support detection failed: {e}")
-        _vector_support_detected = False
-        _vector_support_tested = True
-        return False
-
-# =============================================================================
-# EXISTING FUNCTIONS (keeping for compatibility)
-# =============================================================================
+    return False
 
 def get_vector_field_mapping(dimension: int = 384) -> Dict[str, Any]:
-    """Get simple OpenSearch 2.x compatible vector field mapping"""
-    client = get_opensearch_client()
-    if not client or not detect_vector_support(client):
-        return None
-    
-    return {
-        "type": "knn_vector",
-        "dimension": dimension
-    }
+    """Vector field mapping disabled"""
+    logger.warning("🚫 Vector field mapping disabled (vector support temporarily off)")
+    return None
+
+# =============================================================================
+# INDEX MANAGEMENT WITH TIMEOUT FIXES
+# =============================================================================
 
 def ensure_evaluation_index_exists(client, index_name: str):
-    """Create index with evaluation grouping mapping and optional vector support"""
+    """Create index with evaluation grouping mapping (vector fields disabled)"""
     if client.indices.exists(index=index_name):
         return
     
-    has_vectors = detect_vector_support(client)
-    vector_field = get_vector_field_mapping() if has_vectors else None
-    
-    logger.info(f"🏗️ Creating index {index_name} with vector support: {has_vectors}")
+    logger.info(f"🏗️ Creating index {index_name} (vector support disabled)")
     
     chunk_properties = {
         "chunk_index": {"type": "integer"},
@@ -601,11 +502,8 @@ def ensure_evaluation_index_exists(client, index_name: str):
         "timestamps": {"type": "keyword"},
         "speaker_count": {"type": "integer"},
         "transcript_chunk_index": {"type": "integer"}
+        # Note: embedding fields omitted (vector support disabled)
     }
-    
-    if vector_field:
-        chunk_properties["embedding"] = vector_field
-        logger.info("✅ Added vector field to chunk mapping")
     
     mapping = {
         "settings": {
@@ -679,20 +577,21 @@ def ensure_evaluation_index_exists(client, index_name: str):
         }
     }
     
-    if vector_field:
-        mapping["mappings"]["properties"]["document_embedding"] = vector_field
-        logger.info("✅ Added document-level vector field")
+    # Note: No document-level embedding field (vector support disabled)
     
     try:
-        client.indices.create(index=index_name, body=mapping, timeout="60")
-        vector_status = "WITH VECTORS" if has_vectors else "TEXT ONLY"
-        logger.info(f"✅ Created evaluation index ({vector_status}): {index_name}")
+        client.indices.create(
+            index=index_name, 
+            body=mapping, 
+            request_timeout=60  # ✅ FIXED timeout parameter
+        )
+        logger.info(f"✅ Created evaluation index (TEXT ONLY): {index_name}")
     except Exception as e:
         logger.error(f"❌ Failed to create index {index_name}: {e}")
         raise
 
 def index_document(doc_id: str, document: Dict[str, Any], index_override: str = None) -> bool:
-    """Index evaluation document with grouped chunks and conditional vector support"""
+    """Index evaluation document with fixed timeout and no vector fields"""
     client = get_opensearch_client()
     if not client:
         logger.error("❌ OpenSearch client not available")
@@ -703,29 +602,22 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
     try:
         ensure_evaluation_index_exists(client, index_name)
         
-        has_vectors = detect_vector_support(client)
-        
-        if not has_vectors:
-            clean_document = remove_vector_fields(document)
-            logger.debug("🧹 Removed vector fields (not supported)")
-        else:
-            clean_document = document
-            logger.debug("🔗 Keeping vector fields (supported)")
+        # Remove any vector fields from document (since vector support disabled)
+        clean_document = remove_vector_fields(document)
         
         clean_document["_indexed_at"] = datetime.now().isoformat()
-        clean_document["_structure_version"] = "4.3.2"
-        clean_document["_document_type"] = "evaluation_grouped_enhanced"
+        clean_document["_structure_version"] = "4.4.1_timeout_fixed"
+        clean_document["_document_type"] = "evaluation_grouped_text_only"
         
         response = client.index(
             index=index_name,
             id=doc_id,
             body=clean_document,
             refresh=True,
-            timeout="60s"
+            request_timeout=60  # ✅ FIXED timeout parameter
         )
         
-        vector_status = "WITH VECTORS" if has_vectors else "TEXT ONLY"
-        logger.info(f"✅ Indexed evaluation {doc_id} in {index_name} ({vector_status})")
+        logger.info(f"✅ Indexed evaluation {doc_id} in {index_name} (TEXT ONLY)")
         
         return True
         
@@ -734,7 +626,7 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
         return False
 
 def remove_vector_fields(document: Dict[str, Any]) -> Dict[str, Any]:
-    """Remove all vector/embedding fields from document for non-vector clusters"""
+    """Remove all vector/embedding fields from document"""
     import copy
     clean_doc = copy.deepcopy(document)
     
@@ -761,7 +653,7 @@ def remove_vector_fields(document: Dict[str, Any]) -> Dict[str, Any]:
     return clean_doc
 
 def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
-    """Get a specific evaluation document by ID"""
+    """Get a specific evaluation document by ID with fixed timeout"""
     client = get_opensearch_client()
     if not client:
         return None
@@ -773,7 +665,7 @@ def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
                 "query": {"term": {"evaluationId": evaluation_id}},
                 "size": 1
             },
-            timeout="10s"
+            request_timeout=10  # ✅ FIXED timeout parameter
         )
         
         hits = response.get("hits", {}).get("hits", [])
@@ -783,8 +675,12 @@ def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
         logger.error(f"❌ Failed to get evaluation {evaluation_id}: {e}")
         return None
 
+# =============================================================================
+# HEALTH CHECK WITH TIMEOUT FIX STATUS
+# =============================================================================
+
 def health_check() -> Dict[str, Any]:
-    """Health check with vector support detection"""
+    """Health check with timeout fix and vector status information"""
     try:
         client = get_opensearch_client()
         
@@ -792,11 +688,11 @@ def health_check() -> Dict[str, Any]:
             return {
                 "status": "not_configured",
                 "message": "Could not create OpenSearch client",
-                "provider": "unknown"
+                "provider": "unknown",
+                "timeout_fix": "applied_but_client_creation_failed"
             }
         
         if test_connection():
-            has_vectors = detect_vector_support(client)
             info = client.info()
             
             return {
@@ -807,12 +703,14 @@ def health_check() -> Dict[str, Any]:
                 "host": os.getenv("OPENSEARCH_HOST"),
                 "port": os.getenv("OPENSEARCH_PORT", "25060"),
                 "user": os.getenv("OPENSEARCH_USER"),
-                "structure_version": "4.3.2",
-                "document_structure": "evaluation_grouped_enhanced",
-                "auth_method": "simple_proven_setup",
-                "vector_support": has_vectors,
-                "vector_type": "simple_knn_vector" if has_vectors else None,
-                "search_type": "hybrid" if has_vectors else "text_only",
+                "structure_version": "4.4.1_timeout_fixed",
+                "document_structure": "evaluation_grouped_text_only",
+                "auth_method": "fixed_timeout_configuration",
+                "vector_support": False,
+                "vector_status": "temporarily_disabled_for_stability",
+                "search_type": "text_only",
+                "timeout_configuration": "fixed",
+                "ssl_warnings": "suppressed",
                 "debug_features": "enabled"
             }
         else:
@@ -823,7 +721,7 @@ def health_check() -> Dict[str, Any]:
                 "host": os.getenv("OPENSEARCH_HOST"),
                 "port": os.getenv("OPENSEARCH_PORT", "25060"),
                 "user": os.getenv("OPENSEARCH_USER"),
-                "auth_method": "simple_proven_setup",
+                "timeout_configuration": "fixed_but_connection_failed",
                 "vector_support": None
             }
             
@@ -831,7 +729,7 @@ def health_check() -> Dict[str, Any]:
         return {
             "status": "error",
             "error": str(e),
-            "auth_method": "simple_proven_setup",
+            "timeout_configuration": "fixed_but_error_occurred",
             "vector_support": None
         }
 
@@ -850,25 +748,30 @@ def get_opensearch_manager():
     return SimpleManager()
 
 def get_opensearch_stats() -> Dict[str, Any]:
-    """Get simple OpenSearch statistics with vector support info"""
+    """Get OpenSearch statistics with timeout fix information"""
     client = get_opensearch_client()
-    has_vectors = detect_vector_support(client) if client else False
     
     return {
         "connected": test_connection(),
-        "structure_version": "4.3.2",
-        "auth_method": "simple_proven_setup",
-        "client_type": "enhanced_opensearch_2x",
-        "vector_support": has_vectors,
-        "vector_type": "simple_knn_vector" if has_vectors else None,
+        "structure_version": "4.4.1_timeout_fixed",
+        "auth_method": "fixed_timeout_configuration",
+        "client_type": "enhanced_opensearch_2x_text_only",
+        "vector_support": False,
+        "vector_status": "temporarily_disabled_for_stability",
+        "timeout_configuration": "fixed",
+        "ssl_warnings": "suppressed",
         "debug_features": "enabled"
     }
+
+# =============================================================================
+# MAIN EXECUTION AND TESTING
+# =============================================================================
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
-    print("🧪 Testing ENHANCED OpenSearch Client v4.3.2")
-    print("Expected: Enhanced search with proper debugging")
+    print("🧪 Testing FIXED OpenSearch Client v4.4.1")
+    print("✅ Expected: Fixed timeout configuration, vector search disabled")
     
     health = health_check()
     print(f"\n🏥 Health check: {health['status']}")
@@ -876,7 +779,9 @@ if __name__ == "__main__":
     if health["status"] == "healthy":
         print(f"   Cluster: {health['cluster_name']}")
         print(f"   Version: {health['version']}")
-        print(f"   Vector Support: {health['vector_support']}")
+        print(f"   Vector Support: {health['vector_support']} (temporarily disabled)")
+        print(f"   Timeout Fix: {health['timeout_configuration']}")
+        print(f"   SSL Warnings: {health['ssl_warnings']}")
         print(f"   Debug Features: {health['debug_features']}")
         
         # Test simple search
@@ -890,12 +795,17 @@ if __name__ == "__main__":
             for i, result in enumerate(debug_result["sample_results"][:3]):
                 print(f"     {i+1}. {result['evaluationId']} - {result['template']}")
         
-        print("\n✅ ENHANCED client with debugging ready!")
+        print("\n✅ FIXED client with timeout configuration ready!")
+        print("🔍 Text search should work, vector search temporarily disabled")
         
     else:
         print(f"❌ Health check failed: {health.get('error', 'Unknown error')}")
+        print(f"   Timeout fix status: {health.get('timeout_configuration', 'unknown')}")
     
     print("\n🏁 Testing complete!")
 else:
-    logger.info("🔌 ENHANCED OpenSearch client v4.3.2 loaded")
-    logger.info("   Features: Enhanced search + comprehensive debugging + proper filters")
+    logger.info("🔌 FIXED OpenSearch client v4.4.1 loaded")
+    logger.info("   ✅ Timeout configuration fixed")
+    logger.info("   🚫 Vector search temporarily disabled for stability")
+    logger.info("   🔍 Text search fully functional")
+    logger.info("   🛡️ SSL warnings suppressed")

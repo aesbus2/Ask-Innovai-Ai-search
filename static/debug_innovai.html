@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metro AI Debug Endpoints - Browser Access</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f7fa;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #6e32a0 0%, #e20074 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .url-input {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            border: 2px solid #6e32a0;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            background: #f8f9fa;
+        }
+        .endpoint-section {
+            background: #f8f9fa;
+            border-left: 4px solid #6e32a0;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .endpoint-section h3 {
+            color: #6e32a0;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .endpoint-link {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 12px 20px;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 8px 8px 8px 0;
+            font-weight: 500;
+            transition: all 0.2s;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .endpoint-link:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+        .endpoint-link.dashboard {
+            background: #28a745;
+            font-size: 16px;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        .endpoint-link.dashboard:hover {
+            background: #1e7e34;
+        }
+        .endpoint-link.critical {
+            background: #dc3545;
+        }
+        .endpoint-link.critical:hover {
+            background: #c82333;
+        }
+        .steps {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .steps h4 {
+            color: #1565c0;
+            margin-top: 0;
+        }
+        .example {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        .icon {
+            font-size: 1.2em;
+        }
+        .copy-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .copy-btn:hover {
+            background: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌐 Metro AI Debug Endpoints - Browser Access</h1>
+            <p>Access all your debug endpoints directly in the browser - no command line needed!</p>
+        </div>
+
+        <div class="warning">
+            <strong>🔧 First: Enter Your Server URL</strong>
+            <p>Replace the placeholder below with your actual server address:</p>
+            <input type="text" class="url-input" id="serverUrl" value="http://localhost:8080" placeholder="http://your-server-url.com">
+            <p><small>Examples: http://localhost:8080, https://your-app.ondigitalocean.app, https://your-app.herokuapp.com</small></p>
+        </div>
+
+        <div class="steps">
+            <h4>📋 How to Use Debug Endpoints:</h4>
+            <ol>
+                <li><strong>Click any blue link below</strong> - it opens the endpoint in a new tab</li>
+                <li><strong>Look at the JSON response</strong> - it contains all the debugging info</li>
+                <li><strong>Start with dashboards</strong> - they provide clickable interfaces</li>
+                <li><strong>Follow the logical order</strong> - check data existence first, then search functionality</li>
+            </ol>
+        </div>
+
+        <div class="endpoint-section">
+            <h3><span class="icon">🎛️</span>Start Here: Interactive Dashboards</h3>
+            <p>These provide clickable interfaces for all debug functions:</p>
+            
+            <a href="#" class="endpoint-link dashboard" onclick="openEndpoint('/debug')">
+                🎯 Main Debug Dashboard
+            </a>
+            <a href="#" class="endpoint-link dashboard" onclick="openEndpoint('/debug_metadata')">
+                🔬 Metadata Debug Dashboard
+            </a>
+            
+            <div class="success">
+                <strong>💡 Recommended:</strong> Start with the Main Debug Dashboard - it has links to all other tests with explanations.
+            </div>
+        </div>
+
+        <div class="endpoint-section">
+            <h3><span class="icon">🏥</span>System Health & Status</h3>
+            <p>Check if your system is running properly:</p>
+            
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/health')">
+                /health
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/ping')">
+                /ping
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/status')">
+                /status
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/logs')">
+                /logs
+            </a>
+        </div>
+
+        <div class="endpoint-section">
+            <h3><span class="icon">📊</span>Data Verification</h3>
+            <p>Check if your evaluation data exists and is properly structured:</p>
+            
+            <a href="#" class="endpoint-link critical" onclick="openEndpoint('/opensearch_statistics')">
+                /opensearch_statistics
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/debug/opensearch_data')">
+                /debug/opensearch_data
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/debug/check_indices')">
+                /debug/check_indices
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/debug_filter_data')">
+                /debug_filter_data
+            </a>
+        </div>
+
+        <div class="endpoint-section">
+            <h3><span class="icon">🔍</span>Search Testing</h3>
+            <p>Test if search functionality works with your data:</p>
+            
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/debug/test_search?q=customer%20service')">
+                /debug/test_search?q=customer service
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/debug/test_filters')">
+                /debug/test_filters
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/search?q=customer%20service')">
+                /search?q=customer service
+            </a>
+        </div>
+
+        <div class="endpoint-section">
+            <h3><span class="icon">🎯</span>Metadata Alignment (CRITICAL for your issue)</h3>
+            <p>These are specifically for diagnosing metadata issues after updates:</p>
+            
+            <a href="#" class="endpoint-link critical" onclick="openEndpoint('/debug/verify_metadata_alignment')">
+                /debug/verify_metadata_alignment
+            </a>
+            <a href="#" class="endpoint-link critical" onclick="openEndpoint('/debug/test_disposition_search?query=call%20dispositions')">
+                /debug/test_disposition_search
+            </a>
+            <a href="#" class="endpoint-link critical" onclick="openEndpoint('/debug/simulate_disposition_query')">
+                /debug/simulate_disposition_query
+            </a>
+        </div>
+
+        <div class="endpoint-section">
+            <h3><span class="icon">💬</span>Chat System Testing</h3>
+            <p>Test if chat can build context from your data:</p>
+            
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/debug/test_chat_context?q=What%20are%20call%20dispositions')">
+                /debug/test_chat_context
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/debug/test_chat_full')">
+                /debug/test_chat_full (POST)
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/debug/test_chat_with_verification')">
+                /debug/test_chat_with_verification (POST)
+            </a>
+        </div>
+
+        <div class="endpoint-section">
+            <h3><span class="icon">🧹</span>Maintenance & Filters</h3>
+            <p>Clear caches and check filter options:</p>
+            
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/filter_options_metadata')">
+                /filter_options_metadata
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/check_field_availability')">
+                /check_field_availability
+            </a>
+            <a href="#" class="endpoint-link" onclick="openEndpoint('/clear_filter_cache')">
+                /clear_filter_cache (POST)
+            </a>
+        </div>
+
+        <div class="warning">
+            <h4>🚨 For "No Data" Issues - Check These in Order:</h4>
+            <ol>
+                <li><strong>/opensearch_statistics</strong> - Do you have any evaluations? (total_evaluations > 0)</li>
+                <li><strong>/debug/verify_metadata_alignment</strong> - Are dispositions/programs extracted correctly?</li>
+                <li><strong>/debug/test_search</strong> - Does basic search return results?</li>
+                <li><strong>/debug/test_chat_context</strong> - Can chat build context from your data?</li>
+            </ol>
+        </div>
+
+        <div class="endpoint-section">
+            <h3><span class="icon">📱</span>Test Your Actual Interface</h3>
+            <p>Once debug tests pass, test your real chat:</p>
+            
+            <a href="#" class="endpoint-link dashboard" onclick="openEndpoint('/chat')">
+                🗨️ Open Chat Interface
+            </a>
+            <a href="#" class="endpoint-link dashboard" onclick="openEndpoint('/')">
+                🏠 Admin Interface
+            </a>
+        </div>
+
+        <div class="example">
+            <strong>Example URLs (replace with your server):</strong>
+            <br>• Health check: https://your-app.herokuapp.com/health
+            <br>• Data stats: https://your-app.herokuapp.com/opensearch_statistics  
+            <br>• Metadata test: https://your-app.herokuapp.com/debug/verify_metadata_alignment
+            <br>• Search test: https://your-app.herokuapp.com/debug/test_search?q=customer%20service
+        </div>
+
+        <div class="success">
+            <h4>✅ What Good Results Look Like:</h4>
+            <ul>
+                <li><strong>/opensearch_statistics:</strong> "total_evaluations": 304 (not 0)</li>
+                <li><strong>/debug/verify_metadata_alignment:</strong> "dispositions_found": ["Account", "Technical", etc.] (not [])</li>
+                <li><strong>/debug/test_search:</strong> "total_results": 15 (not 0)</li>
+                <li><strong>/debug/test_chat_context:</strong> "context_found": true, "sources_count": 5</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function openEndpoint(path) {
+            const serverUrl = document.getElementById('serverUrl').value.trim();
+            const fullUrl = serverUrl + path;
+            window.open(fullUrl, '_blank');
+        }
+
+        // Update server URL in real-time for all links
+        document.getElementById('serverUrl').addEventListener('input', function() {
+            const serverUrl = this.value.trim();
+            // You could update the href attributes here if needed
+        });
+    </script>
+</body>
+</html>
