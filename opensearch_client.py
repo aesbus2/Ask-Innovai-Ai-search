@@ -399,7 +399,7 @@ def search_opensearch(query: str, index_override: str = None,
         response = client.search(
             index=index_pattern,
             body=search_body,
-            timeout="45s"
+            timeout=45
         )
         
         # STEP 6: Process results
