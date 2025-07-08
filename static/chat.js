@@ -46,6 +46,7 @@ const performanceMetrics = {
 // PRODUCTION INITIALIZATION
 // =============================================================================
 
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log("🚀 Metro AI Analytics v4.3.2 - Enhanced Production Chat Interface Starting...");
     
@@ -55,6 +56,8 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
         // Core initialization
         initializePage();
+
+         loadFormattingStyles();
         
         // Load real filter data with production error handling (non-blocking)
         setTimeout(() => {
@@ -324,6 +327,153 @@ function handleCriticalFilterError(error) {
     showCriticalError(`Critical system error: Unable to load filter data. ${getProductionErrorMessage(error)}`);
 }
 
+function loadFormattingStyles() {
+    const styleSheet = document.createElement('style');
+    styleSheet.textContent = `
+        /* Enhanced Response Formatting Styles */
+        .formatted-response {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        .formatted-response .response-h1 {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: #6e32a0;
+            margin: 1.2em 0 0.5em 0;
+            padding-bottom: 0.3em;
+            border-bottom: 2px solid #6e32a0;
+        }
+        
+        .formatted-response .response-h2 {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #6e32a0;
+            margin: 1em 0 0.4em 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        }
+        
+        .formatted-response .response-h3 {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #4a5568;
+            margin: 0.8em 0 0.3em 0;
+        }
+        
+        .formatted-response .response-paragraph {
+            margin: 0.6em 0;
+            line-height: 1.6;
+        }
+        
+        .formatted-response .response-bold {
+            font-weight: 600;
+            color: #2d3748;
+            background: rgba(110, 50, 160, 0.1);
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+        
+        .formatted-response .response-list {
+            margin: 0.8em 0;
+            padding-left: 0;
+            list-style: none;
+        }
+        
+        .formatted-response .response-list-item {
+            margin: 0.4em 0;
+            padding-left: 1.5em;
+            position: relative;
+            line-height: 1.5;
+        }
+        
+        .formatted-response .response-list-item::before {
+            content: "•";
+            color: #6e32a0;
+            font-weight: bold;
+            position: absolute;
+            left: 0.5em;
+        }
+        
+        .formatted-response .response-numbered-list {
+            margin: 0.8em 0;
+            padding-left: 2em;
+            counter-reset: item;
+        }
+        
+        .formatted-response .response-numbered-item {
+            margin: 0.4em 0;
+            counter-increment: item;
+            position: relative;
+            line-height: 1.5;
+        }
+        
+        .formatted-response .response-numbered-item::before {
+            content: counter(item) ".";
+            color: #6e32a0;
+            font-weight: bold;
+            position: absolute;
+            left: -2em;
+            width: 1.5em;
+            text-align: right;
+        }
+        
+        .formatted-response .response-divider {
+            border: none;
+            border-top: 2px solid #e2e8f0;
+            margin: 1.2em 0;
+        }
+        
+        /* Response Type Styling */
+        .data-analysis-response {
+            border-left: 4px solid #6e32a0;
+            padding-left: 1em;
+            background: linear-gradient(135deg, #f8f5ff 0%, #ffffff 100%);
+            border-radius: 0 8px 8px 0;
+            margin: 0.5em 0;
+        }
+        
+        .summary-response {
+            border-left: 4px solid #3182ce;
+            padding-left: 1em;
+            background: linear-gradient(135deg, #ebf8ff 0%, #ffffff 100%);
+            border-radius: 0 8px 8px 0;
+            margin: 0.5em 0;
+        }
+        
+        /* Enhanced Sources Container */
+        .sources-container {
+            margin-top: 1em;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .sources-container h4 {
+            background: linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%);
+            color: white;
+            margin: 0;
+            padding: 12px 16px;
+            font-size: 1em;
+        }
+        
+        .source-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .source-item:last-child {
+            border-bottom: none;
+        }
+    `;
+    
+    document.head.appendChild(styleSheet);
+    console.log("✅ Formatting styles loaded");
+}
+
 function showCriticalError(message) {
     // Create critical error overlay
     const errorOverlay = document.createElement('div');
@@ -469,6 +619,61 @@ function populateFilterOptions(data) {
         logProductionError('filter_population_error', error);
         throw error;
     }
+}
+
+function renderMarkdown(text) {
+    if (!text) return '';
+    
+    // Escape HTML first
+    let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    
+    // Headers
+    html = html.replace(/^### (.*$)/gm, '<h3 class="response-h3">$1</h3>');
+    html = html.replace(/^## (.*$)/gm, '<h2 class="response-h2">$1</h2>');
+    html = html.replace(/^# (.*$)/gm, '<h1 class="response-h1">$1</h1>');
+    
+    // Bold text
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="response-bold">$1</strong>');
+    
+    // Lists - handle bullet points
+    html = html.replace(/^• (.*$)/gm, '<li class="response-list-item">$1</li>');
+    html = html.replace(/^- (.*$)/gm, '<li class="response-list-item">$1</li>');
+    
+    // Numbered lists
+    html = html.replace(/^\d+\. (.*$)/gm, '<li class="response-numbered-item">$1</li>');
+    
+    // Wrap consecutive list items in ul/ol
+    html = html.replace(/((?:<li class="response-list-item">.*<\/li>\s*)+)/g, '<ul class="response-list">$1</ul>');
+    html = html.replace(/((?:<li class="response-numbered-item">.*<\/li>\s*)+)/g, '<ol class="response-numbered-list">$1</ol>');
+    
+    // Horizontal rules
+    html = html.replace(/^---$/gm, '<hr class="response-divider">');
+    
+    // Paragraphs - split by double newlines
+    const paragraphs = html.split(/\n\s*\n/);
+    html = paragraphs.map(p => {
+        p = p.trim();
+        if (!p) return '';
+        
+        // Don't wrap headers, lists, or other block elements in paragraphs
+        if (p.match(/^<(h[1-6]|ul|ol|pre|hr|div)/)) {
+            return p;
+        }
+        
+        return `<p class="response-paragraph">${p}</p>`;
+    }).join('\n\n');
+    
+    // Line breaks
+    html = html.replace(/\n/g, '<br>');
+    
+    // Clean up extra breaks around block elements
+    html = html.replace(/<br>\s*<(h[1-6]|ul|ol|pre|hr|div)/g, '<$1');
+    html = html.replace(/<\/(h[1-6]|ul|ol|pre|hr|div)>\s*<br>/g, '</$1>');
+    
+    return html;
 }
 
 function populateSelectOptionsWithRealData(selectId, options, categoryName) {
@@ -1049,7 +1254,23 @@ function createMessageElement(type, content) {
     
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
-    contentDiv.textContent = content;
+    
+    if (type === 'assistant') {
+        // Render markdown for assistant responses
+        const renderedContent = renderMarkdown(content);
+        contentDiv.innerHTML = renderedContent;
+        contentDiv.classList.add('formatted-response');
+        
+        // Add response type classes for styling
+        if (content.includes('📊 Data Analysis Results')) {
+            contentDiv.classList.add('data-analysis-response');
+        } else if (content.includes('📋 Summary')) {
+            contentDiv.classList.add('summary-response');
+        }
+    } else {
+        // Plain text for user messages and system messages
+        contentDiv.textContent = content;
+    }
     
     const metaDiv = document.createElement('div');
     metaDiv.className = 'message-meta';
