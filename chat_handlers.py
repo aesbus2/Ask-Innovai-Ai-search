@@ -38,121 +38,120 @@ GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 
 def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     """
-    CRITICAL FIX: Verify and extract actual metadata from sources to prevent fabricated data
-    FIXED: Correctly distinguishes between evaluations and chunks + Better metadata extraction
+    UPDATED: Simplified metadata verification focusing on 4 essential fields only
+    Fields: evaluationId, template_name, agentName, created_on
     """
     metadata_summary = {
+        # Keep existing structure for backward compatibility
         "dispositions": set(),
         "sub_dispositions": set(),
         "programs": set(),
         "partners": set(),
         "sites": set(),
         "lobs": set(),
-        "agents": set(),
+        "agents": set(),  # Focus on this for agentName
         "languages": set(),
         "call_dates": [],
-        "evaluation_ids": set(),  # Use set to track unique IDs
+        "evaluation_ids": set(),
         "has_real_data": False,
-        "total_evaluations": 0,  # Count unique evaluations
-        "total_chunks_found": 0,  # Count content pieces
-        "data_verification": "VERIFIED_REAL_DATA"
+        "total_evaluations": 0,
+        "total_chunks_found": 0,
+        "data_verification": "VERIFIED_REAL_DATA",
+        
+        # NEW: Essential fields tracking
+        "essential_fields": {
+            "evaluationId": set(),
+            "template_name": set(),
+            "agentName": set(),
+            "created_on": set()
+        }
     }
     
     seen_evaluation_ids = set()
     
     for source in sources:
         try:
-            metadata_summary["total_chunks_found"] += 1  # Count all content pieces
+            metadata_summary["total_chunks_found"] += 1
             
-            # FIXED: Better evaluation ID extraction
+            # Extract evaluation ID
             evaluation_id = None
-            source_data = source.get("_source", source)  # Handle both formats
+            source_data = source.get("_source", source)
             
-            # Try multiple fields for evaluation ID
             for id_field in ["evaluationId", "evaluation_id", "internalId", "internal_id"]:
                 if source_data.get(id_field):
                     evaluation_id = source_data[id_field]
                     break
-                # Also check in metadata
                 if source_data.get("metadata", {}).get(id_field):
                     evaluation_id = source_data["metadata"][id_field]
                     break
             
-            # Also try the source root level
             if not evaluation_id and source.get("evaluationId"):
                 evaluation_id = source.get("evaluationId")
             
             if evaluation_id and evaluation_id not in seen_evaluation_ids:
-                # This is a unique evaluation (not just another chunk)
                 seen_evaluation_ids.add(evaluation_id)
                 metadata_summary["total_evaluations"] += 1
                 metadata_summary["evaluation_ids"].add(evaluation_id)
+                metadata_summary["essential_fields"]["evaluationId"].add(evaluation_id)
                 
                 logger.info(f"🆔 Found unique evaluation: {evaluation_id}")
             
-            # FIXED: Better metadata extraction
-            # Try multiple sources for metadata
+            # Extract metadata with focus on essential fields
             metadata = {}
-            
-            # Source 1: metadata field in _source
             if source_data.get("metadata"):
                 metadata = source_data["metadata"]
-            
-            # Source 2: metadata field in root
             elif source.get("metadata"):
                 metadata = source["metadata"]
             
-            # Source 3: Direct fields in _source
-            elif source_data:
-                # Map direct fields to metadata structure
-                metadata = {
-                    "program": source_data.get("program"),
-                    "partner": source_data.get("partner"),
-                    "site": source_data.get("site"),
-                    "lob": source_data.get("lob"),
-                    "agent": source_data.get("agent") or source_data.get("agentName"),
-                    "disposition": source_data.get("disposition"),
-                    "sub_disposition": source_data.get("sub_disposition") or source_data.get("subDisposition"),
-                    "language": source_data.get("language"),
-                    "call_date": source_data.get("call_date"),
-                }
+            # Process essential fields
+            if evaluation_id:
+                metadata_summary["essential_fields"]["evaluationId"].add(evaluation_id)
             
-            if metadata:
+            # Template name
+            template_name = (source_data.get("template_name") or 
+                           source_data.get("templateName") or 
+                           metadata.get("template_name") or 
+                           "Unknown Template")
+            metadata_summary["essential_fields"]["template_name"].add(template_name)
+            
+            # Agent name
+            agent_name = (metadata.get("agent") or 
+                         metadata.get("agentName") or 
+                         source_data.get("agentName") or 
+                         "Unknown Agent")
+            metadata_summary["essential_fields"]["agentName"].add(agent_name)
+            metadata_summary["agents"].add(agent_name)  # Keep existing structure
+            
+            # Created on
+            created_on = (source_data.get("created_on") or 
+                         metadata.get("created_on") or 
+                         source_data.get("call_date") or 
+                         metadata.get("call_date") or 
+                         "Unknown Date")
+            metadata_summary["essential_fields"]["created_on"].add(created_on)
+            
+            # Keep existing metadata processing for backward compatibility
+            if metadata.get("disposition"):
+                metadata_summary["dispositions"].add(metadata["disposition"])
+            if metadata.get("sub_disposition"):
+                metadata_summary["sub_dispositions"].add(metadata["sub_disposition"])
+            if metadata.get("program"):
+                metadata_summary["programs"].add(metadata["program"])
+            if metadata.get("partner"):
+                metadata_summary["partners"].add(metadata["partner"])
+            if metadata.get("site"):
+                metadata_summary["sites"].add(metadata["site"])
+            if metadata.get("lob"):
+                metadata_summary["lobs"].add(metadata["lob"])
+            if metadata.get("language"):
+                metadata_summary["languages"].add(metadata["language"])
+            if metadata.get("call_date"):
+                metadata_summary["call_dates"].append(metadata["call_date"])
+                
+            # Mark as having real data if essential fields are present
+            if evaluation_id and template_name != "Unknown Template":
                 metadata_summary["has_real_data"] = True
                 
-                # Extract and log metadata values
-                if metadata.get("disposition"):
-                    metadata_summary["dispositions"].add(metadata["disposition"])
-                    logger.debug(f"   Disposition: {metadata['disposition']}")
-                
-                if metadata.get("sub_disposition"):
-                    metadata_summary["sub_dispositions"].add(metadata["sub_disposition"])
-                
-                if metadata.get("program"):
-                    metadata_summary["programs"].add(metadata["program"])
-                    logger.debug(f"   Program: {metadata['program']}")
-                
-                if metadata.get("partner"):
-                    metadata_summary["partners"].add(metadata["partner"])
-                    logger.debug(f"   Partner: {metadata['partner']}")
-                
-                if metadata.get("site"):
-                    metadata_summary["sites"].add(metadata["site"])
-                
-                if metadata.get("lob"):
-                    metadata_summary["lobs"].add(metadata["lob"])
-                
-                if metadata.get("agent"):
-                    metadata_summary["agents"].add(metadata["agent"])
-                
-                if metadata.get("language"):
-                    metadata_summary["languages"].add(metadata["language"])
-                
-                if metadata.get("call_date"):
-                    metadata_summary["call_dates"].append(metadata["call_date"])
-            else:
-                logger.warning(f"⚠️ No metadata found for source with ID: {evaluation_id}")
-                    
         except Exception as e:
             logger.error(f"Error processing source metadata: {e}")
             continue
@@ -163,22 +162,26 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     
     metadata_summary["evaluation_ids"] = list(metadata_summary["evaluation_ids"])
     
-    # FIXED: Add summary logging
-    logger.info(f"📊 METADATA SUMMARY:")
-    logger.info(f"   Total content chunks: {metadata_summary['total_chunks_found']}")
-    logger.info(f"   Unique evaluations: {metadata_summary['total_evaluations']}")
-    logger.info(f"   Programs found: {metadata_summary['programs']}")
-    logger.info(f"   Dispositions found: {metadata_summary['dispositions']}")
+    # Convert essential fields to lists
+    for field in metadata_summary["essential_fields"]:
+        metadata_summary["essential_fields"][field] = sorted(list(metadata_summary["essential_fields"][field]))
+    
+    # Enhanced logging for essential fields
+    logger.info(f"📊 SIMPLIFIED METADATA SUMMARY:")
+    logger.info(f"   Total evaluations: {metadata_summary['total_evaluations']}")
+    logger.info(f"   Total chunks: {metadata_summary['total_chunks_found']}")
+    logger.info(f"   Unique evaluation IDs: {len(metadata_summary['essential_fields']['evaluationId'])}")
+    logger.info(f"   Unique template names: {len(metadata_summary['essential_fields']['template_name'])}")
+    logger.info(f"   Unique agent names: {len(metadata_summary['essential_fields']['agentName'])}")
     logger.info(f"   Has real data: {metadata_summary['has_real_data']}")
     
     return metadata_summary
 
 # Also fix the build_strict_metadata_context function:
 
-def build_strict_metadata_context(metadata_summary: Dict[str, Any], query: str) -> str:
+def build_simplified_context(metadata_summary: Dict[str, Any], query: str) -> str:
     """
-    CRITICAL FIX: Build context that strictly enforces use of real metadata only
-    FIXED: Correctly reports 304 evaluations, not 1,202 chunks
+    UPDATED: Build context focusing on essential fields only
     """
     if not metadata_summary["has_real_data"]:
         return """
@@ -190,88 +193,28 @@ You must clearly state that no data is available and suggest:
 
 DO NOT GENERATE OR ESTIMATE ANY NUMBERS, DATES, OR STATISTICS.
 """
-    
-    context_parts = []
-    
-    # FIXED: Add data verification header with CORRECT counts
-    context_parts.append(f"""
-VERIFIED REAL DATA FROM EVALUATION DATABASE:
-Total unique evaluations found: {metadata_summary['total_evaluations']}
-Total content chunks analyzed: {metadata_summary['total_chunks_found']}
-Data verification status: {metadata_summary['data_verification']}
 
-CRITICAL COUNTING RULE:
-- Report EVALUATIONS ({metadata_summary['total_evaluations']}) not chunks ({metadata_summary['total_chunks_found']})
-- Each evaluation may have multiple content pieces, but count evaluations only
-- Your database has {metadata_summary['total_evaluations']} unique evaluations, NOT {metadata_summary['total_chunks_found']}
+    # Build context focusing on essential metadata
+    context = f"""
+VERIFIED EVALUATION DATA FOUND: {metadata_summary['total_evaluations']} unique evaluations from {metadata_summary['total_chunks_found']} content sources
 
-CRITICAL: Only use the specific values listed below. Do not estimate, extrapolate, or generate any data.
-""")
-    
-    # FIXED: Add specific metadata categories with counts
-    if metadata_summary["dispositions"]:
-        dispositions_list = "\n".join([f"- {disp}" for disp in metadata_summary["dispositions"]])
-        context_parts.append(f"""
-ACTUAL CALL DISPOSITIONS FOUND ({len(metadata_summary['dispositions'])} unique):
-{dispositions_list}
+ESSENTIAL METADATA AVAILABLE:
+- Evaluation IDs: {len(metadata_summary['essential_fields']['evaluationId'])} unique
+- Template Names: {metadata_summary['essential_fields']['template_name']}
+- Agent Names: {metadata_summary['essential_fields']['agentName']}
+- Date Range: {len(metadata_summary['essential_fields']['created_on'])} unique dates
 
-These dispositions appear across {metadata_summary['total_evaluations']} evaluations.
-""")
-    
-    if metadata_summary["programs"]:
-        programs_list = "\n".join([f"- {prog}" for prog in metadata_summary["programs"]])
-        context_parts.append(f"""
-ACTUAL PROGRAMS FOUND ({len(metadata_summary['programs'])} unique):
-{programs_list}
+CRITICAL INSTRUCTIONS:
+1. ONLY use data from the provided evaluation sources
+2. Focus on: evaluationId, template_name, agentName, created_on
+3. DO NOT generate percentages or statistics not directly calculable from the data
+4. Report on {metadata_summary['total_evaluations']} EVALUATIONS (not chunks)
+5. Use only the agent names found: {', '.join(metadata_summary['essential_fields']['agentName'][:10])}
 
-These programs represent {metadata_summary['total_evaluations']} total evaluations.
-""")
+DATA VERIFICATION STATUS: {metadata_summary['data_verification']}
+"""
     
-    if metadata_summary["partners"]:
-        partners_list = "\n".join([f"- {partner}" for partner in metadata_summary["partners"]])
-        context_parts.append(f"""
-ACTUAL PARTNERS FOUND ({len(metadata_summary['partners'])} unique):
-{partners_list}
-""")
-    
-    if metadata_summary["sites"]:
-        sites_list = "\n".join([f"- {site}" for site in metadata_summary["sites"]])
-        context_parts.append(f"""
-ACTUAL SITES FOUND ({len(metadata_summary['sites'])} unique):
-{sites_list}
-""")
-    
-    if metadata_summary["lobs"]:
-        lobs_list = "\n".join([f"- {lob}" for lob in metadata_summary["lobs"]])
-        context_parts.append(f"""
-ACTUAL LINES OF BUSINESS FOUND ({len(metadata_summary['lobs'])} unique):
-{lobs_list}
-""")
-    
-    if metadata_summary["call_dates"]:
-        # Get date range
-        dates = sorted(metadata_summary["call_dates"])
-        date_range = f"From {dates[0]} to {dates[-1]}" if len(dates) > 1 else f"Date: {dates[0]}"
-        context_parts.append(f"""
-ACTUAL DATE RANGE OF EVALUATIONS FOUND:
-{date_range}
-Total unique evaluations: {metadata_summary['total_evaluations']}
-""")
-    
-    # FIXED: Add strict instruction footer with correct counting
-    context_parts.append(f"""
-CRITICAL INSTRUCTIONS FOR RESPONSE:
-1. ONLY use the specific values listed above
-2. NEVER generate, estimate, or extrapolate data
-3. Report {metadata_summary['total_evaluations']} evaluations, NOT {metadata_summary['total_chunks_found']} chunks
-4. If asked for percentages, state you need to analyze individual evaluation records
-5. NEVER mention specific dates unless they appear in the actual data above
-6. Base all insights only on the verified real data shown above
-7. Your database contains {metadata_summary['total_evaluations']} unique evaluations
-""")
-    
-    return "\n".join(context_parts)
-
+    return context
 # =============================================================================
 # PYDANTIC INPUT SCHEMA
 # =============================================================================
@@ -318,6 +261,50 @@ def detect_report_query(query: str) -> bool:
         return True
     
     return False
+
+def create_simplified_source_info(doc: dict, evaluation_id: str, content_text: str, score: float, search_type: str) -> dict:
+    """
+    UPDATED: Create source info focusing on essential fields for frontend
+    """
+    metadata = doc.get("metadata", {})
+    
+    # Focus on essential fields for frontend
+    source_info = {
+        # Core identification
+        "evaluationId": evaluation_id,
+        "text": content_text,
+        "score": round(score, 3),
+        "search_type": search_type,
+        
+        # Essential fields for simplified display
+        "template_name": doc.get("template_name") or doc.get("templateName") or "Unknown Template",
+        "agentName": metadata.get("agent") or metadata.get("agentName") or "Unknown Agent",
+        "created_on": doc.get("created_on") or metadata.get("created_on") or doc.get("call_date") or metadata.get("call_date") or "Unknown Date",
+        
+        # Keep metadata structure for backward compatibility, but prioritize essential fields
+        "metadata": {
+            # Essential fields first
+            "agent": metadata.get("agent") or metadata.get("agentName") or "Unknown Agent",
+            "created_on": doc.get("created_on") or metadata.get("created_on") or doc.get("call_date") or metadata.get("call_date"),
+            
+            # Other fields for backward compatibility (but de-prioritized)
+            "program": metadata.get("program"),
+            "partner": metadata.get("partner"),
+            "site": metadata.get("site"),
+            "lob": metadata.get("lob"),
+            "disposition": metadata.get("disposition"),
+            "sub_disposition": metadata.get("sub_disposition"),
+            "language": metadata.get("language"),
+            "call_date": metadata.get("call_date"),
+            "call_duration": metadata.get("call_duration"),
+            "phone_number": metadata.get("phone_number"),
+            "contact_id": metadata.get("contact_id"),
+            "ucid": metadata.get("ucid"),
+            "call_type": metadata.get("call_type")
+        }
+    }
+    
+    return source_info
 
 
 def build_search_context(query: str, filters: dict, max_results: int = 100) -> tuple[str, List[dict]]:
@@ -471,7 +458,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> t
         
         if metadata_summary["has_real_data"]:
             # Build strict context with real metadata only
-            strict_context = build_strict_metadata_context(metadata_summary, query)
+            strict_context = build_simplified_context(metadata_summary, query)
             
             # Add sample content for context (but more of it now)
             if processed_sources:

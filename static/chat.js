@@ -547,7 +547,7 @@ function setFilterLoadingState(isLoading) {
                 const originalText = element.firstElementChild.textContent;
                 if (!originalText.includes('All')) {
                     element.firstElementChild.setAttribute('data-original', originalText);
-                    element.firstElementChild.textContent = originalText.replace('All ', 'Loading ') + '...';
+                    //element.firstElementChild.textContent = originalText.replace('All ', 'Loading ') + '...';
                 }
             }
         } else {
@@ -1368,6 +1368,87 @@ function updateSendButton() {
     }
 }
 
+// Helper function to extract only the 4 essential fields
+function createSimplifiedSourceMeta(source) {
+    const sourceData = source._source || source;
+    const metadata = sourceData.metadata || {};
+    
+    return {
+        evaluationId: sourceData.evaluationId || sourceData.evaluation_id || sourceData.internalId || 'Unknown',
+        template_name: sourceData.template_name || sourceData.templateName || 'Unknown Template',
+        agentName: metadata.agent || metadata.agentName || sourceData.agentName || 'Unknown Agent',
+        created_on: sourceData.created_on || metadata.created_on || sourceData.call_date || 'Unknown Date'
+    };
+}
+
+// Helper function to generate one-paragraph transcript preview
+function generateTranscriptPreview(source) {
+    const sourceData = source._source || source;
+    let transcriptText = sourceData.text || 
+                        sourceData.transcript_text || 
+                        sourceData.full_text || 
+                        sourceData.content || 
+                        '';
+    
+    if (!transcriptText) {
+        return 'No transcript available';
+    }
+    
+    // Remove HTML tags and normalize whitespace
+    const cleanText = transcriptText
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/\n+/g, ' ')
+        .trim();
+    
+    // Find natural breaking points (sentences)
+    const sentences = cleanText.split(/[.!?]+/).filter(s => s.trim());
+    let preview = '';
+    
+    // Build preview up to ~180 characters
+    for (let sentence of sentences) {
+        const trimmedSentence = sentence.trim();
+        if (trimmedSentence && (preview.length + trimmedSentence.length + 2) <= 180) {
+            preview += trimmedSentence + '. ';
+        } else if (preview.length > 0) {
+            break;
+        }
+    }
+    
+    // Fallback: if no complete sentences or still empty, truncate
+    if (preview.length === 0) {
+        preview = cleanText.substring(0, 180) + '...';
+    } else if (preview.length > 180) {
+        preview = preview.substring(0, 177) + '...';
+    }
+    
+    return preview;
+}
+
+// Helper function to format date for display
+function formatDisplayDate(dateString) {
+    if (!dateString || dateString === 'Unknown Date') {
+        return 'Unknown Date';
+    }
+    
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) {
+            return dateString;
+        }
+        
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch (error) {
+        return dateString;
+    }
+}
+
 function addSourcesMessage(sources) {
     if (!sources || sources.length === 0) return;
     
@@ -1376,19 +1457,25 @@ function addSourcesMessage(sources) {
     
     sourcesDiv.innerHTML = `
         <h4>📄 Sources (${sources.length})</h4>
-        ${sources.map((source, index) => `
-            <div class="source-item">
-                <div class="source-header">
-                    <div class="source-title">Source ${index + 1}: ${source.template_name || 'Unknown Template'}</div>
+        ${sources.map((source, index) => {
+            const simplifiedMeta = createSimplifiedSourceMeta(source);
+            const transcriptPreview = generateTranscriptPreview(source);
+            const formattedDate = formatDisplayDate(simplifiedMeta.created_on);
+            
+            return `
+                <div class="source-item">
+                    <div class="source-header">
+                        <div class="source-title">Source ${index + 1}: ${simplifiedMeta.template_name}</div>
+                    </div>
+                    <div class="source-meta">
+                        Evaluation ID: ${simplifiedMeta.evaluationId} | 
+                        Agent: ${simplifiedMeta.agentName} | 
+                        Created: ${formattedDate}
+                    </div>
+                    <div class="source-text">${transcriptPreview}</div>
                 </div>
-                <div class="source-meta">
-                    Evaluation ID: ${source.evaluationId || 'Unknown'} | 
-                    Program: ${source.metadata?.program || 'Unknown'} | 
-                    Agent: ${source.metadata?.agent || 'Unknown'}
-                </div>
-                <div class="source-text">${source.text || 'No content available'}</div>
-            </div>
-        `).join('')}
+            `;
+        }).join('')}
     `;
     
     if (currentSessionId) {
