@@ -333,7 +333,7 @@ function loadFormattingStyles() {
         /* Enhanced Response Formatting Styles */
         .formatted-response {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
+            line-height: 1.2;
             color: #333;
         }
         
@@ -407,7 +407,7 @@ function loadFormattingStyles() {
             margin: 0.4em 0;
             counter-increment: item;
             position: relative;
-            line-height: 1.5;
+            line-height: 1.2;
         }
         
         .formatted-response .response-numbered-item::before {

@@ -312,28 +312,23 @@
 
                         <div class="example-questions">
                             <div class="example-card"
-                                onclick="askQuestion('Show me all call dispositions and sub dispositions, include total number of calls, evaluation score averages, and coaching suggestions')">
-                                <h4>📊 Call Analysis</h4>
-                                <p>Analyze call dispositions, volumes, and performance patterns across your evaluation
+                                onclick="askQuestion('Review the overall tone, acknowledgement, empathy, and call ownership across agents.')">
+                                <h4>📊 Review Customer Service</h4>
+                                <p>Analyze basic customer service metrics and agent performance trends</p>
                                     data</p>
                             </div>
                             <div class="example-card"
-                                onclick="askQuestion('What are the call disposition patterns for calls longer than 90 seconds? Show trends and recommendations.')">
-                                <h4>📈 Performance Metrics</h4>
-                                <p>Deep dive into call duration analysis and performance optimization opportunities</p>
+                                onclick="askQuestion('Identify customer satisfaction or frustration, patterns in unresolved issues,and call sub-dispositions for transactions.')">
+                                <h4>📈 Resolution</h4>
+                                <p>Deep dive into call resolution analysis and performance optimization opportunities</p>
                             </div>
                             <div class="example-card"
-                                onclick="askQuestion('Find evaluations where agents scored less than 70% on their QA weighted score and provide coaching insights')">
+                                onclick="askQuestion('Identify at risk calls that require immediate action and provide coaching insights')">
                                 <h4>🔍 Quality Analysis</h4>
-                                <p>Identify coaching opportunities and performance improvement areas for quality
+                                <p>Identify low-scoring evaluations and suggest coaching or process
                                     enhancement</p>
                             </div>
-                            <div class="example-card"
-                                onclick="askQuestion('Compare performance between different sites for Account dispositions, show scores and provide a detailed summary of overall performance.')">
-                                <h4>🏢 Site Comparison</h4>
-                                <p>Cross-location performance analysis and operational benchmarking</p>
-                            </div>
-                        </div>
+                           </div>
                     </div>
 
                     <!-- Chat Messages -->
@@ -347,30 +342,22 @@
                     <h4>💡 Quick Analytics Questions</h4>
                     <div class="question-buttons">
                         <button class="question-btn"
-                            onclick="askQuestion('What are the most common call dispositions this week?')">
-                            Common dispositions
+                            onclick="askQuestion('show me all call that are less than 60 seconds')">
+                            Short Calls
                         </button>
                         <button class="question-btn"
-                            onclick="askQuestion('Show me the longest calls with their outcomes and patterns')">
-                            Longest calls analysis
+                            onclick="askQuestion('Show me the longest calls with their outcomes and patterns, and the call type')">
+                            Long Calls
                         </button>
                         <button class="question-btn"
-                            onclick="askQuestion('Which sites have the best performance metrics and what can others learn?')">
-                            Top performing sites
+                            onclick="askQuestion('Show me all the calls where the agent made a sales offer or account upgrade')">
+                            Sales opportunities
                         </button>
                         <button class="question-btn"
                             onclick="askQuestion('What patterns do we see for calls that require technical troubleshooting?')">
                             Troubleshooting patterns
                         </button>
-                        <button class="question-btn"
-                            onclick="askQuestion('Compare Metro vs T-Mobile Prepaid performance metrics and identify improvement opportunities')">
-                            Program comparison
-                        </button>
-                        <button class="question-btn"
-                            onclick="askQuestion('Show me quality trends over the last 30 days with actionable insights')">
-                            Quality trends
-                        </button>
-                    </div>
+                        </div>
                 </div>
 
                 <!-- Chat Input -->

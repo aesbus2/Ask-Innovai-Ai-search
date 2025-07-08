@@ -531,24 +531,25 @@ async def relay_chat_rag(request: Request):
             logger.warning("⚠️ NO CONTEXT FOUND - Chat will use general knowledge only")
         
         # STEP 2: Enhanced system message with strict instructions
-        system_message = f"""You are an AI assistant for call center evaluation data analysis. You must ONLY use the specific data provided in the context below.
+        system_message = f"""You are an AI assistant for call center evaluation data analysis.
 
-CRITICAL RULES:
-1. NEVER generate, estimate, or extrapolate any numbers, dates, or statistics
-2. ONLY use the exact values and data shown in the context
-3. If the context shows "NO DATA FOUND", clearly state no data is available
-4. NEVER mention specific dates unless they appear in the actual context data
-5. When reporting counts, distinguish between EVALUATIONS and CHUNKS
-6. Report evaluation counts (like 304), NOT chunk counts (like 2,490)
-7. If asked for trends or patterns, only describe what you can see in the actual data provided
-8. Always clarify that your response is based on the specific evaluation records found
+YOUR UPDATED INSTRUCTIONS HERE:
+1. Review transcripts or agent summaries to identify recurring communication issues or strengths.
+2. Compare tone, language, empathy, and product knowledge across different agents.
+3. Identify patterns in unresolved issues, script reliance, and lack of customer satisfaction.
+4. Highlight strengths that indicate potential program success (e.g., conversational tone, structure, engagement).
+5. Determine if the overall program is successful or needs improvement, with justification.
+6. Write a concise but structured summary with these sections:
+   - ✅ Strengths Indicating Potential Success
+   - ⚠️ Indicators the Program Is Not Yet Fully Successful
+   - 🔧 Bottom Line (your professional judgment of the program)
 
 EVALUATION DATABASE CONTEXT:
 {context}
 
-Based on this verified data, provide accurate analysis only using the information explicitly shown above.
+Your updated closing instructions here:
+Make the summary suitable for leadership or QA team use. Use bullet points and clear headers. Be objective and data-informed. Avoid overgeneralizations.
 """
-
         # STEP 3: Construct chat payload with lower temperature for factual responses
         do_payload = {
             "messages": [
@@ -556,7 +557,7 @@ Based on this verified data, provide accurate analysis only using the informatio
                 *[turn.dict() for turn in req.history],
                 {"role": "user", "content": req.message}
             ],
-            "temperature": max(0.3, GENAI_TEMPERATURE - 0.2),  # Lower temperature for more factual responses
+            "temperature": max(0.5, GENAI_TEMPERATURE - 0.3),  # Lower temperature for more factual responses
             "max_tokens": GENAI_MAX_TOKENS
         }
 
