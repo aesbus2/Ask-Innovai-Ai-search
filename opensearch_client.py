@@ -1,6 +1,6 @@
-# opensearch_client.py - COMPLETE FIXED VERSION
-# Version: 4.4.1 - Fixed timeout issues, disabled problematic vector search, enhanced error handling
-# FIXES: Timeout configuration, SSL warnings, vector search stability
+# opensearch_client.py - FIXED VERSION for Empty Search Results
+# Version: 4.5.0 - Fixed field mapping, robust search, better error handling
+# FIXES: Field existence checking, flexible search, comprehensive debugging
 
 import os
 import logging
@@ -20,9 +20,9 @@ except ImportError:
 # Setup logging
 logger = logging.getLogger(__name__)
 
-# Global vector support detection - TEMPORARILY DISABLED
-_vector_support_detected = False  # Disabled to prevent timeout errors
-_vector_support_tested = True     # Skip testing to avoid issues
+# Global vector support detection - DISABLED for stability
+_vector_support_detected = False
+_vector_support_tested = True
 
 # Global client instance
 _client = None
@@ -32,15 +32,12 @@ _client = None
 # =============================================================================
 
 def get_client():
-    """
-    FIXED: Get OpenSearch client with proper timeout configuration
-    """
+    """Get OpenSearch client with proper timeout configuration"""
     if not OPENSEARCH_AVAILABLE:
         logger.error("OpenSearch library not available")
         return None
     
     try:
-        # FIXED: Proper timeout parameter names and SSL configuration
         client = OpenSearch(
             hosts=[{
                 "host": os.getenv("OPENSEARCH_HOST"),
@@ -49,22 +46,18 @@ def get_client():
             http_auth=(os.getenv("OPENSEARCH_USER"), os.getenv("OPENSEARCH_PASS")),
             use_ssl=True,
             verify_certs=False,
-            # ✅ FIXED TIMEOUT CONFIGURATION:
-            request_timeout=30,         # Fixed: was timeout=30
-            connect_timeout=30,         # Fixed: was connection_timeout=30
+            request_timeout=30,
+            connect_timeout=30,
             max_retries=3,
             retry_on_timeout=True,
-            # ✅ SUPPRESS SSL WARNINGS:
-            ssl_show_warn=False,        # Added to reduce log noise
-            # ✅ ADDITIONAL STABILITY:
+            ssl_show_warn=False,
             pool_maxsize=20,
             http_compress=True
         )
         
-        # Test basic connection (without vector operations)
         test_result = client.ping()
         if test_result:
-            logger.info("✅ OpenSearch connection successful with fixed timeouts")
+            logger.info("✅ OpenSearch connection successful")
         else:
             logger.warning("⚠️ OpenSearch ping returned False")
         
@@ -99,38 +92,255 @@ def test_connection() -> bool:
         logger.error(f"❌ OpenSearch connection test failed: {e}")
         return False
 
-def get_opensearch_config():
-    """Get OpenSearch configuration for debugging"""
-    return {
-        "host": os.getenv("OPENSEARCH_HOST", "not_configured"),
-        "port": os.getenv("OPENSEARCH_PORT", "25060"),
-        "user": os.getenv("OPENSEARCH_USER", "not_configured"),
-        "ssl": True,
-        "verify_certs": False,
-        "timeout_fixed": True,
-        "ssl_warnings_suppressed": True
-    }
-
-def get_connection_status() -> Dict[str, Any]:
-    """Get connection status with timeout fix information"""
-    return {
-        "connected": test_connection(),
-        "host": os.getenv("OPENSEARCH_HOST"),
-        "port": os.getenv("OPENSEARCH_PORT", "25060"),
-        "user": os.getenv("OPENSEARCH_USER"),
-        "last_test": datetime.now().isoformat(),
-        "timeout_configuration": "fixed",
-        "ssl_warnings": "suppressed"
-    }
-
 # =============================================================================
-# ENHANCED SEARCH FUNCTIONS WITH FIXED TIMEOUT HANDLING
+# ENHANCED SEARCH FUNCTIONS - FIXED FOR FIELD EXISTENCE
 # =============================================================================
+
+def get_available_fields(client, index_pattern: str = "eval-*") -> Dict[str, List[str]]:
+    """
+    FIXED: Get actually available fields from index mappings
+    """
+    try:
+        # Get mappings for the index pattern
+        mappings_response = client.indices.get_mapping(index=index_pattern)
+        
+        available_fields = {
+            "text_fields": [],
+            "keyword_fields": [],
+            "nested_fields": [],
+            "metadata_fields": []
+        }
+        
+        for index_name, mapping_data in mappings_response.items():
+            properties = mapping_data.get("mappings", {}).get("properties", {})
+            
+            # Check top-level fields
+            for field_name, field_config in properties.items():
+                field_type = field_config.get("type", "")
+                
+                if field_type == "text":
+                    available_fields["text_fields"].append(field_name)
+                elif field_type == "keyword":
+                    available_fields["keyword_fields"].append(field_name)
+                elif field_type == "nested":
+                    available_fields["nested_fields"].append(field_name)
+                
+                # Check for text fields with keyword subfields
+                if "fields" in field_config:
+                    if "keyword" in field_config["fields"]:
+                        available_fields["keyword_fields"].append(f"{field_name}.keyword")
+                
+                # Check metadata fields
+                if field_name == "metadata" and "properties" in field_config:
+                    for meta_field in field_config["properties"].keys():
+                        available_fields["metadata_fields"].append(f"metadata.{meta_field}")
+                        if field_config["properties"][meta_field].get("fields", {}).get("keyword"):
+                            available_fields["metadata_fields"].append(f"metadata.{meta_field}.keyword")
+        
+        # Remove duplicates
+        for key in available_fields:
+            available_fields[key] = list(set(available_fields[key]))
+        
+        logger.info(f"📋 Available fields found:")
+        logger.info(f"   Text fields: {available_fields['text_fields'][:5]}...")
+        logger.info(f"   Keyword fields: {available_fields['keyword_fields'][:5]}...")
+        logger.info(f"   Nested fields: {available_fields['nested_fields']}")
+        logger.info(f"   Metadata fields: {available_fields['metadata_fields'][:5]}...")
+        
+        return available_fields
+        
+    except Exception as e:
+        logger.error(f"Failed to get available fields: {e}")
+        return {
+            "text_fields": [],
+            "keyword_fields": [],
+            "nested_fields": [],
+            "metadata_fields": []
+        }
+
+def build_flexible_search_query(query: str, available_fields: Dict[str, List[str]], 
+                               filters: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    FIXED: Build a flexible search query based on actually available fields
+    """
+    
+    # Build multi_match query with available text fields
+    text_fields = available_fields.get("text_fields", [])
+    
+    # Create field list with boosts, using only fields that exist
+    search_fields = []
+    
+    # Priority field mapping - only add if fields exist
+    field_priorities = [
+        ("full_text", 3.0),
+        ("evaluation_text", 2.5),
+        ("transcript_text", 2.0),
+        ("template_name", 1.5),
+        ("content", 1.8),
+        ("text", 1.5),
+        ("title", 1.3),
+        ("description", 1.0)
+    ]
+    
+    for field_name, boost in field_priorities:
+        if field_name in text_fields:
+            search_fields.append(f"{field_name}^{boost}")
+            logger.debug(f"Added search field: {field_name}^{boost}")
+    
+    # Add any other text fields we haven't covered
+    for field in text_fields:
+        field_with_boost = f"{field}^1.0"
+        if not any(field in existing_field for existing_field in search_fields):
+            search_fields.append(field_with_boost)
+    
+    # If no text fields found, use _all or a simple query
+    if not search_fields:
+        logger.warning("No text fields found, using simple query_string")
+        main_query = {
+            "query_string": {
+                "query": query,
+                "default_operator": "AND",
+                "fuzziness": "AUTO"
+            }
+        }
+    else:
+        main_query = {
+            "multi_match": {
+                "query": query,
+                "fields": search_fields,
+                "type": "best_fields",
+                "fuzziness": "AUTO",
+                "minimum_should_match": "75%"
+            }
+        }
+    
+    # Build nested queries for chunks if chunks field exists
+    should_queries = [main_query]
+    
+    if "chunks" in available_fields.get("nested_fields", []):
+        logger.info("📦 Found chunks field, adding nested query")
+        nested_query = {
+            "nested": {
+                "path": "chunks",
+                "query": {
+                    "multi_match": {
+                        "query": query,
+                        "fields": ["chunks.text^2", "chunks.content^1.5", "chunks.question^1.5", "chunks.answer^1.5"],
+                        "fuzziness": "AUTO"
+                    }
+                },
+                "score_mode": "max",
+                "inner_hits": {
+                    "size": 3,
+                    "_source": ["text", "content", "content_type"]
+                }
+            }
+        }
+        should_queries.append(nested_query)
+    
+    # Combine all queries
+    combined_query = {
+        "bool": {
+            "should": should_queries,
+            "minimum_should_match": 1
+        }
+    }
+    
+    # Add filters if provided
+    if filters and any(filters.values()):
+        filter_clauses = build_filter_clauses(filters, available_fields)
+        if filter_clauses:
+            combined_query["bool"]["filter"] = filter_clauses
+    
+    return combined_query
+
+def build_filter_clauses(filters: Dict[str, Any], available_fields: Dict[str, List[str]]) -> List[Dict[str, Any]]:
+    """
+    FIXED: Build filter clauses using only available fields
+    """
+    filter_clauses = []
+    metadata_fields = available_fields.get("metadata_fields", [])
+    keyword_fields = available_fields.get("keyword_fields", [])
+    
+    # Date filters
+    if filters.get("call_date_start") or filters.get("call_date_end"):
+        date_range = {}
+        if filters.get("call_date_start"):
+            date_range["gte"] = filters["call_date_start"]
+        if filters.get("call_date_end"):
+            date_range["lte"] = filters["call_date_end"]
+        
+        # Try different date field variations
+        date_fields = ["metadata.call_date", "call_date", "date"]
+        for date_field in date_fields:
+            if date_field in metadata_fields or date_field in keyword_fields:
+                filter_clauses.append({
+                    "range": {date_field: date_range}
+                })
+                logger.info(f"📅 Added date filter for field: {date_field}")
+                break
+    
+    # Keyword filters with flexible field matching
+    keyword_filter_mapping = {
+        "template_name": ["template_name.keyword", "template_name"],
+        "template_id": ["template_id", "template_id.keyword"],
+        "program": ["metadata.program.keyword", "metadata.program", "program.keyword", "program"],
+        "partner": ["metadata.partner.keyword", "metadata.partner", "partner.keyword", "partner"],
+        "site": ["metadata.site.keyword", "metadata.site", "site.keyword", "site"],
+        "lob": ["metadata.lob.keyword", "metadata.lob", "lob.keyword", "lob"],
+        "agent_name": ["metadata.agent.keyword", "metadata.agent", "agent.keyword", "agent"],
+        "agent": ["metadata.agent.keyword", "metadata.agent", "agent.keyword", "agent"],
+        "disposition": ["metadata.disposition.keyword", "metadata.disposition", "disposition.keyword", "disposition"],
+        "sub_disposition": ["metadata.sub_disposition.keyword", "metadata.sub_disposition", "sub_disposition.keyword", "sub_disposition"],
+        "language": ["metadata.language.keyword", "metadata.language", "language.keyword", "language"],
+        "call_type": ["metadata.call_type.keyword", "metadata.call_type", "call_type.keyword", "call_type"],
+        "phone_number": ["metadata.phone_number", "phone_number"],
+        "contact_id": ["metadata.contact_id", "contact_id"],
+        "ucid": ["metadata.ucid", "ucid"]
+    }
+    
+    for filter_key, possible_fields in keyword_filter_mapping.items():
+        filter_value = filters.get(filter_key)
+        if filter_value and str(filter_value).strip():
+            # Find the first available field from the list
+            available_field = None
+            for field in possible_fields:
+                if field in metadata_fields or field in keyword_fields:
+                    available_field = field
+                    break
+            
+            if available_field:
+                filter_clauses.append({
+                    "term": {available_field: filter_value}
+                })
+                logger.info(f"🏷️ Added filter: {filter_key}='{filter_value}' using field: {available_field}")
+            else:
+                logger.warning(f"⚠️ No available field found for filter: {filter_key}")
+    
+    # Duration filters
+    if filters.get("min_duration") or filters.get("max_duration"):
+        duration_range = {}
+        if filters.get("min_duration"):
+            duration_range["gte"] = int(filters["min_duration"])
+        if filters.get("max_duration"):
+            duration_range["lte"] = int(filters["max_duration"])
+        
+        # Try different duration field variations
+        duration_fields = ["metadata.call_duration", "call_duration", "duration"]
+        for duration_field in duration_fields:
+            if duration_field in metadata_fields or duration_field in keyword_fields:
+                filter_clauses.append({
+                    "range": {duration_field: duration_range}
+                })
+                logger.info(f"⏱️ Added duration filter for field: {duration_field}")
+                break
+    
+    return filter_clauses
 
 def search_opensearch(query: str, index_override: str = None, 
                      filters: Dict[str, Any] = None, size: int = 100) -> List[Dict]:
     """
-    ENHANCED: Search evaluations with increased default size (was 10, now 100)
+    FIXED: Search evaluations with flexible field detection and robust error handling
     """
     client = get_opensearch_client()
     if not client:
@@ -139,7 +349,7 @@ def search_opensearch(query: str, index_override: str = None,
     
     # Determine index pattern
     index_pattern = index_override or "eval-*"
-    logger.info(f"🔍 ENHANCED SEARCHING: index='{index_pattern}', query='{query}', size={size}")
+    logger.info(f"🔍 FLEXIBLE SEARCH: index='{index_pattern}', query='{query}', size={size}")
     logger.info(f"🏷️ FILTERS: {filters}")
     
     try:
@@ -152,188 +362,44 @@ def search_opensearch(query: str, index_override: str = None,
             logger.error(f"❌ NO INDICES FOUND for pattern '{index_pattern}': {e}")
             return []
         
-        # STEP 2: Build comprehensive search query (same as before, but with larger size)
+        # STEP 2: Get available fields from mappings
+        available_fields = get_available_fields(client, index_pattern)
         
-        # Base text query with multiple fields
-        text_query = {
-            "multi_match": {
-                "query": query,
-                "fields": [
-                    "full_text^3",           # Highest priority
-                    "evaluation_text^2",     # Second priority  
-                    "transcript_text^1.5",   # Third priority
-                    "template_name^2",       # Template names important
-                    "chunks.text^1.8",       # Chunk content
-                    "chunks.question^1.5",   # QA questions
-                    "chunks.answer^1.5",     # QA answers
-                    "metadata.disposition^1.2",
-                    "metadata.agent^1.1"
-                ],
-                "type": "best_fields",
-                "fuzziness": "AUTO",
-                "minimum_should_match": "75%"
-            }
-        }
+        # STEP 3: Build flexible search query based on available fields
+        search_query = build_flexible_search_query(query, available_fields, filters)
         
-        # Enhanced nested query for chunks
-        nested_query = {
-            "nested": {
-                "path": "chunks",
-                "query": {
-                    "bool": {
-                        "should": [
-                            {
-                                "multi_match": {
-                                    "query": query,
-                                    "fields": [
-                                        "chunks.text^2",
-                                        "chunks.question^1.5",
-                                        "chunks.answer^1.5"
-                                    ],
-                                    "fuzziness": "AUTO"
-                                }
-                            },
-                            {
-                                "match_phrase": {
-                                    "chunks.text": {
-                                        "query": query,
-                                        "boost": 2
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                },
-                "score_mode": "max",
-                "inner_hits": {
-                    "size": 3,
-                    "_source": ["text", "content_type"]
-                }
-            }
-        }
-        
-        # Combine queries
-        combined_query = {
-            "bool": {
-                "should": [text_query, nested_query],
-                "minimum_should_match": 1
-            }
-        }
-        
-        # STEP 3: Apply filters (same logic as before)
-        if filters and any(filters.values()):
-            logger.info(f"🔧 APPLYING FILTERS: {filters}")
-            filter_clauses = []
-            
-            # Date filters
-            if filters.get("call_date_start") or filters.get("call_date_end"):
-                date_range = {}
-                if filters.get("call_date_start"):
-                    date_range["gte"] = filters["call_date_start"]
-                if filters.get("call_date_end"):
-                    date_range["lte"] = filters["call_date_end"]
-                
-                filter_clauses.append({
-                    "range": {"metadata.call_date": date_range}
-                })
-                logger.info(f"📅 Date filter applied: {date_range}")
-            
-            # Enhanced keyword filters with fallbacks
-            keyword_filters = {
-                "template_name": ["template_name.keyword", "template_name"],
-                "template_id": ["template_id"],
-                "program": ["metadata.program.keyword", "metadata.program"],
-                "partner": ["metadata.partner.keyword", "metadata.partner"], 
-                "site": ["metadata.site.keyword", "metadata.site"],
-                "lob": ["metadata.lob.keyword", "metadata.lob"],
-                "agent_name": ["metadata.agent.keyword", "metadata.agent"],
-                "agent": ["metadata.agent.keyword", "metadata.agent"],
-                "disposition": ["metadata.disposition.keyword", "metadata.disposition"],
-                "sub_disposition": ["metadata.sub_disposition.keyword", "metadata.sub_disposition"],
-                "language": ["metadata.language.keyword", "metadata.language"],
-                "call_type": ["metadata.call_type.keyword", "metadata.call_type"],
-                "phone_number": ["metadata.phone_number"],
-                "contact_id": ["metadata.contact_id"],
-                "ucid": ["metadata.ucid"]
-            }
-            
-            for filter_key, field_paths in keyword_filters.items():
-                filter_value = filters.get(filter_key)
-                if filter_value and str(filter_value).strip():
-                    # Try multiple field paths (with and without .keyword)
-                    field_queries = []
-                    for field_path in field_paths:
-                        field_queries.append({"term": {field_path: filter_value}})
-                    
-                    if len(field_queries) == 1:
-                        filter_clauses.append(field_queries[0])
-                    else:
-                        filter_clauses.append({
-                            "bool": {
-                                "should": field_queries
-                            }
-                        })
-                    
-                    logger.info(f"🏷️ Filter applied: {filter_key}='{filter_value}' -> {field_paths}")
-            
-            # Duration filters
-            if filters.get("min_duration") or filters.get("max_duration"):
-                duration_range = {}
-                if filters.get("min_duration"):
-                    duration_range["gte"] = int(filters["min_duration"])
-                if filters.get("max_duration"):
-                    duration_range["lte"] = int(filters["max_duration"])
-                
-                filter_clauses.append({
-                    "range": {"metadata.call_duration": duration_range}
-                })
-                logger.info(f"⏱️ Duration filter applied: {duration_range}")
-            
-            # Apply filters to query
-            if filter_clauses:
-                combined_query["bool"]["filter"] = filter_clauses
-                logger.info(f"✅ TOTAL FILTERS APPLIED: {len(filter_clauses)}")
-        
-        # STEP 4: Build final search body with INCREASED SIZE
+        # STEP 4: Build final search body
         search_body = {
-            "query": combined_query,
-            "size": size,  # This is now much larger (100 instead of 10)
+            "query": search_query,
+            "size": size,
             "sort": [
-                {"_score": {"order": "desc"}},
-                {"metadata.call_date": {"order": "desc", "missing": "_last"}}
+                {"_score": {"order": "desc"}}
             ],
-            "highlight": {
-                "fields": {
-                    "full_text": {
-                        "fragment_size": 200,
-                        "number_of_fragments": 2
-                    },
-                    "evaluation_text": {
-                        "fragment_size": 200, 
-                        "number_of_fragments": 1
-                    },
-                    "chunks.text": {
-                        "fragment_size": 150,
-                        "number_of_fragments": 1
-                    }
-                }
-            },
-            "_source": {
-                "includes": [
-                    "evaluationId", "internalId", "template_id", "template_name",
-                    "full_text", "evaluation_text", "transcript_text",
-                    "total_chunks", "chunks", "metadata", "indexed_at"
-                ]
-            }
+            "_source": True  # Include all source fields
         }
+        
+        # Add highlighting for available text fields
+        text_fields = available_fields.get("text_fields", [])
+        if text_fields:
+            highlight_fields = {}
+            for field in text_fields[:5]:  # Limit to first 5 fields
+                highlight_fields[field] = {
+                    "fragment_size": 200,
+                    "number_of_fragments": 1
+                }
+            
+            search_body["highlight"] = {
+                "fields": highlight_fields
+            }
         
         # STEP 5: Execute search with detailed logging
-        logger.info(f"🚀 EXECUTING ENHANCED SEARCH with size={size}...")
+        logger.info(f"🚀 EXECUTING FLEXIBLE SEARCH...")
+        logger.debug(f"Search body: {json.dumps(search_body, indent=2)}")
         
         response = client.search(
             index=index_pattern,
             body=search_body,
-            timeout="45s"  # Increased timeout for larger results
+            timeout="45s"
         )
         
         # STEP 6: Process results
@@ -346,36 +412,42 @@ def search_opensearch(query: str, index_override: str = None,
         else:
             total_count = total_hits
         
-        logger.info(f"✅ ENHANCED SEARCH COMPLETED: {len(hits)} hits returned, {total_count} total matches")
+        logger.info(f"✅ FLEXIBLE SEARCH COMPLETED: {len(hits)} hits returned, {total_count} total matches")
         
-        # STEP 7: Build result objects (same as before)
+        # STEP 7: Build result objects with flexible field extraction
         results = []
         for i, hit in enumerate(hits):
             try:
                 source = hit.get("_source", {})
                 
+                # Flexible field extraction - try multiple field names
                 result = {
                     "_id": hit.get("_id"),
                     "_score": hit.get("_score", 0),
                     "_index": hit.get("_index"),
                     "_source": source,
                     
-                    # Key fields for easy access
-                    "evaluationId": source.get("evaluationId"),
-                    "internalId": source.get("internalId"),
-                    "template_id": source.get("template_id"),
-                    "template_name": source.get("template_name"),
-                    "total_chunks": source.get("total_chunks", 0),
+                    # Extract key fields with fallbacks
+                    "evaluationId": (source.get("evaluationId") or 
+                                   source.get("evaluation_id") or 
+                                   source.get("internalId") or 
+                                   source.get("id")),
+                    
+                    "template_name": (source.get("template_name") or 
+                                    source.get("templateName") or 
+                                    "Unknown Template"),
+                    
+                    "template_id": (source.get("template_id") or 
+                                  source.get("templateId") or 
+                                  source.get("template")),
+                    
+                    # Extract text content with multiple fallbacks
+                    "text": extract_text_content(source),
                     "metadata": source.get("metadata", {}),
                     
-                    # Content for context building
-                    "text": source.get("full_text", "")[:500],
-                    "full_text": source.get("full_text", ""),
-                    "evaluation_text": source.get("evaluation_text", ""),
-                    "transcript_text": source.get("transcript_text", ""),
+                    # Additional fields
+                    "total_chunks": source.get("total_chunks", 0),
                     "chunks": source.get("chunks", []),
-                    
-                    # Highlighting
                     "highlight": hit.get("highlight", {}),
                     "inner_hits": hit.get("inner_hits", {})
                 }
@@ -388,96 +460,183 @@ def search_opensearch(query: str, index_override: str = None,
             except Exception as e:
                 logger.error(f"❌ Failed to process hit {i}: {e}")
         
-        logger.info(f"🎯 ENHANCED SEARCH SUMMARY: {len(results)} processed results")
+        logger.info(f"🎯 FLEXIBLE SEARCH SUMMARY: {len(results)} processed results")
         return results
         
     except Exception as e:
-        logger.error(f"❌ ENHANCED SEARCH FAILED: {e}")
+        logger.error(f"❌ FLEXIBLE SEARCH FAILED: {e}")
         logger.error(f"🔍 Query: '{query}'")
         logger.error(f"🏷️ Filters: {filters}")
         logger.error(f"📍 Index: '{index_pattern}'")
         return []
 
-def search_vector(query_vector: List[float], index_override: str = None, 
-                 size: int = 10) -> List[Dict]:
+def extract_text_content(source: Dict[str, Any]) -> str:
     """
-    DISABLED: Vector search temporarily disabled to prevent timeout issues
+    FIXED: Extract text content with multiple fallback strategies
     """
-    logger.warning("🔮 Vector search temporarily disabled due to timeout configuration issues")
-    logger.info("💡 Using text search only until vector search is stabilized")
-    return []
+    # Try different text field names in order of preference
+    text_field_candidates = [
+        "full_text",
+        "evaluation_text", 
+        "transcript_text",
+        "content",
+        "text",
+        "description",
+        "summary"
+    ]
+    
+    for field_name in text_field_candidates:
+        if field_name in source and source[field_name]:
+            text_content = source[field_name]
+            if isinstance(text_content, str) and len(text_content.strip()) > 20:
+                return text_content[:500]  # Truncate for preview
+    
+    # Try to extract from chunks
+    chunks = source.get("chunks", [])
+    if chunks and isinstance(chunks, list):
+        chunk_texts = []
+        for chunk in chunks[:3]:  # First 3 chunks
+            if isinstance(chunk, dict):
+                chunk_text = (chunk.get("text") or 
+                            chunk.get("content") or 
+                            chunk.get("description"))
+                if chunk_text and isinstance(chunk_text, str):
+                    chunk_texts.append(chunk_text)
+        
+        if chunk_texts:
+            return "\n".join(chunk_texts)[:500]
+    
+    # Last resort: try any string field
+    for key, value in source.items():
+        if isinstance(value, str) and len(value.strip()) > 50:
+            return value[:500]
+    
+    return "No text content found"
 
 # =============================================================================
-# DEBUG FUNCTIONS WITH TIMEOUT FIXES
+# DEBUG FUNCTIONS WITH ENHANCED FIELD CHECKING
 # =============================================================================
 
 def debug_search_simple(query: str = "test") -> Dict[str, Any]:
     """
-    DEBUG: Simple search test with fixed timeouts
+    DEBUG: Simple search test with field detection
     """
     client = get_opensearch_client()
     if not client:
         return {"error": "No client available"}
     
     try:
+        # First, check what fields are available
+        available_fields = get_available_fields(client)
+        
         # Simple match_all query first
         response = client.search(
             index="eval-*",
             body={
                 "query": {"match_all": {}},
                 "size": 3,
-                "_source": ["evaluationId", "template_name", "metadata.program"]
+                "_source": True
             },
-            request_timeout=30  # ✅ FIXED timeout parameter
+            request_timeout=30
         )
         
         hits = response.get("hits", {}).get("hits", [])
         total = response.get("hits", {}).get("total", {})
         
+        # Analyze the structure of returned documents
+        sample_docs = []
+        for hit in hits:
+            source = hit.get("_source", {})
+            doc_analysis = {
+                "id": hit.get("_id"),
+                "index": hit.get("_index"),
+                "fields_present": list(source.keys()),
+                "has_metadata": "metadata" in source,
+                "has_chunks": "chunks" in source and isinstance(source.get("chunks"), list),
+                "text_fields_found": [k for k in source.keys() if isinstance(source.get(k), str) and len(source.get(k, "")) > 50]
+            }
+            sample_docs.append(doc_analysis)
+        
         return {
             "status": "success",
             "total_documents": total.get("value", 0) if isinstance(total, dict) else total,
-            "sample_results": [
-                {
-                    "id": hit.get("_id"),
-                    "evaluationId": hit.get("_source", {}).get("evaluationId"),
-                    "template": hit.get("_source", {}).get("template_name"),
-                    "program": hit.get("_source", {}).get("metadata", {}).get("program")
-                }
-                for hit in hits
-            ],
-            "timeout_fix": "applied"
+            "available_fields": available_fields,
+            "sample_documents": sample_docs,
+            "field_detection": "completed",
+            "recommendations": [
+                "Check if text_fields_found contains searchable content",
+                "Verify that metadata field exists if you need filtering",
+                "Look at fields_present to understand document structure"
+            ]
         }
         
     except Exception as e:
-        return {"error": str(e), "timeout_fix": "applied_but_failed"}
+        return {"error": str(e), "field_detection": "failed"}
+
+def debug_field_mappings(index_pattern: str = "eval-*") -> Dict[str, Any]:
+    """
+    DEBUG: Get detailed field mappings for troubleshooting
+    """
+    client = get_opensearch_client()
+    if not client:
+        return {"error": "No client available"}
+    
+    try:
+        mappings_response = client.indices.get_mapping(index=index_pattern)
+        
+        detailed_mappings = {}
+        for index_name, mapping_data in mappings_response.items():
+            properties = mapping_data.get("mappings", {}).get("properties", {})
+            
+            index_analysis = {
+                "total_fields": len(properties),
+                "field_details": {}
+            }
+            
+            for field_name, field_config in properties.items():
+                field_analysis = {
+                    "type": field_config.get("type", "unknown"),
+                    "searchable": field_config.get("type") in ["text", "keyword"],
+                    "has_keyword_subfield": "fields" in field_config and "keyword" in field_config.get("fields", {}),
+                    "is_nested": field_config.get("type") == "nested"
+                }
+                
+                if field_analysis["is_nested"] and "properties" in field_config:
+                    field_analysis["nested_fields"] = list(field_config["properties"].keys())
+                
+                index_analysis["field_details"][field_name] = field_analysis
+            
+            detailed_mappings[index_name] = index_analysis
+        
+        return {
+            "status": "success",
+            "mappings": detailed_mappings,
+            "troubleshooting_tips": [
+                "Look for 'searchable': true fields for text search",
+                "Check nested_fields for chunk-based search",
+                "Verify metadata field structure for filtering"
+            ]
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
 
 # =============================================================================
-# VECTOR SUPPORT FUNCTIONS - TEMPORARILY DISABLED
+# VECTOR SEARCH FUNCTIONS - STILL DISABLED
 # =============================================================================
+
+def search_vector(query_vector: List[float], index_override: str = None, 
+                 size: int = 10) -> List[Dict]:
+    """Vector search temporarily disabled"""
+    logger.warning("🔮 Vector search temporarily disabled")
+    return []
 
 def detect_vector_support(client) -> bool:
-    """
-    DISABLED: Vector support detection temporarily disabled to prevent timeout errors
-    """
-    global _vector_support_detected, _vector_support_tested
-    
-    # Force disable vector support to prevent timeout issues
-    _vector_support_detected = False
-    _vector_support_tested = True
-    
-    logger.info("🚫 Vector support temporarily disabled to prevent timeout errors")
-    logger.info("💡 Will re-enable after timeout configuration is fully stabilized")
-    
+    """Vector support detection disabled"""
     return False
 
-def get_vector_field_mapping(dimension: int = 384) -> Dict[str, Any]:
-    """Vector field mapping disabled"""
-    logger.warning("🚫 Vector field mapping disabled (vector support temporarily off)")
-    return None
-
 # =============================================================================
-# INDEX MANAGEMENT WITH TIMEOUT FIXES
+# INDEX MANAGEMENT AND DOCUMENT OPERATIONS
 # =============================================================================
 
 def ensure_evaluation_index_exists(client, index_name: str):
@@ -485,22 +644,22 @@ def ensure_evaluation_index_exists(client, index_name: str):
     if client.indices.exists(index=index_name):
         return
     
-    logger.info(f"🏗️ Creating index {index_name} (vector support disabled)")
+    logger.info(f"🏗️ Creating index {index_name}")
     
     chunk_properties = {
         "chunk_index": {"type": "integer"},
-        "text": {"type": "text", "analyzer": "evaluation_analyzer"},
+        "text": {"type": "text", "analyzer": "standard"},
+        "content": {"type": "text", "analyzer": "standard"},  # Added content field
         "content_type": {"type": "keyword"},
         "length": {"type": "integer"},
         "section": {"type": "keyword"},
-        "question": {"type": "text", "analyzer": "evaluation_analyzer"},
-        "answer": {"type": "text", "analyzer": "evaluation_analyzer"},
+        "question": {"type": "text", "analyzer": "standard"},
+        "answer": {"type": "text", "analyzer": "standard"},
         "qa_pair_index": {"type": "integer"},
         "speakers": {"type": "keyword"},
         "timestamps": {"type": "keyword"},
         "speaker_count": {"type": "integer"},
         "transcript_chunk_index": {"type": "integer"}
-        # Note: embedding fields omitted (vector support disabled)
     }
     
     mapping = {
@@ -509,87 +668,93 @@ def ensure_evaluation_index_exists(client, index_name: str):
             "number_of_replicas": 0,
             "analysis": {
                 "analyzer": {
-                    "evaluation_analyzer": {
-                        "type": "custom",
-                        "tokenizer": "standard",
-                        "filter": ["lowercase", "stop"]
+                    "standard_analyzer": {
+                        "type": "standard"
                     }
                 }
             }
         },
         "mappings": {
             "properties": {
+                # Primary identification fields
                 "evaluationId": {"type": "keyword"},
+                "evaluation_id": {"type": "keyword"},  # Alternative field name
                 "internalId": {"type": "keyword"},
                 "template_id": {"type": "keyword"},
-                "template_name": {"type": "text", "analyzer": "evaluation_analyzer", 
-                                "fields": {"keyword": {"type": "keyword"}}},
+                "template_name": {
+                    "type": "text", 
+                    "analyzer": "standard",
+                    "fields": {"keyword": {"type": "keyword"}}
+                },
                 
+                # Document metadata
                 "document_type": {"type": "keyword"},
                 "total_chunks": {"type": "integer"},
                 "evaluation_chunks_count": {"type": "integer"},
                 "transcript_chunks_count": {"type": "integer"},
                 
-                "full_text": {"type": "text", "analyzer": "evaluation_analyzer"},
-                "evaluation_text": {"type": "text", "analyzer": "evaluation_analyzer"},
-                "transcript_text": {"type": "text", "analyzer": "evaluation_analyzer"},
+                # Text content fields
+                "full_text": {"type": "text", "analyzer": "standard"},
+                "evaluation_text": {"type": "text", "analyzer": "standard"},
+                "transcript_text": {"type": "text", "analyzer": "standard"},
+                "content": {"type": "text", "analyzer": "standard"},  # Generic content field
+                "text": {"type": "text", "analyzer": "standard"},      # Simple text field
                 
+                # Nested chunks
                 "chunks": {
                     "type": "nested",
                     "properties": chunk_properties
                 },
                 
+                # Metadata with flexible field names
                 "metadata": {
                     "properties": {
                         "evaluationId": {"type": "keyword"},
                         "internalId": {"type": "keyword"},
                         "template_id": {"type": "keyword"},
                         "template_name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "program": {"type": "keyword"},
-                        "partner": {"type": "keyword"},
-                        "site": {"type": "keyword"},
-                        "lob": {"type": "keyword"},
+                        "program": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "partner": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "site": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "lob": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "agent": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "agent_id": {"type": "keyword"},
-                        "disposition": {"type": "keyword"},
-                        "sub_disposition": {"type": "keyword"},
-                        "language": {"type": "keyword"},
+                        "disposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "sub_disposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "language": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "call_date": {"type": "date"},
                         "call_duration": {"type": "integer"},
                         "created_on": {"type": "date"},
                         "phone_number": {"type": "keyword"},
                         "contact_id": {"type": "keyword"},
                         "ucid": {"type": "keyword"},
-                        "call_type": {"type": "keyword"}
+                        "call_type": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                     }
                 },
                 
+                # Additional fields
                 "source": {"type": "keyword"},
                 "indexed_at": {"type": "date"},
                 "collection_name": {"type": "keyword"},
-                "collection_source": {"type": "keyword"},
                 "_structure_version": {"type": "keyword"},
-                "_document_type": {"type": "keyword"},
                 "version": {"type": "keyword"}
             }
         }
     }
     
-    # Note: No document-level embedding field (vector support disabled)
-    
     try:
         client.indices.create(
             index=index_name, 
             body=mapping, 
-            request_timeout=60  # ✅ FIXED timeout parameter
+            request_timeout=60
         )
-        logger.info(f"✅ Created evaluation index (TEXT ONLY): {index_name}")
+        logger.info(f"✅ Created evaluation index: {index_name}")
     except Exception as e:
         logger.error(f"❌ Failed to create index {index_name}: {e}")
         raise
 
 def index_document(doc_id: str, document: Dict[str, Any], index_override: str = None) -> bool:
-    """Index evaluation document with fixed timeout and no vector fields"""
+    """Index evaluation document with fixed timeout"""
     client = get_opensearch_client()
     if not client:
         logger.error("❌ OpenSearch client not available")
@@ -600,58 +765,26 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
     try:
         ensure_evaluation_index_exists(client, index_name)
         
-        # Remove any vector fields from document (since vector support disabled)
-        clean_document = remove_vector_fields(document)
-        
-        clean_document["_indexed_at"] = datetime.now().isoformat()
-        clean_document["_structure_version"] = "4.4.1_timeout_fixed"
-        clean_document["_document_type"] = "evaluation_grouped_text_only"
+        document["_indexed_at"] = datetime.now().isoformat()
+        document["_structure_version"] = "4.5.0_fixed_search"
         
         response = client.index(
             index=index_name,
             id=doc_id,
-            body=clean_document,
+            body=document,
             refresh=True,
-            request_timeout=60  # ✅ FIXED timeout parameter
+            request_timeout=60
         )
         
-        logger.info(f"✅ Indexed evaluation {doc_id} in {index_name} (TEXT ONLY)")
-        
+        logger.info(f"✅ Indexed evaluation {doc_id} in {index_name}")
         return True
         
     except Exception as e:
         logger.error(f"❌ Failed to index evaluation {doc_id}: {e}")
         return False
 
-def remove_vector_fields(document: Dict[str, Any]) -> Dict[str, Any]:
-    """Remove all vector/embedding fields from document"""
-    import copy
-    clean_doc = copy.deepcopy(document)
-    
-    vector_fields_to_remove = [
-        "document_embedding",
-        "embedding", 
-        "vector",
-        "embeddings"
-    ]
-    
-    for field in vector_fields_to_remove:
-        if field in clean_doc:
-            del clean_doc[field]
-            logger.debug(f"🧹 Removed vector field: {field}")
-    
-    if "chunks" in clean_doc and isinstance(clean_doc["chunks"], list):
-        for chunk in clean_doc["chunks"]:
-            if isinstance(chunk, dict):
-                for field in vector_fields_to_remove:
-                    if field in chunk:
-                        del chunk[field]
-                        logger.debug(f"🧹 Removed vector field from chunk: {field}")
-    
-    return clean_doc
-
 def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
-    """Get a specific evaluation document by ID with fixed timeout"""
+    """Get a specific evaluation document by ID"""
     client = get_opensearch_client()
     if not client:
         return None
@@ -660,10 +793,18 @@ def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
         response = client.search(
             index="eval-*",
             body={
-                "query": {"term": {"evaluationId": evaluation_id}},
+                "query": {
+                    "bool": {
+                        "should": [
+                            {"term": {"evaluationId": evaluation_id}},
+                            {"term": {"evaluation_id": evaluation_id}},
+                            {"term": {"internalId": evaluation_id}}
+                        ]
+                    }
+                },
                 "size": 1
             },
-            request_timeout=10  # ✅ FIXED timeout parameter
+            request_timeout=10
         )
         
         hits = response.get("hits", {}).get("hits", [])
@@ -674,24 +815,31 @@ def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
         return None
 
 # =============================================================================
-# HEALTH CHECK WITH TIMEOUT FIX STATUS
+# HEALTH CHECK AND STATUS FUNCTIONS
 # =============================================================================
 
 def health_check() -> Dict[str, Any]:
-    """Health check with timeout fix and vector status information"""
+    """Health check with field detection status"""
     try:
         client = get_opensearch_client()
         
         if not client:
             return {
                 "status": "not_configured",
-                "message": "Could not create OpenSearch client",
-                "provider": "unknown",
-                "timeout_fix": "applied_but_client_creation_failed"
+                "message": "Could not create OpenSearch client"
             }
         
         if test_connection():
             info = client.info()
+            
+            # Test field detection
+            try:
+                available_fields = get_available_fields(client)
+                field_detection_status = "working"
+                searchable_fields_count = len(available_fields.get("text_fields", []))
+            except Exception as e:
+                field_detection_status = f"failed: {str(e)}"
+                searchable_fields_count = 0
             
             return {
                 "status": "healthy",
@@ -700,36 +848,59 @@ def health_check() -> Dict[str, Any]:
                 "version": info.get("version", {}).get("number", "Unknown"),
                 "host": os.getenv("OPENSEARCH_HOST"),
                 "port": os.getenv("OPENSEARCH_PORT", "25060"),
-                "user": os.getenv("OPENSEARCH_USER"),
-                "structure_version": "4.4.1_timeout_fixed",
-                "document_structure": "evaluation_grouped_text_only",
-                "auth_method": "fixed_timeout_configuration",
+                "field_detection": field_detection_status,
+                "searchable_fields_found": searchable_fields_count,
+                "search_type": "flexible_field_based",
+                "structure_version": "4.5.0_fixed_search",
                 "vector_support": False,
-                "vector_status": "temporarily_disabled_for_stability",
-                "search_type": "text_only",
-                "timeout_configuration": "fixed",
-                "ssl_warnings": "suppressed",
-                "debug_features": "enabled"
+                "fixes_applied": [
+                    "flexible_field_detection",
+                    "robust_search_queries", 
+                    "multiple_field_fallbacks",
+                    "enhanced_error_handling"
+                ]
             }
         else:
             return {
                 "status": "unhealthy",
                 "connected": False,
-                "error": "Connection test failed",
-                "host": os.getenv("OPENSEARCH_HOST"),
-                "port": os.getenv("OPENSEARCH_PORT", "25060"),
-                "user": os.getenv("OPENSEARCH_USER"),
-                "timeout_configuration": "fixed_but_connection_failed",
-                "vector_support": None
+                "error": "Connection test failed"
             }
             
     except Exception as e:
         return {
             "status": "error",
-            "error": str(e),
-            "timeout_configuration": "fixed_but_error_occurred",
-            "vector_support": None
+            "error": str(e)
         }
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
+def get_opensearch_config():
+    """Get OpenSearch configuration for debugging"""
+    return {
+        "host": os.getenv("OPENSEARCH_HOST", "not_configured"),
+        "port": os.getenv("OPENSEARCH_PORT", "25060"),
+        "user": os.getenv("OPENSEARCH_USER", "not_configured"),
+        "ssl": True,
+        "verify_certs": False,
+        "fixes_applied": [
+            "flexible_field_detection",
+            "robust_search_queries"
+        ]
+    }
+
+def get_connection_status() -> Dict[str, Any]:
+    """Get connection status with field detection info"""
+    return {
+        "connected": test_connection(),
+        "host": os.getenv("OPENSEARCH_HOST"),
+        "port": os.getenv("OPENSEARCH_PORT", "25060"),
+        "user": os.getenv("OPENSEARCH_USER"),
+        "last_test": datetime.now().isoformat(),
+        "search_improvements": "flexible_field_based_search_implemented"
+    }
 
 def get_opensearch_manager():
     """Get manager for compatibility"""
@@ -745,22 +916,6 @@ def get_opensearch_manager():
     
     return SimpleManager()
 
-def get_opensearch_stats() -> Dict[str, Any]:
-    """Get OpenSearch statistics with timeout fix information"""
-    client = get_opensearch_client()
-    
-    return {
-        "connected": test_connection(),
-        "structure_version": "4.4.1_timeout_fixed",
-        "auth_method": "fixed_timeout_configuration",
-        "client_type": "enhanced_opensearch_2x_text_only",
-        "vector_support": False,
-        "vector_status": "temporarily_disabled_for_stability",
-        "timeout_configuration": "fixed",
-        "ssl_warnings": "suppressed",
-        "debug_features": "enabled"
-    }
-
 # =============================================================================
 # MAIN EXECUTION AND TESTING
 # =============================================================================
@@ -768,8 +923,8 @@ def get_opensearch_stats() -> Dict[str, Any]:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
-    print("🧪 Testing FIXED OpenSearch Client v4.4.1")
-    print("✅ Expected: Fixed timeout configuration, vector search disabled")
+    print("🧪 Testing FIXED OpenSearch Client v4.5.0")
+    print("✅ Expected: Flexible field detection, robust search, no empty results")
     
     health = health_check()
     print(f"\n🏥 Health check: {health['status']}")
@@ -777,33 +932,38 @@ if __name__ == "__main__":
     if health["status"] == "healthy":
         print(f"   Cluster: {health['cluster_name']}")
         print(f"   Version: {health['version']}")
-        print(f"   Vector Support: {health['vector_support']} (temporarily disabled)")
-        print(f"   Timeout Fix: {health['timeout_configuration']}")
-        print(f"   SSL Warnings: {health['ssl_warnings']}")
-        print(f"   Debug Features: {health['debug_features']}")
+        print(f"   Field Detection: {health['field_detection']}")
+        print(f"   Searchable Fields: {health['searchable_fields_found']}")
+        
+        # Test field mappings
+        print("\n🔍 Testing field mappings...")
+        debug_result = debug_field_mappings()
+        if debug_result.get("status") == "success":
+            print("   Field mappings loaded successfully")
+            for index_name, analysis in debug_result["mappings"].items():
+                print(f"   Index {index_name}: {analysis['total_fields']} fields")
         
         # Test simple search
-        print("\n🔍 Testing simple search...")
-        debug_result = debug_search_simple()
-        print(f"   Status: {debug_result.get('status', 'failed')}")
-        print(f"   Total docs: {debug_result.get('total_documents', 0)}")
+        print("\n🔍 Testing flexible search...")
+        search_result = debug_search_simple()
+        print(f"   Status: {search_result.get('status', 'failed')}")
+        print(f"   Total docs: {search_result.get('total_documents', 0)}")
         
-        if debug_result.get("sample_results"):
-            print("   Sample results:")
-            for i, result in enumerate(debug_result["sample_results"][:3]):
-                print(f"     {i+1}. {result['evaluationId']} - {result['template']}")
+        if search_result.get("available_fields"):
+            fields = search_result["available_fields"]
+            print(f"   Text fields available: {len(fields.get('text_fields', []))}")
+            print(f"   Sample text fields: {fields.get('text_fields', [])[:3]}")
         
-        print("\n✅ FIXED client with timeout configuration ready!")
-        print("🔍 Text search should work, vector search temporarily disabled")
+        print("\n✅ FIXED client with flexible search ready!")
+        print("🔍 Should now find content regardless of field names")
         
     else:
         print(f"❌ Health check failed: {health.get('error', 'Unknown error')}")
-        print(f"   Timeout fix status: {health.get('timeout_configuration', 'unknown')}")
     
     print("\n🏁 Testing complete!")
 else:
-    logger.info("🔌 FIXED OpenSearch client v4.4.1 loaded")
-    logger.info("   ✅ Timeout configuration fixed")
-    logger.info("   🚫 Vector search temporarily disabled for stability")
-    logger.info("   🔍 Text search fully functional")
-    logger.info("   🛡️ SSL warnings suppressed")
+    logger.info("🔌 FIXED OpenSearch client v4.5.0 loaded")
+    logger.info("   ✅ Flexible field detection implemented")
+    logger.info("   ✅ Robust search queries with fallbacks")
+    logger.info("   ✅ Multiple field name support")
+    logger.info("   🔍 Should resolve empty search results")
