@@ -437,10 +437,6 @@ INSTRUCTIONS:
 
 @chat_router.post("/chat")
 async def relay_chat_rag(request: Request):
-
-    is_report_request = detect_report_query(req.message)
-    logger.info(f"📊 REPORT REQUEST DETECTED: {is_report_request}")
-    
     start_time = time.time()
     try:
         body = await request.json()
@@ -448,6 +444,9 @@ async def relay_chat_rag(request: Request):
 
         logger.info(f"💬 CHAT REQUEST WITH METADATA VERIFICATION: {req.message[:60]}")
         logger.info(f"🔎 FILTERS RECEIVED: {req.filters}")
+
+        is_report_request = detect_report_query(req.message)
+        logger.info(f"📊 REPORT REQUEST DETECTED: {is_report_request}")
 
         # STEP 1: Build context with strict metadata verification (WITH DEBUGGING)
         context, sources = build_search_context(req.message, req.filters)
