@@ -2197,24 +2197,195 @@ async def get_logs():
         "version": "4.2.0_production"
     }
 
+# Fix for app.py - Replace the analytics_stats function
+
 @app.post("/analytics/stats")
 async def analytics_stats(request: dict):
-    """PRODUCTION: Get analytics statistics with filtering"""
+    """
+    FIXED: Get analytics statistics showing CORRECT evaluation counts (not chunks)
+    """
     try:
         filters = request.get("filters", {})
         
-        # For production, return actual count based on filter options
+        from opensearch_client import get_opensearch_client, test_connection
+        
+        if not test_connection():
+            return {
+                "status": "error", 
+                "error": "OpenSearch not available",
+                "totalRecords": 0
+            }
+        
+        client = get_opensearch_client()
+        
+        # Build filter query for counting
+        filter_query = {"match_all": {}}
+        if filters:
+            filter_clauses = []
+            
+            # Date filters
+            if filters.get("call_date_start") or filters.get("call_date_end"):
+                date_range = {}
+                if filters.get("call_date_start"):
+                    date_range["gte"] = filters["call_date_start"]
+                if filters.get("call_date_end"):
+                    date_range["lte"] = filters["call_date_end"]
+                filter_clauses.append({"range": {"metadata.call_date": date_range}})
+            
+            # Keyword filters
+            keyword_filters = {
+                "template_name": "template_name.keyword",
+                "program": "metadata.program.keyword", 
+                "partner": "metadata.partner.keyword",
+                "site": "metadata.site.keyword",
+                "lob": "metadata.lob.keyword",
+                "agent": "metadata.agent.keyword",
+                "disposition": "metadata.disposition.keyword",
+                "sub_disposition": "metadata.sub_disposition.keyword",
+                "language": "metadata.language.keyword"
+            }
+            
+            for filter_key, field_path in keyword_filters.items():
+                filter_value = filters.get(filter_key)
+                if filter_value and str(filter_value).strip():
+                    filter_clauses.append({"term": {field_path: filter_value}})
+            
+            # Duration filters
+            if filters.get("min_duration") or filters.get("max_duration"):
+                duration_range = {}
+                if filters.get("min_duration"):
+                    duration_range["gte"] = int(filters["min_duration"])
+                if filters.get("max_duration"):
+                    duration_range["lte"] = int(filters["max_duration"])
+                filter_clauses.append({"range": {"metadata.call_duration": duration_range}})
+            
+            if filter_clauses:
+                filter_query = {"bool": {"filter": filter_clauses}}
+        
+        # FIXED: Count unique evaluations, not documents/chunks
+        response = client.search(
+            index="eval-*",
+            body={
+                "size": 0,  # Don't return documents, just count
+                "query": filter_query
+            }
+        )
+        
+        # Get total count (this represents unique evaluations since we store 1 doc per evaluation)
+        total_hits = response.get("hits", {}).get("total", {})
+        if isinstance(total_hits, dict):
+            total_evaluations = total_hits.get("value", 0)
+        else:
+            total_evaluations = total_hits
+        
+        logger.info(f"📊 ANALYTICS STATS: {total_evaluations} evaluations match filters: {filters}")
+        
         return {
             "status": "success",
-            "totalRecords": 1200 + len(str(filters)),
+            "totalRecords": total_evaluations,  # This is now correct
             "filters_applied": filters,
             "timestamp": datetime.now().isoformat(),
-            "version": "4.2.0_production"
+            "data_type": "unique_evaluations",  # Clarify what we're counting
+            "version": "4.4.0_fixed_counting"
         }
+        
     except Exception as e:
+        logger.error(f"Analytics stats error: {e}")
         return {
             "status": "error",
-            "error": str(e)
+            "error": str(e),
+            "totalRecords": 0,
+            "filters_applied": filters
+        }
+# Add this debug endpoint to your app.py to test metadata extraction
+
+@app.get("/debug/test_metadata_extraction")
+async def debug_test_metadata_extraction():
+    """
+    DEBUG: Test metadata extraction from search results to verify it's working
+    """
+    try:
+        from opensearch_client import search_opensearch
+        from chat_handlers import verify_metadata_alignment
+        
+        # Get some sample search results
+        logger.info("🔍 Testing metadata extraction with sample search...")
+        
+        # Search for something that should return results
+        results = search_opensearch("customer service", size=5)
+        
+        if not results:
+            return {
+                "status": "warning",
+                "message": "No search results found - check if data is imported",
+                "sample_results": [],
+                "metadata_test": "no_data_to_test"
+            }
+        
+        # Test metadata extraction
+        logger.info(f"📊 Testing metadata extraction on {len(results)} search results...")
+        metadata_summary = verify_metadata_alignment(results)
+        
+        # Analyze the first few results in detail
+        detailed_analysis = []
+        for i, result in enumerate(results[:3]):
+            source = result.get("_source", result)
+            
+            analysis = {
+                "result_index": i + 1,
+                "has_source": "_source" in result,
+                "source_keys": list(source.keys()) if source else [],
+                "evaluation_id_sources": {
+                    "evaluationId": source.get("evaluationId"),
+                    "evaluation_id": source.get("evaluation_id"), 
+                    "internalId": source.get("internalId"),
+                    "metadata.evaluationId": source.get("metadata", {}).get("evaluationId") if source.get("metadata") else None
+                },
+                "metadata_structure": {
+                    "has_metadata_field": "metadata" in source,
+                    "metadata_keys": list(source.get("metadata", {}).keys()) if source.get("metadata") else [],
+                    "metadata_values": {
+                        "program": source.get("metadata", {}).get("program"),
+                        "partner": source.get("metadata", {}).get("partner"),
+                        "site": source.get("metadata", {}).get("site"),
+                        "lob": source.get("metadata", {}).get("lob"),
+                        "agent": source.get("metadata", {}).get("agent"),
+                        "disposition": source.get("metadata", {}).get("disposition")
+                    } if source.get("metadata") else {}
+                },
+                "index": result.get("_index"),
+                "id": result.get("_id"),
+                "score": result.get("_score")
+            }
+            detailed_analysis.append(analysis)
+        
+        return {
+            "status": "success",
+            "search_results_count": len(results),
+            "metadata_summary": {
+                "total_chunks_found": metadata_summary["total_chunks_found"],
+                "total_evaluations": metadata_summary["total_evaluations"],
+                "has_real_data": metadata_summary["has_real_data"],
+                "programs_found": metadata_summary["programs"],
+                "dispositions_found": metadata_summary["dispositions"],
+                "evaluation_ids_found": len(metadata_summary["evaluation_ids"])
+            },
+            "detailed_analysis": detailed_analysis,
+            "recommendations": [
+                "Check if 'has_real_data' is True",
+                "Verify that evaluation_ids_found > 0", 
+                "Ensure programs_found and dispositions_found are not empty",
+                "Look at detailed_analysis to see metadata structure"
+            ],
+            "version": "4.4.0_metadata_debug"
+        }
+        
+    except Exception as e:
+        logger.error(f"Debug metadata extraction failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "version": "4.4.0_metadata_debug"
         }
 
 @app.get("/opensearch_health_detailed")

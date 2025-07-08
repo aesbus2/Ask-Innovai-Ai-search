@@ -128,9 +128,9 @@ def get_connection_status() -> Dict[str, Any]:
 # =============================================================================
 
 def search_opensearch(query: str, index_override: str = None, 
-                     filters: Dict[str, Any] = None, size: int = 10) -> List[Dict]:
+                     filters: Dict[str, Any] = None, size: int = 100) -> List[Dict]:
     """
-    FIXED: Search evaluations with proper timeout handling and comprehensive debugging
+    ENHANCED: Search evaluations with increased default size (was 10, now 100)
     """
     client = get_opensearch_client()
     if not client:
@@ -139,7 +139,7 @@ def search_opensearch(query: str, index_override: str = None,
     
     # Determine index pattern
     index_pattern = index_override or "eval-*"
-    logger.info(f"🔍 SEARCHING: index='{index_pattern}', query='{query}', size={size}")
+    logger.info(f"🔍 ENHANCED SEARCHING: index='{index_pattern}', query='{query}', size={size}")
     logger.info(f"🏷️ FILTERS: {filters}")
     
     try:
@@ -152,7 +152,7 @@ def search_opensearch(query: str, index_override: str = None,
             logger.error(f"❌ NO INDICES FOUND for pattern '{index_pattern}': {e}")
             return []
         
-        # STEP 2: Build comprehensive search query
+        # STEP 2: Build comprehensive search query (same as before, but with larger size)
         
         # Base text query with multiple fields
         text_query = {
@@ -220,7 +220,7 @@ def search_opensearch(query: str, index_override: str = None,
             }
         }
         
-        # STEP 3: Apply filters with enhanced field mapping
+        # STEP 3: Apply filters (same logic as before)
         if filters and any(filters.values()):
             logger.info(f"🔧 APPLYING FILTERS: {filters}")
             filter_clauses = []
@@ -240,7 +240,6 @@ def search_opensearch(query: str, index_override: str = None,
             
             # Enhanced keyword filters with fallbacks
             keyword_filters = {
-                # Frontend filter key -> OpenSearch field path
                 "template_name": ["template_name.keyword", "template_name"],
                 "template_id": ["template_id"],
                 "program": ["metadata.program.keyword", "metadata.program"],
@@ -295,10 +294,10 @@ def search_opensearch(query: str, index_override: str = None,
                 combined_query["bool"]["filter"] = filter_clauses
                 logger.info(f"✅ TOTAL FILTERS APPLIED: {len(filter_clauses)}")
         
-        # STEP 4: Build final search body
+        # STEP 4: Build final search body with INCREASED SIZE
         search_body = {
             "query": combined_query,
-            "size": size,
+            "size": size,  # This is now much larger (100 instead of 10)
             "sort": [
                 {"_score": {"order": "desc"}},
                 {"metadata.call_date": {"order": "desc", "missing": "_last"}}
@@ -328,14 +327,13 @@ def search_opensearch(query: str, index_override: str = None,
             }
         }
         
-        # STEP 5: Execute search with FIXED timeout parameters
-        logger.info(f"🚀 EXECUTING SEARCH...")
-        logger.debug(f"📋 SEARCH BODY: {json.dumps(search_body, indent=2)}")
+        # STEP 5: Execute search with detailed logging
+        logger.info(f"🚀 EXECUTING ENHANCED SEARCH with size={size}...")
         
         response = client.search(
             index=index_pattern,
             body=search_body,
-            request_timeout=30  # ✅ FIXED: Use request_timeout instead of timeout
+            timeout="45s"  # Increased timeout for larger results
         )
         
         # STEP 6: Process results
@@ -348,9 +346,9 @@ def search_opensearch(query: str, index_override: str = None,
         else:
             total_count = total_hits
         
-        logger.info(f"✅ SEARCH COMPLETED: {len(hits)} hits returned, {total_count} total matches")
+        logger.info(f"✅ ENHANCED SEARCH COMPLETED: {len(hits)} hits returned, {total_count} total matches")
         
-        # STEP 7: Build result objects
+        # STEP 7: Build result objects (same as before)
         results = []
         for i, hit in enumerate(hits):
             try:
@@ -379,22 +377,22 @@ def search_opensearch(query: str, index_override: str = None,
                     
                     # Highlighting
                     "highlight": hit.get("highlight", {}),
-                    "inner_hits": hit.get("inner_hits", {}),
-                    "search_type": "text"  # Mark as text search (vector disabled)
+                    "inner_hits": hit.get("inner_hits", {})
                 }
                 
                 results.append(result)
                 
-                logger.info(f"📄 RESULT {i+1}: {result['evaluationId']} (score: {result['_score']:.3f})")
+                if i < 10:  # Log first 10 for visibility
+                    logger.info(f"📄 RESULT {i+1}: {result['evaluationId']} (score: {result['_score']:.3f})")
                 
             except Exception as e:
                 logger.error(f"❌ Failed to process hit {i}: {e}")
         
-        logger.info(f"🎯 SEARCH SUMMARY: {len(results)} processed results")
+        logger.info(f"🎯 ENHANCED SEARCH SUMMARY: {len(results)} processed results")
         return results
         
     except Exception as e:
-        logger.error(f"❌ SEARCH FAILED: {e}")
+        logger.error(f"❌ ENHANCED SEARCH FAILED: {e}")
         logger.error(f"🔍 Query: '{query}'")
         logger.error(f"🏷️ Filters: {filters}")
         logger.error(f"📍 Index: '{index_pattern}'")

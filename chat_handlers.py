@@ -34,10 +34,12 @@ GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 # METADATA VERIFICATION AND ALIGNMENT FUNCTIONS
 # =============================================================================
 
+# Fix for chat_handlers.py - Replace the verify_metadata_alignment function
+
 def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     """
     CRITICAL FIX: Verify and extract actual metadata from sources to prevent fabricated data
-    Correctly distinguishes between evaluations (304) and chunks (2,490)
+    FIXED: Correctly distinguishes between evaluations and chunks + Better metadata extraction
     """
     metadata_summary = {
         "dispositions": set(),
@@ -62,38 +64,94 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
         try:
             metadata_summary["total_chunks_found"] += 1  # Count all content pieces
             
-            # Extract metadata from each source
-            metadata = source.get("metadata", {})
-            evaluation_id = source.get("evaluationId")
+            # FIXED: Better evaluation ID extraction
+            evaluation_id = None
+            source_data = source.get("_source", source)  # Handle both formats
+            
+            # Try multiple fields for evaluation ID
+            for id_field in ["evaluationId", "evaluation_id", "internalId", "internal_id"]:
+                if source_data.get(id_field):
+                    evaluation_id = source_data[id_field]
+                    break
+                # Also check in metadata
+                if source_data.get("metadata", {}).get(id_field):
+                    evaluation_id = source_data["metadata"][id_field]
+                    break
+            
+            # Also try the source root level
+            if not evaluation_id and source.get("evaluationId"):
+                evaluation_id = source.get("evaluationId")
             
             if evaluation_id and evaluation_id not in seen_evaluation_ids:
                 # This is a unique evaluation (not just another chunk)
                 seen_evaluation_ids.add(evaluation_id)
                 metadata_summary["total_evaluations"] += 1
                 metadata_summary["evaluation_ids"].add(evaluation_id)
+                
+                logger.info(f"🆔 Found unique evaluation: {evaluation_id}")
+            
+            # FIXED: Better metadata extraction
+            # Try multiple sources for metadata
+            metadata = {}
+            
+            # Source 1: metadata field in _source
+            if source_data.get("metadata"):
+                metadata = source_data["metadata"]
+            
+            # Source 2: metadata field in root
+            elif source.get("metadata"):
+                metadata = source["metadata"]
+            
+            # Source 3: Direct fields in _source
+            elif source_data:
+                # Map direct fields to metadata structure
+                metadata = {
+                    "program": source_data.get("program"),
+                    "partner": source_data.get("partner"),
+                    "site": source_data.get("site"),
+                    "lob": source_data.get("lob"),
+                    "agent": source_data.get("agent") or source_data.get("agentName"),
+                    "disposition": source_data.get("disposition"),
+                    "sub_disposition": source_data.get("sub_disposition") or source_data.get("subDisposition"),
+                    "language": source_data.get("language"),
+                    "call_date": source_data.get("call_date"),
+                }
             
             if metadata:
                 metadata_summary["has_real_data"] = True
                 
-                # Collect actual values from your database
+                # Extract and log metadata values
                 if metadata.get("disposition"):
                     metadata_summary["dispositions"].add(metadata["disposition"])
+                    logger.debug(f"   Disposition: {metadata['disposition']}")
+                
                 if metadata.get("sub_disposition"):
                     metadata_summary["sub_dispositions"].add(metadata["sub_disposition"])
+                
                 if metadata.get("program"):
                     metadata_summary["programs"].add(metadata["program"])
+                    logger.debug(f"   Program: {metadata['program']}")
+                
                 if metadata.get("partner"):
                     metadata_summary["partners"].add(metadata["partner"])
+                    logger.debug(f"   Partner: {metadata['partner']}")
+                
                 if metadata.get("site"):
                     metadata_summary["sites"].add(metadata["site"])
+                
                 if metadata.get("lob"):
                     metadata_summary["lobs"].add(metadata["lob"])
+                
                 if metadata.get("agent"):
                     metadata_summary["agents"].add(metadata["agent"])
+                
                 if metadata.get("language"):
                     metadata_summary["languages"].add(metadata["language"])
+                
                 if metadata.get("call_date"):
                     metadata_summary["call_dates"].append(metadata["call_date"])
+            else:
+                logger.warning(f"⚠️ No metadata found for source with ID: {evaluation_id}")
                     
         except Exception as e:
             logger.error(f"Error processing source metadata: {e}")
@@ -105,12 +163,22 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     
     metadata_summary["evaluation_ids"] = list(metadata_summary["evaluation_ids"])
     
+    # FIXED: Add summary logging
+    logger.info(f"📊 METADATA SUMMARY:")
+    logger.info(f"   Total content chunks: {metadata_summary['total_chunks_found']}")
+    logger.info(f"   Unique evaluations: {metadata_summary['total_evaluations']}")
+    logger.info(f"   Programs found: {metadata_summary['programs']}")
+    logger.info(f"   Dispositions found: {metadata_summary['dispositions']}")
+    logger.info(f"   Has real data: {metadata_summary['has_real_data']}")
+    
     return metadata_summary
+
+# Also fix the build_strict_metadata_context function:
 
 def build_strict_metadata_context(metadata_summary: Dict[str, Any], query: str) -> str:
     """
     CRITICAL FIX: Build context that strictly enforces use of real metadata only
-    Correctly reports 304 evaluations, not 2,490 chunks
+    FIXED: Correctly reports 304 evaluations, not 1,202 chunks
     """
     if not metadata_summary["has_real_data"]:
         return """
@@ -125,21 +193,22 @@ DO NOT GENERATE OR ESTIMATE ANY NUMBERS, DATES, OR STATISTICS.
     
     context_parts = []
     
-    # Add data verification header with CORRECT counts
+    # FIXED: Add data verification header with CORRECT counts
     context_parts.append(f"""
 VERIFIED REAL DATA FROM EVALUATION DATABASE:
 Total unique evaluations found: {metadata_summary['total_evaluations']}
-Total content chunks found: {metadata_summary['total_chunks_found']}
+Total content chunks analyzed: {metadata_summary['total_chunks_found']}
 Data verification status: {metadata_summary['data_verification']}
 
 CRITICAL COUNTING RULE:
 - Report EVALUATIONS ({metadata_summary['total_evaluations']}) not chunks ({metadata_summary['total_chunks_found']})
 - Each evaluation may have multiple content pieces, but count evaluations only
+- Your database has {metadata_summary['total_evaluations']} unique evaluations, NOT {metadata_summary['total_chunks_found']}
 
 CRITICAL: Only use the specific values listed below. Do not estimate, extrapolate, or generate any data.
 """)
     
-    # Add specific metadata categories with counts
+    # FIXED: Add specific metadata categories with counts
     if metadata_summary["dispositions"]:
         dispositions_list = "\n".join([f"- {disp}" for disp in metadata_summary["dispositions"]])
         context_parts.append(f"""
@@ -154,6 +223,8 @@ These dispositions appear across {metadata_summary['total_evaluations']} evaluat
         context_parts.append(f"""
 ACTUAL PROGRAMS FOUND ({len(metadata_summary['programs'])} unique):
 {programs_list}
+
+These programs represent {metadata_summary['total_evaluations']} total evaluations.
 """)
     
     if metadata_summary["partners"]:
@@ -187,7 +258,7 @@ ACTUAL DATE RANGE OF EVALUATIONS FOUND:
 Total unique evaluations: {metadata_summary['total_evaluations']}
 """)
     
-    # Add strict instruction footer
+    # FIXED: Add strict instruction footer with correct counting
     context_parts.append(f"""
 CRITICAL INSTRUCTIONS FOR RESPONSE:
 1. ONLY use the specific values listed above
@@ -196,6 +267,7 @@ CRITICAL INSTRUCTIONS FOR RESPONSE:
 4. If asked for percentages, state you need to analyze individual evaluation records
 5. NEVER mention specific dates unless they appear in the actual data above
 6. Base all insights only on the verified real data shown above
+7. Your database contains {metadata_summary['total_evaluations']} unique evaluations
 """)
     
     return "\n".join(context_parts)
@@ -248,14 +320,15 @@ def detect_report_query(query: str) -> bool:
     return False
 
 
-def build_search_context(query: str, filters: dict) -> tuple[str, List[dict]]:
+def build_search_context(query: str, filters: dict, max_results: int = 100) -> tuple[str, List[dict]]:
     """
-    ENHANCED: Build search context with strict metadata verification and accurate counting
-    Correctly distinguishes 304 evaluations from 2,490 chunks
+    ENHANCED: Build search context with configurable limits (removed 15 doc restriction)
+    Now analyzes much more data for better comprehensive responses
     """
-    logger.info(f"🔍 BUILDING SEARCH CONTEXT WITH METADATA VERIFICATION")
+    logger.info(f"🔍 BUILDING SEARCH CONTEXT WITH ENHANCED LIMITS")
     logger.info(f"📋 Query: '{query}'")
     logger.info(f"🏷️ Filters: {filters}")
+    logger.info(f"📊 Max results: {max_results}")
     
     try:
         # STEP 1: Try vector search first (if available)
@@ -267,7 +340,8 @@ def build_search_context(query: str, filters: dict) -> tuple[str, List[dict]]:
             
             try:
                 logger.info("🔍 Performing vector search...")
-                vector_hits = search_vector(query_vector, index_override=None, size=10)
+                # Increased vector search size too
+                vector_hits = search_vector(query_vector, index_override=None, size=max_results//2)
                 logger.info(f"📊 Vector search returned {len(vector_hits)} hits")
                 
                 for hit in vector_hits:
@@ -279,10 +353,10 @@ def build_search_context(query: str, filters: dict) -> tuple[str, List[dict]]:
         except Exception as e:
             logger.warning(f"⚠️ Vector embedding failed: {e}")
 
-        # STEP 2: Try text search (primary method)
+        # STEP 2: Try text search (primary method) with increased size
         text_hits = []
         try:
-            logger.info("📝 Performing text search with enhanced disposition detection...")
+            logger.info("📝 Performing text search with enhanced size...")
             
             # Enhanced query for disposition-related searches
             search_query = query
@@ -291,7 +365,8 @@ def build_search_context(query: str, filters: dict) -> tuple[str, List[dict]]:
                 search_query = f"{query} disposition sub_disposition call_outcome call_result"
                 logger.info(f"🎯 Enhanced disposition search query: '{search_query}'")
             
-            text_hits = search_opensearch(search_query, index_override=None, filters=filters, size=20)
+            # INCREASED: Much larger search size for comprehensive results
+            text_hits = search_opensearch(search_query, index_override=None, filters=filters, size=max_results)
             logger.info(f"📊 Text search returned {len(text_hits)} hits")
             
             for hit in text_hits:
@@ -304,20 +379,25 @@ def build_search_context(query: str, filters: dict) -> tuple[str, List[dict]]:
         all_hits = vector_hits + [hit for hit in text_hits if hit.get("_id") not in [h.get("_id") for h in vector_hits]]
         logger.info(f"🔗 COMBINED RESULTS: {len(all_hits)} total hits")
 
-        # STEP 4: Process hits and build sources with metadata verification
+        # STEP 4: Process hits and build sources (REMOVED 15 limit)
         processed_sources = []
         
-        for i, hit in enumerate(all_hits[:15]):  # Limit to top 15 results
+        # ENHANCED: Process ALL hits instead of limiting to 15
+        for i, hit in enumerate(all_hits):  # ← REMOVED [:15] LIMIT!
             try:
                 doc = hit.get("_source", {})
                 score = hit.get("_score", 0)
                 search_type = hit.get("search_type", "unknown")
                 
-                # Get evaluation ID
-                evaluation_id = (doc.get("evaluationId") or 
-                               doc.get("evaluation_id") or 
-                               doc.get("internalId") or 
-                               f"eval_{i}")
+                # Get evaluation ID with better extraction
+                evaluation_id = None
+                for id_field in ["evaluationId", "evaluation_id", "internalId", "internal_id"]:
+                    if doc.get(id_field):
+                        evaluation_id = doc.get(id_field)
+                        break
+                
+                if not evaluation_id:
+                    evaluation_id = f"eval_{i}"
 
                 # Extract text content
                 content_text = ""
@@ -335,11 +415,11 @@ def build_search_context(query: str, filters: dict) -> tuple[str, List[dict]]:
                             content_text = "\n".join(chunk_texts)
 
                 if content_text and len(content_text.strip()) > 20:
-                    # Truncate long content
-                    if len(content_text) > 800:
-                        content_text = content_text[:800] + "..."
+                    # ENHANCED: Don't truncate content as aggressively for better analysis
+                    if len(content_text) > 1500:  # Increased from 800
+                        content_text = content_text[:1500] + "..."
                     
-                    # CRITICAL: Extract and verify metadata
+                    # CRITICAL: Extract and verify metadata with better handling
                     metadata = doc.get("metadata", {})
                     
                     # Build verified source with all metadata
@@ -369,7 +449,9 @@ def build_search_context(query: str, filters: dict) -> tuple[str, List[dict]]:
                     }
                     
                     processed_sources.append(source_info)
-                    logger.info(f"✅ SOURCE {i+1}: {evaluation_id} - Disposition: {metadata.get('disposition', 'N/A')} ({search_type})")
+                    
+                    if i < 20 or i % 50 == 0:  # Log first 20 and every 50th after that
+                        logger.info(f"✅ SOURCE {i+1}: {evaluation_id} - Disposition: {metadata.get('disposition', 'N/A')} ({search_type})")
                     
             except Exception as e:
                 logger.error(f"❌ Failed to process hit {i}: {e}")
@@ -379,26 +461,32 @@ def build_search_context(query: str, filters: dict) -> tuple[str, List[dict]]:
         
         metadata_summary = verify_metadata_alignment(processed_sources)
         
-        logger.info(f"📊 METADATA SUMMARY:")
+        logger.info(f"📊 ENHANCED METADATA SUMMARY:")
         logger.info(f"   Has real data: {metadata_summary['has_real_data']}")
         logger.info(f"   Total evaluations: {metadata_summary['total_evaluations']}")
         logger.info(f"   Total chunks: {metadata_summary['total_chunks_found']}")
         logger.info(f"   Dispositions found: {len(metadata_summary['dispositions'])}")
-        logger.info(f"   Actual dispositions: {metadata_summary['dispositions']}")
+        logger.info(f"   Programs found: {len(metadata_summary['programs'])}")
+        logger.info(f"   Sources processed: {len(processed_sources)}")
         
         if metadata_summary["has_real_data"]:
             # Build strict context with real metadata only
             strict_context = build_strict_metadata_context(metadata_summary, query)
             
-            # Add sample content for context
+            # Add sample content for context (but more of it now)
             if processed_sources:
-                strict_context += "\n\nSAMPLE EVALUATION CONTENT:\n"
-                for i, source in enumerate(processed_sources[:3]):
+                strict_context += f"\n\nSAMPLE EVALUATION CONTENT FROM {len(processed_sources)} SOURCES:\n"
+                for i, source in enumerate(processed_sources[:10]):  # Show first 10 instead of 3
                     strict_context += f"\n[Evaluation {i+1} - ID: {source['evaluationId']}]\n"
                     strict_context += f"Template: {source.get('template_name', 'Unknown')}\n"
+                    strict_context += f"Program: {source.get('metadata', {}).get('program', 'Unknown')}\n"
+                    strict_context += f"Disposition: {source.get('metadata', {}).get('disposition', 'Unknown')}\n"
                     strict_context += f"Content Preview: {source['text'][:200]}...\n"
+                
+                if len(processed_sources) > 10:
+                    strict_context += f"\n... and {len(processed_sources) - 10} more evaluation sources analyzed\n"
             
-            logger.info(f"✅ STRICT CONTEXT BUILT: {len(strict_context)} chars with verified metadata")
+            logger.info(f"✅ ENHANCED CONTEXT BUILT: {len(strict_context)} chars with {len(processed_sources)} sources")
             return strict_context, processed_sources
         else:
             logger.warning("⚠️ NO VERIFIED METADATA FOUND")
@@ -420,7 +508,7 @@ INSTRUCTIONS:
             return no_data_context, []
 
     except Exception as e:
-        logger.error(f"❌ SEARCH CONTEXT BUILD FAILED: {e}")
+        logger.error(f"❌ ENHANCED SEARCH CONTEXT BUILD FAILED: {e}")
         error_context = f"""
 SEARCH ERROR: Failed to retrieve evaluation data due to: {str(e)}
 
@@ -430,7 +518,6 @@ INSTRUCTIONS:
 - Suggest trying again or contacting technical support
 """
         return error_context, []
-
 # =============================================================================
 # MAIN RAG-ENABLED CHAT ENDPOINT WITH STRICT METADATA VERIFICATION
 # =============================================================================
