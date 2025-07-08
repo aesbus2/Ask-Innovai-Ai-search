@@ -216,9 +216,37 @@ class ChatRequest(BaseModel):
     metadata_focus: List[str] = []
     programs: List[str] = []
 
-# =============================================================================
-# ENHANCED RAG CONTEXT BUILDING WITH STRICT METADATA VERIFICATION
-# =============================================================================
+
+def detect_report_query(query: str) -> bool:
+    """
+    Detect if the user is asking for a comprehensive report/analysis
+    This is just for detection - doesn't change any existing functionality
+    """
+    report_keywords = [
+        'report', 'analysis', 'summary', 'overview', 'breakdown', 'statistics',
+        'all', 'total', 'overall', 'comprehensive', 'complete', 'entire',
+        'trends', 'patterns', 'distribution', 'performance', 'metrics',
+        'dashboard', 'insights', 'analytics', 'aggregated'
+    ]
+    
+    question_patterns = [
+        'what are all', 'show me all', 'give me all', 'list all',
+        'how many total', 'what is the total', 'across all',
+        'overall performance', 'complete breakdown', 'full analysis'
+    ]
+    
+    query_lower = query.lower()
+    
+    # Check for report keywords
+    if any(keyword in query_lower for keyword in report_keywords):
+        return True
+    
+    # Check for question patterns
+    if any(pattern in query_lower for pattern in question_patterns):
+        return True
+    
+    return False
+
 
 def build_search_context(query: str, filters: dict) -> tuple[str, List[dict]]:
     """
@@ -409,6 +437,10 @@ INSTRUCTIONS:
 
 @chat_router.post("/chat")
 async def relay_chat_rag(request: Request):
+
+    is_report_request = detect_report_query(req.message)
+    logger.info(f"📊 REPORT REQUEST DETECTED: {is_report_request}")
+    
     start_time = time.time()
     try:
         body = await request.json()
