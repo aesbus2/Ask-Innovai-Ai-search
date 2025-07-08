@@ -2742,6 +2742,507 @@ async def debug_dashboard():
     
     return HTMLResponse(content=html_content)
 
+# =============================================================================
+# METADATA VERIFICATION DEBUG ENDPOINTS - ADD THESE AFTER EXISTING DEBUG ENDPOINTS
+# =============================================================================
+
+@app.get("/debug/verify_metadata_alignment")
+async def debug_verify_metadata_alignment():
+    """DEBUG: Verify that metadata in OpenSearch matches expected structure for call dispositions"""
+    try:
+        from opensearch_client import get_opensearch_client, test_connection
+        
+        if not test_connection():
+            return {"error": "OpenSearch not available"}
+        
+        client = get_opensearch_client()
+        
+        # Sample query specifically for call disposition data
+        disposition_query = {
+            "size": 10,
+            "query": {"match_all": {}},
+            "_source": [
+                "evaluationId", 
+                "metadata.disposition", 
+                "metadata.sub_disposition",
+                "metadata.program",
+                "metadata.partner", 
+                "metadata.site",
+                "metadata.lob",
+                "metadata.agent",
+                "metadata.call_date",
+                "template_name"
+            ]
+        }
+        
+        response = client.search(index="eval-*", body=disposition_query)
+        hits = response.get("hits", {}).get("hits", [])
+        
+        # Analyze metadata structure with correct counting
+        metadata_analysis = {
+            "dispositions_found": set(),
+            "sub_dispositions_found": set(),
+            "programs_found": set(),
+            "partners_found": set(),
+            "sites_found": set(),
+            "lobs_found": set(),
+            "agents_found": set(),
+            "templates_found": set(),
+            "sample_records": [],
+            "total_sampled": len(hits),
+            "unique_evaluations_sampled": set(),
+            "metadata_structure_issues": []
+        }
+        
+        for hit in hits:
+            source = hit.get("_source", {})
+            metadata = source.get("metadata", {})
+            eval_id = source.get("evaluationId")
+            
+            # Track unique evaluations vs total hits
+            if eval_id:
+                metadata_analysis["unique_evaluations_sampled"].add(eval_id)
+            
+            # Check if metadata exists
+            if not metadata:
+                metadata_analysis["metadata_structure_issues"].append(
+                    f"Evaluation {eval_id or 'Unknown'} has no metadata field"
+                )
+                continue
+            
+            # Collect all unique values
+            if metadata.get("disposition"):
+                metadata_analysis["dispositions_found"].add(metadata["disposition"])
+            if metadata.get("sub_disposition"):
+                metadata_analysis["sub_dispositions_found"].add(metadata["sub_disposition"])
+            if metadata.get("program"):
+                metadata_analysis["programs_found"].add(metadata["program"])
+            if metadata.get("partner"):
+                metadata_analysis["partners_found"].add(metadata["partner"])
+            if metadata.get("site"):
+                metadata_analysis["sites_found"].add(metadata["site"])
+            if metadata.get("lob"):
+                metadata_analysis["lobs_found"].add(metadata["lob"])
+            if metadata.get("agent"):
+                metadata_analysis["agents_found"].add(metadata["agent"])
+            if source.get("template_name"):
+                metadata_analysis["templates_found"].add(source["template_name"])
+            
+            # Add sample record
+            metadata_analysis["sample_records"].append({
+                "evaluationId": eval_id,
+                "template_name": source.get("template_name"),
+                "metadata": {
+                    "disposition": metadata.get("disposition"),
+                    "sub_disposition": metadata.get("sub_disposition"),
+                    "program": metadata.get("program"),
+                    "partner": metadata.get("partner"),
+                    "site": metadata.get("site"),
+                    "lob": metadata.get("lob"),
+                    "agent": metadata.get("agent"),
+                    "call_date": metadata.get("call_date")
+                }
+            })
+        
+        # Convert sets to lists for JSON serialization
+        for key in ["dispositions_found", "sub_dispositions_found", "programs_found", 
+                   "partners_found", "sites_found", "lobs_found", "agents_found", "templates_found"]:
+            metadata_analysis[key] = sorted(list(metadata_analysis[key]))
+        
+        # Correct counting
+        metadata_analysis["unique_evaluations_sampled"] = len(metadata_analysis["unique_evaluations_sampled"])
+        
+        # Add data quality assessment with correct counts
+        metadata_analysis["data_quality_assessment"] = {
+            "has_disposition_data": len(metadata_analysis["dispositions_found"]) > 0,
+            "has_program_data": len(metadata_analysis["programs_found"]) > 0,
+            "metadata_coverage": len([r for r in metadata_analysis["sample_records"] if r["metadata"]["disposition"]]) / len(metadata_analysis["sample_records"]) if metadata_analysis["sample_records"] else 0,
+            "ready_for_analysis": len(metadata_analysis["dispositions_found"]) > 0 and len(metadata_analysis["sample_records"]) > 0,
+            "evaluation_vs_chunk_note": f"Sampled {metadata_analysis['total_sampled']} chunks from {metadata_analysis['unique_evaluations_sampled']} unique evaluations"
+        }
+        
+        return {
+            "status": "success",
+            "metadata_analysis": metadata_analysis,
+            "recommendations": [
+                "Use the 'dispositions_found' list for accurate call disposition queries",
+                "Verify that these match your expected call center dispositions",
+                f"Your database has {metadata_analysis['unique_evaluations_sampled']} unique evaluations in this sample",
+                "Agent should report evaluation counts, not chunk counts",
+                "If dispositions are empty, check if data import included metadata"
+            ],
+            "version": "4.4.0_metadata_debug"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "version": "4.4.0_metadata_debug"
+        }
+
+@app.get("/debug/test_disposition_search")
+async def debug_test_disposition_search(query: str = "call dispositions"):
+    """DEBUG: Test search specifically for call disposition queries"""
+    try:
+        from chat_handlers import build_search_context
+        
+        # Test search with no filters
+        context, sources = build_search_context(query, {})
+        
+        # Analyze what was found with correct counting
+        analysis = {
+            "query_tested": query,
+            "context_generated": bool(context),
+            "context_length": len(context),
+            "sources_found": len(sources),
+            "has_verified_data": "VERIFIED_REAL_DATA" in context,
+            "has_no_data_message": "NO DATA FOUND" in context or "NO EVALUATION DATA FOUND" in context,
+            "context_preview": context[:500] + "..." if len(context) > 500 else context,
+            "sources_summary": [],
+            "unique_evaluations_found": set()
+        }
+        
+        # Analyze sources with correct counting
+        for i, source in enumerate(sources[:5]):
+            eval_id = source.get("evaluationId")
+            if eval_id:
+                analysis["unique_evaluations_found"].add(eval_id)
+                
+            source_summary = {
+                "source_number": i + 1,
+                "evaluation_id": eval_id,
+                "search_type": source.get("search_type"),
+                "template_name": source.get("template_name"),
+                "metadata_preview": {
+                    "disposition": source.get("metadata", {}).get("disposition"),
+                    "sub_disposition": source.get("metadata", {}).get("sub_disposition"),
+                    "program": source.get("metadata", {}).get("program"),
+                    "partner": source.get("metadata", {}).get("partner")
+                },
+                "has_disposition_data": bool(source.get("metadata", {}).get("disposition"))
+            }
+            analysis["sources_summary"].append(source_summary)
+        
+        analysis["unique_evaluations_found"] = len(analysis["unique_evaluations_found"])
+        
+        # Add diagnostic recommendations
+        if not analysis["context_generated"]:
+            analysis["diagnosis"] = "No context generated - likely no matching data found"
+            analysis["recommendations"] = [
+                "Check if evaluation data has been imported",
+                "Verify OpenSearch connection",
+                "Try broader search terms"
+            ]
+        elif analysis["has_no_data_message"]:
+            analysis["diagnosis"] = "Search ran but no relevant data found"
+            analysis["recommendations"] = [
+                "Verify that imported data contains call disposition information",
+                "Check if metadata.disposition field exists in your data",
+                "Try different search terms"
+            ]
+        elif analysis["has_verified_data"]:
+            analysis["diagnosis"] = "SUCCESS - Real data found and verified"
+            analysis["recommendations"] = [
+                "This search is working correctly",
+                "The agent should now use only this real data",
+                "Context includes verified metadata from your database",
+                f"Found {analysis['unique_evaluations_found']} unique evaluations from {analysis['sources_found']} content sources"
+            ]
+        else:
+            analysis["diagnosis"] = "Context generated but verification status unclear"
+            analysis["recommendations"] = [
+                "Check context content for data quality",
+                "Verify metadata extraction is working"
+            ]
+        
+        return {
+            "status": "success",
+            "search_analysis": analysis,
+            "version": "4.4.0_metadata_debug"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "query": query,
+            "version": "4.4.0_metadata_debug"
+        }
+
+@app.get("/debug/simulate_disposition_query")
+async def debug_simulate_disposition_query():
+    """DEBUG: Simulate a full call disposition query to test the complete flow"""
+    try:
+        from chat_handlers import build_search_context, verify_metadata_alignment, build_strict_metadata_context
+        
+        test_query = "What are the most common call dispositions?"
+        test_filters = {}
+        
+        # Step 1: Build search context
+        context, sources = build_search_context(test_query, test_filters)
+        
+        # Step 2: Verify metadata alignment
+        metadata_summary = verify_metadata_alignment(sources)
+        
+        # Step 3: Test strict context building
+        if metadata_summary["has_real_data"]:
+            strict_context = build_strict_metadata_context(metadata_summary, test_query)
+        else:
+            strict_context = "No data found"
+        
+        # Create comprehensive test report with correct counting
+        test_report = {
+            "test_query": test_query,
+            "test_filters": test_filters,
+            "step1_search_results": {
+                "sources_found": len(sources),
+                "context_length": len(context),
+                "search_successful": len(sources) > 0
+            },
+            "step2_metadata_verification": {
+                "has_real_data": metadata_summary["has_real_data"],
+                "total_evaluations": metadata_summary["total_evaluations"],  # Correct count
+                "total_chunks": metadata_summary["total_chunks_found"],      # Chunk count
+                "unique_dispositions": len(metadata_summary["dispositions"]),
+                "actual_dispositions": metadata_summary["dispositions"],
+                "unique_programs": len(metadata_summary["programs"]),
+                "actual_programs": metadata_summary["programs"],
+                "data_verification_status": metadata_summary["data_verification"]
+            },
+            "step3_strict_context": {
+                "context_length": len(strict_context),
+                "contains_real_data_verification": "VERIFIED_REAL_DATA" in strict_context,
+                "contains_actual_dispositions": "ACTUAL CALL DISPOSITIONS FOUND" in strict_context,
+                "contains_correct_counting": "Report EVALUATIONS" in strict_context,
+                "strict_context_preview": strict_context[:300] + "..." if len(strict_context) > 300 else strict_context
+            },
+            "expected_agent_behavior": {
+                "should_fabricate_data": False,
+                "should_use_only_real_dispositions": True,
+                "should_mention_evaluation_count": metadata_summary["total_evaluations"] > 0,
+                "should_not_mention_chunk_count": True,
+                "should_avoid_percentage_estimates": True,
+                "correct_count_to_report": metadata_summary["total_evaluations"]
+            },
+            "test_result": "PASS" if metadata_summary["has_real_data"] and len(metadata_summary["dispositions"]) > 0 else "FAIL"
+        }
+        
+        # Add specific recommendations based on test results
+        if test_report["test_result"] == "PASS":
+            test_report["agent_instructions"] = [
+                f"Agent should mention finding {metadata_summary['total_evaluations']} evaluations (not {metadata_summary['total_chunks_found']} chunks)",
+                f"Agent should list these specific dispositions: {', '.join(metadata_summary['dispositions'])}",
+                "Agent should NOT generate any fake percentages or counts",
+                "Agent should NOT mention any specific dates unless found in the data",
+                "Agent should distinguish between evaluations and content pieces"
+            ]
+        else:
+            test_report["troubleshooting"] = [
+                "No evaluation data found in search results",
+                "Verify that data import included call disposition metadata",
+                "Check OpenSearch index structure",
+                "Confirm that metadata.disposition field exists"
+            ]
+        
+        return {
+            "status": "success",
+            "simulation_test": test_report,
+            "version": "4.4.0_metadata_debug"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "version": "4.4.0_metadata_debug"
+        }
+
+@app.post("/debug/test_chat_with_verification")
+async def debug_test_chat_with_verification(request: dict):
+    """DEBUG: Test the complete chat flow with metadata verification"""
+    try:
+        message = request.get("message", "What are the most common call dispositions?")
+        filters = request.get("filters", {})
+        
+        from chat_handlers import build_search_context, verify_metadata_alignment
+        
+        # Step 1: Test search context building
+        context, sources = build_search_context(message, filters)
+        
+        # Step 2: Test metadata verification
+        metadata_summary = verify_metadata_alignment(sources)
+        
+        # Step 3: Analyze what would be sent to GenAI
+        system_message_preview = f"""You are an AI assistant for call center evaluation data analysis. You must ONLY use the specific data provided in the context below.
+
+CRITICAL RULES:
+1. NEVER generate, estimate, or extrapolate any numbers, dates, or statistics
+2. ONLY use the exact values and data shown in the context
+3. Report EVALUATIONS ({metadata_summary.get('total_evaluations', 0)}) not chunks ({metadata_summary.get('total_chunks_found', 0)})
+...
+
+EVALUATION DATABASE CONTEXT:
+{context[:500]}...
+"""
+        
+        debug_analysis = {
+            "input": {
+                "message": message,
+                "filters": filters
+            },
+            "search_results": {
+                "sources_found": len(sources),
+                "context_built": bool(context),
+                "context_length": len(context)
+            },
+            "metadata_verification": {
+                "real_data_found": metadata_summary["has_real_data"],
+                "total_evaluations": metadata_summary["total_evaluations"],
+                "total_chunks": metadata_summary["total_chunks_found"],
+                "dispositions": metadata_summary["dispositions"],
+                "programs": metadata_summary["programs"],
+                "verification_status": metadata_summary["data_verification"],
+                "counting_note": f"Should report {metadata_summary['total_evaluations']} evaluations, not {metadata_summary['total_chunks_found']} chunks"
+            },
+            "genai_input_preview": {
+                "system_message_length": len(system_message_preview),
+                "strict_instructions": "NEVER generate, estimate" in system_message_preview,
+                "real_data_context": "VERIFIED_REAL_DATA" in context,
+                "counting_instructions": "Report EVALUATIONS" in context,
+                "system_message_preview": system_message_preview
+            },
+            "expected_response_quality": {
+                "should_be_factual": metadata_summary["has_real_data"],
+                "should_avoid_fabrication": True,
+                "should_use_real_dispositions": len(metadata_summary["dispositions"]) > 0,
+                "should_report_correct_counts": True,
+                "data_quality_score": "HIGH" if metadata_summary["has_real_data"] and len(metadata_summary["dispositions"]) > 0 else "LOW"
+            }
+        }
+        
+        # Add specific diagnostics
+        if not metadata_summary["has_real_data"]:
+            debug_analysis["issues"] = [
+                "No real evaluation data found in search results",
+                "Agent will receive 'NO DATA FOUND' context",
+                "This should prevent fabricated responses"
+            ]
+            debug_analysis["fix_recommendations"] = [
+                "Verify data import completed successfully",
+                "Check that metadata fields are populated",
+                "Confirm OpenSearch indexing is working"
+            ]
+        else:
+            debug_analysis["success_indicators"] = [
+                f"Found {metadata_summary['total_evaluations']} real evaluations (from {metadata_summary['total_chunks_found']} content pieces)",
+                f"Extracted {len(metadata_summary['dispositions'])} actual dispositions",
+                "Agent will receive verified real data only",
+                "Agent will receive correct counting instructions"
+            ]
+        
+        return {
+            "status": "success",
+            "debug_analysis": debug_analysis,
+            "version": "4.4.0_metadata_debug"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "version": "4.4.0_metadata_debug"
+        }
+
+# =============================================================================
+# DEBUG DASHBOARD ROUTE
+# =============================================================================
+
+@app.get("/debug_metadata", response_class=HTMLResponse)
+async def serve_metadata_debug_dashboard():
+    """Serve the metadata verification debug dashboard"""
+    try:
+        # Simple dashboard that links to the debug endpoints
+        dashboard_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Metro AI - Metadata Debug Dashboard</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; background: #f5f7fa; }
+                .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                .header { background: linear-gradient(135deg, #6e32a0 0%, #e20074 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 30px; text-align: center; }
+                .test-button { display: inline-block; margin: 10px; padding: 12px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
+                .test-button:hover { background: #0056b3; }
+                .test-button.critical { background: #dc3545; }
+                .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa; }
+                .result { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 5px; padding: 15px; margin: 15px 0; font-family: monospace; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🔍 Metro AI - Metadata Verification Dashboard</h1>
+                    <p>Verify that your agent uses ONLY real evaluation data</p>
+                </div>
+                
+                <div class="section">
+                    <h2>🚨 Critical Tests (Run in Order)</h2>
+                    <a href="/debug/verify_metadata_alignment" class="test-button critical">
+                        1. ✅ Verify Real Metadata Structure
+                    </a>
+                    <br>
+                    <a href="/debug/test_disposition_search?query=call dispositions" class="test-button critical">
+                        2. 🎯 Test Disposition Search
+                    </a>
+                    <br>
+                    <a href="/debug/simulate_disposition_query" class="test-button critical">
+                        3. 🤖 Simulate Complete Flow
+                    </a>
+                    <br>
+                    <small style="color: #666;">These test the metadata alignment fix step by step</small>
+                </div>
+                
+                <div class="section">
+                    <h2>📊 Database Verification</h2>
+                    <a href="/debug/opensearch_data" class="test-button">Check Sample Data</a>
+                    <a href="/debug/check_indices" class="test-button">Check Indices</a>
+                    <a href="/opensearch_statistics" class="test-button">Database Stats</a>
+                </div>
+                
+                <div class="section">
+                    <h2>🔍 Search Testing</h2>
+                    <a href="/debug/test_search?q=customer service" class="test-button">Test Basic Search</a>
+                    <a href="/debug/test_filters" class="test-button">Test All Filters</a>
+                </div>
+                
+                <div class="section">
+                    <h2>🎯 Expected Results</h2>
+                    <p><strong>✅ Success:</strong> Test 1 shows your actual call dispositions (not empty)</p>
+                    <p><strong>✅ Success:</strong> Test 2 shows "has_verified_data: true"</p>
+                    <p><strong>✅ Success:</strong> Test 3 shows "test_result: PASS"</p>
+                    <p><strong>❌ Failure:</strong> Empty dispositions or "FAIL" results mean data import issues</p>
+                </div>
+                
+                <div class="section">
+                    <h2>💬 Test Actual Chat</h2>
+                    <p>After the above tests pass, test your actual chat interface:</p>
+                    <a href="/chat" class="test-button" target="_blank">Open Chat Interface</a>
+                    <p><small>Ask: "What are the most common call dispositions?" and verify it uses your real data</small></p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return HTMLResponse(content=dashboard_html)
+        
+    except Exception as e:
+        return HTMLResponse(
+            content=f"<html><body><h1>Error</h1><p>{str(e)}</p></body></html>", 
+            status_code=500
+        )
+
 # Add startup event
 @app.on_event("startup")
 async def startup_event():
