@@ -374,7 +374,7 @@ async def get_available_metadata_fields(client, indices_info):
         logger.warning(f"Could not check field mappings: {e}")
         # Return expected fields as fallback
         return ["program", "partner", "site", "lob", "agent", "disposition", 
-                "sub_disposition", "language", "call_type"]
+        "sub_disposition", "language", "call_type", "weighted_score", "url"]
 
 async def get_metadata_values_efficiently(client, indices_info, available_fields):
     """
@@ -390,7 +390,11 @@ async def get_metadata_values_efficiently(client, indices_info, available_fields
         "sub_dispositions": set(),
         "agents": set(),
         "languages": set(),
-        "call_types": set()
+        "call_types": set(),
+        
+        # NEWLY ADDED: Collections for new fields ✅
+        "weighted_scores": set(),  # ✅ ADDED: for score ranges
+        "urls": set()  # ✅ ADDED: for URL domains (if needed)
     }
     
     field_mapping = {
@@ -402,7 +406,11 @@ async def get_metadata_values_efficiently(client, indices_info, available_fields
         "sub_disposition": "sub_dispositions",
         "agent": "agents",
         "language": "languages",
-        "call_type": "call_types"
+        "call_type": "call_types",
+        
+        # NEWLY ADDED: Field mappings for new fields ✅
+        "weighted_score": "weighted_scores",  # ✅ ADDED: for score filtering
+        "url": "urls"  # ✅ ADDED: for URL filtering (if needed)
     }
     
     try:
@@ -869,6 +877,7 @@ def generate_agent_id(agent_name):
 def extract_comprehensive_metadata(evaluation: Dict) -> Dict[str, Any]:
     """
     PRODUCTION: Extract all metadata for real data filters with enhanced field mapping
+    VERSION: 4.5.0 - Now includes weighted_score and url fields
     """
     template_name = evaluation.get("template_name", "Unknown Template")
     template_id = evaluation.get("template_id", "")
@@ -886,9 +895,10 @@ def extract_comprehensive_metadata(evaluation: Dict) -> Dict[str, Any]:
         
         # ENHANCED: Program as separate field
         "program": program,
-#NEED TO ADD/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        #NEW Waiting on Justin to Add
-        #"weight_score": safe_int(evaluation.get("weightScore"), 0),
+        
+        # NEWLY ADDED: Previously missing fields ✅
+        "weighted_score": safe_int(evaluation.get("weighted_score"), 0),  # ✅ FIXED: was commented out
+        "url": clean_field_value(evaluation.get("url")),  # ✅ ADDED: was completely missing
         
         # Organizational hierarchy - clean and normalize
         "partner": clean_field_value(evaluation.get("partner"), "Unknown Partner"),
@@ -1671,71 +1681,43 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
 
 @app.get("/opensearch_statistics")
 async def get_opensearch_statistics():
-    """PRODUCTION: Get comprehensive OpenSearch database statistics"""
+    """
+    PRODUCTION: Comprehensive OpenSearch statistics with full aggregation support
+    VERSION: 4.5.0 - Includes weighted_score and url field analytics
+    """
     try:
-        from opensearch_client import get_opensearch_client
+        from opensearch_client import get_opensearch_client, test_connection
         
-        client = get_opensearch_client()
-        if not client:
+        if not test_connection():
             return {
                 "status": "error",
-                "error": "OpenSearch client not available"
+                "error": "OpenSearch connection failed",
+                "data": create_empty_statistics_response()
             }
         
-        # Check if we have any evaluation indices
+        client = get_opensearch_client()
+        
+        # Check if any evaluation indices exist
         try:
-            indices_response = client.indices.get(index="eval-*")
+            indices_response = client.cat.indices(index="eval-*", format="json")
             if not indices_response:
                 return {
                     "status": "success",
-                    "data": {
-                        "total_evaluations": 0,
-                        "total_chunks": 0,
-                        "evaluations_with_transcript": 0,
-                        "template_counts": {},
-                        "program_counts": {},  # NEW: Program statistics
-                        "lob_counts": {},
-                        "partner_counts": {},
-                        "site_counts": {},
-                        "language_counts": {},
-                        "indices": [],
-                        "structure_info": {
-                            "version": "4.2.0_production",
-                            "document_type": "evaluation_grouped",
-                            "collection_strategy": "template_id_based",
-                            "real_data_filters": True
-                        }
-                    },
-                    "message": "No evaluation data found"
+                    "data": create_empty_statistics_response(),
+                    "message": "No evaluation indices found"
                 }
         except Exception:
             return {
                 "status": "success", 
-                "data": {
-                    "total_evaluations": 0,
-                    "total_chunks": 0,
-                    "evaluations_with_transcript": 0,
-                    "template_counts": {},
-                    "program_counts": {},
-                    "lob_counts": {},
-                    "partner_counts": {},
-                    "site_counts": {},
-                    "language_counts": {},
-                    "indices": [],
-                    "structure_info": {
-                        "version": "4.2.0_production",
-                        "document_type": "evaluation_grouped",
-                        "collection_strategy": "template_id_based",
-                        "real_data_filters": True
-                    }
-                },
+                "data": create_empty_statistics_response(),
                 "message": "No evaluation indices found"
             }
         
-        # Build comprehensive aggregation query for PRODUCTION statistics
+        # COMPREHENSIVE AGGREGATION QUERY - VERSION 4.5.0
         agg_query = {
             "size": 0,
             "aggs": {
+                # Template and Program Analysis
                 "template_names": {
                     "terms": {
                         "field": "template_name.keyword",
@@ -1743,20 +1725,15 @@ async def get_opensearch_statistics():
                         "missing": "Unknown Template"
                     }
                 },
-                "program_distribution": {  # NEW: Program statistics
+                "program_distribution": {
                     "terms": {
                         "field": "metadata.program.keyword",
                         "size": 20,
                         "missing": "Unknown Program"
                     }
                 },
-                "lob_distribution": {
-                    "terms": {
-                        "field": "metadata.lob.keyword",
-                        "size": 20,
-                        "missing": "Unknown LOB"
-                    }
-                },
+                
+                # Organizational Hierarchy
                 "partner_distribution": {
                     "terms": {
                         "field": "metadata.partner.keyword", 
@@ -1771,6 +1748,45 @@ async def get_opensearch_statistics():
                         "missing": "Unknown Site"
                     }
                 },
+                "lob_distribution": {
+                    "terms": {
+                        "field": "metadata.lob.keyword",
+                        "size": 20,
+                        "missing": "Unknown LOB"
+                    }
+                },
+                
+                # Agent Analysis
+                "agent_distribution": {
+                    "terms": {
+                        "field": "metadata.agent.keyword",
+                        "size": 50,
+                        "missing": "Unknown Agent"
+                    }
+                },
+                "top_agents_by_evaluation_count": {
+                    "terms": {
+                        "field": "metadata.agent.keyword",
+                        "size": 10,
+                        "order": {"_count": "desc"}
+                    }
+                },
+                
+                # Call Details
+                "disposition_distribution": {
+                    "terms": {
+                        "field": "metadata.disposition.keyword",
+                        "size": 25,
+                        "missing": "Unknown Disposition"
+                    }
+                },
+                "sub_disposition_distribution": {
+                    "terms": {
+                        "field": "metadata.sub_disposition.keyword",
+                        "size": 30,
+                        "missing": "Unknown Sub-Disposition"
+                    }
+                },
                 "language_distribution": {
                     "terms": {
                         "field": "metadata.language.keyword",
@@ -1778,16 +1794,18 @@ async def get_opensearch_statistics():
                         "missing": "Unknown Language"
                     }
                 },
+                "call_type_distribution": {
+                    "terms": {
+                        "field": "metadata.call_type.keyword",
+                        "size": 10,
+                        "missing": "Unknown Call Type"
+                    }
+                },
+                
+                # Content Analysis
                 "total_chunks_sum": {
                     "sum": {
                         "field": "total_chunks"
-                    }
-                },
-                "evaluations_with_transcript": {
-                    "filter": {
-                        "range": {
-                            "transcript_chunks_count": {"gt": 0}
-                        }
                     }
                 },
                 "evaluation_chunks_sum": {
@@ -1800,29 +1818,189 @@ async def get_opensearch_statistics():
                         "field": "transcript_chunks_count"
                     }
                 },
-                "weight_score_stats": {
-                    "stats": {
-                        "field": "metadata.weight_score"
+                "evaluations_with_transcript": {
+                    "filter": {
+                        "range": {
+                            "transcript_chunks_count": {"gt": 0}
+                        }
                     }
                 },
-                "weight_score_ranges": {
+                "evaluations_without_transcript": {
+                    "filter": {
+                        "term": {
+                            "transcript_chunks_count": 0
+                        }
+                    }
+                },
+                
+                # Call Duration Analysis
+                "call_duration_stats": {
+                    "stats": {
+                        "field": "metadata.call_duration"
+                    }
+                },
+                "call_duration_ranges": {
                     "range": {
-                        "field": "metadata.weight_score",
+                        "field": "metadata.call_duration",
                         "ranges": [
-                            {"to": 50, "key": "Below 50%"},
-                            {"from": 50, "to": 70, "key": "50-70%"},
-                            {"from": 70, "to": 85, "key": "70-85%"},
-                            {"from": 85, "to": 95, "key": "85-95%"},
-                            {"from": 95, "key": "95%+"}]
+                            {"to": 60, "key": "under_1_min"},
+                            {"from": 60, "to": 300, "key": "1_to_5_min"},
+                            {"from": 300, "to": 600, "key": "5_to_10_min"},
+                            {"from": 600, "to": 1200, "key": "10_to_20_min"},
+                            {"from": 1200, "key": "over_20_min"}
+                        ]
+                    }
+                },
+                
+                # ✅ WEIGHTED SCORE ANALYSIS - NEW COMPREHENSIVE VERSION
+                "weighted_score_stats": {
+                    "stats": {
+                        "field": "metadata.weighted_score"
+                    }
+                },
+                "weighted_score_ranges": {
+                    "range": {
+                        "field": "metadata.weighted_score",
+                        "ranges": [
+                            {"to": 50, "key": "Below_50"},
+                            {"from": 50, "to": 60, "key": "50_to_60"},
+                            {"from": 60, "to": 70, "key": "60_to_70"},
+                            {"from": 70, "to": 80, "key": "70_to_80"},
+                            {"from": 80, "to": 90, "key": "80_to_90"},
+                            {"from": 90, "key": "90_and_above"}
+                        ]
+                    }
+                },
+                "weighted_score_histogram": {
+                    "histogram": {
+                        "field": "metadata.weighted_score",
+                        "interval": 5,
+                        "min_doc_count": 1,
+                        "extended_bounds": {
+                            "min": 0,
+                            "max": 100
+                        }
+                    }
+                },
+                "evaluations_with_weighted_score": {
+                    "filter": {
+                        "exists": {
+                            "field": "metadata.weighted_score"
+                        }
+                    }
+                },
+                
+                # ✅ URL ANALYSIS - COMPLETELY NEW
+                "evaluations_with_url": {
+                    "filter": {
+                        "exists": {
+                            "field": "metadata.url"
+                        }
+                    }
+                },
+                "url_domains": {
+                    "terms": {
+                        "script": {
+                            "source": """
+                                if (doc['metadata.url.keyword'].size() > 0) {
+                                    String url = doc['metadata.url.keyword'].value;
+                                    if (url.contains('://')) {
+                                        String domain = url.split('://')[1];
+                                        if (domain.contains('/')) {
+                                            domain = domain.split('/')[0];
+                                        }
+                                        return domain;
+                                    }
+                                }
+                                return 'unknown';
+                            """,
+                            "lang": "painless"
+                        },
+                        "size": 10
+                    }
+                },
+                "url_protocols": {
+                    "terms": {
+                        "script": {
+                            "source": """
+                                if (doc['metadata.url.keyword'].size() > 0) {
+                                    String url = doc['metadata.url.keyword'].value;
+                                    if (url.contains('://')) {
+                                        return url.split('://')[0];
+                                    }
+                                }
+                                return 'unknown';
+                            """,
+                            "lang": "painless"
+                        },
+                        "size": 5
+                    }
+                },
+                
+                # Date Analysis
+                "evaluations_by_month": {
+                    "date_histogram": {
+                        "field": "metadata.created_on",
+                        "calendar_interval": "month",
+                        "format": "yyyy-MM",
+                        "min_doc_count": 1
+                    }
+                },
+                "evaluations_by_day": {
+                    "date_histogram": {
+                        "field": "metadata.created_on",
+                        "calendar_interval": "day",
+                        "format": "yyyy-MM-dd",
+                        "min_doc_count": 1
+                    }
+                },
+                "date_range_stats": {
+                    "stats": {
+                        "field": "metadata.created_on"
+                    }
+                },
+                
+                # Performance Metrics
+                "avg_weighted_score_by_agent": {
+                    "terms": {
+                        "field": "metadata.agent.keyword",
+                        "size": 20
+                    },
+                    "aggs": {
+                        "avg_score": {
+                            "avg": {
+                                "field": "metadata.weighted_score"
+                            }
+                        },
+                        "evaluation_count": {
+                            "value_count": {
+                                "field": "metadata.weighted_score"
+                            }
+                        }
+                    }
+                },
+                "avg_weighted_score_by_program": {
+                    "terms": {
+                        "field": "metadata.program.keyword",
+                        "size": 10
+                    },
+                    "aggs": {
+                        "avg_score": {
+                            "avg": {
+                                "field": "metadata.weighted_score"
+                            }
+                        }
                     }
                 }
             }
         }
 
-        # Execute the aggregation query
+        # Execute the comprehensive aggregation query
+        logger.info("🔍 Executing comprehensive OpenSearch statistics query...")
         response = client.search(
             index="eval-*",
-            body=agg_query
+            body=agg_query,
+            request_timeout=60
         )
         
         # Extract aggregation results
@@ -1835,53 +2013,150 @@ async def get_opensearch_statistics():
         else:
             total_evaluations = total_hits
 
-        weight_score_stats = aggs.get("weight_score_stats", {})
-        weight_score_ranges = aggs.get("weight_score_ranges", {}).get("buckets", [])
-        
-        # Process template name counts
-        template_buckets = aggs.get("template_names", {}).get("buckets", [])
-        template_counts = {
-            bucket["key"]: bucket["doc_count"] 
-            for bucket in template_buckets
+        # Process all aggregation results
+        statistics = {
+            # Basic Counts
+            "summary": {
+                "total_evaluations": total_evaluations,
+                "total_chunks": int(aggs.get("total_chunks_sum", {}).get("value", 0)),
+                "evaluation_chunks": int(aggs.get("evaluation_chunks_sum", {}).get("value", 0)),
+                "transcript_chunks": int(aggs.get("transcript_chunks_sum", {}).get("value", 0)),
+                "evaluations_with_transcript": aggs.get("evaluations_with_transcript", {}).get("doc_count", 0),
+                "evaluations_without_transcript": aggs.get("evaluations_without_transcript", {}).get("doc_count", 0)
+            },
+            
+            # Template and Program Analysis
+            "template_analysis": {
+                "template_counts": {
+                    bucket["key"]: bucket["doc_count"] 
+                    for bucket in aggs.get("template_names", {}).get("buckets", [])
+                },
+                "program_counts": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("program_distribution", {}).get("buckets", [])
+                }
+            },
+            
+            # Organizational Analysis
+            "organizational_analysis": {
+                "partner_counts": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("partner_distribution", {}).get("buckets", [])
+                },
+                "site_counts": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("site_distribution", {}).get("buckets", [])
+                },
+                "lob_counts": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("lob_distribution", {}).get("buckets", [])
+                }
+            },
+            
+            # Agent Analysis
+            "agent_analysis": {
+                "agent_counts": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("agent_distribution", {}).get("buckets", [])
+                },
+                "top_agents": [
+                    {
+                        "agent": bucket["key"],
+                        "evaluation_count": bucket["doc_count"],
+                        "avg_score": bucket.get("avg_score", {}).get("value"),
+                        "score_count": bucket.get("evaluation_count", {}).get("value")
+                    }
+                    for bucket in aggs.get("avg_weighted_score_by_agent", {}).get("buckets", [])
+                ]
+            },
+            
+            # Call Analysis
+            "call_analysis": {
+                "disposition_counts": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("disposition_distribution", {}).get("buckets", [])
+                },
+                "sub_disposition_counts": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("sub_disposition_distribution", {}).get("buckets", [])
+                },
+                "language_counts": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("language_distribution", {}).get("buckets", [])
+                },
+                "call_type_counts": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("call_type_distribution", {}).get("buckets", [])
+                },
+                "call_duration_stats": aggs.get("call_duration_stats", {}),
+                "call_duration_ranges": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("call_duration_ranges", {}).get("buckets", [])
+                }
+            },
+            
+            # ✅ WEIGHTED SCORE ANALYSIS - COMPREHENSIVE
+            "weighted_score_analysis": {
+                "statistics": aggs.get("weighted_score_stats", {}),
+                "score_ranges": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("weighted_score_ranges", {}).get("buckets", [])
+                },
+                "score_histogram": [
+                    {
+                        "score_range": f"{bucket['key']}-{bucket['key'] + 5}",
+                        "count": bucket["doc_count"]
+                    }
+                    for bucket in aggs.get("weighted_score_histogram", {}).get("buckets", [])
+                ],
+                "evaluations_with_scores": aggs.get("evaluations_with_weighted_score", {}).get("doc_count", 0),
+                "score_coverage_percentage": round(
+                    (aggs.get("evaluations_with_weighted_score", {}).get("doc_count", 0) / max(total_evaluations, 1)) * 100, 2
+                ),
+                "avg_score_by_program": {
+                    bucket["key"]: {
+                        "avg_score": round(bucket.get("avg_score", {}).get("value", 0), 2),
+                        "evaluation_count": bucket["doc_count"]
+                    }
+                    for bucket in aggs.get("avg_weighted_score_by_program", {}).get("buckets", [])
+                }
+            },
+            
+            # ✅ URL ANALYSIS - COMPLETELY NEW
+            "url_analysis": {
+                "evaluations_with_urls": aggs.get("evaluations_with_url", {}).get("doc_count", 0),
+                "url_coverage_percentage": round(
+                    (aggs.get("evaluations_with_url", {}).get("doc_count", 0) / max(total_evaluations, 1)) * 100, 2
+                ),
+                "url_domains": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("url_domains", {}).get("buckets", [])
+                },
+                "url_protocols": {
+                    bucket["key"]: bucket["doc_count"]
+                    for bucket in aggs.get("url_protocols", {}).get("buckets", [])
+                }
+            },
+            
+            # Date Analysis
+            "temporal_analysis": {
+                "evaluations_by_month": [
+                    {
+                        "month": bucket["key_as_string"],
+                        "count": bucket["doc_count"]
+                    }
+                    for bucket in aggs.get("evaluations_by_month", {}).get("buckets", [])
+                ],
+                "evaluations_by_day": [
+                    {
+                        "date": bucket["key_as_string"],
+                        "count": bucket["doc_count"]
+                    }
+                    for bucket in aggs.get("evaluations_by_day", {}).get("buckets", [])[-30:]  # Last 30 days
+                ],
+                "date_range_stats": aggs.get("date_range_stats", {})
+            }
         }
-        
-        # Process program counts (NEW)
-        program_buckets = aggs.get("program_distribution", {}).get("buckets", [])
-        program_counts = {
-            bucket["key"]: bucket["doc_count"]
-            for bucket in program_buckets
-        }
-        
-        # Process other counts
-        lob_buckets = aggs.get("lob_distribution", {}).get("buckets", [])
-        lob_counts = {
-            bucket["key"]: bucket["doc_count"]
-            for bucket in lob_buckets
-        }
-        
-        partner_buckets = aggs.get("partner_distribution", {}).get("buckets", [])
-        partner_counts = {
-            bucket["key"]: bucket["doc_count"]
-            for bucket in partner_buckets
-        }
-        
-        site_buckets = aggs.get("site_distribution", {}).get("buckets", [])
-        site_counts = {
-            bucket["key"]: bucket["doc_count"]
-            for bucket in site_buckets
-        }
-        
-        language_buckets = aggs.get("language_distribution", {}).get("buckets", [])
-        language_counts = {
-            bucket["key"]: bucket["doc_count"]
-            for bucket in language_buckets
-        }
-        
-        # Extract other metrics
-        total_chunks = int(aggs.get("total_chunks_sum", {}).get("value", 0))
-        evaluations_with_transcript = aggs.get("evaluations_with_transcript", {}).get("doc_count", 0)
-        evaluation_chunks_total = int(aggs.get("evaluation_chunks_sum", {}).get("value", 0))
-        transcript_chunks_total = int(aggs.get("transcript_chunks_sum", {}).get("value", 0))
         
         # Get index information
         try:
@@ -1898,61 +2173,93 @@ async def get_opensearch_statistics():
                     "documents": doc_count,
                     "size_mb": round(size_mb, 2)
                 })
+                
+            statistics["index_information"] = indices_info
+            
         except Exception as e:
             logger.warning(f"Could not get index stats: {e}")
-            indices_info = []
+            statistics["index_information"] = []
+        
+        logger.info(f"✅ OpenSearch statistics generated successfully for {total_evaluations} evaluations")
         
         return {
             "status": "success",
-            "data": {
-                "total_evaluations": total_evaluations,
-                "total_chunks": total_chunks,
-                "evaluation_chunks": evaluation_chunks_total,
-                "transcript_chunks": transcript_chunks_total,
-                "evaluations_with_transcript": evaluations_with_transcript,
-                "evaluations_without_transcript": total_evaluations - evaluations_with_transcript,
-                "template_counts": template_counts,
-                "program_counts": program_counts,  # NEW: Program statistics
-                "lob_counts": lob_counts,
-                "partner_counts": partner_counts,
-                "site_counts": site_counts,
-                "language_counts": language_counts,
-                "indices": indices_info,
-                "structure_info": {
-                    "version": "4.2.0_production",
-                    "document_type": "evaluation_grouped",
-                    "collection_strategy": "template_id_based",
-                    "real_data_filters": True
-                }
-            },
-            "timestamp": datetime.now().isoformat()
+            "data": statistics,
+            "metadata": {
+                "version": "4.5.0_comprehensive_stats",
+                "timestamp": datetime.now().isoformat(),
+                "query_execution_time": "calculated_by_opensearch",
+                "new_features": [
+                    "weighted_score_comprehensive_analysis",
+                    "url_analysis_complete",
+                    "agent_performance_metrics",
+                    "temporal_analysis_enhanced"
+                ]
+            }
         }
         
     except Exception as e:
-        logger.error(f"PRODUCTION: Failed to get OpenSearch statistics: {e}")
+        logger.error(f"OpenSearch statistics error: {e}")
         return {
             "status": "error",
             "error": str(e),
+            "data": create_empty_statistics_response(),
             "timestamp": datetime.now().isoformat()
         }
 
-# ============================================================================
-# PRODUCTION PYDANTIC MODELS AND ENDPOINTS
-# ============================================================================
-
-class ImportRequest(BaseModel):
-    collection: str = "all"
-    max_docs: Optional[int] = None
-    import_type: str = "full"
-    batch_size: Optional[int] = None
-
-class AgentSearchRequest(BaseModel):
-    agentId: Optional[str] = None
-    agentName: Optional[str] = None
-    site: Optional[str] = None
-    partner: Optional[str] = None
-    lob: Optional[str] = None
-    limit: Optional[int] = 10
+def create_empty_statistics_response():
+    """Create empty statistics response structure"""
+    return {
+        "summary": {
+            "total_evaluations": 0,
+            "total_chunks": 0,
+            "evaluation_chunks": 0,
+            "transcript_chunks": 0,
+            "evaluations_with_transcript": 0,
+            "evaluations_without_transcript": 0
+        },
+        "template_analysis": {
+            "template_counts": {},
+            "program_counts": {}
+        },
+        "organizational_analysis": {
+            "partner_counts": {},
+            "site_counts": {},
+            "lob_counts": {}
+        },
+        "agent_analysis": {
+            "agent_counts": {},
+            "top_agents": []
+        },
+        "call_analysis": {
+            "disposition_counts": {},
+            "sub_disposition_counts": {},
+            "language_counts": {},
+            "call_type_counts": {},
+            "call_duration_stats": {},
+            "call_duration_ranges": {}
+        },
+        "weighted_score_analysis": {
+            "statistics": {},
+            "score_ranges": {},
+            "score_histogram": [],
+            "evaluations_with_scores": 0,
+            "score_coverage_percentage": 0,
+            "avg_score_by_program": {}
+        },
+        "url_analysis": {
+            "evaluations_with_urls": 0,
+            "url_coverage_percentage": 0,
+            "url_domains": {},
+            "url_protocols": {}
+        },
+        "temporal_analysis": {
+            "evaluations_by_month": [],
+            "evaluations_by_day": [],
+            "date_range_stats": {}
+        },
+        "index_information": []
+    }
 
 @app.get("/ping")
 async def ping():
@@ -2298,7 +2605,60 @@ async def analytics_stats(request: dict):
             "filters_applied": filters
         }
 # Add this debug endpoint to your app.py to test metadata extraction
-
+@app.get("/debug/test_metadata_extraction_new_fields")
+async def test_metadata_extraction_new_fields():
+    """
+    DEBUG: Test the metadata extraction with sample data including new fields
+    """
+    try:
+        # Sample evaluation data similar to your API response
+        sample_evaluation = {
+            "internalId": "686455bb08b81a355a14506e",
+            "evaluationId": 316,
+            "weighted_score": 79,  # ✅ Test new field
+            "url": "https://innovai-demo.metrocare-agent.com/evaluation/view/316",  # ✅ Test new field
+            "template_id": "685eed5f7e5fe29dc0b183e1",
+            "template_name": "Ai Corporate SPTR - Haiku (working prompts)",
+            "partner": "iQor",
+            "site": "Bacolod",
+            "lob": "CSR",
+            "agentName": "Romnick Belando",
+            "agentId": "30847084",
+            "disposition": "Account",
+            "subDisposition": "Extension",
+            "created_on": "2025-07-01T21:39:41.377Z",
+            "call_date": "2025-06-03T05:00:00.000Z",
+            "call_duration": 239,
+            "language": "english"
+        }
+        
+        # Test the extraction
+        extracted_metadata = extract_comprehensive_metadata(sample_evaluation)
+        
+        return {
+            "status": "success",
+            "test_results": {
+                "input_data": sample_evaluation,
+                "extracted_metadata": extracted_metadata,
+                "new_fields_check": {
+                    "weighted_score_extracted": "weighted_score" in extracted_metadata,
+                    "weighted_score_value": extracted_metadata.get("weighted_score"),
+                    "url_extracted": "url" in extracted_metadata,
+                    "url_value": extracted_metadata.get("url")
+                },
+                "field_coverage": f"{len(extracted_metadata)}/19 fields extracted",
+                "all_fields": sorted(list(extracted_metadata.keys()))
+            },
+            "version": "4.5.0_metadata_test"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "version": "4.5.0_metadata_test"
+        }
+    
 @app.get("/debug/test_metadata_extraction")
 async def debug_test_metadata_extraction():
     """
@@ -3050,6 +3410,120 @@ async def debug_verify_metadata_alignment():
             "status": "error",
             "error": str(e),
             "version": "4.4.0_metadata_debug"
+        }
+@app.get("/debug/verify_new_fields")
+async def verify_new_fields():
+    """
+    DEBUG: Verify that the new fields (weighted_score and url) are working correctly
+    """
+    try:
+        from opensearch_client import get_opensearch_client, test_connection
+        
+        if not test_connection():
+            return {
+                "status": "error",
+                "message": "OpenSearch connection failed"
+            }
+        
+        client = get_opensearch_client()
+        
+        # Test 1: Check if fields exist in mapping
+        mapping_response = client.indices.get_mapping(index="eval-*")
+        fields_in_mapping = set()
+        
+        for index_name, mapping_data in mapping_response.items():
+            metadata_props = mapping_data.get("mappings", {}).get("properties", {}).get("metadata", {}).get("properties", {})
+            fields_in_mapping.update(metadata_props.keys())
+        
+        # Test 2: Search for documents with new fields
+        search_response = client.search(
+            index="eval-*",
+            body={
+                "size": 5,
+                "query": {"match_all": {}},
+                "_source": ["metadata.weighted_score", "metadata.url", "evaluationId"]
+            }
+        )
+        
+        # Test 3: Check field statistics
+        stats_response = client.search(
+            index="eval-*",
+            body={
+                "size": 0,
+                "aggs": {
+                    "weighted_score_stats": {
+                        "stats": {
+                            "field": "metadata.weighted_score"
+                        }
+                    },
+                    "urls_exist": {
+                        "filter": {
+                            "exists": {
+                                "field": "metadata.url"
+                            }
+                        }
+                    },
+                    "weighted_scores_exist": {
+                        "filter": {
+                            "exists": {
+                                "field": "metadata.weighted_score"
+                            }
+                        }
+                    }
+                }
+            }
+        )
+        
+        # Analyze results
+        hits = search_response.get("hits", {}).get("hits", [])
+        sample_data = []
+        
+        for hit in hits:
+            source = hit.get("_source", {})
+            metadata = source.get("metadata", {})
+            
+            sample_data.append({
+                "evaluationId": source.get("evaluationId"),
+                "weighted_score": metadata.get("weighted_score"),
+                "url": metadata.get("url"),
+                "has_weighted_score": "weighted_score" in metadata,
+                "has_url": "url" in metadata
+            })
+        
+        # Get aggregation results
+        aggs = stats_response.get("aggregations", {})
+        weighted_score_stats = aggs.get("weighted_score_stats", {})
+        urls_exist_count = aggs.get("urls_exist", {}).get("doc_count", 0)
+        weighted_scores_exist_count = aggs.get("weighted_scores_exist", {}).get("doc_count", 0)
+        
+        return {
+            "status": "success",
+            "verification_results": {
+                "fields_in_mapping": {
+                    "weighted_score": "weighted_score" in fields_in_mapping,
+                    "url": "url" in fields_in_mapping,
+                    "all_fields": sorted(list(fields_in_mapping))
+                },
+                "field_statistics": {
+                    "weighted_score_stats": weighted_score_stats,
+                    "documents_with_urls": urls_exist_count,
+                    "documents_with_weighted_scores": weighted_scores_exist_count
+                },
+                "sample_data": sample_data,
+                "summary": {
+                    "mapping_updated": "weighted_score" in fields_in_mapping and "url" in fields_in_mapping,
+                    "data_populated": weighted_scores_exist_count > 0 or urls_exist_count > 0,
+                    "recommendation": "Re-run import process if data_populated is False"
+                }
+            },
+            "version": "4.5.0_field_verification"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "version": "4.5.0_field_verification"
         }
 
 @app.get("/debug/test_disposition_search")

@@ -706,7 +706,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
                     "properties": chunk_properties
                 },
                 
-                # Metadata with flexible field names
+                # Metadata with flexible field names - VERSION 4.5.0 - UPDATED WITH NEW FIELDS
                 "metadata": {
                     "properties": {
                         "evaluationId": {"type": "keyword"},
@@ -714,17 +714,34 @@ def ensure_evaluation_index_exists(client, index_name: str):
                         "template_id": {"type": "keyword"},
                         "template_name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "program": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        
+                        # NEWLY ADDED: Previously missing fields ✅
+                        "weighted_score": {"type": "integer"},  # ✅ ADDED: for numeric scoring
+                        "url": {  # ✅ ADDED: for evaluation URLs
+                            "type": "text",
+                            "fields": {"keyword": {"type": "keyword"}}
+                        },
+                        
+                        # Organizational hierarchy
                         "partner": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "site": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "lob": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        
+                        # Agent information
                         "agent": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "agent_id": {"type": "keyword"},
+                        
+                        # Call details
                         "disposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "sub_disposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "language": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        
+                        # Date and timing
                         "call_date": {"type": "date"},
                         "call_duration": {"type": "integer"},
                         "created_on": {"type": "date"},
+                        
+                        # Additional contact information
                         "phone_number": {"type": "keyword"},
                         "contact_id": {"type": "keyword"},
                         "ucid": {"type": "keyword"},
