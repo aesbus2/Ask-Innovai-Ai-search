@@ -186,7 +186,7 @@ def test_document_indexing():
             index=test_index,
             id=test_doc_id,
             body=test_doc,
-            timeout='10s'
+            timeout='10'
         )
         
         print(f"   ✅ Document indexed successfully")

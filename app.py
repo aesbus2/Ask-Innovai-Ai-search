@@ -1679,533 +1679,245 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
 # PRODUCTION STATISTICS AND HEALTH ENDPOINTS
 # ============================================================================
 
+
+# Add this to your app.py to replace the problematic statistics endpoint
+
 @app.get("/opensearch_statistics")
-async def get_opensearch_statistics():
-    """
-    PRODUCTION: Comprehensive OpenSearch statistics with full aggregation support
-    VERSION: 4.5.0 - Includes weighted_score and url field analytics
-    """
+async def get_opensearch_statistics_safe():
+    """SAFE statistics endpoint that prevents compilation errors"""
     try:
-        from opensearch_client import get_opensearch_client, test_connection
-        
-        if not test_connection():
-            return {
-                "status": "error",
-                "error": "OpenSearch connection failed",
-                "data": create_empty_statistics_response()
-            }
+        from opensearch_client import get_opensearch_client
         
         client = get_opensearch_client()
-        
-        # Check if any evaluation indices exist
-        try:
-            indices_response = client.cat.indices(index="eval-*", format="json")
-            if not indices_response:
-                return {
-                    "status": "success",
-                    "data": create_empty_statistics_response(),
-                    "message": "No evaluation indices found"
-                }
-        except Exception:
+        if not client:
             return {
-                "status": "success", 
-                "data": create_empty_statistics_response(),
-                "message": "No evaluation indices found"
+                "status": "error",
+                "error": "OpenSearch client not available"
             }
         
-        # COMPREHENSIVE AGGREGATION QUERY - VERSION 4.5.0
-        agg_query = {
-            "size": 0,
-            "aggs": {
-                # Template and Program Analysis
-                "template_names": {
-                    "terms": {
-                        "field": "template_name.keyword",
-                        "size": 50,
-                        "missing": "Unknown Template"
-                    }
-                },
-                "program_distribution": {
-                    "terms": {
-                        "field": "metadata.program.keyword",
-                        "size": 20,
-                        "missing": "Unknown Program"
-                    }
-                },
-                
-                # Organizational Hierarchy
-                "partner_distribution": {
-                    "terms": {
-                        "field": "metadata.partner.keyword", 
-                        "size": 20,
-                        "missing": "Unknown Partner"
-                    }
-                },
-                "site_distribution": {
-                    "terms": {
-                        "field": "metadata.site.keyword",
-                        "size": 30,
-                        "missing": "Unknown Site"
-                    }
-                },
-                "lob_distribution": {
-                    "terms": {
-                        "field": "metadata.lob.keyword",
-                        "size": 20,
-                        "missing": "Unknown LOB"
-                    }
-                },
-                
-                # Agent Analysis
-                "agent_distribution": {
-                    "terms": {
-                        "field": "metadata.agent.keyword",
-                        "size": 50,
-                        "missing": "Unknown Agent"
-                    }
-                },
-                "top_agents_by_evaluation_count": {
-                    "terms": {
-                        "field": "metadata.agent.keyword",
-                        "size": 10,
-                        "order": {"_count": "desc"}
-                    }
-                },
-                
-                # Call Details
-                "disposition_distribution": {
-                    "terms": {
-                        "field": "metadata.disposition.keyword",
-                        "size": 25,
-                        "missing": "Unknown Disposition"
-                    }
-                },
-                "sub_disposition_distribution": {
-                    "terms": {
-                        "field": "metadata.sub_disposition.keyword",
-                        "size": 30,
-                        "missing": "Unknown Sub-Disposition"
-                    }
-                },
-                "language_distribution": {
-                    "terms": {
-                        "field": "metadata.language.keyword",
-                        "size": 10,
-                        "missing": "Unknown Language"
-                    }
-                },
-                "call_type_distribution": {
-                    "terms": {
-                        "field": "metadata.call_type.keyword",
-                        "size": 10,
-                        "missing": "Unknown Call Type"
-                    }
-                },
-                
-                # Content Analysis
-                "total_chunks_sum": {
-                    "sum": {
-                        "field": "total_chunks"
-                    }
-                },
-                "evaluation_chunks_sum": {
-                    "sum": {
-                        "field": "evaluation_chunks_count"
-                    }
-                },
-                "transcript_chunks_sum": {
-                    "sum": {
-                        "field": "transcript_chunks_count"
-                    }
-                },
-                "evaluations_with_transcript": {
-                    "filter": {
-                        "range": {
-                            "transcript_chunks_count": {"gt": 0}
-                        }
-                    }
-                },
-                "evaluations_without_transcript": {
-                    "filter": {
-                        "term": {
-                            "transcript_chunks_count": 0
-                        }
-                    }
-                },
-                
-                # Call Duration Analysis
-                "call_duration_stats": {
-                    "stats": {
-                        "field": "metadata.call_duration"
-                    }
-                },
-                "call_duration_ranges": {
-                    "range": {
-                        "field": "metadata.call_duration",
-                        "ranges": [
-                            {"to": 60, "key": "under_1_min"},
-                            {"from": 60, "to": 300, "key": "1_to_5_min"},
-                            {"from": 300, "to": 600, "key": "5_to_10_min"},
-                            {"from": 600, "to": 1200, "key": "10_to_20_min"},
-                            {"from": 1200, "key": "over_20_min"}
-                        ]
-                    }
-                },
-                
-                # ✅ WEIGHTED SCORE ANALYSIS - NEW COMPREHENSIVE VERSION
-                "weighted_score_stats": {
-                    "stats": {
-                        "field": "metadata.weighted_score"
-                    }
-                },
-                "weighted_score_ranges": {
-                    "range": {
-                        "field": "metadata.weighted_score",
-                        "ranges": [
-                            {"to": 50, "key": "Below_50"},
-                            {"from": 50, "to": 60, "key": "50_to_60"},
-                            {"from": 60, "to": 70, "key": "60_to_70"},
-                            {"from": 70, "to": 80, "key": "70_to_80"},
-                            {"from": 80, "to": 90, "key": "80_to_90"},
-                            {"from": 90, "key": "90_and_above"}
-                        ]
-                    }
-                },
-                "weighted_score_histogram": {
-                    "histogram": {
-                        "field": "metadata.weighted_score",
-                        "interval": 5,
-                        "min_doc_count": 1,
-                        "extended_bounds": {
-                            "min": 0,
-                            "max": 100
-                        }
-                    }
-                },
-                "evaluations_with_weighted_score": {
-                    "filter": {
-                        "exists": {
-                            "field": "metadata.weighted_score"
-                        }
-                    }
-                },
-                
-                # ✅ URL ANALYSIS - COMPLETELY NEW
-                "evaluations_with_url": {
-                    "filter": {
-                        "exists": {
-                            "field": "metadata.url"
-                        }
-                    }
-                },
-                "url_domains": {
-                    "terms": {
-                        "script": {
-                            "source": """
-                                if (doc['metadata.url.keyword'].size() > 0) {
-                                    String url = doc['metadata.url.keyword'].value;
-                                    if (url.contains('://')) {
-                                        String domain = url.split('://')[1];
-                                        if (domain.contains('/')) {
-                                            domain = domain.split('/')[0];
-                                        }
-                                        return domain;
-                                    }
-                                }
-                                return 'unknown';
-                            """,
-                            "lang": "painless"
-                        },
-                        "size": 10
-                    }
-                },
-                "url_protocols": {
-                    "terms": {
-                        "script": {
-                            "source": """
-                                if (doc['metadata.url.keyword'].size() > 0) {
-                                    String url = doc['metadata.url.keyword'].value;
-                                    if (url.contains('://')) {
-                                        return url.split('://')[0];
-                                    }
-                                }
-                                return 'unknown';
-                            """,
-                            "lang": "painless"
-                        },
-                        "size": 5
-                    }
-                },
-                
-                # Date Analysis
-                "evaluations_by_month": {
-                    "date_histogram": {
-                        "field": "metadata.created_on",
-                        "calendar_interval": "month",
-                        "format": "yyyy-MM",
-                        "min_doc_count": 1
-                    }
-                },
-                "evaluations_by_day": {
-                    "date_histogram": {
-                        "field": "metadata.created_on",
-                        "calendar_interval": "day",
-                        "format": "yyyy-MM-dd",
-                        "min_doc_count": 1
-                    }
-                },
-                "date_range_stats": {
-                    "stats": {
-                        "field": "metadata.created_on"
-                    }
-                },
-                
-                # Performance Metrics
-                "avg_weighted_score_by_agent": {
-                    "terms": {
-                        "field": "metadata.agent.keyword",
-                        "size": 20
-                    },
-                    "aggs": {
-                        "avg_score": {
-                            "avg": {
-                                "field": "metadata.weighted_score"
-                            }
-                        },
-                        "evaluation_count": {
-                            "value_count": {
-                                "field": "metadata.weighted_score"
-                            }
-                        }
-                    }
-                },
-                "avg_weighted_score_by_program": {
-                    "terms": {
-                        "field": "metadata.program.keyword",
-                        "size": 10
-                    },
-                    "aggs": {
-                        "avg_score": {
-                            "avg": {
-                                "field": "metadata.weighted_score"
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        # Execute the comprehensive aggregation query
-        logger.info("🔍 Executing comprehensive OpenSearch statistics query...")
-        response = client.search(
-            index="eval-*",
-            body=agg_query,
-            request_timeout=60
-        )
-        
-        # Extract aggregation results
-        aggs = response.get("aggregations", {})
-        total_hits = response.get("hits", {}).get("total", {})
-        
-        # Handle different OpenSearch response formats
-        if isinstance(total_hits, dict):
-            total_evaluations = total_hits.get("value", 0)
-        else:
-            total_evaluations = total_hits
-
-        # Process all aggregation results
-        statistics = {
-            # Basic Counts
-            "summary": {
-                "total_evaluations": total_evaluations,
-                "total_chunks": int(aggs.get("total_chunks_sum", {}).get("value", 0)),
-                "evaluation_chunks": int(aggs.get("evaluation_chunks_sum", {}).get("value", 0)),
-                "transcript_chunks": int(aggs.get("transcript_chunks_sum", {}).get("value", 0)),
-                "evaluations_with_transcript": aggs.get("evaluations_with_transcript", {}).get("doc_count", 0),
-                "evaluations_without_transcript": aggs.get("evaluations_without_transcript", {}).get("doc_count", 0)
-            },
-            
-            # Template and Program Analysis
-            "template_analysis": {
-                "template_counts": {
-                    bucket["key"]: bucket["doc_count"] 
-                    for bucket in aggs.get("template_names", {}).get("buckets", [])
-                },
-                "program_counts": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("program_distribution", {}).get("buckets", [])
-                }
-            },
-            
-            # Organizational Analysis
-            "organizational_analysis": {
-                "partner_counts": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("partner_distribution", {}).get("buckets", [])
-                },
-                "site_counts": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("site_distribution", {}).get("buckets", [])
-                },
-                "lob_counts": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("lob_distribution", {}).get("buckets", [])
-                }
-            },
-            
-            # Agent Analysis
-            "agent_analysis": {
-                "agent_counts": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("agent_distribution", {}).get("buckets", [])
-                },
-                "top_agents": [
-                    {
-                        "agent": bucket["key"],
-                        "evaluation_count": bucket["doc_count"],
-                        "avg_score": bucket.get("avg_score", {}).get("value"),
-                        "score_count": bucket.get("evaluation_count", {}).get("value")
-                    }
-                    for bucket in aggs.get("avg_weighted_score_by_agent", {}).get("buckets", [])
-                ]
-            },
-            
-            # Call Analysis
-            "call_analysis": {
-                "disposition_counts": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("disposition_distribution", {}).get("buckets", [])
-                },
-                "sub_disposition_counts": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("sub_disposition_distribution", {}).get("buckets", [])
-                },
-                "language_counts": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("language_distribution", {}).get("buckets", [])
-                },
-                "call_type_counts": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("call_type_distribution", {}).get("buckets", [])
-                },
-                "call_duration_stats": aggs.get("call_duration_stats", {}),
-                "call_duration_ranges": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("call_duration_ranges", {}).get("buckets", [])
-                }
-            },
-            
-            # ✅ WEIGHTED SCORE ANALYSIS - COMPREHENSIVE
-            "weighted_score_analysis": {
-                "statistics": aggs.get("weighted_score_stats", {}),
-                "score_ranges": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("weighted_score_ranges", {}).get("buckets", [])
-                },
-                "score_histogram": [
-                    {
-                        "score_range": f"{bucket['key']}-{bucket['key'] + 5}",
-                        "count": bucket["doc_count"]
-                    }
-                    for bucket in aggs.get("weighted_score_histogram", {}).get("buckets", [])
-                ],
-                "evaluations_with_scores": aggs.get("evaluations_with_weighted_score", {}).get("doc_count", 0),
-                "score_coverage_percentage": round(
-                    (aggs.get("evaluations_with_weighted_score", {}).get("doc_count", 0) / max(total_evaluations, 1)) * 100, 2
-                ),
-                "avg_score_by_program": {
-                    bucket["key"]: {
-                        "avg_score": round(bucket.get("avg_score", {}).get("value", 0), 2),
-                        "evaluation_count": bucket["doc_count"]
-                    }
-                    for bucket in aggs.get("avg_weighted_score_by_program", {}).get("buckets", [])
-                }
-            },
-            
-            # ✅ URL ANALYSIS - COMPLETELY NEW
-            "url_analysis": {
-                "evaluations_with_urls": aggs.get("evaluations_with_url", {}).get("doc_count", 0),
-                "url_coverage_percentage": round(
-                    (aggs.get("evaluations_with_url", {}).get("doc_count", 0) / max(total_evaluations, 1)) * 100, 2
-                ),
-                "url_domains": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("url_domains", {}).get("buckets", [])
-                },
-                "url_protocols": {
-                    bucket["key"]: bucket["doc_count"]
-                    for bucket in aggs.get("url_protocols", {}).get("buckets", [])
-                }
-            },
-            
-            # Date Analysis
-            "temporal_analysis": {
-                "evaluations_by_month": [
-                    {
-                        "month": bucket["key_as_string"],
-                        "count": bucket["doc_count"]
-                    }
-                    for bucket in aggs.get("evaluations_by_month", {}).get("buckets", [])
-                ],
-                "evaluations_by_day": [
-                    {
-                        "date": bucket["key_as_string"],
-                        "count": bucket["doc_count"]
-                    }
-                    for bucket in aggs.get("evaluations_by_day", {}).get("buckets", [])[-30:]  # Last 30 days
-                ],
-                "date_range_stats": aggs.get("date_range_stats", {})
-            }
+        # Initialize stats
+        stats = {
+            "total_evaluations": 0,
+            "total_chunks": 0,
+            "indices": [],
+            "programs": {},
+            "dispositions": {},
+            "compilation_safe": True,
+            "timestamp": datetime.now().isoformat()
         }
         
-        # Get index information
+        # STEP 1: Get basic document count (always works)
         try:
-            index_stats = client.indices.stats(index="eval-*")
-            indices_info = []
-            
-            for index_name, stats in index_stats.get("indices", {}).items():
-                doc_count = stats.get("primaries", {}).get("docs", {}).get("count", 0)
-                store_size = stats.get("primaries", {}).get("store", {}).get("size_in_bytes", 0)
-                size_mb = store_size / (1024 * 1024) if store_size else 0
-                
-                indices_info.append({
-                    "name": index_name,
-                    "documents": doc_count,
-                    "size_mb": round(size_mb, 2)
-                })
-                
-            statistics["index_information"] = indices_info
-            
+            count_result = client.count(
+                index="eval-*", 
+                request_timeout=10
+            )
+            stats["total_evaluations"] = count_result.get("count", 0)
+            logger.info(f"✅ Document count: {stats['total_evaluations']}")
         except Exception as e:
-            logger.warning(f"Could not get index stats: {e}")
-            statistics["index_information"] = []
+            logger.warning(f"Count query failed: {e}")
+            stats["count_error"] = str(e)
         
-        logger.info(f"✅ OpenSearch statistics generated successfully for {total_evaluations} evaluations")
+        # STEP 2: Get index information (safe)
+        try:
+            indices = client.cat.indices(
+                index="eval-*", 
+                format="json", 
+                request_timeout=10
+            )
+            
+            if indices:
+                stats["indices"] = [
+                    {
+                        "name": idx.get("index", "unknown"),
+                        "docs": int(idx.get("docs.count", "0") or 0),
+                        "size": idx.get("store.size", "0b")
+                    }
+                    for idx in indices
+                ]
+                
+                # Calculate total chunks from indices
+                stats["total_chunks"] = sum(idx["docs"] for idx in stats["indices"])
+                
+        except Exception as e:
+            logger.warning(f"Index info failed: {e}")
+            stats["index_error"] = str(e)
+        
+        # STEP 3: Try SAFE aggregations (only if we have data)
+        if stats["total_evaluations"] > 0:
+            try:
+                # Get field mappings first to ensure fields exist
+                mappings = client.indices.get_mapping(index="eval-*", request_timeout=10)
+                
+                # Check what fields actually exist
+                available_fields = set()
+                for index_name, mapping_data in mappings.items():
+                    metadata_props = mapping_data.get("mappings", {}).get("properties", {}).get("metadata", {}).get("properties", {})
+                    available_fields.update(metadata_props.keys())
+                
+                logger.info(f"Available metadata fields: {available_fields}")
+                
+                # Build safe aggregation query
+                safe_aggs = {}
+                
+                # Only add aggregations for fields that exist and are safe
+                if "program" in available_fields:
+                    safe_aggs["programs"] = {
+                        "terms": {
+                            "field": "metadata.program.keyword",
+                            "size": 20,
+                            "missing": "Unknown"
+                        }
+                    }
+                
+                if "disposition" in available_fields:
+                    safe_aggs["dispositions"] = {
+                        "terms": {
+                            "field": "metadata.disposition.keyword", 
+                            "size": 20,
+                            "missing": "Unknown"
+                        }
+                    }
+                
+                # Only run aggregations if we have safe fields
+                if safe_aggs:
+                    agg_query = {
+                        "size": 0,
+                        "timeout": "20s",
+                        "aggs": safe_aggs
+                    }
+                    
+                    agg_result = client.search(
+                        index="eval-*",
+                        body=agg_query,
+                        request_timeout=25,
+                        allow_partial_search_results=True
+                    )
+                    
+                    # Process aggregation results
+                    if "aggregations" in agg_result:
+                        aggs = agg_result["aggregations"]
+                        
+                        if "programs" in aggs:
+                            stats["programs"] = {
+                                bucket["key"]: bucket["doc_count"]
+                                for bucket in aggs["programs"]["buckets"]
+                            }
+                        
+                        if "dispositions" in aggs:
+                            stats["dispositions"] = {
+                                bucket["key"]: bucket["doc_count"]
+                                for bucket in aggs["dispositions"]["buckets"]
+                            }
+                            
+                    logger.info("✅ Safe aggregations completed")
+                else:
+                    logger.warning("No safe aggregation fields found")
+                    stats["aggregation_warning"] = "No safe fields for aggregation"
+                    
+            except Exception as e:
+                logger.error(f"Safe aggregation failed: {e}")
+                stats["aggregation_error"] = str(e)
+                stats["compilation_safe"] = False
+        
+        # STEP 4: Add health information
+        try:
+            health = client.cluster.health(request_timeout=5)
+            stats["cluster_health"] = {
+                "status": health.get("status"),
+                "nodes": health.get("number_of_nodes"),
+                "active_shards": health.get("active_primary_shards")
+            }
+        except Exception as e:
+            logger.warning(f"Health check failed: {e}")
         
         return {
             "status": "success",
-            "data": statistics,
-            "metadata": {
-                "version": "4.5.0_comprehensive_stats",
-                "timestamp": datetime.now().isoformat(),
-                "query_execution_time": "calculated_by_opensearch",
-                "new_features": [
-                    "weighted_score_comprehensive_analysis",
-                    "url_analysis_complete",
-                    "agent_performance_metrics",
-                    "temporal_analysis_enhanced"
-                ]
-            }
+            "data": stats,
+            "safe_mode": True,
+            "fixes_applied": [
+                "timeout_fix",
+                "field_existence_check", 
+                "compilation_error_prevention",
+                "partial_results_allowed"
+            ]
         }
         
     except Exception as e:
-        logger.error(f"OpenSearch statistics error: {e}")
+        logger.error(f"Safe statistics endpoint failed: {e}")
         return {
             "status": "error",
             "error": str(e),
-            "data": create_empty_statistics_response(),
+            "safe_mode": True,
             "timestamp": datetime.now().isoformat()
         }
+
+# Add a simple health endpoint that never fails
+@app.get("/opensearch_health_simple")
+async def opensearch_health_simple():
+    """Ultra-simple health check that never causes compilation errors"""
+    try:
+        from opensearch_client import get_opensearch_client
+        
+        client = get_opensearch_client()
+        if not client:
+            return {"status": "no_client", "timestamp": datetime.now().isoformat()}
+        
+        # Just ping - no complex queries
+        ping_result = client.ping(request_timeout=5)
+        
+        return {
+            "status": "healthy" if ping_result else "unhealthy",
+            "connected": ping_result,
+            "timestamp": datetime.now().isoformat(),
+            "safe_mode": True
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+# Add middleware to catch compilation errors
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
+class CompilationErrorMiddleware(BaseHTTPMiddleware):
+    """Catch OpenSearch compilation errors and return safe responses"""
+    
+    async def dispatch(self, request, call_next):
+        try:
+            response = await call_next(request)
+            return response
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            # Check for compilation errors
+            if any(keyword in error_str for keyword in [
+                "search_phase_execution_exception",
+                "compile_error", 
+                "compilation_exception"
+            ]):
+                logger.error(f"🚨 COMPILATION ERROR caught in {request.url.path}: {e}")
+                
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "error": "Query compilation failed",
+                        "details": "OpenSearch could not compile the query",
+                        "suggestion": "Try simpler search terms or contact support",
+                        "safe_mode": True,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                )
+            else:
+                # Re-raise non-compilation errors
+                raise
+
+# Add the middleware to your app
+app.add_middleware(CompilationErrorMiddleware)
 
 def create_empty_statistics_response():
     """Create empty statistics response structure"""
