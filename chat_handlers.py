@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from opensearch_client import search_opensearch, search_vector
 from embedder import embed_text
+from typing import Dict, Any, List, Literal, Tuple
 
 logger = logging.getLogger(__name__)
 chat_router = APIRouter()
@@ -408,7 +409,7 @@ def test_new_fields_extraction():
  
 
 
-def build_search_context(query: str, filters: dict, max_results: int = 100) -> tuple[str, List[dict]]:
+def build_search_context(query: str, filters: dict, max_results: int = 100) -> Tuple[str, List[dict]]:
     """
     ENHANCED: Build search context with configurable limits (removed 15 doc restriction)
     Now analyzes much more data for better comprehensive responses
@@ -606,9 +607,66 @@ INSTRUCTIONS:
 - Suggest trying again or contacting technical support
 """
         return error_context, []
+    
+def build_strict_metadata_context(metadata_summary: Dict[str, Any], query: str) -> str:
+    """Alias for build_simplified_context for backward compatibility"""
+    return build_simplified_context(metadata_summary, query)
+
+
+def build_simplified_context(metadata_summary: Dict[str, Any], query: str) -> str:
+    """
+    Build context focusing on essential fields only
+    """
+    if not metadata_summary.get("has_real_data", False):
+        return """
+NO DATA FOUND: No evaluation records match your query criteria. 
+You must clearly state that no data is available and suggest:
+1. Checking if data has been imported
+2. Adjusting search terms or filters
+3. Verifying the evaluation database connectivity
+
+DO NOT GENERATE OR ESTIMATE ANY NUMBERS, DATES, OR STATISTICS.
+"""
+
+    # Safe field access with defaults
+    essential_fields = metadata_summary.get("essential_fields", {
+        "evaluationId": [],
+        "template_name": [],
+        "agentName": [],
+        "created_on": []
+    })
+
+    # Build context with safe field access
+    context = f"""
+VERIFIED EVALUATION DATA FOUND: {metadata_summary.get('total_evaluations', 0)} unique evaluations from {metadata_summary.get('total_chunks_found', 0)} content sources
+
+ESSENTIAL METADATA AVAILABLE:
+- Evaluation IDs: {len(essential_fields.get('evaluationId', []))} unique
+- Template Names: {essential_fields.get('template_name', [])}
+- Agent Names: {essential_fields.get('agentName', [])}
+- Date Range: {len(essential_fields.get('created_on', []))} unique dates
+- Call Dispositions: {metadata_summary.get('dispositions', [])}
+- Programs: {metadata_summary.get('programs', [])}
+
+CRITICAL INSTRUCTIONS:
+1. ONLY use data from the provided evaluation sources
+2. Focus on: evaluationId, template_name, agentName, created_on
+3. DO NOT generate percentages or statistics not directly calculable from the data
+4. Report on {metadata_summary.get('total_evaluations', 0)} EVALUATIONS (not chunks)
+5. Use only the agent names found: {', '.join(essential_fields.get('agentName', [])[:10])}
+6. Use only the dispositions found: {', '.join(metadata_summary.get('dispositions', []))}
+
+DATA VERIFICATION STATUS: {metadata_summary.get('data_verification', 'VERIFIED_REAL_DATA')}
+"""
+    
+    return context
+
 # =============================================================================
 # MAIN RAG-ENABLED CHAT ENDPOINT WITH STRICT METADATA VERIFICATION
 # =============================================================================
+
+
+
 
 @chat_router.post("/chat")
 async def relay_chat_rag(request: Request):
