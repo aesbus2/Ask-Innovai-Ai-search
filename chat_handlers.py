@@ -412,202 +412,240 @@ def detect_report_query(message: str) -> bool:
     ]
     return any(keyword in message.lower() for keyword in report_keywords)
 
+# Replace your build_search_context function in chat_handlers.py with this working version
+
 def build_search_context(query: str, filters: dict, max_results: int = 100) -> Tuple[str, List[dict]]:
     """
-    ENHANCED: Build search context with configurable limits (removed 15 doc restriction)
-    Now analyzes much more data for better comprehensive responses
+    FIXED: Build search context that actually finds documents
     """
-    logger.info(f"🔍 BUILDING SEARCH CONTEXT WITH ENHANCED LIMITS")
+    logger.info(f"🔍 BUILDING SEARCH CONTEXT (FIXED VERSION)")
     logger.info(f"📋 Query: '{query}'")
     logger.info(f"🏷️ Filters: {filters}")
     logger.info(f"📊 Max results: {max_results}")
     
     try:
-        # STEP 1: Try vector search first (if available)
-        vector_hits = []
-        try:
-            logger.info("🔮 Attempting vector embedding...")
-            query_vector = embed_text(query)
-            logger.info(f"✅ Vector embedding successful: {len(query_vector)} dimensions")
-            
-            try:
-                logger.info("🔍 Performing vector search...")
-                # Increased vector search size too
-                vector_hits = search_vector(query_vector, index_override=None, size=max_results//2)
-                logger.info(f"📊 Vector search returned {len(vector_hits)} hits")
-                
-                for hit in vector_hits:
-                    hit["search_type"] = "vector"
-                    
-            except Exception as e:
-                logger.warning(f"⚠️ Vector search failed: {e}")
-                
-        except Exception as e:
-            logger.warning(f"⚠️ Vector embedding failed: {e}")
-
-        # STEP 2: Try text search (primary method) with increased size
-        text_hits = []
-        try:
-            logger.info("📝 Performing text search with enhanced size...")
-            
-            # Enhanced query for disposition-related searches
-            search_query = query
-            if any(keyword in query.lower() for keyword in ["disposition", "call outcome", "call result", "call status"]):
-                # Enhance search for disposition queries
-                search_query = f"{query} disposition sub_disposition call_outcome call_result"
-                logger.info(f"🎯 Enhanced disposition search query: '{search_query}'")
-            
-            # INCREASED: Much larger search size for comprehensive results
-            text_hits = search_opensearch(search_query, index_override=None, filters=filters, size=max_results)
-            logger.info(f"📊 Text search returned {len(text_hits)} hits")
-            
-            for hit in text_hits:
-                hit["search_type"] = "text"
-                
-        except Exception as e:
-            logger.error(f"❌ Text search FAILED: {e}")
-
-        # STEP 3: Combine and deduplicate results
-        all_hits = vector_hits + [hit for hit in text_hits if hit.get("_id") not in [h.get("_id") for h in vector_hits]]
-        logger.info(f"🔗 COMBINED RESULTS: {len(all_hits)} total hits")
-
-        # STEP 4: Process hits and build sources (REMOVED 15 limit)
-        processed_sources = []
+        from opensearch_client import get_opensearch_client
         
-        # ENHANCED: Process ALL hits instead of limiting to 15
-        for i, hit in enumerate(all_hits):  # ← REMOVED [:15] LIMIT!
+        client = get_opensearch_client()
+        if not client:
+            logger.error("❌ No OpenSearch client available")
+            return "Search system unavailable.", []
+        
+        # STEP 1: Try multiple search strategies
+        all_sources = []
+        
+        # Strategy 1: Simple match_all query (should always work)
+        try:
+            logger.info("🔍 Trying match_all query...")
+            match_all_response = client.search(
+                index="eval-*",
+                body={
+                    "size": min(max_results, 50),
+                    "query": {"match_all": {}},
+                    "_source": [
+                        "evaluationId", "internalId", "template_name", "template_id",
+                        "text", "content", "full_text", "metadata"
+                    ]
+                },
+                request_timeout=15
+            )
+            
+            match_all_hits = match_all_response.get("hits", {}).get("hits", [])
+            logger.info(f"📊 Match_all query returned {len(match_all_hits)} hits")
+            
+            # Process match_all results
+            for hit in match_all_hits:
+                source = hit.get("_source", {})
+                eval_id = source.get("evaluationId") or source.get("internalId") or hit.get("_id")
+                
+                # Get text content
+                text_content = (
+                    source.get("text") or 
+                    source.get("content") or 
+                    source.get("full_text") or 
+                    "No content available"
+                )
+                
+                source_info = {
+                    "evaluationId": eval_id,
+                    "search_type": "match_all",
+                    "score": hit.get("_score", 1.0),
+                    "template_name": source.get("template_name", "Unknown"),
+                    "template_id": source.get("template_id"),
+                    "text": text_content[:2000],  # Limit to 2000 chars
+                    "metadata": source.get("metadata", {}),
+                    "content_type": "evaluation",
+                    "_index": hit.get("_index")
+                }
+                
+                all_sources.append(source_info)
+                
+        except Exception as e:
+            logger.error(f"❌ Match_all query failed: {e}")
+        
+        # Strategy 2: If we have a specific query, try text search
+        if query and query.strip() and len(query.strip()) > 2:
             try:
-                doc = hit.get("_source", {})
-                score = hit.get("_score", 0)
-                search_type = hit.get("search_type", "unknown")
+                logger.info(f"🔍 Trying text search for: '{query}'")
+                text_response = client.search(
+                    index="eval-*",
+                    body={
+                        "size": min(max_results, 30),
+                        "query": {
+                            "bool": {
+                                "should": [
+                                    {
+                                        "multi_match": {
+                                            "query": query,
+                                            "fields": ["text^2", "content^2", "full_text^2"],
+                                            "type": "best_fields",
+                                            "fuzziness": "AUTO"
+                                        }
+                                    },
+                                    {
+                                        "match": {
+                                            "text": {
+                                                "query": query,
+                                                "boost": 1.5
+                                            }
+                                        }
+                                    }
+                                ],
+                                "minimum_should_match": 1
+                            }
+                        },
+                        "_source": [
+                            "evaluationId", "internalId", "template_name", "template_id",
+                            "text", "content", "full_text", "metadata"
+                        ]
+                    },
+                    request_timeout=15
+                )
                 
-                # Get evaluation ID with better extraction
-                evaluation_id = None
-                for id_field in ["evaluationId", "evaluation_id", "internalId", "internal_id"]:
-                    if doc.get(id_field):
-                        evaluation_id = doc.get(id_field)
-                        break
+                text_hits = text_response.get("hits", {}).get("hits", [])
+                logger.info(f"📊 Text search returned {len(text_hits)} hits")
                 
-                if not evaluation_id:
-                    evaluation_id = f"eval_{i}"
-
-                # Extract text content
-                content_text = ""
-                if doc.get("full_text"):
-                    content_text = doc.get("full_text")
-                elif doc.get("evaluation_text"):
-                    content_text = doc.get("evaluation_text")
-                elif doc.get("transcript_text"):
-                    content_text = doc.get("transcript_text")
-                else:
-                    chunks = doc.get("chunks", [])
-                    if chunks and isinstance(chunks, list):
-                        chunk_texts = [chunk.get("text", "") for chunk in chunks[:3] if isinstance(chunk, dict)]
-                        if chunk_texts:
-                            content_text = "\n".join(chunk_texts)
-
-                if content_text and len(content_text.strip()) > 20:
-                    # ENHANCED: Don't truncate content as aggressively for better analysis
-                    if len(content_text) > 1500:  # Increased from 800
-                        content_text = content_text[:1500] + "..."
+                # Process text search results (these get higher priority)
+                for hit in text_hits:
+                    source = hit.get("_source", {})
+                    eval_id = source.get("evaluationId") or source.get("internalId") or hit.get("_id")
                     
-                    # CRITICAL: Extract and verify metadata with better handling
-                    metadata = doc.get("metadata", {})
+                    # Skip if we already have this evaluation
+                    if any(s.get("evaluationId") == eval_id for s in all_sources):
+                        continue
                     
-                    # Build verified source with all metadata
+                    text_content = (
+                        source.get("text") or 
+                        source.get("content") or 
+                        source.get("full_text") or 
+                        "No content available"
+                    )
+                    
                     source_info = {
-                        "evaluationId": evaluation_id,
-                        "text": content_text,
-                        "score": round(score, 3),
-                        "search_type": search_type,
-                        "template_id": doc.get("template_id"),
-                        "template_name": doc.get("template_name"),
-                        "metadata": {
-                            "program": metadata.get("program"),
-                            "partner": metadata.get("partner"),
-                            "site": metadata.get("site"),
-                            "lob": metadata.get("lob"),
-                            "agent": metadata.get("agent"),
-                            "disposition": metadata.get("disposition"),
-                            "sub_disposition": metadata.get("sub_disposition"),
-                            "language": metadata.get("language"),
-                            "call_date": metadata.get("call_date"),
-                            "call_duration": metadata.get("call_duration"),
-                            "phone_number": metadata.get("phone_number"),
-                            "contact_id": metadata.get("contact_id"),
-                            "ucid": metadata.get("ucid"),
-                            "call_type": metadata.get("call_type")
-                        }
+                        "evaluationId": eval_id,
+                        "search_type": "text",
+                        "score": hit.get("_score", 0),
+                        "template_name": source.get("template_name", "Unknown"),
+                        "template_id": source.get("template_id"),
+                        "text": text_content[:2000],
+                        "metadata": source.get("metadata", {}),
+                        "content_type": "evaluation",
+                        "_index": hit.get("_index")
                     }
                     
-                    processed_sources.append(source_info)
-                    
-                    if i < 20 or i % 50 == 0:  # Log first 20 and every 50th after that
-                        logger.info(f"✅ SOURCE {i+1}: {evaluation_id} - Disposition: {metadata.get('disposition', 'N/A')} ({search_type})")
+                    # Insert at beginning (higher priority than match_all)
+                    all_sources.insert(0, source_info)
                     
             except Exception as e:
-                logger.error(f"❌ Failed to process hit {i}: {e}")
-
-        # STEP 5: Verify metadata alignment and build strict context
-        logger.info(f"🔍 METADATA VERIFICATION: Processing {len(processed_sources)} sources")
+                logger.error(f"❌ Text search failed: {e}")
         
-        metadata_summary = verify_metadata_alignment(processed_sources)
+        # STEP 2: Process and verify results
+        logger.info(f"🔗 TOTAL SOURCES FOUND: {len(all_sources)}")
         
-        logger.info(f"📊 ENHANCED METADATA SUMMARY:")
-        logger.info(f"   Has real data: {metadata_summary['has_real_data']}")
-        logger.info(f"   Total evaluations: {metadata_summary['total_evaluations']}")
-        logger.info(f"   Total chunks: {metadata_summary['total_chunks_found']}")
-        logger.info(f"   Dispositions found: {len(metadata_summary['dispositions'])}")
-        logger.info(f"   Programs found: {len(metadata_summary['programs'])}")
-        logger.info(f"   Sources processed: {len(processed_sources)}")
-        
-        if metadata_summary["has_real_data"]:
-            # Build strict context with real metadata only
-            strict_context = build_simplified_context(metadata_summary, query)
-            
-            # Add sample content for context (but more of it now)
-            if processed_sources:
-                strict_context += f"\n\nSAMPLE EVALUATION CONTENT FROM {len(processed_sources)} SOURCES:\n"
-                for i, source in enumerate(processed_sources[:10]):  # Show first 10 instead of 3
-                    strict_context += f"\n[Evaluation {i+1} - ID: {source['evaluationId']}]\n"
-                    strict_context += f"Template: {source.get('template_name', 'Unknown')}\n"
-                    strict_context += f"Program: {source.get('metadata', {}).get('program', 'Unknown')}\n"
-                    strict_context += f"Disposition: {source.get('metadata', {}).get('disposition', 'Unknown')}\n"
-                    strict_context += f"Content Preview: {source['text'][:200]}...\n"
-                
-                if len(processed_sources) > 10:
-                    strict_context += f"\n... and {len(processed_sources) - 10} more evaluation sources analyzed\n"
-            
-            logger.info(f"✅ ENHANCED CONTEXT BUILT: {len(strict_context)} chars with {len(processed_sources)} sources")
-            return strict_context, processed_sources
-        else:
-            logger.warning("⚠️ NO VERIFIED METADATA FOUND")
+        if not all_sources:
+            logger.warning("⚠️ NO SOURCES FOUND")
             no_data_context = """
-NO EVALUATION DATA FOUND: The search did not return any evaluation records with metadata.
+NO EVALUATION DATA FOUND: The search did not return any evaluation records.
 
 POSSIBLE CAUSES:
 1. No data has been imported into the evaluation database
-2. Search terms don't match any indexed content
-3. Applied filters are too restrictive
-4. Database connection issues
+2. Search index is corrupted or misconfigured
+3. Database connection issues
+4. OpenSearch mapping problems
 
 INSTRUCTIONS:
 - Clearly state that no evaluation data was found
 - Do not generate or estimate any statistics
-- Suggest checking data import status or adjusting search criteria
-- Recommend visiting the admin panel to verify data import
+- Suggest checking data import status
+- Recommend contacting technical support
 """
             return no_data_context, []
+        
+        # STEP 3: Verify metadata and build context
+        processed_sources = []
+        unique_evaluations = set()
+        
+        for source in all_sources[:max_results]:  # Limit total sources
+            eval_id = source.get("evaluationId")
+            if eval_id and eval_id not in unique_evaluations:
+                unique_evaluations.add(eval_id)
+                processed_sources.append(source)
+        
+        # STEP 4: Build context with real data
+        if processed_sources:
+            context = f"""
+VERIFIED EVALUATION DATA FOUND: {len(processed_sources)} unique evaluations
+
+DATA OVERVIEW:
+- Total evaluations: {len(unique_evaluations)}
+- Content sources: {len(all_sources)}
+- Search methods used: {', '.join(set(s['search_type'] for s in processed_sources))}
+
+SAMPLE CONTENT:
+{processed_sources[0]['text'][:500]}...
+
+EVALUATION DETAILS:
+"""
+            
+            # Add details from first few evaluations
+            for i, source in enumerate(processed_sources[:5]):
+                metadata = source.get("metadata", {})
+                context += f"""
+[Evaluation {i+1}] ID: {source['evaluationId']}
+- Template: {source.get('template_name', 'Unknown')}
+- Program: {metadata.get('program', 'Unknown')}
+- Disposition: {metadata.get('disposition', 'Unknown')}
+- Content: {source['text'][:200]}...
+"""
+            
+            if len(processed_sources) > 5:
+                context += f"\n... and {len(processed_sources) - 5} more evaluations"
+            
+            context += f"""
+
+INSTRUCTIONS:
+- Use ONLY the data shown above from {len(processed_sources)} evaluations
+- Do not generate statistics not directly calculable from this data
+- Focus on patterns and insights from the actual content provided
+"""
+            
+            logger.info(f"✅ CONTEXT BUILT: {len(context)} chars with {len(processed_sources)} sources")
+            return context, processed_sources
+        else:
+            logger.warning("⚠️ NO VALID SOURCES AFTER PROCESSING")
+            return "No valid evaluation data found after processing.", []
 
     except Exception as e:
-        logger.error(f"❌ ENHANCED SEARCH CONTEXT BUILD FAILED: {e}")
+        logger.error(f"❌ SEARCH CONTEXT BUILD FAILED: {e}")
         error_context = f"""
-SEARCH ERROR: Failed to retrieve evaluation data due to: {str(e)}
+SEARCH ERROR: Failed to retrieve evaluation data due to technical issues.
+
+Error details: {str(e)[:200]}
 
 INSTRUCTIONS:
 - Inform the user that there was a technical error accessing the evaluation database
-- Do not generate any statistics or data
 - Suggest trying again or contacting technical support
+- Do not generate any statistics or data
 """
         return error_context, []
     
