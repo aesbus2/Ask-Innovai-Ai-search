@@ -668,9 +668,6 @@ DATA VERIFICATION STATUS: {metadata_summary.get('data_verification', 'VERIFIED_R
 # MAIN RAG-ENABLED CHAT ENDPOINT WITH STRICT METADATA VERIFICATION
 # =============================================================================
 
-
-
-
 @chat_router.post("/chat")
 async def relay_chat_rag(request: Request):
     start_time = time.time()
@@ -684,7 +681,7 @@ async def relay_chat_rag(request: Request):
         is_report_request = detect_report_query(req.message)
         logger.info(f"📊 REPORT REQUEST DETECTED: {is_report_request}")
 
-        # STEP 1: Build context with strict metadata verification (WITH DEBUGGING)
+        # STEP 1: Build context with strict metadata verification
         context, sources = build_search_context(req.message, req.filters)
         
         # DEBUG: Log context quality
@@ -695,16 +692,13 @@ async def relay_chat_rag(request: Request):
         # STEP 2: Enhanced system message with strict instructions
         system_message = f"""You are an AI assistant for call center evaluation data analysis.
 
-YOUR UPDATED INSTRUCTIONS HERE:
+ANALYSIS INSTRUCTIONS:
 1. Review transcripts or agent summaries to identify recurring communication issues or strengths.
 2. Compare tone, language, empathy, and product knowledge across different agents.
 3. Identify patterns in unresolved issues, script reliance, and lack of customer satisfaction.
-4. Highlight strengths that indicate potential program success (e.g., conversational tone, structure, engagement).
+4. Highlight strengths that indicate potential program success.
 5. Determine if the overall program is successful or needs improvement, with justification.
-6. Write a concise but structured summary with these sections:
-   - ✅ Strengths Indicating Potential Success
-   - ⚠️ Indicators the Program Is Not Yet Fully Successful
-   - 🔧 Bottom Line (your professional judgment of the program)
+6. Write a concise but structured summary with clear sections and bullet points.
 
 EVALUATION DATABASE CONTEXT:
 {context}
@@ -714,40 +708,33 @@ CRITICAL INSTRUCTIONS:
 - Do not generate statistics not directly calculable from the data
 - Be objective and data-informed
 - Avoid overgeneralizations
-- Make the summary suitable for leadership or QA team use. Use bullet points and clear headers. Be objective and data-informed. Avoid overgeneralizations.
+- Make the summary suitable for leadership or QA team use
 """
-        # STEP 3: Prepare conversation history
-        conversation_history = []
-        for msg in req.history[-10:]:  # Keep last 10 messages
-            conversation_history.append({
-                "role": msg.get("role", "user"),
-                "content": msg.get("content", "")
-            })
 
-        # STEP 4: Make GenAI API request
-        genai_payload = {
-            "model": GENAI_MODEL,
+        # STEP 3: Construct DigitalOcean AI payload (corrected format)
+        do_payload = {
             "messages": [
                 {"role": "system", "content": system_message},
-                *conversation_history,
+                *[{"role": msg.get("role", "user"), "content": msg.get("content", "")} for msg in req.history[-10:]],
                 {"role": "user", "content": req.message}
             ],
             "temperature": GENAI_TEMPERATURE,
-            "max_tokens": GENAI_MAX_TOKENS,
-            "stream": False
+            "max_tokens": GENAI_MAX_TOKENS
         }
 
-        # Make the actual API call
-        logger.info(f"🚀 Making GenAI API call...")
         headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {GENAI_ACCESS_KEY}"
+            "Authorization": f"Bearer {GENAI_ACCESS_KEY}",
+            "Content-Type": "application/json"
         }
-        
+
+        # Correct DigitalOcean AI URL format
+        do_url = f"{GENAI_ENDPOINT.rstrip('/')}/api/v1/chat/completions"
+        logger.info(f"🚀 Making GenAI API call to: {do_url}")
+
         genai_response = requests.post(
-            GENAI_ENDPOINT,
-            json=genai_payload,
+            do_url,
             headers=headers,
+            json=do_payload,
             timeout=30
         )
         
@@ -756,7 +743,7 @@ CRITICAL INSTRUCTIONS:
             return JSONResponse(
                 status_code=500,
                 content={
-                    "reply": "I apologize, but I'm experiencing technical difficulties. Please try again in a moment.",
+                    "reply": "I apologize, but I'm experiencing technical difficulties with the AI service. Please try again in a moment.",
                     "sources": [],
                     "timestamp": datetime.now().isoformat(),
                     "search_metadata": {
@@ -767,39 +754,47 @@ CRITICAL INSTRUCTIONS:
                 }
             )
 
-        genai_data = genai_response.json()
-        reply_text = genai_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        result = genai_response.json()
         
-        if not reply_text:
-            reply_text = "I apologize, but I couldn't generate a response. Please try rephrasing your question."
+        # Extract reply from DigitalOcean AI response
+        reply_text = "(No response)"
+        if "choices" in result and result["choices"]:
+            reply_text = result["choices"][0]["message"]["content"].strip()
+        else:
+            logger.error(f"❌ GenAI response missing 'choices': {result}")
+            reply_text = "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
 
-        # STEP 5: Process sources for response
-        unique_sources = {}
+        # STEP 4: Process sources for response - Remove duplicates
+        unique_sources = []
+        seen_ids = set()
         for source in sources:
-            eval_id = source.get("evaluationId")
-            if eval_id and eval_id not in unique_sources:
-                unique_sources[eval_id] = {
+            eval_id = source.get("evaluationId") or source.get("evaluation_id")
+            if eval_id and eval_id not in seen_ids:
+                unique_sources.append({
                     "evaluationId": eval_id,
                     "template_name": source.get("template_name", "Unknown"),
                     "search_type": source.get("search_type", "text"),
                     "score": source.get("score", 0),
                     "metadata": source.get("metadata", {})
-                }
+                })
+                seen_ids.add(eval_id)
 
-        # STEP 6: Build response
+        # STEP 5: Build enhanced response
         response_data = {
             "reply": reply_text,
-            "sources": list(unique_sources.values())[:20],  # Limit sources in response
+            "sources": unique_sources[:20],  # Limit sources in response
             "timestamp": datetime.now().isoformat(),
             "filter_context": req.filters,
             "search_metadata": {
-                "total_sources": len(sources),
-                "unique_sources": len(unique_sources),
+                "vector_sources": len([s for s in sources if s.get("search_type") == "vector"]),
+                "text_sources": len([s for s in sources if s.get("search_type") == "text"]),
                 "context_length": len(context),
                 "processing_time": round(time.time() - start_time, 2),
+                "total_sources": len(sources),
+                "unique_sources": len(unique_sources),
                 "context_found": bool(context and "NO DATA FOUND" not in context),
                 "metadata_verified": "verified_real_data" in context.lower(),
-                "version": "4.4.0_complete"
+                "version": "4.4.0_do_fixed"
             }
         }
         
@@ -818,11 +813,11 @@ CRITICAL INSTRUCTIONS:
                 "search_metadata": {
                     "error": str(e),
                     "processing_time": round(time.time() - start_time, 2),
-                    "version": "4.4.0_complete"
+                    "version": "4.4.0_do_fixed"
                 }
             }
         )
-
+    
 # =============================================================================
 # HEALTH ENDPOINTS
 # =============================================================================

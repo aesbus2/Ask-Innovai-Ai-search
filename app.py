@@ -1679,177 +1679,245 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
 # PRODUCTION STATISTICS AND HEALTH ENDPOINTS
 # ============================================================================
 
-
-# Add this to your app.py to replace the problematic statistics endpoint
-
 @app.get("/opensearch_statistics")
-async def get_opensearch_statistics_safe():
-    """SAFE statistics endpoint that prevents compilation errors"""
+async def get_opensearch_statistics():
+    """CORRECTED: Get OpenSearch statistics using document sampling like the filter system"""
     try:
-        from opensearch_client import get_opensearch_client
+        from opensearch_client import get_opensearch_client, test_connection
         
-        client = get_opensearch_client()
-        if not client:
+        if not test_connection():
             return {
                 "status": "error",
-                "error": "OpenSearch client not available"
+                "error": "OpenSearch connection failed",
+                "timestamp": datetime.now().isoformat()
             }
         
-        # Initialize stats
-        stats = {
-            "total_evaluations": 0,
-            "total_chunks": 0,
-            "indices": [],
-            "programs": {},
-            "dispositions": {},
-            "compilation_safe": True,
-            "timestamp": datetime.now().isoformat()
-        }
+        client = get_opensearch_client()
+        start_time = time.time()
         
-        # STEP 1: Get basic document count (always works)
+        # STEP 1: Get basic document count
         try:
-            count_result = client.count(
+            count_response = client.count(
                 index="eval-*", 
+                body={"query": {"match_all": {}}},
                 request_timeout=10
             )
-            stats["total_evaluations"] = count_result.get("count", 0)
-            logger.info(f"✅ Document count: {stats['total_evaluations']}")
+            total_documents = count_response.get("count", 0)
+            logger.info(f"✅ Document count: {total_documents}")
         except Exception as e:
             logger.warning(f"Count query failed: {e}")
-            stats["count_error"] = str(e)
+            total_documents = 0
         
-        # STEP 2: Get index information (safe)
+        # STEP 2: Get indices information
         try:
-            indices = client.cat.indices(
-                index="eval-*", 
-                format="json", 
-                request_timeout=10
-            )
+            indices_response = client.cat.indices(index="eval-*", format="json", request_timeout=10)
+            active_indices = len(indices_response) if indices_response else 0
+        except Exception as e:
+            logger.warning(f"Indices query failed: {e}")
+            active_indices = 0
+        
+        # STEP 3: Get available metadata fields from mapping
+        try:
+            mapping_response = client.indices.get_mapping(index="eval-*", request_timeout=10)
+            available_fields = set()
             
-            if indices:
-                stats["indices"] = [
-                    {
-                        "name": idx.get("index", "unknown"),
-                        "docs": int(idx.get("docs.count", "0") or 0),
-                        "size": idx.get("store.size", "0b")
-                    }
-                    for idx in indices
-                ]
+            for index_name, mapping_data in mapping_response.items():
+                properties = mapping_data.get("mappings", {}).get("properties", {})
+                metadata_props = properties.get("metadata", {}).get("properties", {})
                 
-                # Calculate total chunks from indices
-                stats["total_chunks"] = sum(idx["docs"] for idx in stats["indices"])
-                
+                # Collect available metadata fields
+                for field_name in metadata_props.keys():
+                    available_fields.add(field_name)
+                    
         except Exception as e:
-            logger.warning(f"Index info failed: {e}")
-            stats["index_error"] = str(e)
+            logger.warning(f"Mapping query failed: {e}")
+            available_fields = set()
         
-        # STEP 3: Try SAFE aggregations (only if we have data)
-        if stats["total_evaluations"] > 0:
-            try:
-                # Get field mappings first to ensure fields exist
-                mappings = client.indices.get_mapping(index="eval-*", request_timeout=10)
-                
-                # Check what fields actually exist
-                available_fields = set()
-                for index_name, mapping_data in mappings.items():
-                    metadata_props = mapping_data.get("mappings", {}).get("properties", {}).get("metadata", {}).get("properties", {})
-                    available_fields.update(metadata_props.keys())
-                
-                logger.info(f"Available metadata fields: {available_fields}")
-                
-                # Build safe aggregation query
-                safe_aggs = {}
-                
-                # Only add aggregations for fields that exist and are safe
-                if "program" in available_fields:
-                    safe_aggs["programs"] = {
-                        "terms": {
-                            "field": "metadata.program.keyword",
-                            "size": 20,
-                            "missing": "Unknown"
-                        }
-                    }
-                
-                if "disposition" in available_fields:
-                    safe_aggs["dispositions"] = {
-                        "terms": {
-                            "field": "metadata.disposition.keyword", 
-                            "size": 20,
-                            "missing": "Unknown"
-                        }
-                    }
-                
-                # Only run aggregations if we have safe fields
-                if safe_aggs:
-                    agg_query = {
-                        "size": 0,
-                        "timeout": "20s",
-                        "aggs": safe_aggs
-                    }
-                    
-                    agg_result = client.search(
-                        index="eval-*",
-                        body=agg_query,
-                        request_timeout=25,
-                        allow_partial_search_results=True
-                    )
-                    
-                    # Process aggregation results
-                    if "aggregations" in agg_result:
-                        aggs = agg_result["aggregations"]
-                        
-                        if "programs" in aggs:
-                            stats["programs"] = {
-                                bucket["key"]: bucket["doc_count"]
-                                for bucket in aggs["programs"]["buckets"]
-                            }
-                        
-                        if "dispositions" in aggs:
-                            stats["dispositions"] = {
-                                bucket["key"]: bucket["doc_count"]
-                                for bucket in aggs["dispositions"]["buckets"]
-                            }
-                            
-                    logger.info("✅ Safe aggregations completed")
-                else:
-                    logger.warning("No safe aggregation fields found")
-                    stats["aggregation_warning"] = "No safe fields for aggregation"
-                    
-            except Exception as e:
-                logger.error(f"Safe aggregation failed: {e}")
-                stats["aggregation_error"] = str(e)
-                stats["compilation_safe"] = False
-        
-        # STEP 4: Add health information
-        try:
-            health = client.cluster.health(request_timeout=5)
-            stats["cluster_health"] = {
-                "status": health.get("status"),
-                "nodes": health.get("number_of_nodes"),
-                "active_shards": health.get("active_primary_shards")
-            }
-        except Exception as e:
-            logger.warning(f"Health check failed: {e}")
-        
-        return {
-            "status": "success",
-            "data": stats,
-            "safe_mode": True,
-            "fixes_applied": [
-                "timeout_fix",
-                "field_existence_check", 
-                "compilation_error_prevention",
-                "partial_results_allowed"
-            ]
+        # STEP 4: Sample documents to extract real statistics (same method as filters)
+        statistics = {
+            "templates": set(),
+            "programs": set(),
+            "partners": set(),
+            "sites": set(),
+            "lobs": set(),
+            "dispositions": set(),
+            "sub_dispositions": set(),
+            "agents": set(),
+            "languages": set(),
+            "call_types": set(),
+            "weighted_scores": [],
+            "urls": set(),
+            "call_durations": []
         }
         
+        evaluations_sampled = set()
+        chunks_sampled = 0
+        
+        try:
+            # Sample a good number of documents to get comprehensive statistics
+            sample_response = client.search(
+                index="eval-*",
+                body={
+                    "size": 200,  # Sample more documents for better statistics
+                    "query": {"match_all": {}},
+                    "_source": [
+                        "template_name", "template_id", "evaluationId", "internalId",
+                        "metadata.program", "metadata.partner", "metadata.site", 
+                        "metadata.lob", "metadata.disposition", "metadata.sub_disposition",
+                        "metadata.subDisposition", "metadata.agent", "metadata.agentName",
+                        "metadata.language", "metadata.call_type", "metadata.weighted_score",
+                        "metadata.url", "metadata.call_duration"
+                    ]
+                },
+                request_timeout=15
+            )
+            
+            hits = sample_response.get("hits", {}).get("hits", [])
+            chunks_sampled = len(hits)
+            
+            for hit in hits:
+                source = hit.get("_source", {})
+                metadata = source.get("metadata", {})
+                
+                # Track unique evaluations
+                eval_id = source.get("evaluationId") or source.get("internalId")
+                if eval_id:
+                    evaluations_sampled.add(eval_id)
+                
+                # Extract template information
+                if source.get("template_name"):
+                    statistics["templates"].add(source["template_name"])
+                
+                # Extract metadata values using the same logic as filter system
+                if metadata.get("program"):
+                    statistics["programs"].add(metadata["program"])
+                if metadata.get("partner"):
+                    statistics["partners"].add(metadata["partner"])
+                if metadata.get("site"):
+                    statistics["sites"].add(metadata["site"])
+                if metadata.get("lob"):
+                    statistics["lobs"].add(metadata["lob"])
+                if metadata.get("disposition"):
+                    statistics["dispositions"].add(metadata["disposition"])
+                    
+                # Handle both sub_disposition and subDisposition
+                sub_disp = metadata.get("sub_disposition") or metadata.get("subDisposition")
+                if sub_disp:
+                    statistics["sub_dispositions"].add(sub_disp)
+                    
+                # Handle both agent and agentName
+                agent = metadata.get("agent") or metadata.get("agentName")
+                if agent:
+                    statistics["agents"].add(agent)
+                    
+                if metadata.get("language"):
+                    statistics["languages"].add(metadata["language"])
+                if metadata.get("call_type"):
+                    statistics["call_types"].add(metadata["call_type"])
+                    
+                # Collect weighted scores for analysis
+                if metadata.get("weighted_score"):
+                    try:
+                        score = float(metadata["weighted_score"])
+                        statistics["weighted_scores"].append(score)
+                    except (ValueError, TypeError):
+                        pass
+                        
+                # Collect URLs
+                if metadata.get("url"):
+                    statistics["urls"].add(metadata["url"])
+                    
+                # Collect call durations
+                if metadata.get("call_duration"):
+                    try:
+                        duration = float(metadata["call_duration"])
+                        statistics["call_durations"].append(duration)
+                    except (ValueError, TypeError):
+                        pass
+        
+        except Exception as e:
+            logger.warning(f"Document sampling failed: {e}")
+            # Keep empty sets as defaults
+        
+        # STEP 5: Calculate additional statistics
+        avg_weighted_score = None
+        if statistics["weighted_scores"]:
+            avg_weighted_score = sum(statistics["weighted_scores"]) / len(statistics["weighted_scores"])
+            
+        avg_call_duration = None
+        if statistics["call_durations"]:
+            avg_call_duration = sum(statistics["call_durations"]) / len(statistics["call_durations"])
+        
+        # STEP 6: Get cluster health for additional info
+        try:
+            cluster_health = client.cluster.health(request_timeout=5)
+            cluster_status = cluster_health.get("status", "unknown")
+        except Exception as e:
+            logger.warning(f"Cluster health check failed: {e}")
+            cluster_status = "unknown"
+        
+        # STEP 7: Build response in format expected by dashboard
+        response_data = {
+            "status": "success",
+            "data": {
+                # Basic counts
+                "total_documents": total_documents,
+                "active_indices": active_indices,
+                "available_fields": sorted(list(available_fields)),
+                "cluster_status": cluster_status,
+                
+                # Statistics from sampling (what the dashboard needs)
+                "templates": len(statistics["templates"]),
+                "programs": len(statistics["programs"]),
+                "partners": len(statistics["partners"]),
+                "sites": len(statistics["sites"]),
+                "lobs": len(statistics["lobs"]),
+                "dispositions": len(statistics["dispositions"]),
+                "sub_dispositions": len(statistics["sub_dispositions"]),
+                "agents": len(statistics["agents"]),
+                "languages": len(statistics["languages"]),
+                "call_types": len(statistics["call_types"]),
+                "urls": len(statistics["urls"]),
+                
+                # Evaluation vs chunk analysis
+                "evaluations_sampled": len(evaluations_sampled),
+                "chunks_sampled": chunks_sampled,
+                "avg_chunks_per_evaluation": round(chunks_sampled / len(evaluations_sampled), 1) if evaluations_sampled else 0,
+                
+                # Additional metrics
+                "avg_weighted_score": round(avg_weighted_score, 1) if avg_weighted_score else None,
+                "avg_call_duration": round(avg_call_duration, 1) if avg_call_duration else None,
+                "weighted_scores_available": len(statistics["weighted_scores"]),
+                "call_durations_available": len(statistics["call_durations"]),
+                
+                # Lists for debugging (first 10 items each)
+                "templates_list": sorted(list(statistics["templates"]))[:10],
+                "programs_list": sorted(list(statistics["programs"]))[:10],
+                "partners_list": sorted(list(statistics["partners"]))[:10],
+                "sites_list": sorted(list(statistics["sites"]))[:10],
+                "lobs_list": sorted(list(statistics["lobs"]))[:10],
+                "dispositions_list": sorted(list(statistics["dispositions"]))[:10],
+                "agents_list": sorted(list(statistics["agents"]))[:10],
+                "languages_list": sorted(list(statistics["languages"]))[:10]
+            },
+            "timestamp": datetime.now().isoformat(),
+            "processing_time": round(time.time() - start_time, 2),
+            "method": "document_sampling",
+            "sample_size": chunks_sampled,
+            "version": "4.4.0_sampling_fixed"
+        }
+        
+        logger.info("✅ Safe aggregations completed")
+        return response_data
+        
     except Exception as e:
-        logger.error(f"Safe statistics endpoint failed: {e}")
+        logger.error(f"Statistics generation failed: {e}")
         return {
             "status": "error",
             "error": str(e),
-            "safe_mode": True,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "method": "document_sampling",
+            "version": "4.4.0_sampling_fixed"
         }
 
 # Add a simple health endpoint that never fails
