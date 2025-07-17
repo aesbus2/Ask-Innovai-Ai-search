@@ -404,7 +404,13 @@ def test_new_fields_extraction():
 # Run this test after updating your functions:
 # test_new_fields_extraction()
  
-
+def detect_report_query(message: str) -> bool:
+    """Detect if the message is asking for a report or analysis"""
+    report_keywords = [
+        "report", "analysis", "summary", "overview", "breakdown",
+        "performance", "trends", "statistics", "metrics", "insights"
+    ]
+    return any(keyword in message.lower() for keyword in report_keywords)
 
 def build_search_context(query: str, filters: dict, max_results: int = 100) -> Tuple[str, List[dict]]:
     """
@@ -703,90 +709,116 @@ YOUR UPDATED INSTRUCTIONS HERE:
 EVALUATION DATABASE CONTEXT:
 {context}
 
-Your updated closing instructions here:
-Make the summary suitable for leadership or QA team use. Use bullet points and clear headers. Be objective and data-informed. Avoid overgeneralizations.
+CRITICAL INSTRUCTIONS:
+- ONLY use data from the provided context above
+- Do not generate statistics not directly calculable from the data
+- Be objective and data-informed
+- Avoid overgeneralizations
+- Make the summary suitable for leadership or QA team use. Use bullet points and clear headers. Be objective and data-informed. Avoid overgeneralizations.
 """
-        # STEP 3: Construct chat payload with lower temperature for factual responses
-        do_payload = {
+        # STEP 3: Prepare conversation history
+        conversation_history = []
+        for msg in req.history[-10:]:  # Keep last 10 messages
+            conversation_history.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", "")
+            })
+
+        # STEP 4: Make GenAI API request
+        genai_payload = {
+            "model": GENAI_MODEL,
             "messages": [
                 {"role": "system", "content": system_message},
-                *[turn.dict() for turn in req.history],
+                *conversation_history,
                 {"role": "user", "content": req.message}
             ],
-            "temperature": max(0.5, GENAI_TEMPERATURE - 0.3),  # Lower temperature for more factual responses
-            "max_tokens": GENAI_MAX_TOKENS
+            "temperature": GENAI_TEMPERATURE,
+            "max_tokens": GENAI_MAX_TOKENS,
+            "stream": False
         }
 
+        # Make the actual API call
+        logger.info(f"🚀 Making GenAI API call...")
         headers = {
-            "Authorization": f"Bearer {GENAI_ACCESS_KEY}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {GENAI_ACCESS_KEY}"
         }
-
-        do_url = f"{GENAI_ENDPOINT.rstrip('/')}/api/v1/chat/completions"
-        logger.info(f"➡️ CALLING GenAI with strict metadata context...")
-
-        response = requests.post(
-            do_url,
+        
+        genai_response = requests.post(
+            GENAI_ENDPOINT,
+            json=genai_payload,
             headers=headers,
-            json=do_payload,
             timeout=30
         )
-
-        response.raise_for_status()
-        result = response.json()
         
-        reply_text = "(No response)"
-        if "choices" in result and result["choices"]:
-            reply_text = result["choices"][0]["message"]["content"].strip()
-        else:
-            logger.error(f"❌ GenAI response missing 'choices': {result}")
+        if not genai_response.ok:
+            logger.error(f"❌ GenAI API error: {genai_response.status_code} - {genai_response.text}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "reply": "I apologize, but I'm experiencing technical difficulties. Please try again in a moment.",
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat(),
+                    "search_metadata": {
+                        "error": f"GenAI API error: {genai_response.status_code}",
+                        "context_length": len(context),
+                        "processing_time": round(time.time() - start_time, 2)
+                    }
+                }
+            )
 
-        # Remove duplicate sources
-        unique_sources = []
-        seen_ids = set()
-        for s in sources:
-            eid = s.get("evaluationId") or s.get("evaluation_id")
-            if eid and eid not in seen_ids:
-                unique_sources.append(s)
-                seen_ids.add(eid)
+        genai_data = genai_response.json()
+        reply_text = genai_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        
+        if not reply_text:
+            reply_text = "I apologize, but I couldn't generate a response. Please try rephrasing your question."
 
-        # Enhanced response with metadata verification info
+        # STEP 5: Process sources for response
+        unique_sources = {}
+        for source in sources:
+            eval_id = source.get("evaluationId")
+            if eval_id and eval_id not in unique_sources:
+                unique_sources[eval_id] = {
+                    "evaluationId": eval_id,
+                    "template_name": source.get("template_name", "Unknown"),
+                    "search_type": source.get("search_type", "text"),
+                    "score": source.get("score", 0),
+                    "metadata": source.get("metadata", {})
+                }
+
+        # STEP 6: Build response
         response_data = {
             "reply": reply_text,
-            "sources": unique_sources,
+            "sources": list(unique_sources.values())[:20],  # Limit sources in response
             "timestamp": datetime.now().isoformat(),
             "filter_context": req.filters,
             "search_metadata": {
-                "vector_sources": len([s for s in sources if s.get("search_type") == "vector"]),
-                "text_sources": len([s for s in sources if s.get("search_type") == "text"]),
-                "context_length": len(context),
-                "processing_time": round(time.time() - start_time, 2),
                 "total_sources": len(sources),
                 "unique_sources": len(unique_sources),
+                "context_length": len(context),
+                "processing_time": round(time.time() - start_time, 2),
                 "context_found": bool(context and "NO DATA FOUND" not in context),
                 "metadata_verified": "verified_real_data" in context.lower(),
-                "version": "4.4.0_metadata_aligned"
+                "version": "4.4.0_complete"
             }
         }
         
-        logger.info(f"✅ CHAT RESPONSE WITH METADATA VERIFICATION: {len(reply_text)} chars, {len(unique_sources)} verified sources")
+        logger.info(f"✅ CHAT RESPONSE COMPLETE: {len(reply_text)} chars, {len(unique_sources)} verified sources")
         return JSONResponse(content=response_data)
 
     except Exception as e:
-        logger.error(f"❌ CHAT WITH METADATA VERIFICATION FAILED: {e}")
+        logger.error(f"❌ CHAT REQUEST FAILED: {e}")
         return JSONResponse(
             status_code=500,
             content={
-                "reply": f"I apologize, but I encountered an error while accessing the evaluation database: {str(e)[:200]}. Please try again or contact support if the issue persists.",
+                "reply": f"I apologize, but I encountered an error while processing your request: {str(e)[:200]}. Please try again or contact support if the issue persists.",
                 "sources": [],
                 "timestamp": datetime.now().isoformat(),
-                "filter_context": body.get("filters", {}),
+                "filter_context": body.get("filters", {}) if 'body' in locals() else {},
                 "search_metadata": {
                     "error": str(e),
-                    "context_length": 0,
                     "processing_time": round(time.time() - start_time, 2),
-                    "metadata_verified": False,
-                    "version": "4.4.0_metadata_aligned"
+                    "version": "4.4.0_complete"
                 }
             }
         )
