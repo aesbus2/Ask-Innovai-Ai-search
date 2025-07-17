@@ -36,12 +36,10 @@ GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 
 # Fix for chat_handlers.py - Replace the verify_metadata_alignment function
 
-# ADD THESE MISSING FIELDS TO YOUR chat_handlers.py
-# Update your verify_metadata_alignment function to include weighted_score and url
-
 def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     """
-    UPDATED: Complete metadata verification including weighted_score and url fields
+    UPDATED: Simplified metadata verification focusing on 4 essential fields only
+    Fields: evaluationId, template_name, agentName, created_on
     """
     metadata_summary = {
         # Keep existing structure for backward compatibility
@@ -51,7 +49,7 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
         "partners": set(),
         "sites": set(),
         "lobs": set(),
-        "agents": set(),
+        "agents": set(),  # Focus on this for agentName
         "languages": set(),
         "call_dates": [],
         "evaluation_ids": set(),
@@ -60,22 +58,13 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
         "total_chunks_found": 0,
         "data_verification": "VERIFIED_REAL_DATA",
         
-        # Essential fields tracking
+        # NEW: Essential fields tracking
         "essential_fields": {
             "evaluationId": set(),
             "template_name": set(),
             "agentName": set(),
             "created_on": set()
-        },
-        
-        # ✅ NEWLY ADDED: Missing fields that you noticed
-        "weighted_scores": set(),  # ✅ For score analysis
-        "urls": set(),            # ✅ For evaluation URLs
-        "call_durations": set(),  # Additional field for analysis
-        "phone_numbers": set(),   # Additional field for analysis
-        "contact_ids": set(),     # Additional field for analysis
-        "ucids": set(),          # Additional field for analysis
-        "call_types": set(),     # Additional field for analysis
+        }
     }
     
     seen_evaluation_ids = set()
@@ -84,11 +73,10 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
         try:
             metadata_summary["total_chunks_found"] += 1
             
-            # Extract evaluation ID with better logic
+            # Extract evaluation ID
             evaluation_id = None
             source_data = source.get("_source", source)
             
-            # Try multiple ID field names
             for id_field in ["evaluationId", "evaluation_id", "internalId", "internal_id"]:
                 if source_data.get(id_field):
                     evaluation_id = source_data[id_field]
@@ -97,25 +85,52 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
                     evaluation_id = source_data["metadata"][id_field]
                     break
             
-            # Fallback for direct field access
             if not evaluation_id and source.get("evaluationId"):
                 evaluation_id = source.get("evaluationId")
             
-            # Count unique evaluations properly
             if evaluation_id and evaluation_id not in seen_evaluation_ids:
                 seen_evaluation_ids.add(evaluation_id)
                 metadata_summary["total_evaluations"] += 1
                 metadata_summary["evaluation_ids"].add(evaluation_id)
-                metadata_summary["essential_fields"]["evaluationId"].add(str(evaluation_id))
+                metadata_summary["essential_fields"]["evaluationId"].add(evaluation_id)
+                
+                logger.info(f"🆔 Found unique evaluation: {evaluation_id}")
             
-            # Extract metadata with better handling
+            # Extract metadata with focus on essential fields
             metadata = {}
             if source_data.get("metadata"):
                 metadata = source_data["metadata"]
             elif source.get("metadata"):
                 metadata = source["metadata"]
             
-            # Extract all standard metadata fields
+            # Process essential fields
+            if evaluation_id:
+                metadata_summary["essential_fields"]["evaluationId"].add(evaluation_id)
+            
+            # Template name
+            template_name = (source_data.get("template_name") or 
+                           source_data.get("templateName") or 
+                           metadata.get("template_name") or 
+                           "Unknown Template")
+            metadata_summary["essential_fields"]["template_name"].add(template_name)
+            
+            # Agent name
+            agent_name = (metadata.get("agent") or 
+                         metadata.get("agentName") or 
+                         source_data.get("agentName") or 
+                         "Unknown Agent")
+            metadata_summary["essential_fields"]["agentName"].add(agent_name)
+            metadata_summary["agents"].add(agent_name)  # Keep existing structure
+            
+            # Created on
+            created_on = (source_data.get("created_on") or 
+                         metadata.get("created_on") or 
+                         source_data.get("call_date") or 
+                         metadata.get("call_date") or 
+                         "Unknown Date")
+            metadata_summary["essential_fields"]["created_on"].add(created_on)
+            
+            # Keep existing metadata processing for backward compatibility
             if metadata.get("disposition"):
                 metadata_summary["dispositions"].add(metadata["disposition"])
             if metadata.get("sub_disposition"):
@@ -128,46 +143,8 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
                 metadata_summary["sites"].add(metadata["site"])
             if metadata.get("lob"):
                 metadata_summary["lobs"].add(metadata["lob"])
-            if metadata.get("agent"):
-                metadata_summary["agents"].add(metadata["agent"])
-                metadata_summary["essential_fields"]["agentName"].add(metadata["agent"])
             if metadata.get("language"):
                 metadata_summary["languages"].add(metadata["language"])
-                
-            # ✅ NEWLY ADDED: Extract weighted_score and url fields
-            if metadata.get("weighted_score") is not None:
-                metadata_summary["weighted_scores"].add(str(metadata["weighted_score"]))
-                
-            if metadata.get("url"):
-                metadata_summary["urls"].add(metadata["url"])
-                
-            # ✅ NEWLY ADDED: Extract additional fields for comprehensive analysis
-            if metadata.get("call_duration") is not None:
-                metadata_summary["call_durations"].add(str(metadata["call_duration"]))
-                
-            if metadata.get("phone_number"):
-                metadata_summary["phone_numbers"].add(metadata["phone_number"])
-                
-            if metadata.get("contact_id"):
-                metadata_summary["contact_ids"].add(metadata["contact_id"])
-                
-            if metadata.get("ucid"):
-                metadata_summary["ucids"].add(metadata["ucid"])
-                
-            if metadata.get("call_type"):
-                metadata_summary["call_types"].add(metadata["call_type"])
-            
-            # Extract template name
-            template_name = source_data.get("template_name", "Unknown Template")
-            if template_name and template_name != "Unknown Template":
-                metadata_summary["essential_fields"]["template_name"].add(template_name)
-            
-            # Extract created_on date
-            created_on = source_data.get("created_on") or metadata.get("created_on")
-            if created_on:
-                metadata_summary["essential_fields"]["created_on"].add(str(created_on))
-            
-            # Extract call dates
             if metadata.get("call_date"):
                 metadata_summary["call_dates"].append(metadata["call_date"])
                 
@@ -180,13 +157,7 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
             continue
     
     # Convert sets to sorted lists for consistent output
-    fields_to_convert = [
-        "dispositions", "sub_dispositions", "programs", "partners", "sites", 
-        "lobs", "agents", "languages", "weighted_scores", "urls", 
-        "call_durations", "phone_numbers", "contact_ids", "ucids", "call_types"
-    ]
-    
-    for key in fields_to_convert:
+    for key in ["dispositions", "sub_dispositions", "programs", "partners", "sites", "lobs", "agents", "languages"]:
         metadata_summary[key] = sorted(list(metadata_summary[key]))
     
     metadata_summary["evaluation_ids"] = list(metadata_summary["evaluation_ids"])
@@ -195,217 +166,145 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     for field in metadata_summary["essential_fields"]:
         metadata_summary["essential_fields"][field] = sorted(list(metadata_summary["essential_fields"][field]))
     
-    # Enhanced logging for debugging (including new fields)
-    logger.info(f"📊 COMPLETE METADATA VERIFICATION:")
+    # Enhanced logging for essential fields
+    logger.info(f"📊 SIMPLIFIED METADATA SUMMARY:")
     logger.info(f"   Total evaluations: {metadata_summary['total_evaluations']}")
     logger.info(f"   Total chunks: {metadata_summary['total_chunks_found']}")
+    logger.info(f"   Unique evaluation IDs: {len(metadata_summary['essential_fields']['evaluationId'])}")
+    logger.info(f"   Unique template names: {len(metadata_summary['essential_fields']['template_name'])}")
+    logger.info(f"   Unique agent names: {len(metadata_summary['essential_fields']['agentName'])}")
     logger.info(f"   Has real data: {metadata_summary['has_real_data']}")
-    logger.info(f"   Dispositions: {len(metadata_summary['dispositions'])}")
-    logger.info(f"   Programs: {len(metadata_summary['programs'])}")
-    logger.info(f"   ✅ Weighted scores: {len(metadata_summary['weighted_scores'])}")  # NEW
-    logger.info(f"   ✅ URLs: {len(metadata_summary['urls'])}")                      # NEW
-    logger.info(f"   Call durations: {len(metadata_summary['call_durations'])}")     # NEW
     
     return metadata_summary
 
-
-# ✅ ALSO UPDATE your build_simplified_context function to include the new fields:
+# Also fix the build_strict_metadata_context function:
 
 def build_simplified_context(metadata_summary: Dict[str, Any], query: str) -> str:
     """
-    UPDATED: Build context including weighted_score and url fields
+    UPDATED: Build context focusing on essential fields only
     """
-    # Check if we have real data
-    if not metadata_summary.get("has_real_data", False):
+    if not metadata_summary["has_real_data"]:
         return """
 NO DATA FOUND: No evaluation records match your query criteria. 
-
-POSSIBLE CAUSES:
-1. No data has been imported into the evaluation database
-2. Search terms don't match any indexed content
-3. Applied filters are too restrictive
-4. Database connection issues
-
-INSTRUCTIONS:
-- Clearly state that no evaluation data was found
-- Do not generate or estimate any statistics
-- Suggest checking data import status or adjusting search criteria
-- Recommend visiting the admin panel to verify data import
+You must clearly state that no data is available and suggest:
+1. Checking if data has been imported
+2. Adjusting search terms or filters
+3. Verifying the evaluation database connectivity
 
 DO NOT GENERATE OR ESTIMATE ANY NUMBERS, DATES, OR STATISTICS.
 """
 
-    # Check if essential_fields exists (this was causing KeyError)
-    essential_fields = metadata_summary.get("essential_fields", {
-        "evaluationId": [],
-        "template_name": [],
-        "agentName": [],
-        "created_on": []
-    })
-
-    # ✅ Get the new fields safely
-    weighted_scores = metadata_summary.get("weighted_scores", [])
-    urls = metadata_summary.get("urls", [])
-    call_durations = metadata_summary.get("call_durations", [])
-
-    # Build context with safe field access including new fields
+    # Build context focusing on essential metadata
     context = f"""
-VERIFIED EVALUATION DATA FOUND: {metadata_summary.get('total_evaluations', 0)} unique evaluations from {metadata_summary.get('total_chunks_found', 0)} content sources
+VERIFIED EVALUATION DATA FOUND: {metadata_summary['total_evaluations']} unique evaluations from {metadata_summary['total_chunks_found']} content sources
 
-REAL METADATA AVAILABLE:
-- Evaluation IDs: {len(essential_fields.get('evaluationId', []))} unique
-- Template Names: {essential_fields.get('template_name', [])}
-- Agent Names: {essential_fields.get('agentName', [])}
-- Date Range: {len(essential_fields.get('created_on', []))} unique dates
-- Call Dispositions: {metadata_summary.get('dispositions', [])}
-- Programs: {metadata_summary.get('programs', [])}
-
-✅ ADDITIONAL FIELDS AVAILABLE:
-- Weighted Scores: {len(weighted_scores)} values found ({weighted_scores[:5] if len(weighted_scores) <= 5 else weighted_scores[:5] + ['...']})
-- Evaluation URLs: {len(urls)} URLs found
-- Call Durations: {len(call_durations)} duration values found
+ESSENTIAL METADATA AVAILABLE:
+- Evaluation IDs: {len(metadata_summary['essential_fields']['evaluationId'])} unique
+- Template Names: {metadata_summary['essential_fields']['template_name']}
+- Agent Names: {metadata_summary['essential_fields']['agentName']}
+- Date Range: {len(metadata_summary['essential_fields']['created_on'])} unique dates
 
 CRITICAL INSTRUCTIONS:
 1. ONLY use data from the provided evaluation sources
 2. Focus on: evaluationId, template_name, agentName, created_on
-3. ✅ You can also reference: weighted_score, url, call_duration when available
-4. DO NOT generate percentages or statistics not directly calculable from the data
-5. Report on {metadata_summary.get('total_evaluations', 0)} EVALUATIONS (not chunks)
-6. Use only the agent names found: {', '.join(essential_fields.get('agentName', [])[:10])}
-7. Use only the dispositions found: {', '.join(metadata_summary.get('dispositions', []))}
-8. ✅ If asked about scores, use only these weighted scores: {', '.join(weighted_scores[:10])}
+3. DO NOT generate percentages or statistics not directly calculable from the data
+4. Report on {metadata_summary['total_evaluations']} EVALUATIONS (not chunks)
+5. Use only the agent names found: {', '.join(metadata_summary['essential_fields']['agentName'][:10])}
 
-DATA VERIFICATION STATUS: {metadata_summary.get('data_verification', 'VERIFIED_REAL_DATA')}
+DATA VERIFICATION STATUS: {metadata_summary['data_verification']}
 """
     
     return context
+# =============================================================================
+# PYDANTIC INPUT SCHEMA
+# =============================================================================
+
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[ChatTurn] = []
+    filters: Dict[str, Any] = {}
+    analytics: bool = False
+    metadata_focus: List[str] = []
+    programs: List[str] = []
 
 
-# ✅ ALSO UPDATE the extract_source_info function to include these fields:
-
-def extract_source_info(hit: dict, search_type: str) -> dict:
+def detect_report_query(query: str) -> bool:
     """
-    UPDATED: Extract source information including weighted_score and url
+    Detect if the user is asking for a comprehensive report/analysis
+    This is just for detection - doesn't change any existing functionality
     """
-    try:
-        doc = hit.get("_source", {})
-        score = hit.get("_score", 0)
-        
-        # Get evaluation ID with better extraction
-        evaluation_id = None
-        for id_field in ["evaluationId", "evaluation_id", "internalId", "internal_id"]:
-            if doc.get(id_field):
-                evaluation_id = doc.get(id_field)
-                break
-        
-        if not evaluation_id:
-            evaluation_id = f"eval_{hash(str(doc))}"
+    report_keywords = [
+        'report', 'analysis', 'summary', 'overview', 'breakdown', 'statistics',
+        'all', 'total', 'overall', 'comprehensive', 'complete', 'entire',
+        'trends', 'patterns', 'distribution', 'performance', 'metrics',
+        'dashboard', 'insights', 'analytics', 'aggregated'
+    ]
+    
+    question_patterns = [
+        'what are all', 'show me all', 'give me all', 'list all',
+        'how many total', 'what is the total', 'across all',
+        'overall performance', 'complete breakdown', 'full analysis'
+    ]
+    
+    query_lower = query.lower()
+    
+    # Check for report keywords
+    if any(keyword in query_lower for keyword in report_keywords):
+        return True
+    
+    # Check for question patterns
+    if any(pattern in query_lower for pattern in question_patterns):
+        return True
+    
+    return False
 
-        # Extract text content (existing logic)
-        content_text = ""
-        if doc.get("full_text"):
-            content_text = doc.get("full_text")
-        elif doc.get("evaluation_text"):
-            content_text = doc.get("evaluation_text")
-        elif doc.get("transcript_text"):
-            content_text = doc.get("transcript_text")
-        else:
-            chunks = doc.get("chunks", [])
-            if chunks and isinstance(chunks, list):
-                chunk_texts = [chunk.get("text", "") for chunk in chunks[:3] if isinstance(chunk, dict)]
-                if chunk_texts:
-                    content_text = "\n".join(chunk_texts)
-
-        if len(content_text) > 1500:
-            content_text = content_text[:1500] + "..."
+def create_simplified_source_info(doc: dict, evaluation_id: str, content_text: str, score: float, search_type: str) -> dict:
+    """
+    UPDATED: Create source info focusing on essential fields for frontend
+    """
+    metadata = doc.get("metadata", {})
+    
+    # Focus on essential fields for frontend
+    source_info = {
+        # Core identification
+        "evaluationId": evaluation_id,
+        "text": content_text,
+        "score": round(score, 3),
+        "search_type": search_type,
         
-        # Extract metadata with ALL fields including new ones
-        metadata = doc.get("metadata", {})
+        # Essential fields for simplified display
+        "template_name": doc.get("template_name") or doc.get("templateName") or "Unknown Template",
+        "agentName": metadata.get("agent") or metadata.get("agentName") or "Unknown Agent",
+        "created_on": doc.get("created_on") or metadata.get("created_on") or doc.get("call_date") or metadata.get("call_date") or "Unknown Date",
         
-        source_info = {
-            "evaluationId": evaluation_id,
-            "text": content_text,
-            "score": round(score, 3),
-            "search_type": search_type,
-            "template_id": doc.get("template_id"),
-            "template_name": doc.get("template_name"),
-            "metadata": {
-                # Standard fields
-                "program": metadata.get("program"),
-                "partner": metadata.get("partner"),
-                "site": metadata.get("site"),
-                "lob": metadata.get("lob"),
-                "agent": metadata.get("agent"),
-                "disposition": metadata.get("disposition"),
-                "sub_disposition": metadata.get("sub_disposition"),
-                "language": metadata.get("language"),
-                "call_date": metadata.get("call_date"),
-                "call_duration": metadata.get("call_duration"),
-                "phone_number": metadata.get("phone_number"),
-                "contact_id": metadata.get("contact_id"),
-                "ucid": metadata.get("ucid"),
-                "call_type": metadata.get("call_type"),
-                
-                # ✅ NEWLY ADDED: Previously missing fields
-                "weighted_score": metadata.get("weighted_score"),  # ✅ ADDED
-                "url": metadata.get("url"),                        # ✅ ADDED
-            }
+        # Keep metadata structure for backward compatibility, but prioritize essential fields
+        "metadata": {
+            # Essential fields first
+            "agent": metadata.get("agent") or metadata.get("agentName") or "Unknown Agent",
+            "created_on": doc.get("created_on") or metadata.get("created_on") or doc.get("call_date") or metadata.get("call_date"),
+            
+            # Other fields for backward compatibility (but de-prioritized)
+            "program": metadata.get("program"),
+            "partner": metadata.get("partner"),
+            "site": metadata.get("site"),
+            "lob": metadata.get("lob"),
+            "disposition": metadata.get("disposition"),
+            "sub_disposition": metadata.get("sub_disposition"),
+            "language": metadata.get("language"),
+            "call_date": metadata.get("call_date"),
+            "call_duration": metadata.get("call_duration"),
+            "phone_number": metadata.get("phone_number"),
+            "contact_id": metadata.get("contact_id"),
+            "ucid": metadata.get("ucid"),
+            "call_type": metadata.get("call_type")
         }
-        
-        return source_info
-        
-    except Exception as e:
-        logger.error(f"Error extracting source info: {e}")
-        return {
-            "evaluationId": "error",
-            "text": "",
-            "score": 0,
-            "search_type": search_type,
-            "metadata": {}
-        }
-
-
-# ✅ TEST THE NEW FIELDS: Add this quick test function to verify extraction works:
-
-def test_new_fields_extraction():
-    """
-    Test function to verify weighted_score and url extraction works
-    """
-    # Sample test data
-    test_source = {
-        "_source": {
-            "evaluationId": 123,
-            "template_name": "Test Template",
-            "full_text": "Test evaluation content",
-            "metadata": {
-                "disposition": "Account",
-                "program": "Corporate",
-                "agent": "John Doe",
-                "weighted_score": 85,  # ✅ Test this
-                "url": "https://example.com/eval/123",  # ✅ Test this
-                "call_duration": 240,
-                "call_type": "CSR"
-            }
-        },
-        "_score": 0.95
     }
     
-    # Test extraction
-    result = extract_source_info(test_source, "test")
-    
-    # Verify new fields are extracted
-    assert result["metadata"]["weighted_score"] == 85, "weighted_score not extracted"
-    assert result["metadata"]["url"] == "https://example.com/eval/123", "url not extracted"
-    
-    print("✅ New fields extraction test PASSED")
-    print(f"✅ Weighted Score: {result['metadata']['weighted_score']}")
-    print(f"✅ URL: {result['metadata']['url']}")
-    
-    return result
-
-# Run this test after updating your functions:
-# test_new_fields_extraction()
- 
+    return source_info
 
 
 def build_search_context(query: str, filters: dict, max_results: int = 100) -> tuple[str, List[dict]]:
