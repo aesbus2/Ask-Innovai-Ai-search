@@ -21,6 +21,14 @@ logger = logging.getLogger(__name__)
 chat_router = APIRouter()
 health_router = APIRouter()
 
+class ChatRequest(BaseModel):
+    """Request model for chat endpoint"""
+    message: str
+    history: List[dict] = []
+    filters: Dict[str, Any] = {}
+    analytics: bool = True
+    metadata_focus: List[str] = []
+
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -31,14 +39,7 @@ GENAI_MODEL = os.getenv("GENAI_MODEL", "n/a")
 GENAI_TEMPERATURE = float(os.getenv("GENAI_TEMPERATURE", "0.7"))
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 
-# =============================================================================
-# METADATA VERIFICATION AND ALIGNMENT FUNCTIONS
-# =============================================================================
 
-# Fix for chat_handlers.py - Replace the verify_metadata_alignment function
-
-# ADD THESE MISSING FIELDS TO YOUR chat_handlers.py
-# Update your verify_metadata_alignment function to include weighted_score and url
 
 def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     """
