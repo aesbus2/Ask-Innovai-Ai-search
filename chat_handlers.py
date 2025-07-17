@@ -342,12 +342,8 @@ def extract_source_info(hit: dict, search_type: str) -> dict:
                 "language": metadata.get("language"),
                 "call_date": metadata.get("call_date"),
                 "call_duration": metadata.get("call_duration"),
-                "phone_number": metadata.get("phone_number"),
-                "contact_id": metadata.get("contact_id"),
-                "ucid": metadata.get("ucid"),
                 "call_type": metadata.get("call_type"),
-                
-                # ✅ NEWLY ADDED: Previously missing fields
+                "agentId": metadata.get("agentId") or metadata.get("agent_id"),  # ✅ Use original            
                 "weighted_score": metadata.get("weighted_score"),  # ✅ ADDED
                 "url": metadata.get("url"),                        # ✅ ADDED
             }

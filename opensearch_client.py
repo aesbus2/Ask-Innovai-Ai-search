@@ -806,9 +806,9 @@ def ensure_evaluation_index_exists(client, index_name: str):
                         "call_date": {"type": "date"},
                         "call_duration": {"type": "integer"},
                         "created_on": {"type": "date"},
-                        "phone_number": {"type": "keyword"},
-                        "contact_id": {"type": "keyword"},
-                        "ucid": {"type": "keyword"},
+                        #"phone_number": {"type": "keyword"},
+                        #"contact_id": {"type": "keyword"},
+                        #"ucid": {"type": "keyword"},
                         "call_type": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "weighted_score": {"type": "integer"},
                         "url": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}

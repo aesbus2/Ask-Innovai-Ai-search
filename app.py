@@ -907,7 +907,7 @@ def extract_comprehensive_metadata(evaluation: Dict) -> Dict[str, Any]:
         
         # Agent information - clean and normalize
         "agent": clean_field_value(evaluation.get("agentName"), "Unknown Agent"),
-        "agent_id": generate_agent_id(evaluation.get("agentName")),
+        "agentId": evaluation.get("agentId") or evaluation.get("agent_id"),
         
         # Call details - clean and normalize
         "disposition": clean_field_value(evaluation.get("disposition"), "Unknown Disposition"),
@@ -920,9 +920,9 @@ def extract_comprehensive_metadata(evaluation: Dict) -> Dict[str, Any]:
         "created_on": evaluation.get("created_on"),
         
         # Additional contact information (if available and not sensitive)
-        "phone_number": clean_field_value(evaluation.get("phoneNumber")),
-        "contact_id": clean_field_value(evaluation.get("contactId")),
-        "ucid": clean_field_value(evaluation.get("ucid")),
+        #"phone_number": clean_field_value(evaluation.get("phoneNumber")),
+        #"contact_id": clean_field_value(evaluation.get("contactId")),
+        #"ucid": clean_field_value(evaluation.get("ucid")),
         "call_type": clean_field_value(evaluation.get("callType"), "CSR")  # Default to CSR
     }
     
