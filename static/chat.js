@@ -896,9 +896,10 @@ function clearFilters() {
     }
 }
 
-// =============================================================================
-// ENHANCED CHAT FUNCTIONALITY WITH COMPREHENSIVE DEBUGGING
-// =============================================================================
+// ============================================================================
+// COMPLETE sendMessage Function - Replace your existing function with this
+// ============================================================================
+// This version properly declares searchMetadata ONCE at the top and uses it throughout
 
 async function sendMessage() {
     const startTime = performance.now();
@@ -988,6 +989,9 @@ async function sendMessage() {
         
         const data = await response.json();
         
+        // IMPORTANT: Declare searchMetadata ONCE at the top of response processing
+        const searchMetadata = data.search_metadata || {};
+        
         if (PRODUCTION_CONFIG.DEBUG_MODE) {
             console.log("📊 RESPONSE DATA:", data);
         }
@@ -1003,7 +1007,6 @@ async function sendMessage() {
         const reply = data.reply || 'Sorry, I couldn\'t process your request.';
         
         // ENHANCED: Check search metadata for debugging
-        const searchMetadata = data.search_metadata || {};
         console.log("🔍 SEARCH METADATA:", searchMetadata);
         
         // Add debugging info to the response if no context was found
@@ -1061,6 +1064,16 @@ async function sendMessage() {
         console.log(`✅ PRODUCTION: Chat response completed in ${responseTime.toFixed(2)}ms`);
         console.log(`🔍 Search results: ${searchMetadata.total_sources || 0} sources, context: ${searchMetadata.context_found ? 'YES' : 'NO'}`);
         
+        // ENHANCED: Add debugging info for troubleshooting
+        if (searchMetadata.total_sources === 0) {
+            console.warn("🚨 TROUBLESHOOTING: No search results found");
+            console.warn("   Possible causes:");
+            console.warn("   1. No data imported to OpenSearch");
+            console.warn("   2. Search terms don't match indexed content");
+            console.warn("   3. Filters are too restrictive");
+            console.warn("   4. OpenSearch connection issues");
+        }
+        
     } catch (error) {
         console.error('❌ PRODUCTION: Chat request failed:', error);
         
@@ -1088,8 +1101,6 @@ async function sendMessage() {
         updateSendButton();
     }
 }
-        
-    
 function getProductionErrorMessage(error) {
     if (error.name === 'NetworkError' || error.message.includes('fetch')) {
         return 'Network connection issue. Please check your internet connection.';
