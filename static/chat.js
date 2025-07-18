@@ -965,7 +965,8 @@ async function sendMessage() {
         }
         
         // Enhanced fetch with explicit error handling
-        const response = await fetch('/chat', {
+        const response = await fetch('/chat_test', { // Use '/chat_test' for testing, switch to '/chat' in production
+        //const response = await fetch('/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

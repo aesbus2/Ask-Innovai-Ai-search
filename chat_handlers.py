@@ -1063,6 +1063,23 @@ def build_sources_summary_with_details(sources, filters=None):
 # =============================================================================
 # MAIN RAG-ENABLED CHAT ENDPOINT WITH STRICT METADATA VERIFICATION
 # =============================================================================
+@chat_router.post("/chat_test")
+async def chat_test_minimal(request: Request):
+    """Minimal test endpoint to isolate the response issue"""
+    try:
+        body = await request.json()
+        
+        # Just return a tiny response to test if the issue is response size
+        return JSONResponse(content={
+            "reply": "Test response working!",
+            "sources": [],
+            "timestamp": datetime.now().isoformat(),
+            "search_metadata": {"test": "success"}
+        })
+        
+    except Exception as e:
+        return JSONResponse(content={"reply": f"Error: {e}"})
+
 
 @chat_router.post("/chat")
 async def relay_chat_rag(request: Request):
