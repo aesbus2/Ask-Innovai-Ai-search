@@ -901,36 +901,29 @@ function clearFilters() {
 // =============================================================================
 
 async function sendMessage() {
-    if (isLoading) {
-        console.warn("⚠️ PRODUCTION: Message blocked - already processing");
-        return;
-    }
-    
-    const input = document.getElementById('chatInput');
-    if (!input) {
-        console.error("❌ PRODUCTION: Chat input not found");
-        return;
-    }
-    
-    const message = input.value.trim();
-    
-    if (!message) {
-        console.warn("⚠️ PRODUCTION: Empty message blocked");
-        return;
-    }
-    
     const startTime = performance.now();
     
     try {
+        const input = document.getElementById('chatInput');
+        if (!input) {
+            console.error('❌ Chat input element not found');
+            return;
+        }
+        
+        const message = input.value.trim();
+        if (!message) {
+            console.warn('⚠️ Empty message submitted');
+            return;
+        }
+        
+        // Clear input and update UI
         input.value = '';
-        input.style.height = 'auto';
         
-        // Hide welcome screen, show chat
-        const welcomeScreen = document.getElementById('welcomeScreen');
-        const chatMessages = document.getElementById('chatMessages');
-        
-        if (welcomeScreen) welcomeScreen.classList.add('hidden');
-        if (chatMessages) chatMessages.classList.remove('hidden');
+        // Update UI visibility
+        const sidebar = document.getElementById('filterSidebar');
+        if (sidebar) {
+            sidebar.classList.remove('hidden');
+        }
         
         // Create new session if needed
         if (!currentSessionId || chatSessions.length === 0) {
@@ -1002,8 +995,11 @@ async function sendMessage() {
         // Remove loading message
         removeLoadingMessage();
         
-    function enhancedResponseProcessing(data) {
-    // Process response with enhanced validation
+        // ============================================================================
+        // ENHANCED RESPONSE PROCESSING WITH DRILL-DOWN FUNCTIONALITY
+        // ============================================================================
+        
+        // Process response with enhanced validation
         const reply = data.reply || 'Sorry, I couldn\'t process your request.';
         
         // ENHANCED: Check search metadata for debugging
@@ -1036,9 +1032,13 @@ async function sendMessage() {
             console.log("📊 SOURCES SUMMARY FOUND:", data.sources_summary);
             addSourcesSummaryMessage(data.sources_summary, data.filter_context || {});
         } else if (data.sources && Array.isArray(data.sources) && data.sources.length > 0) {
-            // UNCHANGED: Fallback to old detailed view for small datasets
+            // FALLBACK: Use existing sources display if available
             console.log("📄 FALLBACK TO DETAILED SOURCES:", data.sources.length);
-            addSourcesMessage(data.sources);
+            if (typeof addSourcesMessage === 'function') {
+                addSourcesMessage(data.sources);
+            } else {
+                console.log("📄 SOURCES AVAILABLE:", data.sources.length, "items");
+            }
         } else {
             console.warn("⚠️ NO SOURCES in response");
             if (PRODUCTION_CONFIG.DEBUG_MODE) {
@@ -1049,7 +1049,10 @@ async function sendMessage() {
                 console.warn("   4. OpenSearch connection issues");
             }
         }
-    }
+        
+        // Add user message and reply to history
+        chatHistory.push({ role: 'user', content: message });
+        chatHistory.push({ role: 'assistant', content: reply });
         
         // Track performance
         const responseTime = performance.now() - startTime;
@@ -1058,64 +1061,62 @@ async function sendMessage() {
         console.log(`✅ PRODUCTION: Chat response completed in ${responseTime.toFixed(2)}ms`);
         console.log(`🔍 Search results: ${searchMetadata.total_sources || 0} sources, context: ${searchMetadata.context_found ? 'YES' : 'NO'}`);
         
-        // ENHANCED: Add debugging info for troubleshooting
-        if (searchMetadata.total_sources === 0) {
-            console.warn("🚨 TROUBLESHOOTING: No search results found");
-            console.warn("   Possible causes:");
-            console.warn("   1. No data imported to OpenSearch");
-            console.warn("   2. Search terms don't match indexed content");
-            console.warn("   3. Filters are too restrictive");
-            console.warn("   4. OpenSearch connection issues");
-            console.warn("   Try visiting /debug to diagnose");
-        }
-        
     } catch (error) {
-        console.error("❌ PRODUCTION: Chat request failed:", error);
+        console.error('❌ PRODUCTION: Chat request failed:', error);
         
+        // Enhanced error handling
+        isLoading = false;
+        updateSendButton();
         removeLoadingMessage();
-        performanceMetrics.errorCount++;
         
-        // Enhanced error logging
-        console.error("🔍 Detailed error:", {
+        // Show user-friendly error message
+        const errorMessage = getProductionErrorMessage(error);
+        addMessage('assistant', `I apologize, but there was an error processing your request: ${errorMessage}`);
+        
+        // Log detailed error for debugging
+        console.error('🔍 Detailed error:', {
             name: error.name,
             message: error.message,
             stack: error.stack
         });
         
-        // Production error handling with debugging hints
-        let errorMessage = getProductionChatErrorMessage(error);
+        // Track error metrics
+        logProductionError('chat_request_error', error);
         
-        // Add debugging suggestions in debug mode
-        if (PRODUCTION_CONFIG.DEBUG_MODE) {
-            errorMessage += `\n\n[DEBUG SUGGESTIONS: Try visiting /debug to test your system, or check browser console for detailed error information]`;
-        }
-        
-        addMessage('assistant', errorMessage);
-        
-    } finally {
+        // Update UI state
         isLoading = false;
         updateSendButton();
     }
 }
-
-
-function getProductionChatErrorMessage(error) {
-    const errorMessage = error.message.toLowerCase();
+        
     
-    if (errorMessage.includes('timeout')) {
-        return 'The request is taking longer than expected. Please try a simpler question or check your connection.';
-    } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
-        return 'Network connection issue. Please check your internet connection and try again.';
-    } else if (errorMessage.includes('500')) {
-        return 'Our AI service is temporarily experiencing issues. Please try again in a moment.';
-    } else if (errorMessage.includes('401') || errorMessage.includes('unauthorized')) {
-        return 'Authentication error. Please refresh the page and try again.';
-    } else if (errorMessage.includes('429')) {
-        return 'Too many requests. Please wait a moment before trying again.';
-    } else if (errorMessage.includes('405')) {
-        return 'System configuration issue. Please contact support or try refreshing the page.';
+function getProductionErrorMessage(error) {
+    if (error.name === 'NetworkError' || error.message.includes('fetch')) {
+        return 'Network connection issue. Please check your internet connection.';
+    } else if (error.message.includes('HTTP 500')) {
+        return 'Server error. Please try again in a moment.';
+    } else if (error.message.includes('HTTP 400')) {
+        return 'Invalid request. Please try rephrasing your question.';
     } else {
-        return 'Sorry, there was an error processing your request. Please try again or contact support if the issue persists.';
+        return 'Unexpected error. Please try again.';
+    }
+}
+
+function logProductionError(errorType, error) {
+    // Add to performance metrics or send to logging service
+    if (!performanceMetrics.errors) {
+        performanceMetrics.errors = [];
+    }
+    
+    performanceMetrics.errors.push({
+        type: errorType,
+        message: error.message,
+        timestamp: new Date().toISOString()
+    });
+    
+    // Keep only last 50 errors
+    if (performanceMetrics.errors.length > 50) {
+        performanceMetrics.errors = performanceMetrics.errors.slice(-50);
     }
 }
 
