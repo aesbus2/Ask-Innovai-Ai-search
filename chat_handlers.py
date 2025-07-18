@@ -1127,12 +1127,13 @@ CRITICAL INSTRUCTIONS:
         # Correct DigitalOcean AI URL format
         do_url = f"{GENAI_ENDPOINT.rstrip('/')}/api/v1/chat/completions"
         logger.info(f"🚀 Making GenAI API call to: {do_url}")
+        logger.info(f"🚀 About to call DigitalOcean AI - payload size: {len(str(do_payload))} chars")
 
         genai_response = requests.post(
             do_url,
             headers=headers,
             json=do_payload,
-            timeout=30
+            timeout=60  # Increased timeout for GenAI API
         )
         
         if not genai_response.ok:
