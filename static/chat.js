@@ -965,7 +965,7 @@ async function sendMessage() {
         }
         
         // Enhanced fetch with explicit error handling
-        const response = await fetch('/api/chat', {
+        const response = await fetch('/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
