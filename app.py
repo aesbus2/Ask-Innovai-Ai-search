@@ -1780,9 +1780,9 @@ async def get_opensearch_statistics():
                 metadata = source.get("metadata", {})
                 
                 # Track unique evaluations
-                eval_id = source.get("evaluationId") or source.get("internalId")
-                if eval_id:
-                    evaluations_sampled.add(eval_id)
+                evaluation_id = source.get("evaluationId") or source.get("internalId")
+                if evaluation_id:
+                    evaluations_sampled.add(evaluation_id)
                 
                 # Extract template information
                 if source.get("template_name"):
@@ -3108,16 +3108,16 @@ async def debug_verify_metadata_alignment():
         for hit in hits:
             source = hit.get("_source", {})
             metadata = source.get("metadata", {})
-            eval_id = source.get("evaluationId")
+            evaluation_id = source.get("evaluationId")
             
             # Track unique evaluations vs total hits
-            if eval_id:
-                metadata_analysis["unique_evaluations_sampled"].add(eval_id)
+            if evaluation_id:
+                metadata_analysis["unique_evaluations_sampled"].add(evaluation_id)
             
             # Check if metadata exists
             if not metadata:
                 metadata_analysis["metadata_structure_issues"].append(
-                    f"Evaluation {eval_id or 'Unknown'} has no metadata field"
+                    f"Evaluation {evaluation_id or 'Unknown'} has no metadata field"
                 )
                 continue
             
@@ -3141,7 +3141,7 @@ async def debug_verify_metadata_alignment():
             
             # Add sample record
             metadata_analysis["sample_records"].append({
-                "evaluationId": eval_id,
+                "evaluationId": evaluation_id,
                 "template_name": source.get("template_name"),
                 "metadata": {
                     "disposition": metadata.get("disposition"),
@@ -3330,13 +3330,13 @@ async def debug_test_disposition_search(query: str = "call dispositions"):
         
         # Analyze sources with correct counting
         for i, source in enumerate(sources[:5]):
-            eval_id = source.get("evaluationId")
-            if eval_id:
-                analysis["unique_evaluations_found"].add(eval_id)
+            evaluation_id = source.get("evaluationId")
+            if evaluation_id:
+                analysis["unique_evaluations_found"].add(evaluation_id)
                 
             source_summary = {
                 "source_number": i + 1,
-                "evaluation_id": eval_id,
+                "evaluation_id": evaluation_id,
                 "search_type": source.get("search_type"),
                 "template_name": source.get("template_name"),
                 "metadata_preview": {

@@ -39,6 +39,8 @@ GENAI_MODEL = os.getenv("GENAI_MODEL", "n/a")
 GENAI_TEMPERATURE = float(os.getenv("GENAI_TEMPERATURE", "0.7"))
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 
+
+
 def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     """
     UPDATED: Complete metadata verification including weighted_score and url fields
@@ -399,6 +401,7 @@ def test_new_fields_extraction():
     
     return result
 
+# Run this test after updating your functions:
 # test_new_fields_extraction()
  
 def detect_report_query(message: str) -> bool:
@@ -409,6 +412,7 @@ def detect_report_query(message: str) -> bool:
     ]
     return any(keyword in message.lower() for keyword in report_keywords)
 
+# Replace your build_search_context function in chat_handlers.py with this working version
 
 def build_search_context(query: str, filters: dict, max_results: int = 100) -> Tuple[str, List[dict]]:
     """
@@ -452,7 +456,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
             # Process match_all results
             for hit in match_all_hits:
                 source = hit.get("_source", {})
-                evaluation_id = source.get("evaluationId") or source.get("internalId") or hit.get("_id")
+                eval_id = source.get("evaluationId") or source.get("internalId") or hit.get("_id")
                 
                 # Get text content
                 text_content = (
@@ -463,7 +467,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 )
                 
                 source_info = {
-                    "evaluationId": evaluation_id,
+                    "evaluationId": eval_id,
                     "search_type": "match_all",
                     "score": hit.get("_score", 1.0),
                     "template_name": source.get("template_name", "Unknown"),
@@ -524,10 +528,10 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 # Process text search results (these get higher priority)
                 for hit in text_hits:
                     source = hit.get("_source", {})
-                    evaluation_id = source.get("evaluationId") or source.get("internalId") or hit.get("_id")
+                    eval_id = source.get("evaluationId") or source.get("internalId") or hit.get("_id")
                     
                     # Skip if we already have this evaluation
-                    if any(s.get("evaluationId") == evaluation_id for s in all_sources):
+                    if any(s.get("evaluationId") == eval_id for s in all_sources):
                         continue
                     
                     text_content = (
@@ -538,7 +542,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                     )
                     
                     source_info = {
-                        "evaluationId": evaluation_id,
+                        "evaluationId": eval_id,
                         "search_type": "text",
                         "score": hit.get("_score", 0),
                         "template_name": source.get("template_name", "Unknown"),
@@ -582,9 +586,9 @@ INSTRUCTIONS:
         unique_evaluations = set()
         
         for source in all_sources[:max_results]:  # Limit total sources
-            evaluation_id = source.get("evaluationId")
-            if evaluation_id and evaluation_id not in unique_evaluations:
-                unique_evaluations.add(evaluation_id)
+            eval_id = source.get("evaluationId")
+            if eval_id and eval_id not in unique_evaluations:
+                unique_evaluations.add(eval_id)
                 processed_sources.append(source)
         
         # STEP 4: Build context with real data
@@ -698,367 +702,32 @@ DATA VERIFICATION STATUS: {metadata_summary.get('data_verification', 'VERIFIED_R
     
     return context
 
-# ============================================================================
-# NEW FUNCTION: Build a summary of sources with detailed drill-down data for each category    
-# ============================================================================
-def build_sources_summary_with_details(sources, filters=None):
-    """
-    NEW FUNCTION: Build a summary of sources with detailed drill-down data for each category
-    Replaces the old simple summary format with interactive drill-down tables
-    """
-    if not sources:
-        return {
-            "summary": {
-                "evaluations": 0,
-                "agents": 0,
-                "date_range": "No data",
-                "opportunities": 0,
-                "churn_triggers": 0,
-                "programs": 0,
-                "templates": 0,
-                "dispositions": 0,
-                "partners": 0,
-                "sites": 0
-            },
-            "details": {},
-            "totals": {},
-            "full_data": {}
-        }
-    
-    # Configuration for display limits
-    DISPLAY_LIMIT = 25  # Show first 25 items, download button for rest
-    
-    # Initialize collections for detailed data
-    evaluations_details = []
-    agents_details = {}
-    programs_details = {}
-    templates_details = {}
-    dispositions_details = {}
-    partners_details = {}
-    sites_details = {}
-    opportunities_details = []
-    churn_triggers_details = []
-    
-    # Track unique values
-    unique_evaluations = set()
-    unique_agents = set()
-    unique_programs = set()
-    unique_templates = set()
-    unique_dispositions = set()
-    unique_partners = set()
-    unique_sites = set()
-    dates = []
-    
-    # Process each source to extract both summary and detailed data
-    seen_evaluation_ids = set()
+def generate_chat_response(query: str, sources: list, ai_generated_answer: str, history: list = None, filters: dict = None) -> dict:
+    from chat_handlers import verify_metadata_alignment
 
-    for source in sources:
-        # Get evaluation ID
-        # Extract evaluation ID with your robust logic
-        evaluation_id = None
-        source_data = source.get("_source", source)
-        
-        for id_field in ["evaluationId", "evaluation_id", "internalId", "internal_id"]:
-                if source_data.get(id_field):
-                    evaluation_id = source_data[id_field]
-                    break
-                if source_data.get("metadata", {}).get(id_field):
-                    evaluation_id = source_data["metadata"][id_field]
-                    break
-            
-            # Fallback for direct field access
-        if not evaluation_id and source.get("evaluationId"):
-            evaluation_id = source.get("evaluationId")
-        
-        # Skip if no evaluation ID found
-        if not evaluation_id:
-            continue
-            
-        # Skip duplicates for evaluations
-        if evaluation_id in seen_evaluation_ids:
-            continue
-        seen_evaluation_ids.add(evaluation_id)
-        unique_evaluations.add(evaluation_id)
-        
-        # Get metadata
-        metadata = source.get("metadata", {})
-        
-        # Extract basic fields
-        agent = (metadata.get("agent") or 
-                metadata.get("agentName") or 
-                source.get("agentName") or "Unknown").strip()
-        
-        program = (metadata.get("program") or "Unknown").strip()
-        template = (source.get("template_name") or "Unknown").strip()
-        disposition = (metadata.get("disposition") or 
-                      metadata.get("call_disposition") or "Unknown").strip()
-        partner = (metadata.get("partner") or "Unknown").strip()
-        site = (metadata.get("site") or "Unknown").strip()
-        
-        # Extract date
-        date_field = (source.get("created_on") or 
-                     metadata.get("created_on") or 
-                     source.get("call_date") or
-                     metadata.get("call_date"))
-        
-        formatted_date = "Unknown"
-        if date_field:
-            try:
-                from datetime import datetime
-                if isinstance(date_field, str):
-                    for fmt in ["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%m/%d/%Y", "%Y-%m-%d %H:%M:%S"]:
-                        try:
-                            parsed_date = datetime.strptime(date_field[:len(fmt)], fmt)
-                            formatted_date = parsed_date.strftime("%m/%d/%Y")
-                            dates.append(parsed_date)
-                            break
-                        except ValueError:
-                            continue
-            except Exception:
-                pass
-        
-        # Build evaluation detail record
-        evaluation_detail = {
-            "evaluation_id": evaluation_id,
-            "agent_name": agent,
-            "program": program,
-            "template": template,
-            "disposition": disposition,
-            "partner": partner,
-            "site": site,
-            "date": formatted_date,
-            "score": metadata.get("weighted_score", "N/A"),
-            "duration": metadata.get("call_duration", "N/A")
-        }
-        evaluations_details.append(evaluation_detail)
-        
-        # Track unique values and build detailed collections for agents
-        if agent != "Unknown":
-            unique_agents.add(agent)
-            if agent not in agents_details:
-                agents_details[agent] = {
-                    "agent_name": agent,
-                    "evaluation_count": 0,
-                    "programs": set(),
-                    "latest_date": None,
-                    "average_score": [],
-                    "evaluations": []
-                }
-            agents_details[agent]["evaluation_count"] += 1
-            agents_details[agent]["programs"].add(program)
-            agents_details[agent]["evaluations"].append(evaluation_id)
-            if metadata.get("weighted_score"):
-                try:
-                    agents_details[agent]["average_score"].append(float(metadata.get("weighted_score")))
-                except:
-                    pass
-        
-        # Track programs details
-        if program != "Unknown":
-            unique_programs.add(program)
-            if program not in programs_details:
-                programs_details[program] = {
-                    "program_name": program,
-                    "evaluation_count": 0,
-                    "agents": set(),
-                    "date_range": [],
-                    "templates": set()
-                }
-            programs_details[program]["evaluation_count"] += 1
-            programs_details[program]["agents"].add(agent)
-            programs_details[program]["templates"].add(template)
-            if dates:
-                programs_details[program]["date_range"].extend(dates[-1:])
-        
-        # Track templates details
-        if template != "Unknown":
-            unique_templates.add(template)
-            if template not in templates_details:
-                templates_details[template] = {
-                    "template_name": template,
-                    "usage_count": 0,
-                    "programs": set(),
-                    "agents": set()
-                }
-            templates_details[template]["usage_count"] += 1
-            templates_details[template]["programs"].add(program)
-            templates_details[template]["agents"].add(agent)
-        
-        # Track dispositions with examples
-        if disposition != "Unknown":
-            unique_dispositions.add(disposition)
-            if disposition not in dispositions_details:
-                dispositions_details[disposition] = {
-                    "disposition_name": disposition,
-                    "count": 0,
-                    "examples": []
-                }
-            dispositions_details[disposition]["count"] += 1
-            dispositions_details[disposition]["examples"].append({
-                "evaluation_id": evaluation_id,
-                "agent": agent,
-                "date": formatted_date
-            })
-            
-            # Check for opportunities and churn triggers
-            disposition_lower = disposition.lower()
-            if any(keyword in disposition_lower for keyword in ["opportunity", "sale", "interested", "lead", "positive"]):
-                opportunities_details.append({
-                    "evaluation_id": evaluation_id,
-                    "agent": agent,
-                    "disposition": disposition,
-                    "program": program,
-                    "date": formatted_date,
-                    "score": metadata.get("weighted_score", "N/A")
-                })
-            elif any(keyword in disposition_lower for keyword in ["churn", "cancel", "disconnect", "terminate", "unsatisfied", "complaint"]):
-                churn_triggers_details.append({
-                    "evaluation_id": evaluation_id,
-                    "agent": agent,
-                    "disposition": disposition,
-                    "program": program,
-                    "date": formatted_date,
-                    "score": metadata.get("weighted_score", "N/A")
-                })
-        
-        # Track partners details
-        if partner != "Unknown":
-            unique_partners.add(partner)
-            if partner not in partners_details:
-                partners_details[partner] = {
-                    "partner_name": partner,
-                    "evaluation_count": 0,
-                    "programs": set(),
-                    "agents": set()
-                }
-            partners_details[partner]["evaluation_count"] += 1
-            partners_details[partner]["programs"].add(program)
-            partners_details[partner]["agents"].add(agent)
-        
-        # Track sites details
-        if site != "Unknown":
-            unique_sites.add(site)
-            if site not in sites_details:
-                sites_details[site] = {
-                    "site_name": site,
-                    "evaluation_count": 0,
-                    "programs": set(),
-                    "agents": set()
-                }
-            sites_details[site]["evaluation_count"] += 1
-            sites_details[site]["programs"].add(program)
-            sites_details[site]["agents"].add(agent)
-    
-    # Calculate date range
-    date_range = "No data"
-    if dates:
-        dates.sort()
-        start_date = dates[0].strftime("%b %d")
-        end_date = dates[-1].strftime("%b %d, %Y")
-        if len(dates) == 1:
-            date_range = dates[0].strftime("%b %d, %Y")
-        else:
-            date_range = f"{start_date} - {end_date}"
-    
-    # Convert sets to lists and calculate averages
-    agents_list = []
-    for agent_name, details in agents_details.items():
-        agent_record = {
-            "agent_name": agent_name,
-            "evaluation_count": details["evaluation_count"],
-            "programs": list(details["programs"]),
-            "average_score": round(sum(details["average_score"]) / len(details["average_score"]), 2) if details["average_score"] else "N/A",
-            "evaluations": details["evaluations"][:10]  # Limit for display
-        }
-        agents_list.append(agent_record)
-    
-    programs_list = []
-    for program_name, details in programs_details.items():
-        program_record = {
-            "program_name": program_name,
-            "evaluation_count": details["evaluation_count"],
-            "agent_count": len(details["agents"]),
-            "agents": list(details["agents"])[:10],  # Limit for display
-            "templates": list(details["templates"])
-        }
-        programs_list.append(program_record)
-    
-    # Build final response with limited display data and full download data
-    summary = {
-        "evaluations": len(unique_evaluations),
-        "agents": len(unique_agents),
-        "date_range": date_range,
-        "opportunities": len(opportunities_details),
-        "churn_triggers": len(churn_triggers_details),
-        "programs": len(unique_programs),
-        "templates": len(unique_templates),
-        "dispositions": len(unique_dispositions),
-        "partners": len(unique_partners),
-        "sites": len(unique_sites)
-    }
-    
-    # Prepare limited data for display (first 25 items)
-    detailed_data = {
-        "evaluations": evaluations_details[:DISPLAY_LIMIT],
-        "agents": agents_list[:DISPLAY_LIMIT],
-        "programs": programs_list[:DISPLAY_LIMIT],
-        "templates": [{"template_name": name, "usage_count": details["usage_count"], 
-                      "programs": list(details["programs"]), "agents": list(details["agents"])[:10]} 
-                     for name, details in list(templates_details.items())[:DISPLAY_LIMIT]],
-        "dispositions": [{"disposition_name": name, "count": details["count"],
-                         "examples": details["examples"][:5]} 
-                        for name, details in list(dispositions_details.items())[:DISPLAY_LIMIT]],
-        "opportunities": opportunities_details[:DISPLAY_LIMIT],
-        "churn_triggers": churn_triggers_details[:DISPLAY_LIMIT],
-        "partners": [{"partner_name": name, "evaluation_count": details["evaluation_count"],
-                     "programs": list(details["programs"]), "agents": list(details["agents"])[:10]}
-                    for name, details in list(partners_details.items())[:DISPLAY_LIMIT]],
-        "sites": [{"site_name": name, "evaluation_count": details["evaluation_count"],
-                  "programs": list(details["programs"]), "agents": list(details["agents"])[:10]}
-                 for name, details in list(sites_details.items())[:DISPLAY_LIMIT]]
-    }
-    
-    # Prepare full data for download (all items)
-    full_data_for_download = {
-        "evaluations": evaluations_details,  # All evaluations
-        "agents": agents_list,  # All agents
-        "programs": programs_list,  # All programs
-        "templates": [{"template_name": name, "usage_count": details["usage_count"], 
-                      "programs": list(details["programs"]), "agents": list(details["agents"])} 
-                     for name, details in templates_details.items()],
-        "dispositions": [{"disposition_name": name, "count": details["count"],
-                         "examples": details["examples"]} 
-                        for name, details in dispositions_details.items()],
-        "opportunities": opportunities_details,  # All opportunities
-        "churn_triggers": churn_triggers_details,  # All churn triggers
-        "partners": [{"partner_name": name, "evaluation_count": details["evaluation_count"],
-                     "programs": list(details["programs"]), "agents": list(details["agents"])}
-                    for name, details in partners_details.items()],
-        "sites": [{"site_name": name, "evaluation_count": details["evaluation_count"],
-                  "programs": list(details["programs"]), "agents": list(details["agents"])}
-                 for name, details in sites_details.items()]
-    }
-    
-    # Track total counts for each category
-    totals = {
-        "evaluations": len(evaluations_details),
-        "agents": len(agents_list),
-        "programs": len(programs_list),
-        "templates": len(templates_details),
-        "dispositions": len(dispositions_details),
-        "opportunities": len(opportunities_details),
-        "churn_triggers": len(churn_triggers_details),
-        "partners": len(partners_details),
-        "sites": len(sites_details)
-    }
-    
+    metadata_summary = verify_metadata_alignment(sources)
+    source_summary = build_source_summary(metadata_summary)
+
     return {
-        "summary": summary,
-        "details": detailed_data,
-        "totals": totals,
-        "full_data": full_data_for_download,
-        "display_limit": DISPLAY_LIMIT
+        "answer": ai_generated_answer,
+        "sources_summary": source_summary,
+        "metadata": metadata_summary,
+        "sources": sources,
+        "history": history or [],
+        "filters": filters or {}
     }
+
+
+
+# The 'history' parameter is intended to maintain context from prior user and AI messages in a chat session.
+# This allows the AI to provide more coherent responses across multiple turns.
+# Example format:
+# history = [
+#     {"role": "user", "content": "How many evaluations did we complete last quarter?"},
+#     {"role": "assistant", "content": "We completed 45 evaluations last quarter."}
+# ]
+
+# If you want persistent chat sessions or follow-up queries, history is passed along to help models maintain continuity.
 
 # =============================================================================
 # MAIN RAG-ENABLED CHAT ENDPOINT WITH STRICT METADATA VERIFICATION
@@ -1090,18 +759,17 @@ async def relay_chat_rag(request: Request):
 
 ANALYSIS INSTRUCTIONS:
 1. Review transcripts or agent summaries to identify recurring communication issues or strengths.
-2. Compare tone, language, empathy, and product knowledge across transcripts and agents.
-3. Identify opportunities for improvement in agent performance based on the provided evaluation data.
-4. Highlight strengths that highlight agent performance, such as effective communication, problem-solving skills, and customer rapport.
-5. Determine what is successful and what needs improvement, with justifications.
+2. Compare tone, language, empathy, and product knowledge across different agents.
+3. Identify patterns in unresolved issues, script reliance, and lack of customer satisfaction.
+4. Highlight strengths that indicate potential program success.
+5. Determine if the overall program is successful or needs improvement, with justification.
 6. Write a concise but structured summary with clear sections and bullet points.
 
 EVALUATION DATABASE CONTEXT:
 {context}
 
 CRITICAL INSTRUCTIONS:
-- ONLY use data from the provided context above along with the last 10 messages in the chat history
-- Always answer questoins based on the provided evaluation data
+- ONLY use data from the provided context above
 - Do not generate statistics not directly calculable from the data
 - Be objective and data-informed
 - Avoid overgeneralizations
@@ -1161,35 +829,24 @@ CRITICAL INSTRUCTIONS:
             logger.error(f"❌ GenAI response missing 'choices': {result}")
             reply_text = "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
 
-               
         # STEP 4: Process sources for response - Remove duplicates
         unique_sources = []
         seen_ids = set()
         for source in sources:
-            evaluation_id = source.get("evaluationId") or source.get("evaluation_id")
-            if evaluation_id and evaluation_id not in seen_ids:
+            eval_id = source.get("evaluationId") or source.get("evaluation_id")
+            if eval_id and eval_id not in seen_ids:
                 unique_sources.append({
-                    "evaluationId": evaluation_id,
+                    "evaluationId": eval_id,
                     "template_name": source.get("template_name", "Unknown"),
                     "search_type": source.get("search_type", "text"),
                     "score": source.get("score", 0),
                     "metadata": source.get("metadata", {})
                 })
-                seen_ids.add(evaluation_id)
+                seen_ids.add(eval_id)
 
-
-        # STEP 5: NEW - Build sources summary with detailed drill-down data
-
-        sources_data = build_sources_summary_with_details(unique_sources, req.filters)
-
-        # STEP 56: Build enhanced response
+        # STEP 5: Build enhanced response
         response_data = {
             "reply": reply_text,
-            "sources_summary": sources_data["summary"],           # NEW: Summary counts
-            "sources_details": sources_data["details"],          # NEW: Limited data for display  
-            "sources_totals": sources_data["totals"],            # NEW: Total counts for each category
-            "sources_full_data": sources_data["full_data"],      # NEW: Complete data for download
-            "display_limit": sources_data["display_limit"],      # NEW: Current display limit (25)
             "sources": unique_sources[:20],  # Limit sources in response
             "timestamp": datetime.now().isoformat(),
             "filter_context": req.filters,
@@ -1202,12 +859,11 @@ CRITICAL INSTRUCTIONS:
                 "unique_sources": len(unique_sources),
                 "context_found": bool(context and "NO DATA FOUND" not in context),
                 "metadata_verified": "verified_real_data" in context.lower(),
-                "version": "4.7.0"
+                "version": "4.4.0_do_fixed"
             }
         }
         
         logger.info(f"✅ CHAT RESPONSE COMPLETE: {len(reply_text)} chars, {len(unique_sources)} verified sources")
-        logger.info(f"📊 SOURCES SUMMARY: {sources_data['summary']}")  # NEW: Log summary data
         return JSONResponse(content=response_data)
 
     except Exception as e:
@@ -1216,29 +872,13 @@ CRITICAL INSTRUCTIONS:
             status_code=500,
             content={
                 "reply": f"I apologize, but I encountered an error while processing your request: {str(e)[:200]}. Please try again or contact support if the issue persists.",
-                # NEW: Error response includes all new fields
-                "sources_summary": {
-                    "evaluations": 0,
-                    "agents": 0,
-                    "date_range": "Error",
-                    "opportunities": 0,
-                    "churn_triggers": 0,
-                    "programs": 0,
-                    "templates": 0,
-                    "dispositions": 0,
-                    "partners": 0,
-                    "sites": 0
-                },
-                "sources_details": {},
-                "sources_totals": {},
-                "sources_full_data": {},
-                "display_limit": 25,
                 "sources": [],
                 "timestamp": datetime.now().isoformat(),
-                "filter_context": req.filters if 'req' in locals() else {},
+                "filter_context": body.get("filters", {}) if 'body' in locals() else {},
                 "search_metadata": {
                     "error": str(e),
-                    "version": "4.7.0_limited_display_with_download"  # UPDATED: Version number
+                    "processing_time": round(time.time() - start_time, 2),
+                    "version": "4.4.0_do_fixed"
                 }
             }
         )

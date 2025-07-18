@@ -408,17 +408,8 @@ function loadFormattingStyles() {
             counter-increment: item;
             position: relative;
             line-height: 1.2;
-        }
-        
-        .formatted-response .response-numbered-item::before {
-            content: counter(item) ".";
-            color: #6e32a0;
-            font-weight: bold;
-            position: absolute;
-            left: -2em;
-            width: 1.5em;
-            text-align: right;
-        }
+        }       
+       
         
         .formatted-response .response-divider {
             border: none;
@@ -1011,7 +1002,8 @@ async function sendMessage() {
         // Remove loading message
         removeLoadingMessage();
         
-        // Process response with enhanced validation
+    function enhancedResponseProcessing(data) {
+    // Process response with enhanced validation
         const reply = data.reply || 'Sorry, I couldn\'t process your request.';
         
         // ENHANCED: Check search metadata for debugging
@@ -1026,9 +1018,26 @@ async function sendMessage() {
         
         addMessage('assistant', enhancedReply);
         
-        // Show sources if available
-        if (data.sources && Array.isArray(data.sources) && data.sources.length > 0) {
-            console.log("📄 SOURCES FOUND:", data.sources.length);
+        // NEW: Show sources summary with drill-down functionality
+        if (data.sources_summary && data.sources_details && data.sources_totals) {
+            console.log("📊 SOURCES SUMMARY WITH DETAILS AND TOTALS FOUND:", data.sources_summary);
+            addSourcesSummaryWithDrilldown(
+                data.sources_summary, 
+                data.sources_details, 
+                data.sources_totals,
+                data.sources_full_data || {},
+                data.display_limit || 25,
+                data.filter_context || {}
+            );
+        } else if (data.sources_summary && data.sources_details) {
+            console.log("📊 SOURCES SUMMARY WITH DETAILS FOUND:", data.sources_summary);
+            addSourcesSummaryWithDrilldown(data.sources_summary, data.sources_details, {}, {}, 25, data.filter_context || {});
+        } else if (data.sources_summary) {
+            console.log("📊 SOURCES SUMMARY FOUND:", data.sources_summary);
+            addSourcesSummaryMessage(data.sources_summary, data.filter_context || {});
+        } else if (data.sources && Array.isArray(data.sources) && data.sources.length > 0) {
+            // UNCHANGED: Fallback to old detailed view for small datasets
+            console.log("📄 FALLBACK TO DETAILED SOURCES:", data.sources.length);
             addSourcesMessage(data.sources);
         } else {
             console.warn("⚠️ NO SOURCES in response");
@@ -1040,6 +1049,7 @@ async function sendMessage() {
                 console.warn("   4. OpenSearch connection issues");
             }
         }
+    }
         
         // Track performance
         const responseTime = performance.now() - startTime;
@@ -1087,6 +1097,7 @@ async function sendMessage() {
         updateSendButton();
     }
 }
+
 
 function getProductionChatErrorMessage(error) {
     const errorMessage = error.message.toLowerCase();
@@ -1320,6 +1331,932 @@ function createChatSessionElement(session) {
     `;
     
     return sessionDiv;
+}
+// NEW: Interactive sources summary with drill-down functionality
+function addSourcesSummaryWithDrilldown(sourcesSummary, sourcesDetails, sourcesTotals, sourcesFullData, displayLimit, filterContext) {
+    if (!sourcesSummary) return;
+    
+    const summaryDiv = document.createElement('div');
+    summaryDiv.className = 'sources-container summary-container';
+    
+    // Generate unique ID for this summary
+    const summaryId = 'summary-' + Date.now();
+    
+    // NEW: Build clickable summary items
+    const summaryItems = [];
+    
+    if (sourcesSummary.evaluations > 0) {
+        summaryItems.push({
+            key: 'evaluations',
+            label: `Evaluations: ${sourcesSummary.evaluations.toLocaleString()}`,
+            count: sourcesSummary.evaluations,
+            data: sourcesDetails.evaluations || []
+        });
+    }
+    
+    if (sourcesSummary.agents > 0) {
+        summaryItems.push({
+            key: 'agents',
+            label: `Agents: ${sourcesSummary.agents}`,
+            count: sourcesSummary.agents,
+            data: sourcesDetails.agents || []
+        });
+    }
+    
+    if (sourcesSummary.opportunities > 0) {
+        summaryItems.push({
+            key: 'opportunities',
+            label: `Opportunities: ${sourcesSummary.opportunities}`,
+            count: sourcesSummary.opportunities,
+            data: sourcesDetails.opportunities || []
+        });
+    }
+    
+    if (sourcesSummary.churn_triggers > 0) {
+        summaryItems.push({
+            key: 'churn_triggers',
+            label: `Churn Triggers: ${sourcesSummary.churn_triggers}`,
+            count: sourcesSummary.churn_triggers,
+            data: sourcesDetails.churn_triggers || []
+        });
+    }
+    
+    if (sourcesSummary.programs > 0) {
+        summaryItems.push({
+            key: 'programs',
+            label: `Programs: ${sourcesSummary.programs}`,
+            count: sourcesSummary.programs,
+            data: sourcesDetails.programs || []
+        });
+    }
+    
+    if (sourcesSummary.templates > 0) {
+        summaryItems.push({
+            key: 'templates',
+            label: `Templates: ${sourcesSummary.templates}`,
+            count: sourcesSummary.templates,
+            data: sourcesDetails.templates || []
+        });
+    }
+    
+    if (sourcesSummary.dispositions > 0) {
+        summaryItems.push({
+            key: 'dispositions',
+            label: `Dispositions: ${sourcesSummary.dispositions}`,
+            count: sourcesSummary.dispositions,
+            data: sourcesDetails.dispositions || []
+        });
+    }
+    
+    if (sourcesSummary.partners > 0) {
+        summaryItems.push({
+            key: 'partners',
+            label: `Partners: ${sourcesSummary.partners}`,
+            count: sourcesSummary.partners,
+            data: sourcesDetails.partners || []
+        });
+    }
+    
+    if (sourcesSummary.sites > 0) {
+        summaryItems.push({
+            key: 'sites',
+            label: `Sites: ${sourcesSummary.sites}`,
+            count: sourcesSummary.sites,
+            data: sourcesDetails.sites || []
+        });
+    }
+    
+    // Add date range (non-clickable)
+    if (sourcesSummary.date_range && sourcesSummary.date_range !== "No data") {
+        summaryItems.push({
+            key: 'date_range',
+            label: `Date Range: ${sourcesSummary.date_range}`,
+            count: 0,
+            data: [],
+            clickable: false
+        });
+    }
+    
+    // NEW: Create the summary display with clickable items
+    const summaryItemsHtml = summaryItems.map(item => {
+        if (item.clickable === false) {
+            return `<span class="summary-item non-clickable">${item.label}</span>`;
+        }
+        return `<span class="summary-item clickable" data-category="${item.key}" onclick="toggleDetailedTable('${summaryId}', '${item.key}')">${item.label}</span>`;
+    }).join(', ');
+    
+    // UNCHANGED: Check for active filters
+    const activeFilters = [];
+    if (filterContext) {
+        if (filterContext.template_name) activeFilters.push(`Template: ${filterContext.template_name}`);
+        if (filterContext.program) activeFilters.push(`Program: ${filterContext.program}`);
+        if (filterContext.partner) activeFilters.push(`Partner: ${filterContext.partner}`);
+        if (filterContext.site) activeFilters.push(`Site: ${filterContext.site}`);
+        if (filterContext.lob) activeFilters.push(`LOB: ${filterContext.lob}`);
+        if (filterContext.call_disposition) activeFilters.push(`Disposition: ${filterContext.call_disposition}`);
+        if (filterContext.language) activeFilters.push(`Language: ${filterContext.language}`);
+        if (filterContext.start_date || filterContext.end_date) {
+            const dateFilter = `${filterContext.start_date || 'Start'} to ${filterContext.end_date || 'End'}`;
+            activeFilters.push(`Date Filter: ${dateFilter}`);
+        }
+    }
+    
+    summaryDiv.innerHTML = `
+        <h4>📊 Data Sources Summary <small>(Click items to view details)</small></h4>
+        <div class="sources-summary-content" id="${summaryId}">
+            <div class="summary-main">
+                ${summaryItemsHtml}
+            </div>
+            ${activeFilters.length > 0 ? `
+            <div class="summary-filters">
+                <small>📌 Active Filters: ${activeFilters.join(' | ')}</small>
+            </div>
+            ` : ''}
+            <div class="summary-metadata">
+                <small>
+                    💡 Click on any category above to view detailed breakdown. 
+                    ${sourcesSummary.evaluations > 0 ? 
+                        `Analysis based on ${sourcesSummary.evaluations.toLocaleString()} unique evaluation${sourcesSummary.evaluations !== 1 ? 's' : ''}.` : 
+                        'No evaluation data found for current filters.'
+                    }
+                </small>
+            </div>
+            
+            <!-- NEW: Expandable detail sections will be inserted here -->
+            <div class="detail-tables-container"></div>
+        </div>
+    `;
+    
+    // NEW: Store the detailed data for access by click handlers
+    summaryDiv.dataset.detailsData = JSON.stringify(sourcesDetails);
+    summaryDiv.dataset.totalsData = JSON.stringify(sourcesTotals);
+    summaryDiv.dataset.fullData = JSON.stringify(sourcesFullData);
+    summaryDiv.dataset.displayLimit = displayLimit;
+    
+    // UNCHANGED: Add the summary to the current session
+    if (currentSessionId) {
+        const sessionElement = document.getElementById(`session-${currentSessionId}`);
+        if (sessionElement) {
+            const contentDiv = sessionElement.querySelector('.chat-session-content');
+            if (contentDiv) {
+                contentDiv.appendChild(summaryDiv);
+                summaryDiv.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+    }
+    
+    console.log("📊 Sources summary with drill-down displayed");
+}
+
+// ============================================================================
+// NEW: Toggle detailed table display with download functionality
+// ============================================================================
+function toggleDetailedTable(summaryId, category) {
+    const summaryContainer = document.getElementById(summaryId);
+    if (!summaryContainer) return;
+    
+    const detailsData = JSON.parse(summaryContainer.dataset.detailsData || '{}');
+    const totalsData = JSON.parse(summaryContainer.dataset.totalsData || '{}');
+    const fullData = JSON.parse(summaryContainer.dataset.fullData || '{}');
+    const displayLimit = parseInt(summaryContainer.dataset.displayLimit || '25');
+    
+    const tablesContainer = summaryContainer.querySelector('.detail-tables-container');
+    const existingTable = document.getElementById(`table-${category}`);
+    
+    // If table exists, toggle it
+    if (existingTable) {
+        if (existingTable.style.display === 'none') {
+            existingTable.style.display = 'block';
+            existingTable.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+            existingTable.style.display = 'none';
+        }
+        return;
+    }
+    
+    // Create new table
+    const tableData = detailsData[category] || [];
+    const totalCount = totalsData[category] || tableData.length;
+    const fullDataForCategory = fullData[category] || tableData;
+    
+    if (tableData.length === 0) {
+        showToast(`No detailed data available for ${category}`, 'warning');
+        return;
+    }
+    
+    const tableHtml = generateDetailedTableWithDownload(category, tableData, totalCount, displayLimit, fullDataForCategory);
+    const tableDiv = document.createElement('div');
+    tableDiv.id = `table-${category}`;
+    tableDiv.className = 'detailed-table-wrapper';
+    tableDiv.innerHTML = tableHtml;
+    
+    tablesContainer.appendChild(tableDiv);
+    tableDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    
+    console.log(`📋 Detailed table shown for ${category}: ${tableData.length} of ${totalCount} items`);
+}
+
+// ============================================================================
+// NEW: Generate detailed table with download button
+// ============================================================================
+function generateDetailedTableWithDownload(category, data, totalCount, displayLimit, fullData) {
+    const categoryTitle = category.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const showingMessage = totalCount > displayLimit ? 
+        `Showing ${data.length} of ${totalCount.toLocaleString()}` : 
+        `${data.length} item${data.length !== 1 ? 's' : ''}`;
+    
+    const downloadButton = totalCount > displayLimit ? 
+        `<button class="download-all-btn" onclick="downloadCategoryData('${category}', '${categoryTitle}')">
+            📥 Download All ${totalCount.toLocaleString()}
+        </button>` : '';
+    
+    let tableContent = '';
+    
+    // NEW: Category-specific table structures
+    switch (category) {
+        case 'evaluations':
+            tableContent = `
+                <table class="detailed-data-table">
+                    <thead>
+                        <tr>
+                            <th>Evaluation ID</th>
+                            <th>Agent</th>
+                            <th>Program</th>
+                            <th>Template</th>
+                            <th>Date</th>
+                            <th>Disposition</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(item => `
+                            <tr>
+                                <td class="eval-id">${item.evaluation_id || 'N/A'}</td>
+                                <td>${item.agent_name || 'N/A'}</td>
+                                <td>${item.program || 'N/A'}</td>
+                                <td>${item.template || 'N/A'}</td>
+                                <td>${item.date || 'N/A'}</td>
+                                <td class="disposition">${item.disposition || 'N/A'}</td>
+                                <td class="score">${item.score || 'N/A'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            break;
+            
+        case 'agents':
+            tableContent = `
+                <table class="detailed-data-table">
+                    <thead>
+                        <tr>
+                            <th>Agent Name</th>
+                            <th>Evaluations</th>
+                            <th>Programs</th>
+                            <th>Avg Score</th>
+                            <th>Recent Evaluation IDs</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(item => `
+                            <tr>
+                                <td class="agent-name">${item.agent_name || 'N/A'}</td>
+                                <td class="count">${item.evaluation_count || 0}</td>
+                                <td>${(item.programs || []).join(', ') || 'N/A'}</td>
+                                <td class="score">${item.average_score || 'N/A'}</td>
+                                <td class="eval-ids">${(item.evaluations || []).slice(0, 3).join(', ')}${item.evaluations && item.evaluations.length > 3 ? '...' : ''}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            break;
+            
+        case 'opportunities':
+        case 'churn_triggers':
+            tableContent = `
+                <table class="detailed-data-table">
+                    <thead>
+                        <tr>
+                            <th>Evaluation ID</th>
+                            <th>Agent</th>
+                            <th>Disposition</th>
+                            <th>Program</th>
+                            <th>Date</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(item => `
+                            <tr>
+                                <td class="eval-id">${item.evaluation_id || 'N/A'}</td>
+                                <td>${item.agent || 'N/A'}</td>
+                                <td class="disposition ${category === 'opportunities' ? 'positive' : 'negative'}">${item.disposition || 'N/A'}</td>
+                                <td>${item.program || 'N/A'}</td>
+                                <td>${item.date || 'N/A'}</td>
+                                <td class="score">${item.score || 'N/A'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            break;
+            
+        case 'programs':
+            tableContent = `
+                <table class="detailed-data-table">
+                    <thead>
+                        <tr>
+                            <th>Program Name</th>
+                            <th>Evaluations</th>
+                            <th>Agents</th>
+                            <th>Templates</th>
+                            <th>Sample Agents</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(item => `
+                            <tr>
+                                <td class="program-name">${item.program_name || 'N/A'}</td>
+                                <td class="count">${item.evaluation_count || 0}</td>
+                                <td class="count">${item.agent_count || 0}</td>
+                                <td>${(item.templates || []).join(', ') || 'N/A'}</td>
+                                <td>${(item.agents || []).slice(0, 3).join(', ')}${item.agents && item.agents.length > 3 ? '...' : ''}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            break;
+            
+        case 'dispositions':
+            tableContent = `
+                <table class="detailed-data-table">
+                    <thead>
+                        <tr>
+                            <th>Disposition</th>
+                            <th>Count</th>
+                            <th>Recent Examples</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(item => `
+                            <tr>
+                                <td class="disposition-name">${item.disposition_name || 'N/A'}</td>
+                                <td class="count">${item.count || 0}</td>
+                                <td class="examples">
+                                    ${(item.examples || []).map(ex => 
+                                        `${ex.evaluation_id} (${ex.agent}, ${ex.date})`
+                                    ).join('<br>')}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            break;
+            
+        default:
+            // Generic table for templates, partners, sites
+            tableContent = `
+                <table class="detailed-data-table">
+                    <thead>
+                        <tr>
+                            <th>${categoryTitle} Name</th>
+                            <th>Evaluations</th>
+                            <th>Programs</th>
+                            <th>Sample Agents</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(item => {
+                            const nameKey = Object.keys(item).find(key => key.includes('_name'));
+                            const countKey = Object.keys(item).find(key => key.includes('_count') || key === 'usage_count');
+                            return `
+                                <tr>
+                                    <td class="item-name">${item[nameKey] || 'N/A'}</td>
+                                    <td class="count">${item[countKey] || 0}</td>
+                                    <td>${(item.programs || []).join(', ') || 'N/A'}</td>
+                                    <td>${(item.agents || []).slice(0, 3).join(', ')}${item.agents && item.agents.length > 3 ? '...' : ''}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+    }
+    
+    return `
+        <div class="detailed-table-header">
+            <div class="table-title-section">
+                <h5>${categoryTitle} Details</h5>
+                <span class="showing-count">${showingMessage}</span>
+            </div>
+            <div class="table-actions">
+                ${downloadButton}
+                <button class="close-table-btn" onclick="document.getElementById('table-${category}').style.display='none'">✕</button>
+            </div>
+        </div>
+        <div class="table-scroll-container">
+            ${tableContent}
+        </div>
+    `;
+}
+
+// ============================================================================
+// NEW: CSV Download functionality
+// ============================================================================
+function downloadCategoryData(category, categoryTitle) {
+    // Get the full data from the current summary container
+    const summaryContainers = document.querySelectorAll('.summary-container');
+    let fullDataForCategory = null;
+    
+    for (let container of summaryContainers) {
+        const fullData = JSON.parse(container.dataset.fullData || '{}');
+        if (fullData[category]) {
+            fullDataForCategory = fullData[category];
+            break;
+        }
+    }
+    
+    if (!fullDataForCategory || fullDataForCategory.length === 0) {
+        showToast('No data available for download', 'warning');
+        return;
+    }
+    
+    // Generate CSV content
+    const csvContent = generateCSVForCategory(category, fullDataForCategory);
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const filename = `${categoryTitle}_${timestamp}.csv`;
+    
+    if (navigator.msSaveBlob) { // IE 10+
+        navigator.msSaveBlob(blob, filename);
+    } else {
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    showToast(`Downloaded ${fullDataForCategory.length} ${categoryTitle.toLowerCase()} records`, 'success');
+}
+
+function generateCSVForCategory(category, data) {
+    if (!data || data.length === 0) return '';
+    
+    let headers = [];
+    let rows = [];
+    
+    // NEW: Category-specific CSV formats
+    switch (category) {
+        case 'evaluations':
+            headers = ['Evaluation ID', 'Agent Name', 'Program', 'Template', 'Date', 'Disposition', 'Score', 'Partner', 'Site', 'Duration'];
+            rows = data.map(item => [
+                item.evaluation_id || '',
+                item.agent_name || '',
+                item.program || '',
+                item.template || '',
+                item.date || '',
+                item.disposition || '',
+                item.score || '',
+                item.partner || '',
+                item.site || '',
+                item.duration || ''
+            ]);
+            break;
+            
+        case 'agents':
+            headers = ['Agent Name', 'Evaluation Count', 'Programs', 'Average Score', 'Evaluation IDs'];
+            rows = data.map(item => [
+                item.agent_name || '',
+                item.evaluation_count || 0,
+                (item.programs || []).join('; '),
+                item.average_score || '',
+                (item.evaluations || []).join('; ')
+            ]);
+            break;
+            
+        case 'opportunities':
+        case 'churn_triggers':
+            headers = ['Evaluation ID', 'Agent', 'Disposition', 'Program', 'Date', 'Score'];
+            rows = data.map(item => [
+                item.evaluation_id || '',
+                item.agent || '',
+                item.disposition || '',
+                item.program || '',
+                item.date || '',
+                item.score || ''
+            ]);
+            break;
+            
+        case 'programs':
+            headers = ['Program Name', 'Evaluation Count', 'Agent Count', 'Templates', 'Agents'];
+            rows = data.map(item => [
+                item.program_name || '',
+                item.evaluation_count || 0,
+                item.agent_count || 0,
+                (item.templates || []).join('; '),
+                (item.agents || []).join('; ')
+            ]);
+            break;
+            
+        case 'dispositions':
+            headers = ['Disposition Name', 'Count', 'Example Evaluations'];
+            rows = data.map(item => [
+                item.disposition_name || '',
+                item.count || 0,
+                (item.examples || []).map(ex => `${ex.evaluation_id} (${ex.agent})`).join('; ')
+            ]);
+            break;
+            
+        default:
+            // Generic handling for templates, partners, sites
+            const nameKey = Object.keys(data[0] || {}).find(key => key.includes('_name'));
+            const countKey = Object.keys(data[0] || {}).find(key => key.includes('_count') || key === 'usage_count');
+            
+            headers = [category.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) + ' Name', 'Count', 'Programs', 'Agents'];
+            rows = data.map(item => [
+                item[nameKey] || '',
+                item[countKey] || 0,
+                (item.programs || []).join('; '),
+                (item.agents || []).join('; ')
+            ]);
+    }
+    
+    // Escape CSV values
+    const escapeCSV = (value) => {
+        if (value === null || value === undefined) return '';
+        const stringValue = String(value);
+        if (stringValue.includes('"') || stringValue.includes(',') || stringValue.includes('\n')) {
+            return '"' + stringValue.replace(/"/g, '""') + '"';
+        }
+        return stringValue;
+    };
+    
+    const csvRows = [
+        headers.map(escapeCSV).join(','),
+        ...rows.map(row => row.map(escapeCSV).join(','))
+    ];
+    
+    return csvRows.join('\n');
+}
+
+// ============================================================================
+// NEW: Enhanced styling for drill-down functionality
+// ============================================================================
+function loadDrilldownStyles() {
+    const styleSheet = document.createElement('style');
+    styleSheet.textContent = `
+        /* Enhanced Summary Container Styles */
+        .summary-container {
+            margin-top: 1em;
+            background: linear-gradient(135deg, #f8f9fb 0%, #ffffff 100%);
+            border: 1px solid #e1e8ed;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .summary-container h4 {
+            background: linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%);
+            color: white;
+            margin: 0;
+            padding: 16px 20px;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+        
+        .summary-container h4 small {
+            opacity: 0.9;
+            font-weight: normal;
+            font-size: 0.85em;
+        }
+        
+        /* NEW: Clickable Summary Items */
+        .summary-item {
+            display: inline-block;
+            margin: 2px 4px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+        
+        .summary-item.clickable {
+            background: #e6f3ff;
+            color: #2563eb;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid #bfdbfe;
+        }
+        
+        .summary-item.clickable:hover {
+            background: #dbeafe;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+        }
+        
+        .summary-item.non-clickable {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        
+        /* NEW: Detailed Table Styles */
+        .detailed-table-wrapper {
+            margin: 16px 0;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .detailed-table-header {
+            background: #f9fafb;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .table-title-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .detailed-table-header h5 {
+            margin: 0;
+            color: #374151;
+            font-size: 1em;
+            font-weight: 600;
+        }
+        
+        .showing-count {
+            background: #e0e7ff;
+            color: #3730a3;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        
+        .table-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .download-all-btn {
+            background: #059669;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        
+        .download-all-btn:hover {
+            background: #047857;
+        }
+        
+        .close-table-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .close-table-btn:hover {
+            background: #dc2626;
+        }
+        
+        .table-scroll-container {
+            max-height: 400px;
+            overflow-y: auto;
+            overflow-x: auto;
+        }
+        
+        .detailed-data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+        
+        .detailed-data-table th {
+            background: #f8fafc;
+            color: #374151;
+            font-weight: 600;
+            padding: 12px 8px;
+            text-align: left;
+            border-bottom: 2px solid #e5e7eb;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        
+        .detailed-data-table td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #f3f4f6;
+            vertical-align: top;
+        }
+        
+        .detailed-data-table tr:hover {
+            background: #f8fafc;
+        }
+        
+        /* NEW: Special cell styling */
+        .eval-id {
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #6366f1;
+            font-weight: 500;
+        }
+        
+        .agent-name {
+            font-weight: 600;
+            color: #059669;
+        }
+        
+        .program-name {
+            font-weight: 600;
+            color: #7c3aed;
+        }
+        
+        .disposition {
+            font-weight: 500;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        
+        .disposition.positive {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .disposition.negative {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .score {
+            font-weight: 600;
+            text-align: center;
+            color: #1f2937;
+        }
+        
+        .count {
+            font-weight: 600;
+            text-align: center;
+            color: #6366f1;
+        }
+        
+        .eval-ids {
+            font-family: monospace;
+            font-size: 0.8em;
+            color: #6b7280;
+        }
+        
+        .examples {
+            font-size: 0.85em;
+            color: #6b7280;
+            line-height: 1.4;
+        }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .detailed-data-table {
+                font-size: 0.8em;
+            }
+            
+            .detailed-data-table th,
+            .detailed-data-table td {
+                padding: 8px 4px;
+            }
+            
+            .table-scroll-container {
+                max-height: 300px;
+            }
+            
+            .summary-item {
+                margin: 2px 1px;
+                padding: 3px 6px;
+                font-size: 0.9em;
+            }
+            
+            .detailed-table-header {
+                flex-direction: column;
+                gap: 8px;
+                align-items: stretch;
+            }
+            
+            .table-title-section {
+                justify-content: center;
+            }
+            
+            .table-actions {
+                justify-content: center;
+            }
+            
+            .download-all-btn {
+                font-size: 0.8em;
+                padding: 8px 12px;
+            }
+            
+            .showing-count {
+                font-size: 0.8em;
+            }
+        }
+        
+        /* Animation for table appearance */
+        .detailed-table-wrapper {
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    `;
+    
+    document.head.appendChild(styleSheet);
+    console.log("✅ Drill-down styles loaded");
+}
+
+// ============================================================================
+// UPDATED: Enhanced toast notification with multiple types
+// ============================================================================
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    
+    const backgroundColor = {
+        'info': '#3b82f6',
+        'success': '#059669',
+        'warning': '#f59e0b',
+        'error': '#ef4444'
+    }[type] || '#3b82f6';
+    
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${backgroundColor};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 6px;
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        font-weight: 500;
+    `;
+    
+    // Add animation styles if not already present
+    if (!document.getElementById('toastStyles')) {
+        const toastStyles = document.createElement('style');
+        toastStyles.id = 'toastStyles';
+        toastStyles.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(toastStyles);
+    }
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideIn 0.3s ease-out reverse';
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.remove();
+            }
+        }, 300);
+    }, 3000);
 }
 
 function addLoadingMessage() {
