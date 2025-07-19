@@ -1071,7 +1071,7 @@ async def relay_chat_rag(request: Request):
         body = await request.json()
         req = ChatRequest(**body)
 
-        logger.info(f"💬 CHAT REQUEST WITH METADATA VERIFICATION: {req.message[:60]}")
+        logger.info(f"💬 CHAT REQUEST WITH LLAMA 3.1: {req.message[:60]}")
         logger.info(f"🔎 FILTERS RECEIVED: {req.filters}")
 
         is_report_request = detect_report_query(req.message)
@@ -1080,43 +1080,47 @@ async def relay_chat_rag(request: Request):
         # STEP 1: Build context with strict metadata verification
         context, sources = build_search_context(req.message, req.filters)
         
-        # DEBUG: Log context quality
         logger.info(f"📋 CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
         if not context:
             logger.warning("⚠️ NO CONTEXT FOUND - Chat will use general knowledge only")
         
-        # STEP 2: Enhanced system message with strict instructions
-        system_message = f"""You are an AI assistant for call center evaluation data analysis.
+        # STEP 2: Your custom instructions - PRESERVED EXACTLY
+        system_message = f"""You are an AI assistant for call center evaluation data analysis. Analyze the provided evaluation data carefully and provide actionable insights.
 
 ANALYSIS INSTRUCTIONS:
-1. Review transcripts or agent summaries to identify recurring communication issues or strengths.
-2. Compare tone, language, empathy, and product knowledge across transcripts and agents.
-3. Identify opportunities for improvement in agent performance based on the provided evaluation data.
-4. Highlight strengths that highlight agent performance, such as effective communication, problem-solving skills, and customer rapport.
-5. Determine what is successful and what needs improvement, with justifications.
-6. Write a concise but structured summary with clear sections and bullet points.
+1. Review transcripts or agent summaries to identify recurring communication issues or strengths
+2. Compare tone, language, empathy, and product knowledge across transcripts and agents  
+3. Identify opportunities for improvement in agent performance based on the provided evaluation data
+4. Highlight strengths in agent performance such as effective communication, problem-solving skills, and customer rapport
+5. Determine what is successful and what needs improvement, with clear justifications
+6. Write a concise but structured summary with clear sections and bullet points
 
 EVALUATION DATABASE CONTEXT:
 {context}
 
 CRITICAL INSTRUCTIONS:
-- ONLY use data from the provided context above along with the last 10 messages in the chat history
-- Always answer questoins based on the provided evaluation data
+- ONLY use data from the provided context above
+- Always answer questions based on the provided evaluation data
 - Do not generate statistics not directly calculable from the data
 - Be objective and data-informed
-- Avoid overgeneralizations
+- Avoid overgeneralizations  
 - Make the summary suitable for leadership or QA team use
-"""
 
-        # STEP 3: Construct DigitalOcean AI payload (corrected format)
-        do_payload = {
+Respond in a clear, professional format with specific examples from the data."""
+
+        # STEP 3: Streamlined Llama payload (no model parameter needed)
+        llama_payload = {
             "messages": [
                 {"role": "system", "content": system_message},
                 *[{"role": msg.get("role", "user"), "content": msg.get("content", "")} for msg in req.history[-10:]],
                 {"role": "user", "content": req.message}
             ],
             "temperature": GENAI_TEMPERATURE,
-            "max_tokens": GENAI_MAX_TOKENS
+            "max_tokens": GENAI_MAX_TOKENS,
+            "top_p": 0.9,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0,
+            "stop": ["<|eot_id|>", "<|end_of_text|>"]  # Llama stop tokens
         }
 
         headers = {
@@ -1124,48 +1128,167 @@ CRITICAL INSTRUCTIONS:
             "Content-Type": "application/json"
         }
 
-        # Correct DigitalOcean AI URL format
-        do_url = f"{GENAI_ENDPOINT.rstrip('/')}/api/v1/chat/completions"
-        logger.info(f"🚀 Making GenAI API call to: {do_url}")
-        logger.info(f"🚀 About to call DigitalOcean AI - payload size: {len(str(do_payload))} chars")
-
-        genai_response = requests.post(
-            do_url,
-            headers=headers,
-            json=do_payload,
-            timeout=60  # Increased timeout for GenAI API
-        )
+        logger.info(f"🦙 Making Llama 3.1 API call...")
+        logger.info(f"🔑 Auth configured: {GENAI_ACCESS_KEY[:10] if GENAI_ACCESS_KEY else 'MISSING'}...")
+        logger.info(f"🌐 Endpoint: {GENAI_ENDPOINT}")
         
-        if not genai_response.ok:
-            logger.error(f"❌ GenAI API error: {genai_response.status_code} - {genai_response.text}")
+        if not GENAI_ENDPOINT or not GENAI_ACCESS_KEY:
+            logger.error("❌ Missing Llama GenAI configuration!")
             return JSONResponse(
                 status_code=500,
                 content={
-                    "reply": "I apologize, but I'm experiencing technical difficulties with the AI service. Please try again in a moment.",
+                    "reply": "Llama AI service not configured. Please check your GENAI_ENDPOINT and GENAI_ACCESS_KEY environment variables.",
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+
+        genai_response = None
+        successful_url = None
+        
+        # Try different URL formats for DigitalOcean
+        possible_urls = [
+            f"{GENAI_ENDPOINT.rstrip('/')}/v1/chat/completions",  # Most likely
+            f"{GENAI_ENDPOINT.rstrip('/')}/api/v1/chat/completions",
+            f"{GENAI_ENDPOINT.rstrip('/')}/v1/completions",
+            f"{GENAI_ENDPOINT.rstrip('/')}/completions",
+            GENAI_ENDPOINT.rstrip('/')  # Direct endpoint
+        ]
+        
+        for url in possible_urls:
+            try:
+                logger.info(f"🧪 Trying Llama URL: {url}")
+                
+                genai_response = requests.post(
+                    url,
+                    headers=headers,
+                    json=llama_payload,
+                    timeout=60
+                )
+                
+                logger.info(f"📥 Llama Response Status: {genai_response.status_code} for {url}")
+                
+                if genai_response.ok:
+                    successful_url = url
+                    break
+                else:
+                    logger.warning(f"⚠️ URL {url} returned {genai_response.status_code}: {genai_response.text()[:200]}")
+                    
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"⚠️ URL {url} failed: {e}")
+                continue
+        
+        if not genai_response or not genai_response.ok:
+            error_text = genai_response.text() if genai_response else "No response"
+            logger.error(f"❌ All Llama API URLs failed. Last error: {error_text[:500]}")
+            
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "reply": f"I apologize, but I'm having trouble connecting to the Llama AI service. Status: {genai_response.status_code if genai_response else 'Connection failed'}. Please try again or contact support.",
                     "sources": [],
                     "timestamp": datetime.now().isoformat(),
                     "search_metadata": {
-                        "error": f"GenAI API error: {genai_response.status_code}",
+                        "error": f"Llama API error: {genai_response.status_code if genai_response else 'Connection failed'}",
                         "context_length": len(context),
                         "processing_time": round(time.time() - start_time, 2)
                     }
                 }
             )
 
-        result = genai_response.json()
-        
-        # Extract reply from DigitalOcean AI response
-        reply_text = "(No response)"
-        if "choices" in result and result["choices"]:
-            reply_text = result["choices"][0]["message"]["content"].strip()
-        else:
-            logger.error(f"❌ GenAI response missing 'choices': {result}")
-            reply_text = "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
+        logger.info(f"✅ Successful Llama URL: {successful_url}")
 
+        try:
+            result = genai_response.json()
+            logger.info(f"📊 Llama Response Structure: {list(result.keys())}")
+            
+        except ValueError as e:
+            logger.error(f"❌ Llama response is not valid JSON: {e}")
+            logger.error(f"🔍 Raw response: {genai_response.text()[:500]}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "reply": "I apologize, but received an invalid response from the Llama AI service. Please try again.",
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
         
-
+        # STEP 4: Extract reply from Llama response (handles multiple formats)
+        reply_text = None
+        
+        # Try all possible Llama response formats
+        if "choices" in result and result["choices"] and len(result["choices"]) > 0:
+            choice = result["choices"][0]
+            if "message" in choice and "content" in choice["message"]:
+                reply_text = choice["message"]["content"].strip()
+                logger.info(f"✅ Extracted Llama reply from choices[0].message.content: {len(reply_text)} chars")
+            elif "text" in choice:
+                reply_text = choice["text"].strip()
+                logger.info(f"✅ Extracted Llama reply from choices[0].text: {len(reply_text)} chars")
+            elif "delta" in choice and "content" in choice["delta"]:
+                reply_text = choice["delta"]["content"].strip()
+                logger.info(f"✅ Extracted Llama reply from choices[0].delta.content: {len(reply_text)} chars")
+        elif "text" in result:
+            reply_text = result["text"].strip()
+            logger.info(f"✅ Extracted Llama reply from text: {len(reply_text)} chars")
+        elif "content" in result:
+            reply_text = result["content"].strip()
+            logger.info(f"✅ Extracted Llama reply from content: {len(reply_text)} chars")
+        elif "response" in result:
+            reply_text = result["response"].strip()
+            logger.info(f"✅ Extracted Llama reply from response: {len(reply_text)} chars")
+        elif "completion" in result:
+            reply_text = result["completion"].strip()
+            logger.info(f"✅ Extracted Llama reply from completion: {len(reply_text)} chars")
+        elif "generated_text" in result:
+            reply_text = result["generated_text"].strip()
+            logger.info(f"✅ Extracted Llama reply from generated_text: {len(reply_text)} chars")
+        
+        # Debug if extraction failed
+        if not reply_text:
+            logger.error(f"❌ Could not extract reply from Llama response")
+            logger.error(f"🔍 Full Llama response: {json.dumps(result, indent=2)[:2000]}...")
+            
+            # Try to find any substantial text content
+            def find_llama_text(obj, path=""):
+                texts = []
+                if isinstance(obj, dict):
+                    for key, value in obj.items():
+                        new_path = f"{path}.{key}" if path else key
+                        if isinstance(value, str) and len(value.strip()) > 20:
+                            texts.append((new_path, value))
+                            logger.info(f"🔍 Found Llama text at {new_path}: {value[:100]}...")
+                        elif isinstance(value, (dict, list)):
+                            texts.extend(find_llama_text(value, new_path))
+                elif isinstance(obj, list):
+                    for i, item in enumerate(obj):
+                        texts.extend(find_llama_text(item, f"{path}[{i}]"))
+                return texts
+            
+            found_texts = find_llama_text(result)
+            if found_texts:
+                # Use the longest text found
+                reply_text = max(found_texts, key=lambda x: len(x[1]))[1].strip()
+                logger.info(f"✅ Using longest found text as Llama reply: {len(reply_text)} chars")
+            else:
+                reply_text = "I apologize, but I received an unexpected response format from the Llama AI service. Please try rephrasing your question."
+        
+        # Clean up Llama response artifacts
+        if reply_text:
+            # Remove Llama special tokens if they appear in the response
+            reply_text = reply_text.replace("<|eot_id|>", "").replace("<|end_of_text|>", "")
+            reply_text = reply_text.replace("<|start_header_id|>", "").replace("<|end_header_id|>", "")
+            reply_text = reply_text.strip()
+        
+        # Ensure we have some reply text
+        if not reply_text or len(reply_text.strip()) < 5:
+            reply_text = "I apologize, but I couldn't generate a proper response using Llama. Please try rephrasing your question."
+            logger.warning(f"⚠️ Using fallback reply text for Llama")
+        
+        logger.info(f"📝 Final Llama reply length: {len(reply_text)} characters")
                
-        # STEP 4: Process sources for response - Remove duplicates
+        # STEP 5: Process sources for response - Remove duplicates  
         unique_sources = []
         seen_ids = set()
         for source in sources:
@@ -1180,20 +1303,17 @@ CRITICAL INSTRUCTIONS:
                 })
                 seen_ids.add(evaluation_id)
 
-
-        # STEP 5: NEW - Build sources summary with detailed drill-down data
-
+        # STEP 6: Build sources summary with detailed drill-down data
         sources_data = build_sources_summary_with_details(unique_sources, req.filters)
 
-        # STEP 56: Build enhanced response
+        # STEP 7: Build enhanced response
         response_data = {
             "reply": reply_text,
-            "sources_summary": sources_data["summary"],           # NEW: Summary counts
-            "sources_details": sources_data["details"],          # NEW: Limited data for display  
-            "sources_totals": sources_data["totals"],            # NEW: Total counts for each category
-            #"sources_full_data": sources_data["full_data"],      # NEW: Complete data for download
-            "display_limit": sources_data["display_limit"],      # NEW: Current display limit (25)
-            "sources": unique_sources[:20],  # Limit sources in response
+            "sources_summary": sources_data["summary"],
+            "sources_details": sources_data["details"], 
+            "sources_totals": sources_data["totals"],
+            "display_limit": sources_data["display_limit"],
+            "sources": unique_sources[:20],
             "timestamp": datetime.now().isoformat(),
             "filter_context": req.filters,
             "search_metadata": {
@@ -1205,25 +1325,32 @@ CRITICAL INSTRUCTIONS:
                 "unique_sources": len(unique_sources),
                 "context_found": bool(context and "NO DATA FOUND" not in context),
                 "metadata_verified": "verified_real_data" in context.lower(),
-                "version": "4.7.0"
+                "llama_response_structure": list(result.keys()) if 'result' in locals() else [],
+                "successful_url": successful_url,
+                "model": "llama-3.1-8b-instruct",  # For reference only
+                "version": "4.7.0_llama_streamlined"
             }
         }
         
-        logger.info(f"✅ CHAT RESPONSE COMPLETE: {len(reply_text)} chars, {len(unique_sources)} verified sources")
-        logger.info(f"📊 SOURCES SUMMARY: {sources_data['summary']}")  # NEW: Log summary data
+        logger.info(f"✅ LLAMA CHAT RESPONSE COMPLETE: {len(reply_text)} chars, {len(unique_sources)} verified sources")
+        logger.info(f"📊 SOURCES SUMMARY: {sources_data['summary']}")
+        
         # Truncate reply if too long  
         if len(reply_text) > 2000:
             response_data["reply"] = reply_text[:2000] + "\n\n[Response truncated for display]"
+        
         return JSONResponse(content=response_data)
 
     except Exception as e:
-        logger.error(f"❌ CHAT REQUEST FAILED: {e}")
+        logger.error(f"❌ LLAMA CHAT REQUEST FAILED: {e}")
+        logger.error(f"🔍 Full error: {str(e)}")
+        import traceback
+        logger.error(f"🔍 Traceback: {traceback.format_exc()}")
         
         return JSONResponse(
             status_code=500,
             content={
-                "reply": f"I apologize, but I encountered an error while processing your request: {str(e)[:200]}. Please try again or contact support if the issue persists.",
-                # NEW: Error response includes all new fields
+                "reply": f"I apologize, but I encountered an error while processing your request with Llama: {str(e)[:200]}. Please try again or contact support if the issue persists.",
                 "sources_summary": {
                     "evaluations": 0,
                     "agents": 0,
@@ -1245,7 +1372,8 @@ CRITICAL INSTRUCTIONS:
                 "filter_context": req.filters if 'req' in locals() else {},
                 "search_metadata": {
                     "error": str(e),
-                    "version": "4.7.0_limited_display_with_download"  # UPDATED: Version number
+                    "model": "llama-3.1-8b-instruct",
+                    "version": "4.7.0_llama_streamlined"
                 }
             }
         )
