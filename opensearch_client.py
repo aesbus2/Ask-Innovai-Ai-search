@@ -1,9 +1,6 @@
-# opensearch_client.py - VERSION 4.6.0
-# COMPREHENSIVE FIX: Timeout issues, query compilation errors, field validation
-# FIXES: All timeout configurations, safe aggregations, robust error handling
-# NEW: Enhanced field validation, compilation error prevention, performance improvements
-# API INTEGRATION: weight_score, url, evaluation, transcript, agentName, subDisposition
-# SEARCH IMPROVEMENTS: Separate weight_score search, URL extraction, proper field mapping
+# opensearch_client.py - FIXED VERSION for Empty Search Results
+# Version: 4.5.0 - Fixed field mapping, robust search, better error handling
+# FIXES: Field existence checking, flexible search, comprehensive debugging
 
 import os
 import logging
@@ -30,33 +27,17 @@ _vector_support_tested = True
 # Global client instance
 _client = None
 
-# Version information
-VERSION = "4.6.0"
-FIXES_APPLIED = [
-    "timeout_configuration_fix",
-    "query_compilation_error_prevention", 
-    "field_validation_enhancement",
-    "safe_aggregation_queries",
-    "robust_error_handling",
-    "performance_improvements",
-    "api_field_integration",
-    "weight_score_search_separation",
-    "url_field_support",
-    "evaluation_transcript_indexing"
-]
-
 # =============================================================================
-# FIXED CLIENT CREATION - ALL TIMEOUT ISSUES RESOLVED
+# FIXED CLIENT CREATION WITH PROPER TIMEOUT CONFIGURATION
 # =============================================================================
 
 def get_client():
-    """Get OpenSearch client with COMPLETELY FIXED timeout configuration"""
+    """Get OpenSearch client with proper timeout configuration"""
     if not OPENSEARCH_AVAILABLE:
         logger.error("OpenSearch library not available")
         return None
     
     try:
-        # FIXED: All timeouts are integers (seconds), not strings
         client = OpenSearch(
             hosts=[{
                 "host": os.getenv("OPENSEARCH_HOST"),
@@ -65,8 +46,8 @@ def get_client():
             http_auth=(os.getenv("OPENSEARCH_USER"), os.getenv("OPENSEARCH_PASS")),
             use_ssl=True,
             verify_certs=False,
-            request_timeout=30,        # INTEGER: 30 seconds
-            connect_timeout=10,        # INTEGER: 10 seconds  
+            request_timeout=30,
+            connect_timeout=10,
             max_retries=3,
             retry_on_timeout=True,
             ssl_show_warn=False,
@@ -74,8 +55,7 @@ def get_client():
             http_compress=True
         )
         
-        # Test connection with proper timeout
-        test_result = client.ping(request_timeout=5)  # INTEGER: 5 seconds
+        test_result = client.ping()
         if test_result:
             logger.info("✅ OpenSearch connection successful")
         else:
@@ -95,13 +75,12 @@ def get_opensearch_client():
     return _client
 
 def test_connection() -> bool:
-    """Test connection with FIXED timeout handling"""
+    """Test connection with enhanced error handling"""
     client = get_opensearch_client()
     if not client:
         return False
     
     try:
-        # Use integer timeout
         result = client.ping(request_timeout=5)
         if result:
             logger.info("✅ OpenSearch connection test successful")
@@ -114,62 +93,28 @@ def test_connection() -> bool:
         return False
 
 # =============================================================================
-# ENHANCED FIELD DETECTION - PREVENTS COMPILATION ERRORS
+# ENHANCED SEARCH FUNCTIONS - FIXED FOR FIELD EXISTENCE
 # =============================================================================
-
-def validate_field_exists(client, index_pattern: str, field_path: str) -> bool:
-    """NEW: Validate that a field exists before using it in queries"""
-    try:
-        mappings = client.indices.get_mapping(index=index_pattern, request_timeout=10)
-        
-        for index_name, mapping_data in mappings.items():
-            properties = mapping_data.get("mappings", {}).get("properties", {})
-            
-            # Navigate nested field path (e.g., "metadata.program.keyword")
-            current_props = properties
-            field_parts = field_path.split(".")
-            
-            for part in field_parts[:-1]:
-                if part in current_props:
-                    current_props = current_props[part].get("properties", {})
-                    if not current_props:
-                        # Check if it's a multi-field (has "fields")
-                        current_props = current_props.get("fields", {})
-                else:
-                    return False
-            
-            # Check final field
-            final_field = field_parts[-1]
-            if final_field in current_props:
-                return True
-                
-        return False
-        
-    except Exception as e:
-        logger.warning(f"Field validation failed for {field_path}: {e}")
-        return False
 
 def get_available_fields(client, index_pattern: str = "eval-*") -> Dict[str, List[str]]:
     """
-    ENHANCED: Get available fields with validation and safety checks
+    FIXED: Get actually available fields from index mappings
     """
     try:
-        mappings_response = client.indices.get_mapping(index=index_pattern, request_timeout=10)
+        # Get mappings for the index pattern
+        mappings_response = client.indices.get_mapping(index=index_pattern)
         
         available_fields = {
             "text_fields": [],
             "keyword_fields": [],
             "nested_fields": [],
-            "metadata_fields": [],
-            "safe_aggregation_fields": {},  # NEW: Fields safe for aggregation
-            "date_fields": [],
-            "numeric_fields": []
+            "metadata_fields": []
         }
         
         for index_name, mapping_data in mappings_response.items():
             properties = mapping_data.get("mappings", {}).get("properties", {})
             
-            # Analyze top-level fields
+            # Check top-level fields
             for field_name, field_config in properties.items():
                 field_type = field_config.get("type", "")
                 
@@ -177,41 +122,30 @@ def get_available_fields(client, index_pattern: str = "eval-*") -> Dict[str, Lis
                     available_fields["text_fields"].append(field_name)
                 elif field_type == "keyword":
                     available_fields["keyword_fields"].append(field_name)
-                    available_fields["safe_aggregation_fields"][field_name] = field_name
                 elif field_type == "nested":
                     available_fields["nested_fields"].append(field_name)
-                elif field_type == "date":
-                    available_fields["date_fields"].append(field_name)
-                elif field_type in ["integer", "long", "float", "double"]:
-                    available_fields["numeric_fields"].append(field_name)
                 
                 # Check for text fields with keyword subfields
-                if "fields" in field_config and "keyword" in field_config["fields"]:
-                    keyword_field = f"{field_name}.keyword"
-                    available_fields["keyword_fields"].append(keyword_field)
-                    available_fields["safe_aggregation_fields"][field_name] = keyword_field
+                if "fields" in field_config:
+                    if "keyword" in field_config["fields"]:
+                        available_fields["keyword_fields"].append(f"{field_name}.keyword")
                 
-                # Analyze metadata fields (most important for filtering)
+                # Check metadata fields
                 if field_name == "metadata" and "properties" in field_config:
-                    for meta_field, meta_config in field_config["properties"].items():
-                        meta_type = meta_config.get("type", "")
-                        
-                        # Add to metadata fields list
+                    for meta_field in field_config["properties"].keys():
                         available_fields["metadata_fields"].append(f"metadata.{meta_field}")
-                        
-                        # Check if safe for aggregation
-                        if meta_type == "keyword":
-                            available_fields["safe_aggregation_fields"][meta_field] = f"metadata.{meta_field}"
-                        elif meta_type == "text" and "fields" in meta_config and "keyword" in meta_config["fields"]:
-                            available_fields["safe_aggregation_fields"][meta_field] = f"metadata.{meta_field}.keyword"
+                        if field_config["properties"][meta_field].get("fields", {}).get("keyword"):
+                            available_fields["metadata_fields"].append(f"metadata.{meta_field}.keyword")
         
         # Remove duplicates
         for key in available_fields:
-            if isinstance(available_fields[key], list):
-                available_fields[key] = list(set(available_fields[key]))
+            available_fields[key] = list(set(available_fields[key]))
         
-        logger.info(f"✅ Field detection completed: {len(available_fields['text_fields'])} text fields, "
-                   f"{len(available_fields['safe_aggregation_fields'])} safe aggregation fields")
+        logger.info(f"📋 Available fields found:")
+        logger.info(f"   Text fields: {available_fields['text_fields'][:5]}...")
+        logger.info(f"   Keyword fields: {available_fields['keyword_fields'][:5]}...")
+        logger.info(f"   Nested fields: {available_fields['nested_fields']}")
+        logger.info(f"   Metadata fields: {available_fields['metadata_fields'][:5]}...")
         
         return available_fields
         
@@ -221,55 +155,52 @@ def get_available_fields(client, index_pattern: str = "eval-*") -> Dict[str, Lis
             "text_fields": [],
             "keyword_fields": [],
             "nested_fields": [],
-            "metadata_fields": [],
-            "safe_aggregation_fields": {},
-            "date_fields": [],
-            "numeric_fields": []
+            "metadata_fields": []
         }
 
-# =============================================================================
-# SAFE QUERY BUILDING - PREVENTS COMPILATION ERRORS
-# =============================================================================
-
-def build_safe_search_query(query: str, available_fields: Dict[str, List[str]], 
-                           filters: Dict[str, Any] = None) -> Dict[str, Any]:
+def build_flexible_search_query(query: str, available_fields: Dict[str, List[str]], 
+                               filters: Dict[str, Any] = None) -> Dict[str, Any]:
     """
-    NEW: Build search query with field validation to prevent compilation errors
+    FIXED: Build a flexible search query based on actually available fields
     """
+    
+    # Build multi_match query with available text fields
     text_fields = available_fields.get("text_fields", [])
     
-    # Build search fields with validation - Updated for API structure
+    # Create field list with boosts, using only fields that exist
     search_fields = []
+    
+    # Priority field mapping - only add if fields exist
     field_priorities = [
-        ("evaluation", 3.0),        # NEW: Full evaluation content (highest priority)
-        ("transcript", 2.8),        # NEW: Call transcript (high priority)
-        ("full_text", 2.5),
-        ("evaluation_text", 2.2),
-        ("template_name", 2.0),
+        ("full_text", 3.0),
+        ("evaluation_text", 2.5),
+        ("transcript_text", 2.0),
+        ("template_name", 1.5),
         ("content", 1.8),
         ("text", 1.5),
         ("title", 1.3),
         ("description", 1.0)
     ]
     
-    # Only use fields that actually exist
     for field_name, boost in field_priorities:
         if field_name in text_fields:
             search_fields.append(f"{field_name}^{boost}")
+            logger.debug(f"Added search field: {field_name}^{boost}")
     
-    # Add remaining text fields
+    # Add any other text fields we haven't covered
     for field in text_fields:
-        if not any(field in sf for sf in search_fields):
-            search_fields.append(f"{field}^1.0")
+        field_with_boost = f"{field}^1.0"
+        if not any(field in existing_field for existing_field in search_fields):
+            search_fields.append(field_with_boost)
     
-    # Build main query
+    # If no text fields found, use _all or a simple query
     if not search_fields:
-        logger.warning("No text fields available, using query_string fallback")
+        logger.warning("No text fields found, using simple query_string")
         main_query = {
             "query_string": {
                 "query": query,
                 "default_operator": "AND",
-                "lenient": True  # Prevent parsing errors
+                "fuzziness": "AUTO"
             }
         }
     else:
@@ -283,22 +214,18 @@ def build_safe_search_query(query: str, available_fields: Dict[str, List[str]],
             }
         }
     
-    # Add nested query for chunks if available
+    # Build nested queries for chunks if chunks field exists
     should_queries = [main_query]
     
     if "chunks" in available_fields.get("nested_fields", []):
+        logger.info("📦 Found chunks field, adding nested query")
         nested_query = {
             "nested": {
                 "path": "chunks",
                 "query": {
                     "multi_match": {
                         "query": query,
-                        "fields": [
-                            "chunks.text^2", 
-                            "chunks.content^1.5", 
-                            "chunks.question^1.5", 
-                            "chunks.answer^1.5"
-                        ],
+                        "fields": ["chunks.text^2", "chunks.content^1.5", "chunks.question^1.5", "chunks.answer^1.5"],
                         "fuzziness": "AUTO"
                     }
                 },
@@ -311,7 +238,7 @@ def build_safe_search_query(query: str, available_fields: Dict[str, List[str]],
         }
         should_queries.append(nested_query)
     
-    # Combine queries
+    # Combine all queries
     combined_query = {
         "bool": {
             "should": should_queries,
@@ -319,37 +246,23 @@ def build_safe_search_query(query: str, available_fields: Dict[str, List[str]],
         }
     }
     
-    # Add filters safely
-    if filters:
-        filter_clauses = build_safe_filter_clauses(filters, available_fields)
+    # Add filters if provided
+    if filters and any(filters.values()):
+        filter_clauses = build_filter_clauses(filters, available_fields)
         if filter_clauses:
             combined_query["bool"]["filter"] = filter_clauses
     
     return combined_query
 
-def build_safe_filter_clauses(filters: Dict[str, Any], available_fields: Dict[str, List[str]]) -> List[Dict[str, Any]]:
+def build_filter_clauses(filters: Dict[str, Any], available_fields: Dict[str, List[str]]) -> List[Dict[str, Any]]:
     """
-    NEW: Build filter clauses with field validation
+    FIXED: Build filter clauses using only available fields
     """
     filter_clauses = []
-    safe_agg_fields = available_fields.get("safe_aggregation_fields", {})
+    metadata_fields = available_fields.get("metadata_fields", [])
+    keyword_fields = available_fields.get("keyword_fields", [])
     
-    # Text-based filters
-    for filter_key, filter_value in filters.items():
-        if not filter_value or filter_key == "collection":
-            continue
-            
-        # Check if we have a safe field for this filter
-        if filter_key in safe_agg_fields:
-            safe_field = safe_agg_fields[filter_key]
-            filter_clauses.append({
-                "term": {safe_field: filter_value}
-            })
-            logger.debug(f"Added safe filter: {safe_field} = {filter_value}")
-        else:
-            logger.warning(f"No safe field found for filter: {filter_key}")
-    
-    # Date range filters
+    # Date filters
     if filters.get("call_date_start") or filters.get("call_date_end"):
         date_range = {}
         if filters.get("call_date_start"):
@@ -358,16 +271,53 @@ def build_safe_filter_clauses(filters: Dict[str, Any], available_fields: Dict[st
             date_range["lte"] = filters["call_date_end"]
         
         # Try different date field variations
-        date_fields = ["metadata.call_date", "call_date", "created_on"]
+        date_fields = ["metadata.call_date", "call_date", "date"]
         for date_field in date_fields:
-            if date_field in available_fields.get("date_fields", []) or date_field in available_fields.get("metadata_fields", []):
+            if date_field in metadata_fields or date_field in keyword_fields:
                 filter_clauses.append({
                     "range": {date_field: date_range}
                 })
-                logger.debug(f"Added date filter: {date_field}")
+                logger.info(f"📅 Added date filter for field: {date_field}")
                 break
     
-    # Numeric range filters
+    # Keyword filters with flexible field matching
+    keyword_filter_mapping = {
+        "template_name": ["template_name.keyword", "template_name"],
+        "template_id": ["template_id", "template_id.keyword"],
+        "program": ["metadata.program.keyword", "metadata.program", "program.keyword", "program"],
+        "partner": ["metadata.partner.keyword", "metadata.partner", "partner.keyword", "partner"],
+        "site": ["metadata.site.keyword", "metadata.site", "site.keyword", "site"],
+        "lob": ["metadata.lob.keyword", "metadata.lob", "lob.keyword", "lob"],
+        "agent_name": ["metadata.agent.keyword", "metadata.agent", "agent.keyword", "agent"],
+        "agent": ["metadata.agent.keyword", "metadata.agent", "agent.keyword", "agent"],
+        "disposition": ["metadata.disposition.keyword", "metadata.disposition", "disposition.keyword", "disposition"],
+        "sub_disposition": ["metadata.sub_disposition.keyword", "metadata.sub_disposition", "sub_disposition.keyword", "sub_disposition"],
+        "language": ["metadata.language.keyword", "metadata.language", "language.keyword", "language"],
+        "call_type": ["metadata.call_type.keyword", "metadata.call_type", "call_type.keyword", "call_type"],
+        "phone_number": ["metadata.phone_number", "phone_number"],
+        "contact_id": ["metadata.contact_id", "contact_id"],
+        "ucid": ["metadata.ucid", "ucid"]
+    }
+    
+    for filter_key, possible_fields in keyword_filter_mapping.items():
+        filter_value = filters.get(filter_key)
+        if filter_value and str(filter_value).strip():
+            # Find the first available field from the list
+            available_field = None
+            for field in possible_fields:
+                if field in metadata_fields or field in keyword_fields:
+                    available_field = field
+                    break
+            
+            if available_field:
+                filter_clauses.append({
+                    "term": {available_field: filter_value}
+                })
+                logger.info(f"🏷️ Added filter: {filter_key}='{filter_value}' using field: {available_field}")
+            else:
+                logger.warning(f"⚠️ No available field found for filter: {filter_key}")
+    
+    # Duration filters
     if filters.get("min_duration") or filters.get("max_duration"):
         duration_range = {}
         if filters.get("min_duration"):
@@ -375,576 +325,212 @@ def build_safe_filter_clauses(filters: Dict[str, Any], available_fields: Dict[st
         if filters.get("max_duration"):
             duration_range["lte"] = int(filters["max_duration"])
         
+        # Try different duration field variations
         duration_fields = ["metadata.call_duration", "call_duration", "duration"]
         for duration_field in duration_fields:
-            if duration_field in available_fields.get("numeric_fields", []) or duration_field in available_fields.get("metadata_fields", []):
+            if duration_field in metadata_fields or duration_field in keyword_fields:
                 filter_clauses.append({
                     "range": {duration_field: duration_range}
                 })
-                logger.debug(f"Added duration filter: {duration_field}")
+                logger.info(f"⏱️ Added duration filter for field: {duration_field}")
                 break
     
     return filter_clauses
 
-# =============================================================================
-# SAFE SEARCH EXECUTION - PREVENTS COMPILATION ERRORS
-# =============================================================================
-
-def safe_search_with_error_handling(client, index_pattern: str, query_body: Dict, timeout: int = 30) -> Dict:
-    """
-    NEW: Execute search with comprehensive error handling
-    """
-    try:
-        # Add timeout to query body (OpenSearch expects string format)
-        query_body["timeout"] = f"{timeout}s"
-        
-        # Execute search with proper timeouts
-        result = client.search(
-            index=index_pattern,
-            body=query_body,
-            request_timeout=timeout,  # Client timeout (integer)
-            allow_partial_search_results=True
-        )
-        
-        return result
-        
-    except RequestError as e:
-        error_msg = str(e).lower()
-        
-        if "compile_error" in error_msg or "search_phase_execution_exception" in error_msg:
-            logger.error(f"🚨 QUERY COMPILATION ERROR: {e}")
-            logger.error(f"Failed query: {json.dumps(query_body, indent=2)}")
-            
-            # Return safe empty result
-            return {
-                "hits": {"hits": [], "total": {"value": 0}},
-                "aggregations": {},
-                "_compilation_error": True
-            }
-        else:
-            logger.error(f"OpenSearch request error: {e}")
-            raise
-            
-    except Exception as e:
-        logger.error(f"Search execution failed: {e}")
-        return {
-            "hits": {"hits": [], "total": {"value": 0}},
-            "aggregations": {},
-            "_search_error": True
-        }
-
 def search_opensearch(query: str, index_override: str = None, 
                      filters: Dict[str, Any] = None, size: int = 100) -> List[Dict]:
     """
-    ENHANCED: Main search function with comprehensive error handling
+    FIXED: Search evaluations with flexible field detection and robust error handling
     """
     client = get_opensearch_client()
     if not client:
-        logger.error("❌ OpenSearch client not available")
+        logger.error("❌ OpenSearch client not available for search")
         return []
     
+    # Determine index pattern
     index_pattern = index_override or "eval-*"
-    logger.info(f"🔍 SAFE SEARCH v{VERSION}: query='{query}', size={size}")
+    logger.info(f"🔍 FLEXIBLE SEARCH: index='{index_pattern}', query='{query}', size={size}")
+    logger.info(f"🏷️ FILTERS: {filters}")
     
     try:
-        # STEP 1: Validate indices exist
+        # STEP 1: Check if any indices exist
         try:
-            indices_exist = client.indices.exists(index=index_pattern, request_timeout=5)
-            if not indices_exist:
-                logger.warning(f"No indices found for pattern: {index_pattern}")
-                return []
+            indices_response = client.indices.get(index=index_pattern)
+            available_indices = list(indices_response.keys())
+            logger.info(f"📊 AVAILABLE INDICES: {len(available_indices)} ({available_indices[:3]}...)")
         except Exception as e:
-            logger.error(f"Could not check indices: {e}")
+            logger.error(f"❌ NO INDICES FOUND for pattern '{index_pattern}': {e}")
             return []
         
-        # STEP 2: Get available fields
+        # STEP 2: Get available fields from mappings
         available_fields = get_available_fields(client, index_pattern)
         
-        # STEP 3: Build safe search query
-        search_query = build_safe_search_query(query, available_fields, filters)
+        # STEP 3: Build flexible search query based on available fields
+        search_query = build_flexible_search_query(query, available_fields, filters)
         
-        # STEP 4: Build search body
+        # STEP 4: Build final search body
         search_body = {
             "query": search_query,
             "size": size,
-            "sort": [{"_score": {"order": "desc"}}],
-            "_source": True
+            "sort": [
+                {"_score": {"order": "desc"}}
+            ],
+            "_source": True  # Include all source fields
         }
         
         # Add highlighting for available text fields
-        text_fields = available_fields.get("text_fields", [])[:5]  # Limit to prevent timeout
+        text_fields = available_fields.get("text_fields", [])
         if text_fields:
+            highlight_fields = {}
+            for field in text_fields[:5]:  # Limit to first 5 fields
+                highlight_fields[field] = {
+                    "fragment_size": 200,
+                    "number_of_fragments": 1
+                }
+            
             search_body["highlight"] = {
-                "fields": {field: {"fragment_size": 150, "number_of_fragments": 1} for field in text_fields}
+                "fields": highlight_fields
             }
         
-        # STEP 5: Execute search with error handling
-        response = safe_search_with_error_handling(client, index_pattern, search_body, timeout=30)
+        # STEP 5: Execute search with detailed logging
+        logger.info(f"🚀 EXECUTING FLEXIBLE SEARCH...")
+        logger.debug(f"Search body: {json.dumps(search_body, indent=2)}")
+        
+        response = client.search(
+            index=index_pattern,
+            body=search_body,
+            timeout=45
+        )
         
         # STEP 6: Process results
         hits = response.get("hits", {}).get("hits", [])
-        results = []
+        total_hits = response.get("hits", {}).get("total", {})
         
-        for hit in hits:
-            source = hit.get("_source", {})
-            
-            # Extract highlights
-            highlights = []
-            if "highlight" in hit:
-                for field, snippets in hit["highlight"].items():
-                    highlights.extend(snippets)
-            
-            result = {
-                "_id": hit.get("_id"),
-                "_score": hit.get("_score", 0),
-                "_index": hit.get("_index"),
-                "evaluationId": source.get("evaluationId"),
-                "internalId": source.get("internalId"),  # NEW: Internal ID from API
-                "template_name": source.get("template_name"),
-                "template_id": source.get("template_id"),  # NEW: Template ID from API
-                "text": source.get("text", source.get("full_text", source.get("evaluation", ""))),
-                "evaluation": source.get("evaluation", ""),  # NEW: Full evaluation content
-                "transcript": source.get("transcript", ""),  # NEW: Call transcript
-                "weight_score": source.get("weight_score", source.get("weighted_score")),  # NEW: Actual weight score
-                "url": source.get("url", ""),  # NEW: Evaluation URL
-                "metadata": source.get("metadata", {}),
-                "highlights": highlights,
-                "source": source.get("source", "opensearch"),
-                "search_type": "safe_search_v4_6_0"
-            }
-            
-            # Add chunk information if available
-            if "chunks" in source and isinstance(source["chunks"], list):
-                result["total_chunks"] = len(source["chunks"])
-                result["sample_chunks"] = source["chunks"][:3]  # First 3 chunks
-            
-            results.append(result)
-        
-        logger.info(f"✅ Safe search completed: {len(results)} results from {response.get('hits', {}).get('total', {}).get('value', 0)} total")
-        
-        return results
-        
-    except Exception as e:
-        logger.error(f"Search failed with error: {e}")
-        return []
-
-def search_by_weight_score(min_score: int = None, max_score: int = None, 
-                          additional_query: str = None, size: int = 100) -> List[Dict]:
-    """
-    NEW: Search evaluations by weight_score (not generated 1-5 scores)
-    """
-    client = get_opensearch_client()
-    if not client:
-        logger.error("❌ OpenSearch client not available")
-        return []
-    
-    try:
-        # Build weight score filter
-        score_filter = []
-        if min_score is not None or max_score is not None:
-            score_range = {}
-            if min_score is not None:
-                score_range["gte"] = min_score
-            if max_score is not None:
-                score_range["lte"] = max_score
-            
-            # Try both field names for compatibility
-            score_filter.append({
-                "bool": {
-                    "should": [
-                        {"range": {"weight_score": score_range}},
-                        {"range": {"weighted_score": score_range}},
-                        {"range": {"metadata.weight_score": score_range}},
-                        {"range": {"metadata.weighted_score": score_range}}
-                    ]
-                }
-            })
-        
-        # Build query
-        query = {"bool": {"must": []}}
-        
-        # Add text query if provided
-        if additional_query:
-            query["bool"]["must"].append({
-                "multi_match": {
-                    "query": additional_query,
-                    "fields": ["evaluation^2", "transcript^2", "template_name^1.5", "text"]
-                }
-            })
+        # Handle different total formats
+        if isinstance(total_hits, dict):
+            total_count = total_hits.get("value", 0)
         else:
-            query["bool"]["must"].append({"match_all": {}})
+            total_count = total_hits
         
-        # Add score filter
-        if score_filter:
-            query["bool"]["filter"] = score_filter
+        logger.info(f"✅ FLEXIBLE SEARCH COMPLETED: {len(hits)} hits returned, {total_count} total matches")
         
-        # Execute search
-        search_body = {
-            "query": query,
-            "size": size,
-            "sort": [
-                {"weight_score": {"order": "desc", "missing": "_last"}},
-                {"weighted_score": {"order": "desc", "missing": "_last"}},
-                {"_score": {"order": "desc"}}
-            ]
-        }
-        
-        response = safe_search_with_error_handling(client, "eval-*", search_body)
-        
-        # Process results
+        # STEP 7: Build result objects with flexible field extraction
         results = []
-        for hit in response.get("hits", {}).get("hits", []):
-            source = hit.get("_source", {})
-            
-            result = {
-                "_id": hit.get("_id"),
-                "_score": hit.get("_score", 0),
-                "evaluationId": source.get("evaluationId"),
-                "template_name": source.get("template_name"),
-                "weight_score": source.get("weight_score", source.get("weighted_score")),
-                "url": source.get("url", ""),
-                "metadata": source.get("metadata", {}),
-                "search_type": "weight_score_search"
-            }
-            results.append(result)
-        
-        logger.info(f"✅ Weight score search completed: {len(results)} results")
-        return results
-        
-    except Exception as e:
-        logger.error(f"Weight score search failed: {e}")
-        return []
-
-def get_evaluation_url(evaluation_id: str) -> str:
-    """
-    NEW: Get the URL for a specific evaluation ID
-    """
-    client = get_opensearch_client()
-    if not client:
-        return ""
-    
-    try:
-        response = client.search(
-            index="eval-*",
-            body={
-                "query": {
-                    "bool": {
-                        "should": [
-                            {"term": {"evaluationId": evaluation_id}},
-                            {"term": {"internalId": evaluation_id}}
-                        ]
-                    }
-                },
-                "size": 1,
-                "_source": ["url", "evaluationId", "internalId"]
-            }
-        )
-        
-        hits = response.get("hits", {}).get("hits", [])
-        if hits:
-            return hits[0].get("_source", {}).get("url", "")
-        
-        return ""
-        
-    except Exception as e:
-        logger.error(f"Failed to get evaluation URL: {e}")
-        return ""
-
-# =============================================================================
-# SAFE AGGREGATION FUNCTIONS - PREVENTS COMPILATION ERRORS
-# =============================================================================
-
-def get_safe_aggregation_query(field_name: str, available_fields: Dict[str, List[str]], 
-                              agg_name: str = None, size: int = 20) -> Optional[Dict]:
-    """
-    NEW: Build safe aggregation query for a specific field
-    """
-    safe_agg_fields = available_fields.get("safe_aggregation_fields", {})
-    
-    if field_name not in safe_agg_fields:
-        logger.warning(f"Field '{field_name}' not available for safe aggregation")
-        return None
-    
-    safe_field_path = safe_agg_fields[field_name]
-    agg_name = agg_name or f"{field_name}_aggregation"
-    
-    return {
-        agg_name: {
-            "terms": {
-                "field": safe_field_path,
-                "size": size,
-                "missing": "Unknown"
-            }
-        }
-    }
-
-def get_safe_statistics(client, index_pattern: str = "eval-*") -> Dict:
-    """
-    NEW: Get statistics using only safe aggregation fields
-    """
-    try:
-        # Get available fields first
-        available_fields = get_available_fields(client, index_pattern)
-        safe_agg_fields = available_fields.get("safe_aggregation_fields", {})
-        
-        if not safe_agg_fields:
-            logger.warning("No safe aggregation fields available")
-            return {
-                "total_documents": 0,
-                "error": "No safe aggregation fields found",
-                "available_fields": available_fields
-            }
-        
-        # Build safe aggregation query
-        agg_body = {"size": 0}
-        aggregations = {}
-        
-        # Add safe aggregations for common fields - Updated for API structure
-        common_fields = ["program", "disposition", "subDisposition", "partner", "site", "lob", "agentName", "language"]
-        for field_name in common_fields:
-            if field_name in safe_agg_fields:
-                agg_query = get_safe_aggregation_query(field_name, available_fields, size=15)
-                if agg_query:
-                    aggregations.update(agg_query)
-        
-        if aggregations:
-            agg_body["aggs"] = aggregations
-        
-        # Execute with error handling
-        result = safe_search_with_error_handling(client, index_pattern, agg_body, timeout=25)
-        
-        # Process results
-        stats = {
-            "total_documents": result.get("hits", {}).get("total", {}).get("value", 0),
-            "aggregations": {},
-            "safe_fields_used": list(safe_agg_fields.keys()),
-            "version": VERSION
-        }
-        
-        if "aggregations" in result:
-            for agg_name, agg_data in result["aggregations"].items():
-                if "buckets" in agg_data:
-                    stats["aggregations"][agg_name] = {
-                        bucket["key"]: bucket["doc_count"]
-                        for bucket in agg_data["buckets"]
-                    }
-        
-        logger.info(f"✅ Safe statistics completed: {stats['total_documents']} documents, {len(stats['aggregations'])} aggregations")
-        return stats
-        
-    except Exception as e:
-        logger.error(f"Safe statistics failed: {e}")
-        return {
-            "error": str(e),
-            "total_documents": 0,
-            "version": VERSION
-        }
-
-# =============================================================================
-# INDEX MANAGEMENT - ENHANCED WITH BETTER ERROR HANDLING
-# =============================================================================
-
-def ensure_evaluation_index_exists(client, index_name: str):
-    """Enhanced index creation with better field mappings"""
-    try:
-        if client.indices.exists(index=index_name, request_timeout=10):
-            logger.info(f"✅ Index {index_name} already exists")
-            return
-    except Exception as e:
-        logger.warning(f"Could not check index existence: {e}")
-    
-    # Enhanced mapping with all necessary fields
-    mapping = {
-        "mappings": {
-            "properties": {
-                # Core identification fields
-                "evaluationId": {"type": "keyword"},
-                "internalId": {"type": "keyword"},
-                "template_id": {"type": "keyword"},
-                "template_name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                
-                # Content fields - Updated to match API structure
-                "text": {"type": "text", "analyzer": "standard"},
-                "full_text": {"type": "text", "analyzer": "standard"},
-                "content": {"type": "text", "analyzer": "standard"},
-                "evaluation_text": {"type": "text", "analyzer": "standard"},
-                "evaluation": {"type": "text", "analyzer": "standard"},  # NEW: Full evaluation content
-                "transcript": {"type": "text", "analyzer": "standard"},   # NEW: Call transcript
-                
-                # Nested chunks with comprehensive properties
-                "chunks": {
-                    "type": "nested",
-                    "properties": {
-                        "text": {"type": "text", "analyzer": "standard"},
-                        "content": {"type": "text", "analyzer": "standard"},
-                        "content_type": {"type": "keyword"},
-                        "question": {"type": "text", "analyzer": "standard"},
-                        "answer": {"type": "text", "analyzer": "standard"},
-                        "section": {"type": "keyword"},
-                        "score": {"type": "float"},
-                        "chunk_id": {"type": "keyword"}
-                    }
-                },
-                
-                # Metadata with comprehensive field coverage
-                "metadata": {
-                    "properties": {
-                        "evaluationId": {"type": "keyword"},
-                        "internalId": {"type": "keyword"},
-                        "template_id": {"type": "keyword"},
-                        "template_name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "program": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "partner": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "site": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "lob": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "agentName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "agentId": {"type": "keyword"},
-                        "subDisposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "disposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "sub_disposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "language": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "call_date": {"type": "date"},
-                        "call_duration": {"type": "integer"},
-                        "created_on": {"type": "date"},
-                        #"phone_number": {"type": "keyword"},
-                        #"contact_id": {"type": "keyword"},
-                        #"ucid": {"type": "keyword"},
-                        "call_type": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "weighted_score": {"type": "integer"},
-                        "url": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
-                    }
-                },
-                
-                # Additional system fields
-                "source": {"type": "keyword"},
-                "indexed_at": {"type": "date"},
-                "collection_name": {"type": "keyword"},
-                "_structure_version": {"type": "keyword"},
-                "version": {"type": "keyword"}
-            }
-        }
-    }
-    
-    try:
-        client.indices.create(
-            index=index_name,
-            body=mapping,
-            request_timeout=60
-        )
-        logger.info(f"✅ Created index {index_name} with v{VERSION} mapping")
-    except Exception as e:
-        logger.error(f"❌ Failed to create index {index_name}: {e}")
-        raise
-
-def index_document(doc_id: str, document: Dict[str, Any], index_override: str = None) -> bool:
-    """Enhanced document indexing with better error handling"""
-    client = get_opensearch_client()
-    if not client:
-        logger.error("❌ OpenSearch client not available")
-        return False
-    
-    index_name = index_override or "evaluations-grouped"
-    
-    try:
-        # Ensure index exists
-        ensure_evaluation_index_exists(client, index_name)
-        
-        # Add system fields
-        document["_indexed_at"] = datetime.now().isoformat()
-        document["_structure_version"] = VERSION
-        
-        # Index with proper timeout
-        response = client.index(
-            index=index_name,
-            id=doc_id,
-            body=document,
-            refresh=True,
-            request_timeout=60
-        )
-        
-        logger.info(f"✅ Indexed document {doc_id} in {index_name}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to index document {doc_id}: {e}")
-        return False
-
-# =============================================================================
-# HEALTH CHECK AND DEBUGGING - ENHANCED
-# =============================================================================
-
-def health_check() -> Dict[str, Any]:
-    """Enhanced health check with comprehensive status"""
-    try:
-        client = get_opensearch_client()
-        
-        if not client:
-            return {
-                "status": "unhealthy",
-                "error": "Could not create OpenSearch client",
-                "version": VERSION
-            }
-        
-        if test_connection():
-            info = client.info(request_timeout=10)
-            
-            # Test field detection
+        for i, hit in enumerate(hits):
             try:
-                available_fields = get_available_fields(client)
-                field_status = "working"
-                searchable_fields = len(available_fields.get("text_fields", []))
-                safe_agg_fields = len(available_fields.get("safe_aggregation_fields", {}))
+                source = hit.get("_source", {})
+                
+                # Flexible field extraction - try multiple field names
+                result = {
+                    "_id": hit.get("_id"),
+                    "_score": hit.get("_score", 0),
+                    "_index": hit.get("_index"),
+                    "_source": source,
+                    
+                    # Extract key fields with fallbacks
+                    "evaluationId": (source.get("evaluationId") or 
+                                   source.get("evaluation_id") or 
+                                   source.get("internalId") or 
+                                   source.get("id")),
+                    
+                    "template_name": (source.get("template_name") or 
+                                    source.get("templateName") or 
+                                    "Unknown Template"),
+                    
+                    "template_id": (source.get("template_id") or 
+                                  source.get("templateId") or 
+                                  source.get("template")),
+                    
+                    # Extract text content with multiple fallbacks
+                    "text": extract_text_content(source),
+                    "metadata": source.get("metadata", {}),
+                    
+                    # Additional fields
+                    "total_chunks": source.get("total_chunks", 0),
+                    "chunks": source.get("chunks", []),
+                    "highlight": hit.get("highlight", {}),
+                    "inner_hits": hit.get("inner_hits", {})
+                }
+                
+                results.append(result)
+                
+                if i < 10:  # Log first 10 for visibility
+                    logger.info(f"📄 RESULT {i+1}: {result['evaluationId']} (score: {result['_score']:.3f})")
+                
             except Exception as e:
-                field_status = f"failed: {str(e)}"
-                searchable_fields = 0
-                safe_agg_fields = 0
-            
-            return {
-                "status": "healthy",
-                "connected": True,
-                "cluster_name": info.get("cluster_name", "Unknown"),
-                "version": info.get("version", {}).get("number", "Unknown"),
-                "client_version": VERSION,
-                "host": os.getenv("OPENSEARCH_HOST"),
-                "port": os.getenv("OPENSEARCH_PORT", "25060"),
-                "field_detection": field_status,
-                "searchable_fields": searchable_fields,
-                "safe_aggregation_fields": safe_agg_fields,
-                "fixes_applied": FIXES_APPLIED,
-                "capabilities": [
-                    "safe_search_queries",
-                    "compilation_error_prevention",
-                    "field_validation",
-                    "robust_aggregations",
-                    "enhanced_error_handling"
-                ]
-            }
-        else:
-            return {
-                "status": "unhealthy",
-                "connected": False,
-                "error": "Connection test failed",
-                "version": VERSION
-            }
-            
+                logger.error(f"❌ Failed to process hit {i}: {e}")
+        
+        logger.info(f"🎯 FLEXIBLE SEARCH SUMMARY: {len(results)} processed results")
+        return results
+        
     except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "version": VERSION
-        }
+        logger.error(f"❌ FLEXIBLE SEARCH FAILED: {e}")
+        logger.error(f"🔍 Query: '{query}'")
+        logger.error(f"🏷️ Filters: {filters}")
+        logger.error(f"📍 Index: '{index_pattern}'")
+        return []
+
+
+def extract_text_content(source: Dict[str, Any]) -> str:
+    """
+    FIXED: Extract text content with multiple fallback strategies
+    """
+    # Try different text field names in order of preference
+    text_field_candidates = [
+        "full_text",
+        "evaluation_text", 
+        "transcript_text",
+        "content",
+        "text",
+        "description",
+        "summary"
+    ]
+    
+    for field_name in text_field_candidates:
+        if field_name in source and source[field_name]:
+            text_content = source[field_name]
+            if isinstance(text_content, str) and len(text_content.strip()) > 20:
+                return text_content[:500]  # Truncate for preview
+    
+    # Try to extract from chunks
+    chunks = source.get("chunks", [])
+    if chunks and isinstance(chunks, list):
+        chunk_texts = []
+        for chunk in chunks[:3]:  # First 3 chunks
+            if isinstance(chunk, dict):
+                chunk_text = (chunk.get("text") or 
+                            chunk.get("content") or 
+                            chunk.get("description"))
+                if chunk_text and isinstance(chunk_text, str):
+                    chunk_texts.append(chunk_text)
+        
+        if chunk_texts:
+            return "\n".join(chunk_texts)[:500]
+    
+    # Last resort: try any string field
+    for key, value in source.items():
+        if isinstance(value, str) and len(value.strip()) > 50:
+            return value[:500]
+    
+    return "No text content found"
+
+# =============================================================================
+# DEBUG FUNCTIONS WITH ENHANCED FIELD CHECKING
+# =============================================================================
 
 def debug_search_simple(query: str = "test") -> Dict[str, Any]:
-    """Enhanced debug search with field analysis"""
+    """
+    DEBUG: Simple search test with field detection
+    """
     client = get_opensearch_client()
     if not client:
-        return {"error": "No client available", "version": VERSION}
+        return {"error": "No client available"}
     
     try:
-        # Get available fields
+        # First, check what fields are available
         available_fields = get_available_fields(client)
         
-        # Simple search test
+        # Simple match_all query first
         response = client.search(
             index="eval-*",
             body={
@@ -958,7 +544,7 @@ def debug_search_simple(query: str = "test") -> Dict[str, Any]:
         hits = response.get("hits", {}).get("hits", [])
         total = response.get("hits", {}).get("total", {})
         
-        # Analyze document structure
+        # Analyze the structure of returned documents
         sample_docs = []
         for hit in hits:
             source = hit.get("_source", {})
@@ -968,16 +554,7 @@ def debug_search_simple(query: str = "test") -> Dict[str, Any]:
                 "fields_present": list(source.keys()),
                 "has_metadata": "metadata" in source,
                 "has_chunks": "chunks" in source and isinstance(source.get("chunks"), list),
-                "has_weight_score": "weight_score" in source or "weighted_score" in source,
-                "has_url": "url" in source,
-                "has_evaluation": "evaluation" in source,
-                "has_transcript": "transcript" in source,
-                "text_fields": [k for k in source.keys() if isinstance(source.get(k), str) and len(source.get(k, "")) > 50],
-                "metadata_fields": list(source.get("metadata", {}).keys()) if source.get("metadata") else [],
-                "weight_score": source.get("weight_score", source.get("weighted_score")),
-                "url": source.get("url", ""),
-                "evaluationId": source.get("evaluationId"),
-                "internalId": source.get("internalId")
+                "text_fields_found": [k for k in source.keys() if isinstance(source.get(k), str) and len(source.get(k, "")) > 50]
             }
             sample_docs.append(doc_analysis)
         
@@ -986,50 +563,64 @@ def debug_search_simple(query: str = "test") -> Dict[str, Any]:
             "total_documents": total.get("value", 0) if isinstance(total, dict) else total,
             "available_fields": available_fields,
             "sample_documents": sample_docs,
-            "version": VERSION,
-            "compilation_safe": True
+            "field_detection": "completed",
+            "recommendations": [
+                "Check if text_fields_found contains searchable content",
+                "Verify that metadata field exists if you need filtering",
+                "Look at fields_present to understand document structure"
+            ]
         }
         
     except Exception as e:
+        return {"error": str(e), "field_detection": "failed"}
+
+def debug_field_mappings(index_pattern: str = "eval-*") -> Dict[str, Any]:
+    """
+    DEBUG: Get detailed field mappings for troubleshooting
+    """
+    client = get_opensearch_client()
+    if not client:
+        return {"error": "No client available"}
+    
+    try:
+        mappings_response = client.indices.get_mapping(index=index_pattern)
+        
+        detailed_mappings = {}
+        for index_name, mapping_data in mappings_response.items():
+            properties = mapping_data.get("mappings", {}).get("properties", {})
+            
+            index_analysis = {
+                "total_fields": len(properties),
+                "field_details": {}
+            }
+            
+            for field_name, field_config in properties.items():
+                field_analysis = {
+                    "type": field_config.get("type", "unknown"),
+                    "searchable": field_config.get("type") in ["text", "keyword"],
+                    "has_keyword_subfield": "fields" in field_config and "keyword" in field_config.get("fields", {}),
+                    "is_nested": field_config.get("type") == "nested"
+                }
+                
+                if field_analysis["is_nested"] and "properties" in field_config:
+                    field_analysis["nested_fields"] = list(field_config["properties"].keys())
+                
+                index_analysis["field_details"][field_name] = field_analysis
+            
+            detailed_mappings[index_name] = index_analysis
+        
         return {
-            "error": str(e),
-            "version": VERSION,
-            "compilation_safe": False
+            "status": "success",
+            "mappings": detailed_mappings,
+            "troubleshooting_tips": [
+                "Look for 'searchable': true fields for text search",
+                "Check nested_fields for chunk-based search",
+                "Verify metadata field structure for filtering"
+            ]
         }
-
-# =============================================================================
-# UTILITY FUNCTIONS - ENHANCED
-# =============================================================================
-
-def get_opensearch_config():
-    """Enhanced configuration information"""
-    return {
-        "host": os.getenv("OPENSEARCH_HOST", "not_configured"),
-        "port": os.getenv("OPENSEARCH_PORT", "25060"),
-        "user": os.getenv("OPENSEARCH_USER", "not_configured"),
-        "ssl": True,
-        "verify_certs": False,
-        "version": VERSION,
-        "fixes_applied": FIXES_APPLIED,
-        "capabilities": [
-            "timeout_fix",
-            "compilation_error_prevention",
-            "field_validation",
-            "safe_aggregations"
-        ]
-    }
-
-def get_connection_status() -> Dict[str, Any]:
-    """Enhanced connection status"""
-    return {
-        "connected": test_connection(),
-        "host": os.getenv("OPENSEARCH_HOST"),
-        "port": os.getenv("OPENSEARCH_PORT", "25060"),
-        "user": os.getenv("OPENSEARCH_USER"),
-        "version": VERSION,
-        "last_test": datetime.now().isoformat(),
-        "improvements": "comprehensive_v4_6_0_fixes"
-    }
+        
+    except Exception as e:
+        return {"error": str(e)}
 
 # =============================================================================
 # VECTOR SEARCH FUNCTIONS - STILL DISABLED
@@ -1037,13 +628,312 @@ def get_connection_status() -> Dict[str, Any]:
 
 def search_vector(query_vector: List[float], index_override: str = None, 
                  size: int = 10) -> List[Dict]:
-    """Vector search still disabled for stability"""
-    logger.warning("🔮 Vector search disabled in v4.6.0")
+    """Vector search temporarily disabled"""
+    logger.warning("🔮 Vector search temporarily disabled")
     return []
 
 def detect_vector_support(client) -> bool:
     """Vector support detection disabled"""
     return False
+
+# =============================================================================
+# INDEX MANAGEMENT AND DOCUMENT OPERATIONS
+# =============================================================================
+
+def ensure_evaluation_index_exists(client, index_name: str):
+    """Create index with evaluation grouping mapping (vector fields disabled)"""
+    if client.indices.exists(index=index_name):
+        return
+    
+    logger.info(f"🏗️ Creating index {index_name}")
+    
+    chunk_properties = {
+        "chunk_index": {"type": "integer"},
+        "text": {"type": "text", "analyzer": "standard"},
+        "content": {"type": "text", "analyzer": "standard"},  # Added content field
+        "content_type": {"type": "keyword"},
+        "length": {"type": "integer"},
+        "section": {"type": "keyword"},
+        "question": {"type": "text", "analyzer": "standard"},
+        "answer": {"type": "text", "analyzer": "standard"},
+        "qa_pair_index": {"type": "integer"},
+        "speakers": {"type": "keyword"},
+        "timestamps": {"type": "keyword"},
+        "speaker_count": {"type": "integer"},
+        "transcript_chunk_index": {"type": "integer"}
+    }
+    
+    mapping = {
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "analysis": {
+                "analyzer": {
+                    "standard_analyzer": {
+                        "type": "standard"
+                    }
+                }
+            }
+        },
+        "mappings": {
+            "properties": {
+                # Primary identification fields
+                "evaluationId": {"type": "keyword"},
+                "evaluation_id": {"type": "keyword"},  # Alternative field name
+                "internalId": {"type": "keyword"},
+                "template_id": {"type": "keyword"},
+                "template_name": {
+                    "type": "text", 
+                    "analyzer": "standard",
+                    "fields": {"keyword": {"type": "keyword"}}
+                },
+                
+                # Document metadata
+                "document_type": {"type": "keyword"},
+                "total_chunks": {"type": "integer"},
+                "evaluation_chunks_count": {"type": "integer"},
+                "transcript_chunks_count": {"type": "integer"},
+                
+                # Text content fields
+                "full_text": {"type": "text", "analyzer": "standard"},
+                "evaluation_text": {"type": "text", "analyzer": "standard"},
+                "transcript_text": {"type": "text", "analyzer": "standard"},
+                "content": {"type": "text", "analyzer": "standard"},  # Generic content field
+                "text": {"type": "text", "analyzer": "standard"},      # Simple text field
+                
+                # Nested chunks
+                "chunks": {
+                    "type": "nested",
+                    "properties": chunk_properties
+                },
+                
+                # Metadata with flexible field names - VERSION 4.5.0 - UPDATED WITH NEW FIELDS
+                "metadata": {
+                    "properties": {
+                        "evaluationId": {"type": "keyword"},
+                        "internalId": {"type": "keyword"},
+                        "template_id": {"type": "keyword"},
+                        "template_name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "program": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        
+                        # NEWLY ADDED: Previously missing fields ✅
+                        "weighted_score": {"type": "integer"},  # ✅ ADDED: for numeric scoring
+                        "url": {  # ✅ ADDED: for evaluation URLs
+                            "type": "text",
+                            "fields": {"keyword": {"type": "keyword"}}
+                        },
+                        
+                        # Organizational hierarchy
+                        "partner": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "site": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "lob": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        
+                        # Agent information
+                        "agent": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "agent_id": {"type": "keyword"},
+                        
+                        # Call details
+                        "disposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "sub_disposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "language": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        
+                        # Date and timing
+                        "call_date": {"type": "date"},
+                        "call_duration": {"type": "integer"},
+                        "created_on": {"type": "date"},
+                        
+                        # Additional contact information
+                        "phone_number": {"type": "keyword"},
+                        "contact_id": {"type": "keyword"},
+                        "ucid": {"type": "keyword"},
+                        "call_type": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
+                    }
+                },
+                
+                # Additional fields
+                "source": {"type": "keyword"},
+                "indexed_at": {"type": "date"},
+                "collection_name": {"type": "keyword"},
+                "_structure_version": {"type": "keyword"},
+                "version": {"type": "keyword"}
+            }
+        }
+    }
+    
+    try:
+        client.indices.create(
+            index=index_name, 
+            body=mapping, 
+            request_timeout=60
+        )
+        logger.info(f"✅ Created evaluation index: {index_name}")
+    except Exception as e:
+        logger.error(f"❌ Failed to create index {index_name}: {e}")
+        raise
+
+def index_document(doc_id: str, document: Dict[str, Any], index_override: str = None) -> bool:
+    """Index evaluation document with fixed timeout"""
+    client = get_opensearch_client()
+    if not client:
+        logger.error("❌ OpenSearch client not available")
+        return False
+    
+    index_name = index_override or "evaluations-grouped"
+    
+    try:
+        ensure_evaluation_index_exists(client, index_name)
+        
+        document["_indexed_at"] = datetime.now().isoformat()
+        document["_structure_version"] = "4.5.0_fixed_search"
+        
+        response = client.index(
+            index=index_name,
+            id=doc_id,
+            body=document,
+            refresh=True,
+            request_timeout=60
+        )
+        
+        logger.info(f"✅ Indexed evaluation {doc_id} in {index_name}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to index evaluation {doc_id}: {e}")
+        return False
+
+def get_evaluation_by_id(evaluation_id: str) -> Optional[Dict]:
+    """Get a specific evaluation document by ID"""
+    client = get_opensearch_client()
+    if not client:
+        return None
+    
+    try:
+        response = client.search(
+            index="eval-*",
+            body={
+                "query": {
+                    "bool": {
+                        "should": [
+                            {"term": {"evaluationId": evaluation_id}},
+                            {"term": {"evaluation_id": evaluation_id}},
+                            {"term": {"internalId": evaluation_id}}
+                        ]
+                    }
+                },
+                "size": 1
+            },
+            request_timeout=10
+        )
+        
+        hits = response.get("hits", {}).get("hits", [])
+        return hits[0] if hits else None
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to get evaluation {evaluation_id}: {e}")
+        return None
+
+# =============================================================================
+# HEALTH CHECK AND STATUS FUNCTIONS
+# =============================================================================
+
+def health_check() -> Dict[str, Any]:
+    """Health check with field detection status"""
+    try:
+        client = get_opensearch_client()
+        
+        if not client:
+            return {
+                "status": "not_configured",
+                "message": "Could not create OpenSearch client"
+            }
+        
+        if test_connection():
+            info = client.info()
+            
+            # Test field detection
+            try:
+                available_fields = get_available_fields(client)
+                field_detection_status = "working"
+                searchable_fields_count = len(available_fields.get("text_fields", []))
+            except Exception as e:
+                field_detection_status = f"failed: {str(e)}"
+                searchable_fields_count = 0
+            
+            return {
+                "status": "healthy",
+                "connected": True,
+                "cluster_name": info.get("cluster_name", "Unknown"),
+                "version": info.get("version", {}).get("number", "Unknown"),
+                "host": os.getenv("OPENSEARCH_HOST"),
+                "port": os.getenv("OPENSEARCH_PORT", "25060"),
+                "field_detection": field_detection_status,
+                "searchable_fields_found": searchable_fields_count,
+                "search_type": "flexible_field_based",
+                "structure_version": "4.5.0_fixed_search",
+                "vector_support": False,
+                "fixes_applied": [
+                    "flexible_field_detection",
+                    "robust_search_queries", 
+                    "multiple_field_fallbacks",
+                    "enhanced_error_handling"
+                ]
+            }
+        else:
+            return {
+                "status": "unhealthy",
+                "connected": False,
+                "error": "Connection test failed"
+            }
+            
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
+def get_opensearch_config():
+    """Get OpenSearch configuration for debugging"""
+    return {
+        "host": os.getenv("OPENSEARCH_HOST", "not_configured"),
+        "port": os.getenv("OPENSEARCH_PORT", "25060"),
+        "user": os.getenv("OPENSEARCH_USER", "not_configured"),
+        "ssl": True,
+        "verify_certs": False,
+        "fixes_applied": [
+            "flexible_field_detection",
+            "robust_search_queries"
+        ]
+    }
+
+def get_connection_status() -> Dict[str, Any]:
+    """Get connection status with field detection info"""
+    return {
+        "connected": test_connection(),
+        "host": os.getenv("OPENSEARCH_HOST"),
+        "port": os.getenv("OPENSEARCH_PORT", "25060"),
+        "user": os.getenv("OPENSEARCH_USER"),
+        "last_test": datetime.now().isoformat(),
+        "search_improvements": "flexible_field_based_search_implemented"
+    }
+
+def get_opensearch_manager():
+    """Get manager for compatibility"""
+    class SimpleManager:
+        def test_connection(self):
+            return test_connection()
+        
+        def get_opensearch_config(self):
+            return get_opensearch_config()
+        
+        def get_connection_status(self):
+            return get_connection_status()
+    
+    return SimpleManager()
+
 
 # =============================================================================
 # MAIN EXECUTION AND TESTING
@@ -1052,55 +942,47 @@ def detect_vector_support(client) -> bool:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
-    print(f"🧪 Testing OpenSearch Client v{VERSION}")
-    print("=" * 60)
-    print("✅ FIXES APPLIED:")
-    for fix in FIXES_APPLIED:
-        print(f"   - {fix}")
-    print("=" * 60)
+    print("🧪 Testing FIXED OpenSearch Client v4.5.0")
+    print("✅ Expected: Flexible field detection, robust search, no empty results")
     
-    # Test health check
     health = health_check()
-    print(f"\n🏥 Health Check: {health['status']}")
+    print(f"\n🏥 Health check: {health['status']}")
     
     if health["status"] == "healthy":
         print(f"   Cluster: {health['cluster_name']}")
         print(f"   Version: {health['version']}")
-        print(f"   Searchable Fields: {health['searchable_fields']}")
-        print(f"   Safe Aggregation Fields: {health['safe_aggregation_fields']}")
+        print(f"   Field Detection: {health['field_detection']}")
+        print(f"   Searchable Fields: {health['searchable_fields_found']}")
         
-        # Test search
-        print("\n🔍 Testing Safe Search...")
-        search_results = search_opensearch("customer service", size=3)
-        print(f"   Results: {len(search_results)} documents found")
-        if search_results:
-            first_result = search_results[0]
-            print(f"   Sample weight_score: {first_result.get('weight_score', 'N/A')}")
-            print(f"   Sample URL: {first_result.get('url', 'N/A')}")
+        # Test field mappings
+        print("\n🔍 Testing field mappings...")
+        debug_result = debug_field_mappings()
+        if debug_result.get("status") == "success":
+            print("   Field mappings loaded successfully")
+            for index_name, analysis in debug_result["mappings"].items():
+                print(f"   Index {index_name}: {analysis['total_fields']} fields")
         
-        # Test weight score search
-        print("\n📊 Testing Weight Score Search...")
-        weight_results = search_by_weight_score(min_score=80, additional_query="customer", size=3)
-        print(f"   High-score results: {len(weight_results)} documents found")
+        # Test simple search
+        print("\n🔍 Testing flexible search...")
+        search_result = debug_search_simple()
+        print(f"   Status: {search_result.get('status', 'failed')}")
+        print(f"   Total docs: {search_result.get('total_documents', 0)}")
         
-        # Test statistics
-        print("\n📊 Testing Safe Statistics...")
-        client = get_opensearch_client()
-        stats = get_safe_statistics(client)
-        print(f"   Total Documents: {stats.get('total_documents', 0)}")
-        print(f"   Aggregations: {len(stats.get('aggregations', {}))}")
+        if search_result.get("available_fields"):
+            fields = search_result["available_fields"]
+            print(f"   Text fields available: {len(fields.get('text_fields', []))}")
+            print(f"   Sample text fields: {fields.get('text_fields', [])[:3]}")
         
-        print(f"\n✅ All tests completed successfully!")
-        print(f"🎉 OpenSearch Client v{VERSION} is ready for production!")
-        print(f"🔗 Weight scores and URLs properly handled!")
-        print(f"📝 Evaluation and transcript content indexed!")
+        print("\n✅ FIXED client with flexible search ready!")
+        print("🔍 Should now find content regardless of field names")
         
     else:
         print(f"❌ Health check failed: {health.get('error', 'Unknown error')}")
     
-    print("=" * 60)
-
+    print("\n🏁 Testing complete!")
 else:
-    logger.info(f"🔌 OpenSearch Client v{VERSION} loaded successfully")
-    logger.info(f"   Fixes: {', '.join(FIXES_APPLIED)}")
-    logger.info(f"   Ready for production use with enhanced safety")
+    logger.info("🔌 FIXED OpenSearch client v4.5.0 loaded")
+    logger.info("   ✅ Flexible field detection implemented")
+    logger.info("   ✅ Robust search queries with fallbacks")
+    logger.info("   ✅ Multiple field name support")
+    logger.info("   🔍 Should resolve empty search results")

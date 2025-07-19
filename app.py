@@ -1173,20 +1173,20 @@ async def process_evaluation(evaluation: Dict) -> Dict:
         comprehensive_metadata = extract_comprehensive_metadata(evaluation)
         
         # Validation
-        evaluation_id = evaluation.get("evaluationId")
-        if not evaluation_id:
-            return {"status": "skipped", "reason": "missing_evaluation_id"}
+        eval_id = evaluation.get("evaluationId")
+        if not eval_id:
+            return {"status": "skipped", "reason": "missing_eval_id"}
         
         template_id = evaluation.get("template_id")
         if not template_id:
             return {"status": "skipped", "reason": "missing_template_id"}
         
         # Document ID and collection
-        doc_id = str(evaluation_id)
+        doc_id = str(eval_id)
         collection = clean_template_id_for_index(template_id)
         
         # PRODUCTION logging
-        log_import(f" PRODUCTION METADATA for {evaluation_id}:")
+        log_import(f" PRODUCTION METADATA for {eval_id}:")
         log_import(f"    Template: '{comprehensive_metadata['template_name']}'")
         log_import(f"    Program: '{comprehensive_metadata['program']}'")
         log_import(f"    Partner: '{comprehensive_metadata['partner']}'")
@@ -1216,13 +1216,13 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                         await asyncio.sleep(0.1)
                         
             except Exception as e:
-                log_import(f"⚠️ Embedding failed for evaluation {evaluation_id}: {str(e)[:50]}")
+                log_import(f"⚠️ Embedding failed for evaluation {eval_id}: {str(e)[:50]}")
                 chunk_embeddings = []
         
         # CREATE SINGLE DOCUMENT WITH COMPREHENSIVE METADATA
         document_body = {
             # Primary identification
-            "evaluationId": evaluation_id,
+            "evaluationId": eval_id,
             "internalId": comprehensive_metadata["internalId"],
             "template_id": template_id,
             "template_name": comprehensive_metadata["template_name"],
@@ -1288,19 +1288,19 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             for retry in range(max_retries):
                 try:
                     index_document(doc_id, document_body, index_override=collection)
-                    log_import(f"✅ PRODUCTION INDEXED: Eval {evaluation_id} | Template: '{comprehensive_metadata['template_name']}' | Program: '{comprehensive_metadata['program']}' | {len(all_chunks)} chunks")
+                    log_import(f"✅ PRODUCTION INDEXED: Eval {eval_id} | Template: '{comprehensive_metadata['template_name']}' | Program: '{comprehensive_metadata['program']}' | {len(all_chunks)} chunks")
                     break
                     
                 except Exception as index_error:
                     if retry < max_retries - 1:
                         delay = (retry + 1) * 2
-                        log_import(f"⚠️ Retry {retry + 1}/{max_retries} for eval {evaluation_id} in {delay}s: {str(index_error)[:50]}")
+                        log_import(f"⚠️ Retry {retry + 1}/{max_retries} for eval {eval_id} in {delay}s: {str(index_error)[:50]}")
                         time.sleep(delay)
                     else:
                         raise index_error
             
         except Exception as e:
-            error_msg = f"Failed to index evaluation {evaluation_id}: {str(e)}"
+            error_msg = f"Failed to index evaluation {eval_id}: {str(e)}"
             log_import(f"❌ {error_msg}")
             
             if any(keyword in str(e).lower() for keyword in ["timeout", "connection", "unreachable", "opensearch"]):
@@ -1311,7 +1311,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
         return {
             "status": "success",
             "document_id": doc_id,
-            "evaluationId": evaluation_id,
+            "evaluationId": eval_id,
             "template_id": template_id,
             "template_name": comprehensive_metadata["template_name"],
             "program": comprehensive_metadata["program"],
@@ -1780,9 +1780,9 @@ async def get_opensearch_statistics():
                 metadata = source.get("metadata", {})
                 
                 # Track unique evaluations
-                evaluation_id = source.get("evaluationId") or source.get("internalId")
-                if evaluation_id:
-                    evaluations_sampled.add(evaluation_id)
+                eval_id = source.get("evaluationId") or source.get("internalId")
+                if eval_id:
+                    evaluations_sampled.add(eval_id)
                 
                 # Extract template information
                 if source.get("template_name"):
@@ -2477,7 +2477,7 @@ async def debug_test_metadata_extraction():
                 "source_keys": list(source.keys()) if source else [],
                 "evaluation_id_sources": {
                     "evaluationId": source.get("evaluationId"),
-                    "evaluation_id": source.get("evaluation_id"), 
+                    "eval_id": source.get("eval_id"), 
                     "internalId": source.get("internalId"),
                     "metadata.evaluationId": source.get("metadata", {}).get("evaluationId") if source.get("metadata") else None
                 },
@@ -2508,7 +2508,7 @@ async def debug_test_metadata_extraction():
                 "has_real_data": metadata_summary["has_real_data"],
                 "programs_found": metadata_summary["programs"],
                 "dispositions_found": metadata_summary["dispositions"],
-                "evaluation_ids_found": len(metadata_summary["evaluation_ids"])
+                "evaluation_ids_found": len(metadata_summary["eval_ids"])
             },
             "detailed_analysis": detailed_analysis,
             "recommendations": [
@@ -3108,16 +3108,16 @@ async def debug_verify_metadata_alignment():
         for hit in hits:
             source = hit.get("_source", {})
             metadata = source.get("metadata", {})
-            evaluation_id = source.get("evaluationId")
+            eval_id = source.get("evaluationId")
             
             # Track unique evaluations vs total hits
-            if evaluation_id:
-                metadata_analysis["unique_evaluations_sampled"].add(evaluation_id)
+            if eval_id:
+                metadata_analysis["unique_evaluations_sampled"].add(eval_id)
             
             # Check if metadata exists
             if not metadata:
                 metadata_analysis["metadata_structure_issues"].append(
-                    f"Evaluation {evaluation_id or 'Unknown'} has no metadata field"
+                    f"Evaluation {eval_id or 'Unknown'} has no metadata field"
                 )
                 continue
             
@@ -3141,7 +3141,7 @@ async def debug_verify_metadata_alignment():
             
             # Add sample record
             metadata_analysis["sample_records"].append({
-                "evaluationId": evaluation_id,
+                "evaluationId": eval_id,
                 "template_name": source.get("template_name"),
                 "metadata": {
                     "disposition": metadata.get("disposition"),
@@ -3330,13 +3330,13 @@ async def debug_test_disposition_search(query: str = "call dispositions"):
         
         # Analyze sources with correct counting
         for i, source in enumerate(sources[:5]):
-            evaluation_id = source.get("evaluationId")
-            if evaluation_id:
-                analysis["unique_evaluations_found"].add(evaluation_id)
+            eval_id = source.get("evaluationId")
+            if eval_id:
+                analysis["unique_evaluations_found"].add(eval_id)
                 
             source_summary = {
                 "source_number": i + 1,
-                "evaluation_id": evaluation_id,
+                "eval_id": eval_id,
                 "search_type": source.get("search_type"),
                 "template_name": source.get("template_name"),
                 "metadata_preview": {
