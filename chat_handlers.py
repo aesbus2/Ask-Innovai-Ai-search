@@ -1063,23 +1063,6 @@ def build_sources_summary_with_details(sources, filters=None):
 # =============================================================================
 # MAIN RAG-ENABLED CHAT ENDPOINT WITH STRICT METADATA VERIFICATION
 # =============================================================================
-@chat_router.post("/chat_test")
-async def chat_test_minimal(request: Request):
-    """Minimal test endpoint to isolate the response issue"""
-    try:
-        body = await request.json()
-        
-        # Just return a tiny response to test if the issue is response size
-        return JSONResponse(content={
-            "reply": "Test response working!",
-            "sources": [],
-            "timestamp": datetime.now().isoformat(),
-            "search_metadata": {"test": "success"}
-        })
-        
-    except Exception as e:
-        return JSONResponse(content={"reply": f"Error: {e}"})
-
 
 @chat_router.post("/chat")
 async def relay_chat_rag(request: Request):
@@ -1179,6 +1162,8 @@ CRITICAL INSTRUCTIONS:
             logger.error(f"❌ GenAI response missing 'choices': {result}")
             reply_text = "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
 
+        
+
                
         # STEP 4: Process sources for response - Remove duplicates
         unique_sources = []
@@ -1206,7 +1191,7 @@ CRITICAL INSTRUCTIONS:
             "sources_summary": sources_data["summary"],           # NEW: Summary counts
             "sources_details": sources_data["details"],          # NEW: Limited data for display  
             "sources_totals": sources_data["totals"],            # NEW: Total counts for each category
-            "sources_full_data": sources_data["full_data"],      # NEW: Complete data for download
+            #"sources_full_data": sources_data["full_data"],      # NEW: Complete data for download
             "display_limit": sources_data["display_limit"],      # NEW: Current display limit (25)
             "sources": unique_sources[:20],  # Limit sources in response
             "timestamp": datetime.now().isoformat(),
@@ -1226,10 +1211,14 @@ CRITICAL INSTRUCTIONS:
         
         logger.info(f"✅ CHAT RESPONSE COMPLETE: {len(reply_text)} chars, {len(unique_sources)} verified sources")
         logger.info(f"📊 SOURCES SUMMARY: {sources_data['summary']}")  # NEW: Log summary data
+        # Truncate reply if too long  
+        if len(reply_text) > 2000:
+            response_data["reply"] = reply_text[:2000] + "\n\n[Response truncated for display]"
         return JSONResponse(content=response_data)
 
     except Exception as e:
         logger.error(f"❌ CHAT REQUEST FAILED: {e}")
+        
         return JSONResponse(
             status_code=500,
             content={
