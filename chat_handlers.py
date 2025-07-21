@@ -1284,6 +1284,7 @@ Respond in a clear, professional format with specific examples from the data."""
         # STEP 7: Build enhanced response with vector search information
         response_data = {
             "reply": reply_text,
+            "response": reply_text,
             "sources_summary": sources_data["summary"],
             "sources_details": sources_data["details"], 
             "sources_totals": sources_data["totals"],

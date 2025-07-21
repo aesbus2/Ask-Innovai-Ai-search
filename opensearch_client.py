@@ -280,7 +280,7 @@ def search_vector(query_vector: List[float], index_override: str = None,
                         {
                             "knn": {
                                 "document_embedding": {
-                                    "vector": query_vector,
+                                    "vector": [float(x) for x in query_vector],
                                     "k": size
                                 }
                             }
@@ -292,7 +292,7 @@ def search_vector(query_vector: List[float], index_override: str = None,
                                 "query": {
                                     "knn": {
                                         "chunks.embedding": {
-                                            "vector": query_vector,
+                                            "vector": [float(x) for x in query_vector],
                                             "k": size
                                         }
                                     }
@@ -402,7 +402,7 @@ def hybrid_search(query: str, query_vector: List[float] = None,
                         {
                             "knn": {
                                 "document_embedding": {
-                                    "vector": query_vector,
+                                    "vector": [float(x) for x in query_vector],
                                     "k": size
                                 }
                             }
@@ -413,7 +413,7 @@ def hybrid_search(query: str, query_vector: List[float] = None,
                                 "query": {
                                     "knn": {
                                         "chunks.embedding": {
-                                            "vector": query_vector,
+                                            "vector": [float(x) for x in query_vector],
                                             "k": size
                                         }
                                     }
@@ -865,11 +865,27 @@ def search_opensearch(query: str, index_override: str = None,
         
         # STEP 4: Use hybrid search if vector is available and supported
         if query_vector and available_fields.get("has_vector_support", False):
-            logger.info("🔥 Using hybrid text+vector search")
-            return hybrid_search(query, query_vector, index_pattern, filters, size)
+    # Check if actual vector fields exist in the data
+            try:
+                test_response = client.search(
+                    index=index_pattern,
+                    body={
+                        "query": {"exists": {"field": "document_embedding"}},
+                        "size": 1
+                    },
+                    request_timeout=5
+                )
+                has_actual_vectors = test_response.get("hits", {}).get("total", {}).get("value", 0) > 0
+                
+                if has_actual_vectors:
+                    logger.info("🔥 Using hybrid text+vector search")
+                    return hybrid_search(query, query_vector, index_pattern, filters, size)
+                else:
+                    logger.info("📝 No vector data found, using text-only search")
+            except:
+                logger.info("📝 Vector field check failed, using text-only search")
         else:
             logger.info("📝 Using text-only search")
-            # Continue with existing text search logic...
         
         # STEP 5: Build safe search query (text-only fallback)
         search_query = build_safe_search_query(query, available_fields, filters)

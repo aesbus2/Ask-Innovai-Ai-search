@@ -658,14 +658,11 @@ async function sendMessage() {
         // Remove typing indicator
         hideTypingIndicator();
         
-        if (data.response) {
-            // Add assistant response
-            addMessageToChat('assistant', data.response, data);
-            
-            // Update chat history
+        if (data.reply) {
+            addMessageToChat('assistant', data.reply, data);
             chatHistory.push(
                 { role: 'user', content: message },
-                { role: 'assistant', content: data.response }
+                { role: 'assistant', content: data.reply }
             );
             
             console.log(`✅ Message sent successfully in ${responseTime.toFixed(2)}ms`);
@@ -1017,6 +1014,7 @@ window.showCriticalError = showCriticalError;
 window.applyFilters = applyFilters;
 window.clearFilters = clearFilters;
 window.removeFilter = removeFilter;
+window.updateFilterCounts = updateFilterCounts;
 window.updateHierarchyFilters = updateHierarchyFilters;
 window.updateSubDispositions = updateSubDispositions;
 
