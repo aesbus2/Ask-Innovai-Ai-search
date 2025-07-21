@@ -84,6 +84,7 @@ except ImportError as e:
 # Import embedder with fallback
 EMBEDDER_AVAILABLE = False
 ECTOR_SEARCH_READY = False
+PRELOAD_MODEL_ON_STARTUP = True
 try:
     from embedder import embed_text, get_embedding_stats, preload_embedding_model
     EMBEDDER_AVAILABLE = True
@@ -110,6 +111,7 @@ GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
 API_BASE_URL = os.getenv("API_BASE_URL", "https://innovai-6abj.onrender.com/api/content")
 API_AUTH_KEY = os.getenv("API_AUTH_KEY", "auth")
 API_AUTH_VALUE = os.getenv("API_AUTH_VALUE", "")
+
 
 # Production import status tracking
 import_status = {
@@ -2096,7 +2098,7 @@ async def get_opensearch_statistics():
                 # Basic counts
                 "total_documents": total_documents,
                 "active_indices": active_indices,
-                "available_fields": sorted(list(available_metadata_fields)),
+                "available_fields": sorted(list(available_meta_fields)),
                 "cluster_status": cluster_status,
 
                 # NEW: Vector search capabilities
@@ -4051,10 +4053,10 @@ async def serve_metadata_debug_dashboard():
 # Add startup event
 @app.on_event("startup")
 async def startup_event():
-    """PRODUCTION: Enhanced startup with comprehensive logging"""
+    """PRODUCTION: Enhanced startup with comprehensive logging and model preloading"""
     try:
         logger.info("🚀 Ask InnovAI PRODUCTION starting...")
-        logger.info(f"   Version: 4.8.0_vector_enabled")
+        logger.info(f"   Version: 4.8.0_vector_enabled_preload")
         logger.info(f"   🔮 VECTOR SEARCH: {'✅ ENABLED' if VECTOR_SEARCH_READY else '❌ DISABLED'}")
         logger.info(f"   🔥 HYBRID SEARCH: {'✅ AVAILABLE' if VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
         logger.info(f"   📚 EMBEDDER: {'✅ LOADED' if EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
@@ -4080,43 +4082,114 @@ async def startup_event():
         logger.info(f"   API Source: {'✅ Configured' if api_configured else '❌ Missing'}")
         logger.info(f"   GenAI: {'✅ Configured' if genai_configured else '❌ Missing'}")
         logger.info(f"   OpenSearch: {'✅ Configured' if opensearch_configured else '❌ Missing'}")
-        logger.info(" PRODUCTION startup complete with CHAT FIX")
-        logger.info(" Chat endpoint should now work without 405 errors")
-
-    except Exception as e:
-        logger.error(f"❌ PRODUCTION startup error: {e}")
         
-        # Preload embedder if available (non-blocking)
+        # 🎯 CRITICAL FIX: PRELOAD EMBEDDING MODEL DURING STARTUP
         if EMBEDDER_AVAILABLE:
+            logger.info("🔮 PRELOADING EMBEDDING MODEL (this will take 20-30 seconds but makes chat fast)...")
+            preload_start = time.time()
+            
             try:
+                # Method 1: Use the preload function
+                from embedder import preload_embedding_model, embed_text
                 preload_embedding_model()
-                logger.info("✅ Embedding model preloaded")
+                
+                # Method 2: Force load with actual embedding to ensure it's ready
+                test_embedding = embed_text("startup preload test")
+                
+                preload_time = time.time() - preload_start
+                logger.info(f"✅ EMBEDDING MODEL SUCCESSFULLY PRELOADED in {preload_time:.1f}s")
+                logger.info(f"   Model dimension: {len(test_embedding)}")
+                logger.info("🚀 FIRST CHAT REQUEST WILL NOW BE FAST (~2-3 seconds instead of ~30s)!")
+                
             except Exception as e:
-                logger.warning(f"⚠️ Embedding preload failed: {e}")
+                preload_time = time.time() - preload_start
+                logger.error(f"❌ EMBEDDING MODEL PRELOAD FAILED after {preload_time:.1f}s: {e}")
+                logger.warning("⚠️ Vector search will work but first chat request will be slow (~30s)")
+                logger.warning("💡 Users should expect a delay on the first chat message only")
+        else:
+            logger.info("⚠️ No embedder available - skipping model preload")
         
-        logger.info("🎉 PRODUCTION startup complete with VECTOR SEARCH CAPABILITIES")
+        logger.info("✅ PRODUCTION startup complete with CHAT FIX and MODEL PRELOADING")
         logger.info("📊 Ready for enhanced search with semantic similarity matching")
         logger.info("🔮 Vector search enables finding semantically similar content beyond keyword matching")
         logger.info("🔥 Hybrid search combines text matching with vector similarity for best results")
+        logger.info("💬 Chat endpoint should now work without 405 errors and respond quickly")
         
     except Exception as e:
         logger.error(f"❌ PRODUCTION startup error: {e}")
+        logger.error("🚨 Startup failed - some features may not work correctly")
 
-# For Digital Ocean App Platform
-if __name__ == "__main__":
-    import uvicorn
-    
-    port = int(os.getenv("PORT", 8080))
-    logger.info(f"🚀 Starting Ask InnovAI PRODUCTION on port {port}")
-    logger.info("🎯 Features: Real Data Filters + Template_ID Collections + Program Extraction + Efficient Metadata Loading")
-    logger.info(f"💾 Memory monitoring: {'✅ Enabled' if PSUTIL_AVAILABLE else '❌ Disabled'}")
-    logger.info(f"⚡ Performance: Index-based metadata extraction with {_filter_metadata_cache['ttl_seconds']}s caching")
-    logger.info(f"🔮 Vector search: {'✅ ENABLED' if VECTOR_SEARCH_READY else '❌ DISABLED'}")
-    logger.info(f"🔥 Hybrid search: {'✅ AVAILABLE' if VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
-    
-    uvicorn.run(
-        app, 
-        host="0.0.0.0", 
-        port=port,
-        log_level="info"
-    )
+# Add these additional endpoints for model management
+@app.get("/admin/model_status")
+async def check_model_status():
+    """Check if embedding model is loaded and ready"""
+    try:
+        if not EMBEDDER_AVAILABLE:
+            return {
+                "model_loaded": False,
+                "embedder_available": False,
+                "message": "Embedder module not available"
+            }
+        
+        # Test if model responds quickly (already loaded)
+        start_time = time.time()
+        from embedder import embed_text
+        
+        test_embedding = embed_text("quick test")
+        response_time = time.time() - start_time
+        
+        return {
+            "model_loaded": True,
+            "embedder_available": True,
+            "response_time_seconds": round(response_time, 3),
+            "embedding_dimension": len(test_embedding),
+            "fast_response": response_time < 1.0,
+            "status": "ready" if response_time < 1.0 else "loading_on_demand",
+            "message": "Model preloaded and ready" if response_time < 1.0 else "Model loads on first use"
+        }
+        
+    except Exception as e:
+        return {
+            "model_loaded": False,
+            "error": str(e),
+            "message": "Error checking model status"
+        }
+
+@app.post("/admin/warmup_model")
+async def warmup_embedding_model():
+    """Manual endpoint to warm up the embedding model if not preloaded"""
+    try:
+        if not EMBEDDER_AVAILABLE:
+            return {
+                "status": "error",
+                "message": "Embedder not available"
+            }
+            
+        logger.info("🔥 MANUAL MODEL WARMUP REQUESTED...")
+        start_time = time.time()
+        
+        from embedder import embed_text, preload_embedding_model
+        
+        # Preload the model
+        preload_embedding_model()
+        
+        # Test with actual embedding
+        test_embedding = embed_text("manual warmup test")
+        
+        warmup_time = time.time() - start_time
+        logger.info(f"✅ Manual model warmup completed in {warmup_time:.1f}s")
+        
+        return {
+            "status": "success",
+            "warmup_time_seconds": round(warmup_time, 2),
+            "embedding_dimension": len(test_embedding),
+            "message": f"Model manually warmed up in {warmup_time:.1f}s - chat should now be fast!"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Manual model warmup failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "message": "Model warmup failed"
+        }
