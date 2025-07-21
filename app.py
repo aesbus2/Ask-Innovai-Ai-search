@@ -13,108 +13,109 @@ import gc
 import hashlib
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from contextlib import asynccontextmanager
+from threading import Thread
+from uuid import uuid4
+from collections import defaultdict
+
+# FastAPI imports
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, Query, APIRouter
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse as StarletteJSONResponse
+
+# Other imports
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from uuid import uuid4
-from collections import defaultdict
-from chat_handlers import chat_router, health_router
-from fastapi import APIRouter
-from contextlib import asynccontextmanager
 
-# FIXED: Lifespan event handler (replaces deprecated @app.on_event)
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    FIXED: Lifespan event handler (replaces deprecated @app.on_event)
-    Handles startup and shutdown events
-    """
-    # Startup
-    try:
-        logger.info("🚀 Ask InnovAI PRODUCTION starting...")
-        logger.info(f"   Version: 4.8.1_lifespan_fixed")
-        logger.info(f"   🔮 VECTOR SEARCH: {'✅ ENABLED' if VECTOR_SEARCH_READY else '❌ DISABLED'}")
-        logger.info(f"   🔥 HYBRID SEARCH: {'✅ AVAILABLE' if VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
-        logger.info(f"   📚 EMBEDDER: {'✅ LOADED' if EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
-        logger.info(f"   CHAT FIX: Endpoint moved directly to app.py")
-        logger.info(f"   405 Method Not Allowed error resolved")
-        logger.info(f"   Router conflicts eliminated")
-        logger.info(f"   CORS properly configured")
-        logger.info(f"   Features: Vector Search + Real Data Filters + Hybrid Search + Semantic Similarity")
-        logger.info(f"   Features: Real Data Filters + Efficient Metadata Loading + Evaluation Grouping")
-        logger.info(f"   Collection Strategy: Template_ID-based")
-        logger.info(f"   Document Strategy: Evaluation-grouped")
-        logger.info(f"   Program Extraction: Enhanced pattern matching")
-        logger.info(f"   Metadata Loading: Index-based efficient sampling")
-        logger.info(f"   Filter Caching: {_filter_metadata_cache['ttl_seconds']}s TTL")
-        logger.info(f"   Port: {os.getenv('PORT', '8080')}")
-        logger.info(f"   Memory Monitoring: {'✅ Available' if PSUTIL_AVAILABLE else '❌ Disabled'}")
-        
-        # Check configuration
-        api_configured = bool(API_AUTH_VALUE)
-        genai_configured = bool(GENAI_ACCESS_KEY)
-        opensearch_configured = bool(os.getenv("OPENSEARCH_HOST"))
-        
-        logger.info(f"   API Source: {'✅ Configured' if api_configured else '❌ Missing'}")
-        logger.info(f"   GenAI: {'✅ Configured' if genai_configured else '❌ Missing'}")
-        logger.info(f"   OpenSearch: {'✅ Configured' if opensearch_configured else '❌ Missing'}")
-        
-        # 🎯 CRITICAL FIX: Start model loading in background to avoid health check timeout
-        if EMBEDDER_AVAILABLE:
-            logger.info("🔮 STARTING EMBEDDING MODEL LOAD IN BACKGROUND...")
-            logger.info("⏱️ This will take 20-30s but won't block app startup")
-            logger.info("📱 Health checks will pass immediately, model loads separately")
-            
-            # Start background loading thread
-            from threading import Thread
-            background_thread = Thread(target=load_model_background, daemon=True)
-            background_thread.start()
-            
-            logger.info("✅ Background model loading initiated")
-        else:
-            logger.info("⚠️ No embedder available - skipping model preload")
-        
-        logger.info("✅ PRODUCTION startup complete - HEALTH CHECKS WILL PASS")
-        logger.info("📊 Ready for enhanced search with semantic similarity matching")
-        logger.info("🔮 Vector search enables finding semantically similar content beyond keyword matching")
-        logger.info("🔥 Hybrid search combines text matching with vector similarity for best results")
-        logger.info("💬 Chat endpoint should now work without 405 errors")
-        logger.info("⏱️ First chat may be slower (~30s) until background model loading completes")
-        
-    except Exception as e:
-        logger.error(f"❌ PRODUCTION startup error: {e}")
-        logger.error("🚨 Startup failed - some features may not work correctly")
-    
-    # App runs here
-    yield
-    
-    # Shutdown
-    logger.info("🛑 Ask InnovAI PRODUCTION shutting down...")
+# ============================================================================
+# ENVIRONMENT AND CONFIGURATION
+# ============================================================================
 
+load_dotenv()
 
-# Create FastAPI app
-app = FastAPI(
-    title="Ask InnovAI Production - Efficient Real Data Filter System",
-    description="AI-Powered Knowledge Assistant with Real-Time Data Filters and Efficient Metadata Loading",
-    version="4.8.1",
-    lifespan=lifespan
-)
+# Production Configuration
+GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", "https://tcxn3difq23zdxlph2heigba.agents.do-ai.run")
+GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://innovai-6abj.onrender.com/api/content")
+API_AUTH_KEY = os.getenv("API_AUTH_KEY", "auth")
+API_AUTH_VALUE = os.getenv("API_AUTH_VALUE", "")
 
-app.include_router(chat_router, prefix="/api")
-app.include_router(health_router)
+# ============================================================================
+# GLOBAL VARIABLES AND FLAGS
+# ============================================================================
 
-# Enable CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  
-    allow_headers=["*"],
-)
+# Import logs for tracking import events
+import_logs = []
+
+# Filter metadata cache (used for caching filter options)
+_filter_metadata_cache = {
+    "data": None,
+    "timestamp": None,
+    "ttl_seconds": 300  # Cache TTL in seconds (5 minutes)
+}
+
+# Memory monitoring setup
+PSUTIL_AVAILABLE = False
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+    logging.info("✅ psutil available for memory monitoring")
+except ImportError:
+    logging.warning("⚠️ psutil not available - memory monitoring disabled")
+
+# Import modules with error handling
+try:
+    from sentence_splitter import split_into_chunks
+    logging.info("✅ sentence_splitter imported successfully")
+except ImportError as e:
+    logging.error(f"❌ Failed to import sentence_splitter: {e}")
+    sys.exit(1)
+
+try:
+    from opensearch_client import search_opensearch, index_document, search_vector
+    logging.info("✅ opensearch_client imported successfully")
+except ImportError as e:
+    logging.error(f"❌ Failed to import opensearch_client: {e}")
+    sys.exit(1)
+
+# Import embedder with fallback
+EMBEDDER_AVAILABLE = False
+VECTOR_SEARCH_READY = False
+PRELOAD_MODEL_ON_STARTUP = True
+try:
+    from embedder import embed_text, get_embedding_stats, preload_embedding_model
+    EMBEDDER_AVAILABLE = False # Disable for chat
+    VECTOR_SEARCH_READY = False # Disable for chat
+    logging.info("✅ embedder imported successfully - VECTOR SEARCH READY")
+except ImportError as e:
+    logging.warning(f"⚠️ embedder import failed: {e} - vector search will be disabled")
+
+MODEL_LOADING_STATUS = {
+    "loaded": False,
+    "loading": False,
+    "load_time": None,
+    "error": None
+}
+
+# Import status global variable (must be defined before use)
+import_status = {
+    "status": "idle",
+    "start_time": None,
+    "end_time": None,
+    "current_step": None,
+    "results": {},
+    "error": None,
+    "import_type": None
+}
+
+# global variables (Above)
+# ============================================================================
+# LOGGING SETUP
+# ============================================================================
 
 # Production logging setup
 logging.basicConfig(
@@ -126,85 +127,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ask-innovai-production")
 
-# Load environment variables
-load_dotenv()
 
-# Memory monitoring setup
-PSUTIL_AVAILABLE = False
-try:
-    import psutil
-    PSUTIL_AVAILABLE = True
-    logger.info("✅ psutil available for memory monitoring")
-except ImportError:
-    logger.warning("⚠️ psutil not available - memory monitoring disabled")
-
-# Import modules with error handling
-try:
-    from sentence_splitter import split_into_chunks
-    logger.info("✅ sentence_splitter imported successfully")
-except ImportError as e:
-    logger.error(f"❌ Failed to import sentence_splitter: {e}")
-    sys.exit(1)
-
-try:
-    from opensearch_client import search_opensearch, index_document, search_vector
-    logger.info("✅ opensearch_client imported successfully")
-except ImportError as e:
-    logger.error(f"❌ Failed to import opensearch_client: {e}")
-    sys.exit(1)
-
-# Import embedder with fallback
-EMBEDDER_AVAILABLE = False
-VECTOR_SEARCH_READY = False
-PRELOAD_MODEL_ON_STARTUP = True
-try:
-    from embedder import embed_text, get_embedding_stats, preload_embedding_model
-    EMBEDDER_AVAILABLE = False # Disable for chat
-    VECTOR_SEARCH_READY = False # Disable for chat
-    logger.info("✅ embedder imported successfully - VECTOR SEARCH READY")
-except ImportError as e:
-    logger.warning(f"⚠️ embedder import failed: {e} - vector search will be disabled")
-
+# logging setup (Above)
+# ============================================================================
+# PYDANTIC MODELS
+# ============================================================================
 class ImportRequest(BaseModel):
     collection: str = "all"
     max_docs: Optional[int] = None
     import_type: str = "full"
     batch_size: Optional[int] = None
 
-# Mount static files
-try:
-    app.mount("/static", StaticFiles(directory="static"), name="static")
-except Exception as e:
-    logger.warning(f"⚠️ Failed to mount static files: {e}")
-
-# Production Configuration
-GENAI_ENDPOINT = os.getenv("GENAI_ENDPOINT", "https://tcxn3difq23zdxlph2heigba.agents.do-ai.run")
-GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
-API_BASE_URL = os.getenv("API_BASE_URL", "https://innovai-6abj.onrender.com/api/content")
-API_AUTH_KEY = os.getenv("API_AUTH_KEY", "auth")
-API_AUTH_VALUE = os.getenv("API_AUTH_VALUE", "")
-
-
-# Production import status tracking
-import_status = {
-    "status": "idle",
-    "start_time": None,
-    "end_time": None,
-    "current_step": None,
-    "results": {},
-    "error": None,
-    "import_type": "full"
-}
-
-# In-memory logs (last 100 entries)
-import_logs = []
-
-# Global cache for efficient filter metadata
-_filter_metadata_cache = {
-    "data": None,
-    "timestamp": None,
-    "ttl_seconds": 300  # 5 minutes cache
-}
+#Pydantic Models (Above)
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
 
 def log_import(message: str):
     """Add message to import logs with production formatting"""
@@ -228,11 +165,355 @@ def update_import_status(status: str, step: str = None, results: dict = None, er
     elif status in ["completed", "failed"]:
         import_status["end_time"] = datetime.now().isoformat()
 
+
+def load_model_background():
+    """Load embedding model in background thread"""
+    global MODEL_LOADING_STATUS
+    
+    if not EMBEDDER_AVAILABLE:
+        MODEL_LOADING_STATUS["error"] = "Embedder not available"
+        return
+    
+    try:
+        MODEL_LOADING_STATUS["loading"] = True
+        logger.info("🔮 BACKGROUND: Starting embedding model load...")
+        
+        start_time = time.time()
+        
+        from embedder import preload_embedding_model, embed_text
+        
+        # Load the model
+        preload_embedding_model()
+        
+        # Test with actual embedding
+        test_embedding = embed_text("background preload test")
+        
+        load_time = time.time() - start_time
+        
+        MODEL_LOADING_STATUS["loaded"] = True
+        MODEL_LOADING_STATUS["loading"] = False
+        MODEL_LOADING_STATUS["load_time"] = round(load_time, 1)
+        
+        logger.info(f"✅ BACKGROUND: Model loaded successfully in {load_time:.1f}s")
+        logger.info("🚀 Chat requests will now be fast!")
+        
+    except Exception as e:
+        MODEL_LOADING_STATUS["loading"] = False
+        MODEL_LOADING_STATUS["error"] = str(e)
+        logger.error(f"❌ BACKGROUND: Model loading failed: {e}")
+
+
+# Utility Functions (above)
 # ============================================================================
-# ENDPOINTS
+# MIDDLEWARE CLASSES
+# ============================================================================
+class CompilationErrorMiddleware(BaseHTTPMiddleware):
+    """Catch OpenSearch compilation errors and return safe responses"""
+    
+    async def dispatch(self, request, call_next):
+        try:
+            response = await call_next(request)
+            return response
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            # Check for compilation errors
+            if any(keyword in error_str for keyword in [
+                "search_phase_execution_exception",
+                "compile_error", 
+                "compilation_exception"
+            ]):
+                logger.error(f"🚨 COMPILATION ERROR caught in {request.url.path}: {e}")
+                
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "error": "Query compilation failed",
+                        "details": "OpenSearch could not compile the query",
+                        "suggestion": "Try simpler search terms or contact support",
+                        "safe_mode": True,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                )
+            else:
+                # Re-raise non-compilation errors
+                raise
+
+
+
+
+# Midleware classes (above)
+# ============================================================================
+# LIFESPAN EVENT HANDLER
 # ============================================================================
 
-# Enhanced model status endpoint
+@asynccontextmanager  
+async def lifespan(app: FastAPI):
+    """  Lifespan event handler for startup and shutdown
+    """
+    # Startup
+    try:
+        logger.info("🚀 Ask InnovAI PRODUCTION starting...")
+        logger.info(f"   Version: 4.8.1_lifespan_fixed")
+        logger.info(f"   🔮 VECTOR SEARCH: {'✅ ENABLED' if VECTOR_SEARCH_READY else '❌ DISABLED'}")
+        logger.info(f"   🔥 HYBRID SEARCH: {'✅ AVAILABLE' if VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
+        logger.info(f"   📚 EMBEDDER: {'✅ LOADED' if EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
+        
+        # Check configuration
+        api_configured = bool(API_AUTH_VALUE)
+        genai_configured = bool(GENAI_ACCESS_KEY)
+        opensearch_configured = bool(os.getenv("OPENSEARCH_HOST"))
+
+        logger.info(f"   API Source: {'✅ Configured' if api_configured else '❌ Missing'}")
+        logger.info(f"   GenAI: {'✅ Configured' if genai_configured else '❌ Missing'}")
+        logger.info(f"   OpenSearch: {'✅ Configured' if opensearch_configured else '❌ Missing'}")
+
+        
+        logger.info(f"   Features: Vector Search + Real Data Filters + Hybrid Search + Semantic Similarity")
+        logger.info(f"   Features: Real Data Filters + Efficient Metadata Loading + Evaluation Grouping")
+        logger.info(f"   Program Extraction: Enhanced pattern matching")
+        logger.info(f"   Metadata Loading: Index-based efficient sampling")
+        logger.info(f"   Filter Caching: {_filter_metadata_cache['ttl_seconds']}s TTL")
+        logger.info(f"   Port: {os.getenv('PORT', '8080')}")
+        logger.info(f"   Memory Monitoring: {'✅ Available' if PSUTIL_AVAILABLE else '❌ Disabled'}")           
+           
+        
+        # Start model loading in background to avoid health check timeout
+        if EMBEDDER_AVAILABLE:
+            logger.info("🔮 STARTING EMBEDDING MODEL LOAD IN BACKGROUND...")
+            logger.info("⏱️ This will take 20-30s but won't block app startup")
+            logger.info("📱 Health checks will pass immediately, model loads separately")
+            
+            # Start background loading thread
+            from threading import Thread
+            background_thread = Thread(target=load_model_background, daemon=True)
+            background_thread.start()
+            
+            logger.info("✅ Background model loading initiated")
+        else:
+            logger.info("⚠️ No embedder available - skipping model preload")
+        
+        logger.info("✅ PRODUCTION startup complete - HEALTH CHECKS WILL PASS")
+                
+    except Exception as e:
+        logger.error(f"❌ PRODUCTION startup error: {e}")
+        logger.error("🚨 Startup failed - some features may not work correctly")
+    
+    # App runs here
+    yield
+    
+    # Shutdown
+    logger.info("🛑 Ask InnovAI PRODUCTION shutting down...")
+
+# lifespan event handler (Above)
+# ============================================================================
+# FASTAPI APP CREATION
+# ============================================================================
+
+# Create FastAPI app
+app = FastAPI(
+    title="Ask InnovAI Production - Efficient Real Data Filter System",
+    description="AI-Powered Knowledge Assistant with Real-Time Data Filters and Efficient Metadata Loading",
+    version="4.8.1",
+    lifespan=lifespan
+)
+
+# ============================================================================
+# 10. MIDDLEWARE SETUP
+# ============================================================================
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  
+    allow_headers=["*"],
+)
+
+# Add the middleware to your app
+app.add_middleware(CompilationErrorMiddleware)
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "script-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self'"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
+
+# ============================================================================
+# MOUNT STATIC FILES
+# ============================================================================
+
+try:
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+except Exception as e:
+    logger.warning(f"⚠️ Failed to mount static files: {e}")
+
+# ============================================================================
+# IMPORT CHAT AND HEALTH ROUTERS (AFTER APP CREATION)
+# ============================================================================
+
+try:
+    from chat_handlers import chat_router, health_router
+    app.include_router(chat_router, prefix="/api")
+    app.include_router(health_router)
+    logger.info("✅ Chat and health routers imported and mounted")
+except ImportError as e:
+    logger.warning(f"⚠️ Could not import chat/health routers: {e}")
+    
+    # Create minimal health router if import fails
+    health_router = APIRouter()
+    
+    @health_router.get("/health")
+    async def fallback_health():
+        return {
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "note": "fallback_health_endpoint"
+        }
+    
+    app.include_router(health_router)
+
+# ============================================================================
+# MAIN APPLICATION ROUTES
+# ============================================================================
+
+@app.get("/", response_class=HTMLResponse)
+async def get_index():
+    try:
+        with open("static/index.html", "r") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        return HTMLResponse(content="""
+        <html><body>
+        <h1>🤖 Ask InnovAI Production v4.2.0</h1>
+        <p><strong>Status:</strong> Production Ready ✅</p>
+        <p><strong>Features:</strong> Real Data Filters + Efficient Metadata Loading + Evaluation Grouping</p>
+        <p><strong>Structure:</strong> Template_ID Collections with Program Extraction</p>
+        <p>Admin interface file not found. Please ensure static/index.html exists.</p>
+        </body></html>
+        """)
+
+@app.get("/ping")
+async def ping():
+    return {
+        "status": "ok", 
+        "timestamp": datetime.now().isoformat(),
+        "service": "ask-innovai-production",
+        "version": "4.2.1_fixed_routing",
+        "chat_fix": "endpoint_moved_to_app_py",
+        "features": {
+            "chat_routing": "direct_in_app_py",
+            "method_allowed": "POST",
+            "cors_enabled": True,
+            "405_error": "fixed",
+            "real_data_filters": True,
+            "evaluation_grouping": True,
+            "template_id_collections": True,
+            "program_extraction": True,
+            "efficient_metadata_loading": True,
+            "filter_caching": True,
+            "vector_search_enabled": VECTOR_SEARCH_READY,
+            "hybrid_search_available": VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE,
+            "semantic_similarity": VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE,
+            "enhanced_relevance": VECTOR_SEARCH_READY
+        }
+    }
+
+# Health check endpoint that always responds quickly
+@app.get("/health")
+async def health_check():
+    """Fast health check that doesn't depend on model loading"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "app_ready": True,
+        "model_status": "loaded" if MODEL_LOADING_STATUS["loaded"] else ("loading" if MODEL_LOADING_STATUS["loading"] else "not_loaded"),
+        "version": "4.8.1_lifespan_fixed"
+    }
+
+@app.get("/chat", response_class=FileResponse)
+async def serve_chat_ui():
+    try:
+        return FileResponse("static/chat.html")
+    except:
+        return HTMLResponse(content="<h1>Chat interface not found</h1><p>Please ensure static/chat.html exists.</p>")
+
+@app.get("/search")
+async def search_endpoint(q: str = Query(..., description="Search query")):
+    """PRODUCTION: Search endpoint with real data integration"""
+    try:
+        results = search_opensearch(q, size=10)
+        
+        return {
+            "status": "success",
+            "query": q,
+            "results": [
+                {
+                    "title": result.get("template_name", "Unknown"),
+                    "text": result.get("text", ""),
+                    "score": result.get("_score", 0),
+                    "evaluationId": result.get("evaluationId"),
+                    "program": result.get("metadata", {}).get("program", "Unknown"),  # NEW
+                    "collection": result.get("_index")
+                }
+                for result in results
+            ],
+            "count": len(results),
+            "version": "4.2.0_production"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "query": q,
+            "results": []
+        }
+    
+# Manual warmup endpoint (now triggers background loading if not done)
+@app.post("/admin/warmup_model")
+async def warmup_embedding_model():
+    """Manually trigger model warmup"""
+    if not EMBEDDER_AVAILABLE:
+        return {
+            "status": "error",
+            "message": "Embedder not available"
+        }
+    
+    if MODEL_LOADING_STATUS["loaded"]:
+        return {
+            "status": "already_loaded",
+            "load_time": MODEL_LOADING_STATUS["load_time"],
+            "message": "Model is already loaded and ready"
+        }
+    
+    if MODEL_LOADING_STATUS["loading"]:
+        return {
+            "status": "loading",
+            "message": "Model is already loading in background"
+        }
+    
+    # Start background loading if not already started
+    logger.info("🔥 MANUAL MODEL WARMUP REQUESTED...")
+    from threading import Thread
+    background_thread = Thread(target=load_model_background, daemon=True)
+    background_thread.start()
+    
+    return {
+        "status": "initiated",
+        "message": "Background model loading initiated - check /admin/model_status for progress"
+    }
+
 @app.get("/admin/model_status")
 async def check_model_status():
     """Check embedding model loading status"""
@@ -293,781 +574,19 @@ async def check_model_status():
             "message": "Model loading not yet initiated"
         }
 
-# Manual warmup endpoint (now triggers background loading if not done)
-@app.post("/admin/warmup_model")
-async def warmup_embedding_model():
-    """Manually trigger model warmup"""
-    global MODEL_LOADING_STATUS
-    
-    if not EMBEDDER_AVAILABLE:
-        return {
-            "status": "error",
-            "message": "Embedder not available"
-        }
-    
-    if MODEL_LOADING_STATUS["loaded"]:
-        return {
-            "status": "already_loaded",
-            "load_time": MODEL_LOADING_STATUS["load_time"],
-            "message": "Model is already loaded and ready"
-        }
-    
-    if MODEL_LOADING_STATUS["loading"]:
-        return {
-            "status": "loading",
-            "message": "Model is already loading in background"
-        }
-    
-    # Start background loading if not already started
-    logger.info("🔥 MANUAL MODEL WARMUP REQUESTED...")
-    from threading import Thread
-    background_thread = Thread(target=load_model_background, daemon=True)
-    background_thread.start()
-    
-    return {
-        "status": "initiated",
-        "message": "Background model loading initiated - check /admin/model_status for progress"
-    }
+# main App routes (Above)
+# ============================================================================
+# REMAINING FUNCTIONS AND ENDPOINTS (IN LOGICAL ORDER)
+# ============================================================================
+# - Data processing functions
+# - Filter metadata functions  
+# - Import functions
+# - Debug endpoints
+# - Admin endpoints
 
-# Health check endpoint that always responds quickly
-@app.get("/health")
-async def health_check():
-    """Fast health check that doesn't depend on model loading"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "app_ready": True,
-        "model_status": "loaded" if MODEL_LOADING_STATUS["loaded"] else ("loading" if MODEL_LOADING_STATUS["loading"] else "not_loaded"),
-        "version": "4.8.1_lifespan_fixed"
-    }
-
-
-
-@health_router.get("/health")
-async def health_check():
-    return {
-        "status": "ok",
-        "components": {
-            "opensearch": {"status": "connected"},
-            "embedding_service": {"status": "healthy" if EMBEDDER_AVAILABLE else "disabled"},
-            "genai_agent": {"status": "configured"},
-            "vector_search": {"status": "enabled" if VECTOR_SEARCH_READY else "disabled"}
-        },
-        "enhancements": {
-            "document_structure": "enhanced v4.8.0",
-            "vector_search": "enabled" if VECTOR_SEARCH_READY else "disabled",
-            "hybrid_search": "enabled" if VECTOR_SEARCH_READY else "disabled",
-            "semantic_similarity": "enabled" if VECTOR_SEARCH_READY else "disabled"
-        }
-    }
-
-@health_router.get("/last_import_info")
-async def last_import_info():
-    return {
-        "status": "success",
-        "last_import_timestamp": datetime.now().isoformat(),
-        "vector_search_enabled": VECTOR_SEARCH_READY
-    }
-
-
-@app.get("/filter_options_metadata")
-async def filter_options_metadata():
-    """
-    ENHANCED: Get filter options with vector search capabilities detection
-    """
-    try:
-        # Check cache first
-        cached_data = get_cached_filter_metadata()
-        if cached_data:
-            logger.info(f"📋 Returning cached filter metadata (age: {cached_data.get('cache_age_seconds', 0):.1f}s)")
-            return cached_data
-        
-        from opensearch_client import get_opensearch_client, test_connection, detect_vector_support
-        
-        if not test_connection():
-            logger.warning("OpenSearch not available for filter options")
-            return create_empty_filter_response("opensearch_unavailable")
-        
-        client = get_opensearch_client()
-        if not client:
-            logger.error("Could not create OpenSearch client for filter options")
-            return create_empty_filter_response("client_unavailable")
-        
-        logger.info("🚀 Loading filter metadata using efficient index-based approach...")
-        start_time = time.time()
-
-        # STEP 1: Check vector search support
-        vector_support = detect_vector_support(client) if client else False
-        logger.info(f"🔮 Vector search support: {'✅ ENABLED' if vector_support else '❌ DISABLED'}")
-        
-        # STEP 2: Get all evaluation indices efficiently
-        indices_info = await get_evaluation_indices_info(client)
-        if not indices_info:
-            return create_empty_filter_response("no_indices")
-        
-        # STEP 3: Extract templates from index names (much faster than aggregation)
-        templates_from_indices = extract_templates_from_indices(indices_info)
-        
-        # STEP 4: Get field mappings to understand available metadata fields
-        available_fields = await get_available_metadata_fields(client, indices_info)
-        
-        # STEP 5: Use targeted sampling per index for metadata values
-        metadata_values = await get_metadata_values_efficiently(client, indices_info, available_fields)
-        
-        # STEP 6: Build final response including Vector search capabilities
-        filter_options = {
-            # Templates from index structure (fastest)
-            "templates": templates_from_indices,
-            
-            # Metadata from efficient sampling
-            "programs": metadata_values.get("programs", []),
-            "partners": metadata_values.get("partners", []),
-            "sites": metadata_values.get("sites", []),
-            "lobs": metadata_values.get("lobs", []),
-            "callDispositions": metadata_values.get("dispositions", []),
-            "callSubDispositions": metadata_values.get("sub_dispositions", []),
-            "agentNames": metadata_values.get("agents", []),
-            "languages": metadata_values.get("languages", []),
-            "callTypes": metadata_values.get("call_types", []),
-            
-            # Template IDs from index names
-            "template_ids": [info["template_id"] for info in indices_info],
-            
-            # Enhanced metadata with vector search info
-            "total_evaluations": sum(info["doc_count"] for info in indices_info),
-            "total_indices": len(indices_info),
-            "data_freshness": datetime.now().isoformat(),
-            "status": "success",
-            "version": "4.8.0_vector_enabled",
-            "load_method": "index_structure_based",
-            "load_time_ms": round((time.time() - start_time) * 1000, 2),
-            "cached": False,
-            
-            # Vector search capabilities
-            "vector_search_enabled": vector_support,
-            "hybrid_search_available": vector_support and EMBEDDER_AVAILABLE,
-            "semantic_similarity": vector_support and EMBEDDER_AVAILABLE,
-            "search_enhancements": {
-                "vector_support": vector_support,
-                "embedder_available": EMBEDDER_AVAILABLE,
-                "hybrid_search": vector_support and EMBEDDER_AVAILABLE,
-                "search_quality": "enhanced_with_vector_similarity" if vector_support and EMBEDDER_AVAILABLE else "text_only"
-            }
-        }
-        
-        # Cache the result
-        cache_filter_metadata(filter_options)
-        
-        # PRODUCTION logging
-        logger.info(f"✅ EFFICIENT metadata loading completed in {filter_options['load_time_ms']}ms:")
-        logger.info(f"   📁 Indices analyzed: {len(indices_info)}")
-        logger.info(f"   📋 Templates: {len(templates_from_indices)} (from index names)")
-        logger.info(f"   🏢 Programs: {len(metadata_values.get('programs', []))}")
-        logger.info(f"   🤝 Partners: {len(metadata_values.get('partners', []))}")
-        logger.info(f"   📊 Total evaluations: {filter_options['total_evaluations']:,}")
-        logger.info(f"   🔮 Vector search: {'✅ ENABLED' if vector_support else '❌ DISABLED'}")
-        logger.info(f"   🔥 Hybrid search: {'✅ AVAILABLE' if filter_options['hybrid_search_available'] else '❌ NOT AVAILABLE'}")
-        
-        return filter_options
-        
-    except Exception as e:
-        logger.error(f"EFFICIENT: Failed to load filter options: {e}")
-        return create_empty_filter_response("error", str(e))
-
-async def get_evaluation_indices_info(client):
-    """
-    Get information about all evaluation indices efficiently
-    """
-    try:
-        # Get index stats for eval-* pattern
-        stats_response = client.indices.stats(index="eval-*")
-        indices_info = []
-        
-        for index_name, stats in stats_response.get("indices", {}).items():
-            # Extract template_id from index name (eval-template-123 -> template-123)
-            template_id = index_name.replace("eval-", "") if index_name.startswith("eval-") else "unknown"
-            
-            doc_count = stats.get("primaries", {}).get("docs", {}).get("count", 0)
-            size_bytes = stats.get("primaries", {}).get("store", {}).get("size_in_bytes", 0)
-            
-            indices_info.append({
-                "index_name": index_name,
-                "template_id": template_id,
-                "doc_count": doc_count,
-                "size_bytes": size_bytes
-            })
-        
-        logger.info(f"📊 Found {len(indices_info)} evaluation indices")
-        return indices_info
-        
-    except Exception as e:
-        logger.error(f"Failed to get indices info: {e}")
-        return []
-
-def extract_templates_from_indices(indices_info):
-    """
-    Extract template names efficiently by sampling one document per index
-    Much faster than aggregating all documents
-    """
-    templates = []
-    seen_templates = set()
-    
-    try:
-        from opensearch_client import get_opensearch_client
-        client = get_opensearch_client()
-        
-        for index_info in indices_info:
-            index_name = index_info["index_name"]
-            
-            # Sample one document from each index to get template_name
-            try:
-                sample_response = client.search(
-                    index=index_name,
-                    body={
-                        "size": 1,
-                        "query": {"match_all": {}},
-                        "_source": ["template_name", "template_id"]
-                    }
-                )
-                
-                hits = sample_response.get("hits", {}).get("hits", [])
-                if hits:
-                    source = hits[0].get("_source", {})
-                    template_name = source.get("template_name", f"Template {index_info['template_id']}")
-                    
-                    if template_name and template_name not in seen_templates:
-                        templates.append(template_name)
-                        seen_templates.add(template_name)
-                        
-            except Exception as e:
-                logger.debug(f"Could not sample from {index_name}: {e}")
-                # Fallback: create template name from index
-                fallback_name = f"Template {index_info['template_id']}"
-                if fallback_name not in seen_templates:
-                    templates.append(fallback_name)
-                    seen_templates.add(fallback_name)
-        
-        logger.info(f"📋 Extracted {len(templates)} templates from index sampling")
-        return sorted(templates)
-        
-    except Exception as e:
-        logger.error(f"Failed to extract templates from indices: {e}")
-        return []
-
-async def get_available_metadata_fields(client, indices_info):
-    """
-    Check index mappings to see what metadata fields are actually available including vectors
-    """
-    try:
-        # Get mapping for a representative index
-        sample_index = indices_info[0]["index_name"] if indices_info else "eval-*"
-        
-        mapping_response = client.indices.get_mapping(index=sample_index)
-        
-        available_fields = set()
-        vector_fields = set()
-        
-        for index_name, mapping_data in mapping_response.items():
-            properties = mapping_data.get("mappings", {}).get("properties", {})
-            metadata_props = properties.get("metadata", {}).get("properties", {})
-            
-            # Collect available metadata fields
-            for field_name in metadata_props.keys():
-                available_fields.add(field_name)
-
-            if "document_embedding" in properties:
-                vector_fields.add("document_embedding")
-        
-        logger.info(f"🔍 Available metadata fields: {sorted(available_fields)}")
-        logger.info(f"🔮 Vector fields detected: {sorted(vector_fields)}")
-        return list(available_fields)
-    
-        
-    except Exception as e:
-        logger.warning(f"Could not check field mappings: {e}")
-        # Return expected fields as fallback
-        return ["program", "partner", "site", "lob", "agent", "disposition", 
-        "sub_disposition", "language", "call_type", "weighted_score", "url"]
-
-async def get_metadata_values_efficiently(client, indices_info, available_fields):
-    """
-    Get metadata values using targeted sampling instead of full aggregation
-    """
-    metadata_values = {
-        "programs": set(),
-        "partners": set(), 
-        "sites": set(),
-        "lobs": set(),
-        "dispositions": set(),
-        "sub_dispositions": set(),
-        "agents": set(),
-        "languages": set(),
-        "call_types": set(),
-        "weighted_scores": set(), 
-        "urls": set() 
-    }
-    
-    field_mapping = {
-        "program": "programs",
-        "partner": "partners",
-        "site": "sites", 
-        "lob": "lobs",
-        "disposition": "dispositions",
-        "sub_disposition": "sub_dispositions",
-        "agent": "agents",
-        "language": "languages",
-        "call_type": "call_types",
-        "weighted_score": "weighted_scores",
-        "url": "urls"
-    }
-    
-    try:
-        # Sample from each index (limited samples for speed)
-        samples_per_index = 10
-        
-        for index_info in indices_info[:10]:  # Limit to top 10 indices for speed
-            index_name = index_info["index_name"]
-            
-            try:
-                # Get sample documents with metadata
-                sample_response = client.search(
-                    index=index_name,
-                    body={
-                        "size": samples_per_index,
-                        "query": {"match_all": {}},
-                        "_source": ["metadata"],
-                        "sort": [{"_doc": {"order": "asc"}}]  # Fast sampling
-                    }
-                )
-                
-                hits = sample_response.get("hits", {}).get("hits", [])
-                
-                for hit in hits:
-                    metadata = hit.get("_source", {}).get("metadata", {})
-                    
-                    # Extract values for each field
-                    for opensearch_field, result_key in field_mapping.items():
-                        if opensearch_field in available_fields:
-                            value = metadata.get(opensearch_field)
-                            if value and isinstance(value, str) and value.strip():
-                                cleaned_value = value.strip()
-                                if cleaned_value.lower() not in ["unknown", "null", "", "n/a"]:
-                                    metadata_values[result_key].add(cleaned_value)
-                
-            except Exception as e:
-                logger.debug(f"Could not sample metadata from {index_name}: {e}")
-        
-        # Convert sets to sorted lists
-        result = {}
-        for key, value_set in metadata_values.items():
-            result[key] = sorted(list(value_set))
-            logger.info(f"   {key}: {len(result[key])} unique values")
-        
-        logger.info(f"Metadata sampling completed from {len(indices_info)} indices")
-        return result
-        
-    except Exception as e:
-        logger.error(f"Failed to sample metadata efficiently: {e}")
-        return {key: [] for key in metadata_values.keys()}
-
-def get_cached_filter_metadata():
-    """
-    Get cached filter metadata if still valid
-    """
-    try:
-        cache = _filter_metadata_cache
-        
-        if not cache["data"] or not cache["timestamp"]:
-            return None
-        
-        # Check if cache is expired
-        cache_age = time.time() - cache["timestamp"]
-        if cache_age > cache["ttl_seconds"]:
-            logger.info(f"📋 Filter cache expired (age: {cache_age:.1f}s > {cache['ttl_seconds']}s)")
-            return None
-        
-        # Add cache metadata to response
-        cached_data = cache["data"].copy()
-        cached_data["cached"] = True
-        cached_data["cache_age_seconds"] = cache_age
-        cached_data["cache_expires_in_seconds"] = cache["ttl_seconds"] - cache_age
-        
-        return cached_data
-        
-    except Exception as e:
-        logger.warning(f"Cache retrieval failed: {e}")
-        return None
-
-def cache_filter_metadata(data):
-    """
-    Cache filter metadata for faster subsequent requests
-    """
-    try:
-        _filter_metadata_cache["data"] = data.copy()
-        _filter_metadata_cache["timestamp"] = time.time()
-        
-        logger.info(f"📋 Filter metadata cached for {_filter_metadata_cache['ttl_seconds']}s")
-        
-    except Exception as e:
-        logger.warning(f"Failed to cache filter metadata: {e}")
-
-def create_empty_filter_response(status="no_data", error_msg=""):
-    """
-    Create empty filter response for error cases
-    """
-    return {
-        "templates": [],
-        "programs": [],
-        "partners": [],
-        "sites": [],
-        "lobs": [],
-        "callDispositions": [],
-        "callSubDispositions": [],
-        "agentNames": [],
-        "languages": [],
-        "callTypes": [],
-        "template_ids": [],
-        "total_evaluations": 0,
-        "total_indices": 0,
-        "status": status,
-        "error": error_msg,
-        "message": f"No filter data available: {error_msg}" if error_msg else "No data available",
-        "version": "4.2.0_efficient",
-        "load_method": "fallback",
-        "vector_search_enabled": False,
-        "hybrid_search_available": False
-    }
-
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com; "
-        "script-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: https:; "
-        "connect-src 'self'"
-    )
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    return response
-
-@app.post("/clear_filter_cache")
-async def clear_filter_cache():
-    """
-    Clear the filter metadata cache (useful after data imports)
-    """
-    try:
-        _filter_metadata_cache["data"] = None
-        _filter_metadata_cache["timestamp"] = None
-        
-        return {
-            "status": "success",
-            "message": "Filter metadata cache cleared",
-            "timestamp": datetime.now().isoformat(),
-            "vector_search_ready": VECTOR_SEARCH_READY
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
-    
-# ENHANCED DEBUG ENDPOINTS WITH VECTOR SEARCH TESTING
-    
-@app.get("/debug/routes")
-async def debug_routes():
-    """Debug endpoint to show all available routes"""
-    routes = []
-    for route in app.routes:
-        routes.append({
-            "path": getattr(route, 'path', 'Unknown'),
-            "methods": getattr(route, 'methods', 'Unknown'),
-            "name": getattr(route, 'name', 'Unknown')
-        })
-    
-    return {
-        "total_routes": len(routes),
-        "routes": routes,
-        "chat_endpoint_status": "directly_defined_in_app_py",
-        "fix_applied": "moved_from_router_to_direct_endpoint",
-        "version": "4.8.0_vector_enabled"
-    }
-
-@app.get("/debug/test_vector_search")
-async def debug_test_vector_search(query: str = "customer service"):
-    """
-    ✅ NEW: Test vector search functionality
-    """
-    if not VECTOR_SEARCH_READY:
-        return {
-            "status": "disabled",
-            "message": "Vector search not available - embedder not imported",
-            "requirements": ["embedder module", "OpenSearch vector support"],
-            "version": "4.8.0_vector_enabled"
-        }
-    
-    try:
-        from opensearch_client import get_opensearch_client, detect_vector_support, search_vector
-        from embedder import embed_text
-        
-        client = get_opensearch_client()
-        if not client:
-            return {"error": "OpenSearch client not available"}
-        
-        # Test vector support
-        vector_support = detect_vector_support(client)
-        if not vector_support:
-            return {
-                "status": "unsupported",
-                "message": "OpenSearch cluster does not support vector search",
-                "cluster_support": False,
-                "version": "4.8.0_vector_enabled"
-            }
-        
-        # Generate query vector
-        logger.info(f"🔮 Testing vector search with query: '{query}'")
-        query_vector = embed_text(query)
-        
-        # Perform vector search
-        vector_results = search_vector(query_vector, size=5)
-        
-        # Analyze results
-        result_analysis = []
-        for i, result in enumerate(vector_results):
-            analysis = {
-                "result_index": i + 1,
-                "evaluation_id": result.get("evaluationId"),
-                "score": result.get("_score", 0),
-                "search_type": result.get("search_type"),
-                "template_name": result.get("template_name"),
-                "has_vector_dimension": "vector_dimension" in result,
-                "vector_dimension": result.get("vector_dimension"),
-                "best_matching_chunks": len(result.get("best_matching_chunks", [])),
-                "metadata_program": result.get("metadata", {}).get("program"),
-                "metadata_disposition": result.get("metadata", {}).get("disposition")
-            }
-            result_analysis.append(analysis)
-        
-        return {
-            "status": "success",
-            "vector_search_test": {
-                "query": query,
-                "query_vector_dimension": len(query_vector),
-                "cluster_vector_support": vector_support,
-                "results_found": len(vector_results),
-                "embedding_generation": "successful",
-                "search_execution": "successful"
-            },
-            "results_analysis": result_analysis,
-            "recommendations": [
-                "Vector search is working correctly" if vector_results else "No vector results found - check if data has embeddings",
-                "Results should have vector scores and dimensions",
-                "Check best_matching_chunks for relevant content pieces"
-            ],
-            "version": "4.8.0_vector_enabled"
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Vector search test failed: {e}")
-        return {
-            "status": "error",
-            "error": str(e),
-            "query": query,
-            "version": "4.8.0_vector_enabled"
-        }
-@app.get("/debug/test_hybrid_search")
-async def debug_test_hybrid_search(query: str = "call dispositions"):
-    """
-    ✅ NEW: Test hybrid search functionality (text + vector)
-    """
-    if not VECTOR_SEARCH_READY:
-        return {
-            "status": "disabled",
-            "message": "Hybrid search not available - requires vector search",
-            "version": "4.8.0_vector_enabled"
-        }
-    
-    try:
-        from opensearch_client import get_opensearch_client, detect_vector_support, hybrid_search
-        from embedder import embed_text
-        
-        client = get_opensearch_client()
-        if not client:
-            return {"error": "OpenSearch client not available"}
-        
-        # Test vector support
-        vector_support = detect_vector_support(client)
-        if not vector_support:
-            return {
-                "status": "unsupported",
-                "message": "Hybrid search requires vector support in OpenSearch cluster",
-                "version": "4.8.0_vector_enabled"
-            }
-        
-        # Generate query vector
-        logger.info(f"🔥 Testing hybrid search with query: '{query}'")
-        query_vector = embed_text(query)
-        
-        # Perform hybrid search with different vector weights
-        test_weights = [0.3, 0.6, 0.8]
-        hybrid_test_results = {}
-        
-        for weight in test_weights:
-            try:
-                hybrid_results = hybrid_search(
-                    query=query,
-                    query_vector=query_vector,
-                    size=5,
-                    vector_weight=weight
-                )
-                
-                hybrid_test_results[f"weight_{weight}"] = {
-                    "results_count": len(hybrid_results),
-                    "average_score": sum(r.get("_score", 0) for r in hybrid_results) / len(hybrid_results) if hybrid_results else 0,
-                    "search_types": list(set(r.get("search_type") for r in hybrid_results)),
-                    "sample_results": [
-                        {
-                            "evaluation_id": r.get("evaluationId"),
-                            "score": r.get("_score", 0),
-                            "hybrid_score": r.get("hybrid_score", 0),
-                            "search_type": r.get("search_type"),
-                            "template_name": r.get("template_name")
-                        }
-                        for r in hybrid_results[:3]
-                    ]
-                }
-                
-            except Exception as e:
-                hybrid_test_results[f"weight_{weight}"] = {"error": str(e)}
-        
-        return {
-            "status": "success",
-            "hybrid_search_test": {
-                "query": query,
-                "query_vector_dimension": len(query_vector),
-                "weights_tested": test_weights,
-                "cluster_support": vector_support
-            },
-            "weight_comparison": hybrid_test_results,
-            "analysis": {
-                "best_weight": max(test_weights, key=lambda w: hybrid_test_results.get(f"weight_{w}", {}).get("results_count", 0)),
-                "total_unique_results": len(set().union(*[
-                    [r["evaluation_id"] for r in hybrid_test_results.get(f"weight_{w}", {}).get("sample_results", [])]
-                    for w in test_weights
-                ])),
-                "search_quality": "hybrid text+vector search active"
-            },
-            "recommendations": [
-                "Compare different vector weights to see which gives best results for your data",
-                "Higher vector weights (0.6-0.8) emphasize semantic similarity",
-                "Lower vector weights (0.2-0.4) emphasize text matching",
-                "Use weight 0.6 as a good balance for most queries"
-            ],
-            "version": "4.8.0_vector_enabled"
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Hybrid search test failed: {e}")
-        return {
-            "status": "error",
-            "error": str(e),
-            "query": query,
-            "version": "4.8.0_vector_enabled"
-        }
-    
-@app.get("/debug/vector_capabilities")
-async def debug_vector_capabilities():
-    """
-    ✅ NEW: Check overall vector search capabilities and status
-    """
-    try:
-        from opensearch_client import get_opensearch_client, detect_vector_support, get_available_fields
-        
-        capabilities = {
-            "embedder_module": EMBEDDER_AVAILABLE,
-            "vector_search_ready": VECTOR_SEARCH_READY,
-            "opensearch_client": False,
-            "cluster_vector_support": False,
-            "vector_fields_detected": [],
-            "hybrid_search_available": False,
-            "search_enhancements": []
-        }
-        
-        # Test OpenSearch client
-        client = get_opensearch_client()
-        if client:
-            capabilities["opensearch_client"] = True
-            
-            # Test vector support
-            vector_support = detect_vector_support(client)
-            capabilities["cluster_vector_support"] = vector_support
-            
-            if vector_support:
-                # Get available fields including vector fields
-                available_fields = get_available_fields(client)
-                capabilities["vector_fields_detected"] = available_fields.get("vector_fields", [])
-                capabilities["has_vector_mapping"] = available_fields.get("has_vector_support", False)
-                
-                # Check hybrid search availability
-                if EMBEDDER_AVAILABLE:
-                    capabilities["hybrid_search_available"] = True
-                    capabilities["search_enhancements"] = [
-                        "text_search",
-                        "vector_similarity_search", 
-                        "hybrid_text_vector_search",
-                        "semantic_similarity_matching"
-                    ]
-        
-        # Test embedding generation if available
-        embedding_test = {"available": False, "dimension": 0, "generation_time": 0}
-        if EMBEDDER_AVAILABLE:
-            try:
-                from embedder import embed_text
-                start_time = time.time()
-                test_vector = embed_text("test query")
-                embedding_test = {
-                    "available": True,
-                    "dimension": len(test_vector),
-                    "generation_time": round((time.time() - start_time) * 1000, 2)
-                }
-            except Exception as e:
-                embedding_test["error"] = str(e)
-        
-        # Overall status assessment
-        overall_status = "disabled"
-        if capabilities["embedder_module"] and capabilities["opensearch_client"]:
-            if capabilities["cluster_vector_support"] and capabilities["hybrid_search_available"]:
-                overall_status = "fully_enabled"
-            elif capabilities["cluster_vector_support"]:
-                overall_status = "vector_only"
-            else:
-                overall_status = "text_only"
-        
-        return {
-            "status": "success",
-            "overall_vector_status": overall_status,
-            "capabilities": capabilities,
-            "embedding_test": embedding_test,
-            "recommendations": {
-                "fully_enabled": "All vector search features are available and working",
-                "vector_only": "Vector search available but embedder missing - install embedder module",
-                "text_only": "Only text search available - cluster doesn't support vectors",
-                "disabled": "Vector search completely disabled - check OpenSearch connection and embedder module"
-            }.get(overall_status, "Unknown status"),
-            "next_steps": get_vector_setup_recommendations(overall_status),
-            "version": "4.8.0_vector_enabled"
-        }
-        
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "version": "4.8.0_vector_enabled"
-        }
+# ============================================================================
+# ENHANCED DATA PROCESSING - PRODUCTION QUALITY
+# ============================================================================
 
 def get_vector_setup_recommendations(status):
     """Get recommendations based on vector search status"""
@@ -1096,9 +615,6 @@ def get_vector_setup_recommendations(status):
     }
     return recommendations.get(status, ["Check application logs for specific issues"])
 
-# ============================================================================
-# ENHANCED DATA PROCESSING - PRODUCTION QUALITY
-# ============================================================================
 
 def clean_template_id_for_index(template_id: str) -> str:
     """Clean template_id to create valid OpenSearch index names - PRODUCTION version"""
@@ -1472,6 +988,714 @@ def split_transcript_by_speakers(transcript: str) -> List[Dict[str, Any]]:
         })
     
     return chunks
+
+
+# ============================================================================
+# FILTER METADATA FUNCTIONS
+# ============================================================================
+
+@app.get("/filter_options_metadata")
+async def filter_options_metadata():
+    """
+    ENHANCED: Get filter options with vector search capabilities detection
+    """
+    try:
+        # Check cache first
+        cached_data = get_cached_filter_metadata()
+        if cached_data:
+            logger.info(f"📋 Returning cached filter metadata (age: {cached_data.get('cache_age_seconds', 0):.1f}s)")
+            return cached_data
+        
+        from opensearch_client import get_opensearch_client, test_connection, detect_vector_support
+        
+        if not test_connection():
+            logger.warning("OpenSearch not available for filter options")
+            return create_empty_filter_response("opensearch_unavailable")
+        
+        client = get_opensearch_client()
+        if not client:
+            logger.error("Could not create OpenSearch client for filter options")
+            return create_empty_filter_response("client_unavailable")
+        
+        logger.info("🚀 Loading filter metadata using efficient index-based approach...")
+        start_time = time.time()
+
+        # STEP 1: Check vector search support
+        vector_support = detect_vector_support(client) if client else False
+        logger.info(f"🔮 Vector search support: {'✅ ENABLED' if vector_support else '❌ DISABLED'}")
+        
+        # STEP 2: Get all evaluation indices efficiently
+        indices_info = await get_evaluation_indices_info(client)
+        if not indices_info:
+            return create_empty_filter_response("no_indices")
+        
+        # STEP 3: Extract templates from index names (much faster than aggregation)
+        templates_from_indices = extract_templates_from_indices(indices_info)
+        
+        # STEP 4: Get field mappings to understand available metadata fields
+        available_fields = await get_available_metadata_fields(client, indices_info)
+        
+        # STEP 5: Use targeted sampling per index for metadata values
+        metadata_values = await get_metadata_values_efficiently(client, indices_info, available_fields)
+        
+        # STEP 6: Build final response including Vector search capabilities
+        filter_options = {
+            # Templates from index structure (fastest)
+            "templates": templates_from_indices,
+            
+            # Metadata from efficient sampling
+            "programs": metadata_values.get("programs", []),
+            "partners": metadata_values.get("partners", []),
+            "sites": metadata_values.get("sites", []),
+            "lobs": metadata_values.get("lobs", []),
+            "callDispositions": metadata_values.get("dispositions", []),
+            "callSubDispositions": metadata_values.get("sub_dispositions", []),
+            "agentNames": metadata_values.get("agents", []),
+            "languages": metadata_values.get("languages", []),
+            "callTypes": metadata_values.get("call_types", []),
+            
+            # Template IDs from index names
+            "template_ids": [info["template_id"] for info in indices_info],
+            
+            # Enhanced metadata with vector search info
+            "total_evaluations": sum(info["doc_count"] for info in indices_info),
+            "total_indices": len(indices_info),
+            "data_freshness": datetime.now().isoformat(),
+            "status": "success",
+            "version": "4.8.0_vector_enabled",
+            "load_method": "index_structure_based",
+            "load_time_ms": round((time.time() - start_time) * 1000, 2),
+            "cached": False,
+            
+            # Vector search capabilities
+            "vector_search_enabled": vector_support,
+            "hybrid_search_available": vector_support and EMBEDDER_AVAILABLE,
+            "semantic_similarity": vector_support and EMBEDDER_AVAILABLE,
+            "search_enhancements": {
+                "vector_support": vector_support,
+                "embedder_available": EMBEDDER_AVAILABLE,
+                "hybrid_search": vector_support and EMBEDDER_AVAILABLE,
+                "search_quality": "enhanced_with_vector_similarity" if vector_support and EMBEDDER_AVAILABLE else "text_only"
+            }
+        }
+        
+        # Cache the result
+        cache_filter_metadata(filter_options)
+        
+        # PRODUCTION logging
+        logger.info(f"✅ EFFICIENT metadata loading completed in {filter_options['load_time_ms']}ms:")
+        logger.info(f"   📁 Indices analyzed: {len(indices_info)}")
+        logger.info(f"   📋 Templates: {len(templates_from_indices)} (from index names)")
+        logger.info(f"   🏢 Programs: {len(metadata_values.get('programs', []))}")
+        logger.info(f"   🤝 Partners: {len(metadata_values.get('partners', []))}")
+        logger.info(f"   📊 Total evaluations: {filter_options['total_evaluations']:,}")
+        logger.info(f"   🔮 Vector search: {'✅ ENABLED' if vector_support else '❌ DISABLED'}")
+        logger.info(f"   🔥 Hybrid search: {'✅ AVAILABLE' if filter_options['hybrid_search_available'] else '❌ NOT AVAILABLE'}")
+        
+        return filter_options
+        
+    except Exception as e:
+        logger.error(f"EFFICIENT: Failed to load filter options: {e}")
+        return create_empty_filter_response("error", str(e))
+
+async def get_evaluation_indices_info(client):
+    """
+    Get information about all evaluation indices efficiently
+    """
+    try:
+        # Get index stats for eval-* pattern
+        stats_response = client.indices.stats(index="eval-*")
+        indices_info = []
+        
+        for index_name, stats in stats_response.get("indices", {}).items():
+            # Extract template_id from index name (eval-template-123 -> template-123)
+            template_id = index_name.replace("eval-", "") if index_name.startswith("eval-") else "unknown"
+            
+            doc_count = stats.get("primaries", {}).get("docs", {}).get("count", 0)
+            size_bytes = stats.get("primaries", {}).get("store", {}).get("size_in_bytes", 0)
+            
+            indices_info.append({
+                "index_name": index_name,
+                "template_id": template_id,
+                "doc_count": doc_count,
+                "size_bytes": size_bytes
+            })
+        
+        logger.info(f"📊 Found {len(indices_info)} evaluation indices")
+        return indices_info
+        
+    except Exception as e:
+        logger.error(f"Failed to get indices info: {e}")
+        return []
+
+def extract_templates_from_indices(indices_info):
+    """
+    Extract template names efficiently by sampling one document per index
+    Much faster than aggregating all documents
+    """
+    templates = []
+    seen_templates = set()
+    
+    try:
+        from opensearch_client import get_opensearch_client
+        client = get_opensearch_client()
+        
+        for index_info in indices_info:
+            index_name = index_info["index_name"]
+            
+            # Sample one document from each index to get template_name
+            try:
+                sample_response = client.search(
+                    index=index_name,
+                    body={
+                        "size": 1,
+                        "query": {"match_all": {}},
+                        "_source": ["template_name", "template_id"]
+                    }
+                )
+                
+                hits = sample_response.get("hits", {}).get("hits", [])
+                if hits:
+                    source = hits[0].get("_source", {})
+                    template_name = source.get("template_name", f"Template {index_info['template_id']}")
+                    
+                    if template_name and template_name not in seen_templates:
+                        templates.append(template_name)
+                        seen_templates.add(template_name)
+                        
+            except Exception as e:
+                logger.debug(f"Could not sample from {index_name}: {e}")
+                # Fallback: create template name from index
+                fallback_name = f"Template {index_info['template_id']}"
+                if fallback_name not in seen_templates:
+                    templates.append(fallback_name)
+                    seen_templates.add(fallback_name)
+        
+        logger.info(f"📋 Extracted {len(templates)} templates from index sampling")
+        return sorted(templates)
+        
+    except Exception as e:
+        logger.error(f"Failed to extract templates from indices: {e}")
+        return []
+
+async def get_available_metadata_fields(client, indices_info):
+    """
+    Check index mappings to see what metadata fields are actually available including vectors
+    """
+    try:
+        # Get mapping for a representative index
+        sample_index = indices_info[0]["index_name"] if indices_info else "eval-*"
+        
+        mapping_response = client.indices.get_mapping(index=sample_index)
+        
+        available_fields = set()
+        vector_fields = set()
+        
+        for index_name, mapping_data in mapping_response.items():
+            properties = mapping_data.get("mappings", {}).get("properties", {})
+            metadata_props = properties.get("metadata", {}).get("properties", {})
+            
+            # Collect available metadata fields
+            for field_name in metadata_props.keys():
+                available_fields.add(field_name)
+
+            if "document_embedding" in properties:
+                vector_fields.add("document_embedding")
+        
+        logger.info(f"🔍 Available metadata fields: {sorted(available_fields)}")
+        logger.info(f"🔮 Vector fields detected: {sorted(vector_fields)}")
+        return list(available_fields)
+    
+        
+    except Exception as e:
+        logger.warning(f"Could not check field mappings: {e}")
+        # Return expected fields as fallback
+        return ["program", "partner", "site", "lob", "agent", "disposition", 
+        "sub_disposition", "language", "call_type", "weighted_score", "url"]
+
+async def get_metadata_values_efficiently(client, indices_info, available_fields):
+    """
+    Get metadata values using targeted sampling instead of full aggregation
+    """
+    metadata_values = {
+        "programs": set(),
+        "partners": set(), 
+        "sites": set(),
+        "lobs": set(),
+        "dispositions": set(),
+        "sub_dispositions": set(),
+        "agents": set(),
+        "languages": set(),
+        "call_types": set(),
+        "weighted_scores": set(), 
+        "urls": set() 
+    }
+    
+    field_mapping = {
+        "program": "programs",
+        "partner": "partners",
+        "site": "sites", 
+        "lob": "lobs",
+        "disposition": "dispositions",
+        "sub_disposition": "sub_dispositions",
+        "agent": "agents",
+        "language": "languages",
+        "call_type": "call_types",
+        "weighted_score": "weighted_scores",
+        "url": "urls"
+    }
+    
+    try:
+        # Sample from each index (limited samples for speed)
+        samples_per_index = 10
+        
+        for index_info in indices_info[:10]:  # Limit to top 10 indices for speed
+            index_name = index_info["index_name"]
+            
+            try:
+                # Get sample documents with metadata
+                sample_response = client.search(
+                    index=index_name,
+                    body={
+                        "size": samples_per_index,
+                        "query": {"match_all": {}},
+                        "_source": ["metadata"],
+                        "sort": [{"_doc": {"order": "asc"}}]  # Fast sampling
+                    }
+                )
+                
+                hits = sample_response.get("hits", {}).get("hits", [])
+                
+                for hit in hits:
+                    metadata = hit.get("_source", {}).get("metadata", {})
+                    
+                    # Extract values for each field
+                    for opensearch_field, result_key in field_mapping.items():
+                        if opensearch_field in available_fields:
+                            value = metadata.get(opensearch_field)
+                            if value and isinstance(value, str) and value.strip():
+                                cleaned_value = value.strip()
+                                if cleaned_value.lower() not in ["unknown", "null", "", "n/a"]:
+                                    metadata_values[result_key].add(cleaned_value)
+                
+            except Exception as e:
+                logger.debug(f"Could not sample metadata from {index_name}: {e}")
+        
+        # Convert sets to sorted lists
+        result = {}
+        for key, value_set in metadata_values.items():
+            result[key] = sorted(list(value_set))
+            logger.info(f"   {key}: {len(result[key])} unique values")
+        
+        logger.info(f"Metadata sampling completed from {len(indices_info)} indices")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to sample metadata efficiently: {e}")
+        return {key: [] for key in metadata_values.keys()}
+
+def get_cached_filter_metadata():
+    """
+    Get cached filter metadata if still valid
+    """
+    try:
+        cache = _filter_metadata_cache
+        
+        if not cache["data"] or not cache["timestamp"]:
+            return None
+        
+        # Check if cache is expired
+        cache_age = time.time() - cache["timestamp"]
+        if cache_age > cache["ttl_seconds"]:
+            logger.info(f"📋 Filter cache expired (age: {cache_age:.1f}s > {cache['ttl_seconds']}s)")
+            return None
+        
+        # Add cache metadata to response
+        cached_data = cache["data"].copy()
+        cached_data["cached"] = True
+        cached_data["cache_age_seconds"] = cache_age
+        cached_data["cache_expires_in_seconds"] = cache["ttl_seconds"] - cache_age
+        
+        return cached_data
+        
+    except Exception as e:
+        logger.warning(f"Cache retrieval failed: {e}")
+        return None
+
+def cache_filter_metadata(data):
+    """
+    Cache filter metadata for faster subsequent requests
+    """
+    try:
+        _filter_metadata_cache["data"] = data.copy()
+        _filter_metadata_cache["timestamp"] = time.time()
+        
+        logger.info(f"📋 Filter metadata cached for {_filter_metadata_cache['ttl_seconds']}s")
+        
+    except Exception as e:
+        logger.warning(f"Failed to cache filter metadata: {e}")
+
+def create_empty_filter_response(status="no_data", error_msg=""):
+    """
+    Create empty filter response for error cases
+    """
+    return {
+        "templates": [],
+        "programs": [],
+        "partners": [],
+        "sites": [],
+        "lobs": [],
+        "callDispositions": [],
+        "callSubDispositions": [],
+        "agentNames": [],
+        "languages": [],
+        "callTypes": [],
+        "template_ids": [],
+        "total_evaluations": 0,
+        "total_indices": 0,
+        "status": status,
+        "error": error_msg,
+        "message": f"No filter data available: {error_msg}" if error_msg else "No data available",
+        "version": "4.2.0_efficient",
+        "load_method": "fallback",
+        "vector_search_enabled": False,
+        "hybrid_search_available": False
+    }
+
+
+
+@app.post("/clear_filter_cache")
+async def clear_filter_cache():
+    """
+    Clear the filter metadata cache (useful after data imports)
+    """
+    try:
+        _filter_metadata_cache["data"] = None
+        _filter_metadata_cache["timestamp"] = None
+        
+        return {
+            "status": "success",
+            "message": "Filter metadata cache cleared",
+            "timestamp": datetime.now().isoformat(),
+            "vector_search_ready": VECTOR_SEARCH_READY
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+# ============================================================================
+# APP HEALTH ENDPOINTS
+# ============================================================================
+
+@health_router.get("/last_import_info")
+async def last_import_info():
+    return {
+        "status": "success",
+        "last_import_timestamp": datetime.now().isoformat(),
+        "vector_search_enabled": VECTOR_SEARCH_READY
+    }
+
+# ============================================================================
+# DEBUG AND ADMIN ENDPOINTS
+# ============================================================================
+    
+@app.get("/debug/routes")
+async def debug_routes():
+    """Debug endpoint to show all available routes"""
+    routes = []
+    for route in app.routes:
+        routes.append({
+            "path": getattr(route, 'path', 'Unknown'),
+            "methods": getattr(route, 'methods', 'Unknown'),
+            "name": getattr(route, 'name', 'Unknown')
+        })
+    
+    return {
+        "total_routes": len(routes),
+        "routes": routes,
+        "chat_endpoint_status": "directly_defined_in_app_py",
+        "fix_applied": "moved_from_router_to_direct_endpoint",
+        "version": "4.8.0_vector_enabled"
+    }
+
+@app.get("/debug/test_vector_search")
+async def debug_test_vector_search(query: str = "customer service"):
+    """
+    ✅ NEW: Test vector search functionality
+    """
+    if not VECTOR_SEARCH_READY:
+        return {
+            "status": "disabled",
+            "message": "Vector search not available - embedder not imported",
+            "requirements": ["embedder module", "OpenSearch vector support"],
+            "version": "4.8.0_vector_enabled"
+        }
+    
+    try:
+        from opensearch_client import get_opensearch_client, detect_vector_support, search_vector
+        from embedder import embed_text
+        
+        client = get_opensearch_client()
+        if not client:
+            return {"error": "OpenSearch client not available"}
+        
+        # Test vector support
+        vector_support = detect_vector_support(client)
+        if not vector_support:
+            return {
+                "status": "unsupported",
+                "message": "OpenSearch cluster does not support vector search",
+                "cluster_support": False,
+                "version": "4.8.0_vector_enabled"
+            }
+        
+        # Generate query vector
+        logger.info(f"🔮 Testing vector search with query: '{query}'")
+        query_vector = embed_text(query)
+        
+        # Perform vector search
+        vector_results = search_vector(query_vector, size=5)
+        
+        # Analyze results
+        result_analysis = []
+        for i, result in enumerate(vector_results):
+            analysis = {
+                "result_index": i + 1,
+                "evaluation_id": result.get("evaluationId"),
+                "score": result.get("_score", 0),
+                "search_type": result.get("search_type"),
+                "template_name": result.get("template_name"),
+                "has_vector_dimension": "vector_dimension" in result,
+                "vector_dimension": result.get("vector_dimension"),
+                "best_matching_chunks": len(result.get("best_matching_chunks", [])),
+                "metadata_program": result.get("metadata", {}).get("program"),
+                "metadata_disposition": result.get("metadata", {}).get("disposition")
+            }
+            result_analysis.append(analysis)
+        
+        return {
+            "status": "success",
+            "vector_search_test": {
+                "query": query,
+                "query_vector_dimension": len(query_vector),
+                "cluster_vector_support": vector_support,
+                "results_found": len(vector_results),
+                "embedding_generation": "successful",
+                "search_execution": "successful"
+            },
+            "results_analysis": result_analysis,
+            "recommendations": [
+                "Vector search is working correctly" if vector_results else "No vector results found - check if data has embeddings",
+                "Results should have vector scores and dimensions",
+                "Check best_matching_chunks for relevant content pieces"
+            ],
+            "version": "4.8.0_vector_enabled"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Vector search test failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "query": query,
+            "version": "4.8.0_vector_enabled"
+        }
+@app.get("/debug/test_hybrid_search")
+async def debug_test_hybrid_search(query: str = "call dispositions"):
+    """
+    ✅ NEW: Test hybrid search functionality (text + vector)
+    """
+    if not VECTOR_SEARCH_READY:
+        return {
+            "status": "disabled",
+            "message": "Hybrid search not available - requires vector search",
+            "version": "4.8.0_vector_enabled"
+        }
+    
+    try:
+        from opensearch_client import get_opensearch_client, detect_vector_support, hybrid_search
+        from embedder import embed_text
+        
+        client = get_opensearch_client()
+        if not client:
+            return {"error": "OpenSearch client not available"}
+        
+        # Test vector support
+        vector_support = detect_vector_support(client)
+        if not vector_support:
+            return {
+                "status": "unsupported",
+                "message": "Hybrid search requires vector support in OpenSearch cluster",
+                "version": "4.8.0_vector_enabled"
+            }
+        
+        # Generate query vector
+        logger.info(f"🔥 Testing hybrid search with query: '{query}'")
+        query_vector = embed_text(query)
+        
+        # Perform hybrid search with different vector weights
+        test_weights = [0.3, 0.6, 0.8]
+        hybrid_test_results = {}
+        
+        for weight in test_weights:
+            try:
+                hybrid_results = hybrid_search(
+                    query=query,
+                    query_vector=query_vector,
+                    size=5,
+                    vector_weight=weight
+                )
+                
+                hybrid_test_results[f"weight_{weight}"] = {
+                    "results_count": len(hybrid_results),
+                    "average_score": sum(r.get("_score", 0) for r in hybrid_results) / len(hybrid_results) if hybrid_results else 0,
+                    "search_types": list(set(r.get("search_type") for r in hybrid_results)),
+                    "sample_results": [
+                        {
+                            "evaluation_id": r.get("evaluationId"),
+                            "score": r.get("_score", 0),
+                            "hybrid_score": r.get("hybrid_score", 0),
+                            "search_type": r.get("search_type"),
+                            "template_name": r.get("template_name")
+                        }
+                        for r in hybrid_results[:3]
+                    ]
+                }
+                
+            except Exception as e:
+                hybrid_test_results[f"weight_{weight}"] = {"error": str(e)}
+        
+        return {
+            "status": "success",
+            "hybrid_search_test": {
+                "query": query,
+                "query_vector_dimension": len(query_vector),
+                "weights_tested": test_weights,
+                "cluster_support": vector_support
+            },
+            "weight_comparison": hybrid_test_results,
+            "analysis": {
+                "best_weight": max(test_weights, key=lambda w: hybrid_test_results.get(f"weight_{w}", {}).get("results_count", 0)),
+                "total_unique_results": len(set().union(*[
+                    [r["evaluation_id"] for r in hybrid_test_results.get(f"weight_{w}", {}).get("sample_results", [])]
+                    for w in test_weights
+                ])),
+                "search_quality": "hybrid text+vector search active"
+            },
+            "recommendations": [
+                "Compare different vector weights to see which gives best results for your data",
+                "Higher vector weights (0.6-0.8) emphasize semantic similarity",
+                "Lower vector weights (0.2-0.4) emphasize text matching",
+                "Use weight 0.6 as a good balance for most queries"
+            ],
+            "version": "4.8.0_vector_enabled"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Hybrid search test failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "query": query,
+            "version": "4.8.0_vector_enabled"
+        }
+    
+@app.get("/debug/vector_capabilities")
+async def debug_vector_capabilities():
+    """
+    ✅ NEW: Check overall vector search capabilities and status
+    """
+    try:
+        from opensearch_client import get_opensearch_client, detect_vector_support, get_available_fields
+        
+        capabilities = {
+            "embedder_module": EMBEDDER_AVAILABLE,
+            "vector_search_ready": VECTOR_SEARCH_READY,
+            "opensearch_client": False,
+            "cluster_vector_support": False,
+            "vector_fields_detected": [],
+            "hybrid_search_available": False,
+            "search_enhancements": []
+        }
+        
+        # Test OpenSearch client
+        client = get_opensearch_client()
+        if client:
+            capabilities["opensearch_client"] = True
+            
+            # Test vector support
+            vector_support = detect_vector_support(client)
+            capabilities["cluster_vector_support"] = vector_support
+            
+            if vector_support:
+                # Get available fields including vector fields
+                available_fields = get_available_fields(client)
+                capabilities["vector_fields_detected"] = available_fields.get("vector_fields", [])
+                capabilities["has_vector_mapping"] = available_fields.get("has_vector_support", False)
+                
+                # Check hybrid search availability
+                if EMBEDDER_AVAILABLE:
+                    capabilities["hybrid_search_available"] = True
+                    capabilities["search_enhancements"] = [
+                        "text_search",
+                        "vector_similarity_search", 
+                        "hybrid_text_vector_search",
+                        "semantic_similarity_matching"
+                    ]
+        
+        # Test embedding generation if available
+        embedding_test = {"available": False, "dimension": 0, "generation_time": 0}
+        if EMBEDDER_AVAILABLE:
+            try:
+                from embedder import embed_text
+                start_time = time.time()
+                test_vector = embed_text("test query")
+                embedding_test = {
+                    "available": True,
+                    "dimension": len(test_vector),
+                    "generation_time": round((time.time() - start_time) * 1000, 2)
+                }
+            except Exception as e:
+                embedding_test["error"] = str(e)
+        
+        # Overall status assessment
+        overall_status = "disabled"
+        if capabilities["embedder_module"] and capabilities["opensearch_client"]:
+            if capabilities["cluster_vector_support"] and capabilities["hybrid_search_available"]:
+                overall_status = "fully_enabled"
+            elif capabilities["cluster_vector_support"]:
+                overall_status = "vector_only"
+            else:
+                overall_status = "text_only"
+        
+        return {
+            "status": "success",
+            "overall_vector_status": overall_status,
+            "capabilities": capabilities,
+            "embedding_test": embedding_test,
+            "recommendations": {
+                "fully_enabled": "All vector search features are available and working",
+                "vector_only": "Vector search available but embedder missing - install embedder module",
+                "text_only": "Only text search available - cluster doesn't support vectors",
+                "disabled": "Vector search completely disabled - check OpenSearch connection and embedder module"
+            }.get(overall_status, "Unknown status"),
+            "next_steps": get_vector_setup_recommendations(overall_status),
+            "version": "4.8.0_vector_enabled"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "version": "4.8.0_vector_enabled"
+        }
+
+
+
+
 
 # ============================================================================
 # PRODUCTION MEMORY MANAGEMENT
@@ -2380,44 +2604,6 @@ async def opensearch_health_simple():
             "timestamp": datetime.now().isoformat()
         }
 
-# Add middleware to catch compilation errors
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
-
-class CompilationErrorMiddleware(BaseHTTPMiddleware):
-    """Catch OpenSearch compilation errors and return safe responses"""
-    
-    async def dispatch(self, request, call_next):
-        try:
-            response = await call_next(request)
-            return response
-        except Exception as e:
-            error_str = str(e).lower()
-            
-            # Check for compilation errors
-            if any(keyword in error_str for keyword in [
-                "search_phase_execution_exception",
-                "compile_error", 
-                "compilation_exception"
-            ]):
-                logger.error(f"🚨 COMPILATION ERROR caught in {request.url.path}: {e}")
-                
-                return JSONResponse(
-                    status_code=500,
-                    content={
-                        "error": "Query compilation failed",
-                        "details": "OpenSearch could not compile the query",
-                        "suggestion": "Try simpler search terms or contact support",
-                        "safe_mode": True,
-                        "timestamp": datetime.now().isoformat()
-                    }
-                )
-            else:
-                # Re-raise non-compilation errors
-                raise
-
-# Add the middleware to your app
-app.add_middleware(CompilationErrorMiddleware)
 
 def create_empty_statistics_response():
     """Create empty statistics response structure"""
@@ -2473,47 +2659,9 @@ def create_empty_statistics_response():
         "index_information": []
     }
 
-@app.get("/ping")
-async def ping():
-    return {
-        "status": "ok", 
-        "timestamp": datetime.now().isoformat(),
-        "service": "ask-innovai-production",
-        "version": "4.2.1_fixed_routing",
-        "chat_fix": "endpoint_moved_to_app_py",
-        "features": {
-            "chat_routing": "direct_in_app_py",
-            "method_allowed": "POST",
-            "cors_enabled": True,
-            "405_error": "fixed",
-            "real_data_filters": True,
-            "evaluation_grouping": True,
-            "template_id_collections": True,
-            "program_extraction": True,
-            "efficient_metadata_loading": True,
-            "filter_caching": True,
-            "vector_search_enabled": VECTOR_SEARCH_READY,
-            "hybrid_search_available": VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE,
-            "semantic_similarity": VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE,
-            "enhanced_relevance": VECTOR_SEARCH_READY
-        }
-    }
 
-@app.get("/", response_class=HTMLResponse)
-async def get_index():
-    try:
-        with open("static/index.html", "r") as f:
-            return HTMLResponse(content=f.read())
-    except FileNotFoundError:
-        return HTMLResponse(content="""
-        <html><body>
-        <h1>🤖 Ask InnovAI Production v4.2.0</h1>
-        <p><strong>Status:</strong> Production Ready ✅</p>
-        <p><strong>Features:</strong> Real Data Filters + Efficient Metadata Loading + Evaluation Grouping</p>
-        <p><strong>Structure:</strong> Template_ID Collections with Program Extraction</p>
-        <p>Admin interface file not found. Please ensure static/index.html exists.</p>
-        </body></html>
-        """)
+
+
 
 
 
@@ -3037,41 +3185,8 @@ async def get_opensearch_health_detailed():
         }
 from fastapi.responses import FileResponse
 
-@app.get("/chat", response_class=FileResponse)
-async def serve_chat_ui():
-    return FileResponse("static/chat.html")
 
 
-@app.get("/search")
-async def search_endpoint(q: str = Query(..., description="Search query")):
-    """PRODUCTION: Search endpoint with real data integration"""
-    try:
-        results = search_opensearch(q, size=10)
-        
-        return {
-            "status": "success",
-            "query": q,
-            "results": [
-                {
-                    "title": result.get("template_name", "Unknown"),
-                    "text": result.get("text", ""),
-                    "score": result.get("_score", 0),
-                    "evaluationId": result.get("evaluationId"),
-                    "program": result.get("metadata", {}).get("program", "Unknown"),  # NEW
-                    "collection": result.get("_index")
-                }
-                for result in results
-            ],
-            "count": len(results),
-            "version": "4.2.0_production"
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "query": q,
-            "results": []
-        }
     
 # Add these debugging endpoints to your existing app.py file
 # These will help diagnose chat and filter issues
@@ -4233,53 +4348,8 @@ async def serve_metadata_debug_dashboard():
             status_code=500
         )
 
-# Add startup event
-# FIXED: Background model loading to prevent health check timeouts
-
-import asyncio
-from threading import Thread
-
-# Global flag to track model loading status
-MODEL_LOADING_STATUS = {
-    "loaded": False,
-    "loading": False,
-    "load_time": None,
-    "error": None
-}
-
-def load_model_background():
-    """Load embedding model in background thread"""
-    global MODEL_LOADING_STATUS
-    
-    if not EMBEDDER_AVAILABLE:
-        MODEL_LOADING_STATUS["error"] = "Embedder not available"
-        return
-    
-    try:
-        MODEL_LOADING_STATUS["loading"] = True
-        logger.info("🔮 BACKGROUND: Starting embedding model load...")
-        
-        start_time = time.time()
-        
-        from embedder import preload_embedding_model, embed_text
-        
-        # Load the model
-        preload_embedding_model()
-        
-        # Test with actual embedding
-        test_embedding = embed_text("background preload test")
-        
-        load_time = time.time() - start_time
-        
-        MODEL_LOADING_STATUS["loaded"] = True
-        MODEL_LOADING_STATUS["loading"] = False
-        MODEL_LOADING_STATUS["load_time"] = round(load_time, 1)
-        
-        logger.info(f"✅ BACKGROUND: Model loaded successfully in {load_time:.1f}s")
-        logger.info("🚀 Chat requests will now be fast!")
-        
-    except Exception as e:
-        MODEL_LOADING_STATUS["loading"] = False
-        MODEL_LOADING_STATUS["error"] = str(e)
-        logger.error(f"❌ BACKGROUND: Model loading failed: {e}")
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 
