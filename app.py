@@ -1929,7 +1929,7 @@ async def get_opensearch_statistics():
         # STEP 4: Get available metadata fields from mapping
         try:
             mapping_response = client.indices.get_mapping(index="eval-*", request_timeout=10)
-            available_fields = set()
+            available_metadata_fields = set()  # <-- RENAMED VARIABLE
             
             for index_name, mapping_data in mapping_response.items():
                 properties = mapping_data.get("mappings", {}).get("properties", {})
@@ -1937,11 +1937,12 @@ async def get_opensearch_statistics():
                 
                 # Collect available metadata fields
                 for field_name in metadata_props.keys():
-                    available_fields.add(field_name)
-                    
+                    available_metadata_fields.add(field_name)
+            logger.info(f"✅ Available metadata fields: {available_metadata_fields}")
+
         except Exception as e:
             logger.warning(f"Mapping query failed: {e}")
-            available_fields = set()
+            available_metadata_fields = set()
         
         # STEP 5: Sample documents to extract real statistics (same method as filters)
         statistics = {
@@ -2095,7 +2096,7 @@ async def get_opensearch_statistics():
                 # Basic counts
                 "total_documents": total_documents,
                 "active_indices": active_indices,
-                "available_fields": sorted(list(available_fields)),
+                "available_fields": sorted(list(available_metadata_fields)),
                 "cluster_status": cluster_status,
 
                 # NEW: Vector search capabilities
