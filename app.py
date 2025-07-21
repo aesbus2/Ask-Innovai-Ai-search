@@ -95,114 +95,6 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("🛑 Ask InnovAI PRODUCTION shutting down...")
 
-# Enhanced model status endpoint
-@app.get("/admin/model_status")
-async def check_model_status():
-    """Check embedding model loading status"""
-    global MODEL_LOADING_STATUS
-    
-    if not EMBEDDER_AVAILABLE:
-        return {
-            "model_loaded": False,
-            "embedder_available": False,
-            "message": "Embedder module not available"
-        }
-    
-    if MODEL_LOADING_STATUS["loaded"]:
-        # Test response time
-        try:
-            start_time = time.time()
-            from embedder import embed_text
-            test_embedding = embed_text("quick test")
-            response_time = time.time() - start_time
-            
-            return {
-                "model_loaded": True,
-                "embedder_available": True,
-                "background_load_time": MODEL_LOADING_STATUS["load_time"],
-                "current_response_time": round(response_time, 3),
-                "status": "ready",
-                "message": f"Model loaded in background ({MODEL_LOADING_STATUS['load_time']}s) and ready for fast responses"
-            }
-        except Exception as e:
-            return {
-                "model_loaded": False,
-                "error": str(e),
-                "message": "Model status check failed"
-            }
-    
-    elif MODEL_LOADING_STATUS["loading"]:
-        return {
-            "model_loaded": False,
-            "embedder_available": True,
-            "status": "loading",
-            "message": "Model is currently loading in background - first chat may be slow"
-        }
-    
-    elif MODEL_LOADING_STATUS["error"]:
-        return {
-            "model_loaded": False,
-            "embedder_available": True,
-            "status": "error",
-            "error": MODEL_LOADING_STATUS["error"],
-            "message": "Background model loading failed"
-        }
-    
-    else:
-        return {
-            "model_loaded": False,
-            "embedder_available": True,
-            "status": "not_started",
-            "message": "Model loading not yet initiated"
-        }
-
-# Manual warmup endpoint (now triggers background loading if not done)
-@app.post("/admin/warmup_model")
-async def warmup_embedding_model():
-    """Manually trigger model warmup"""
-    global MODEL_LOADING_STATUS
-    
-    if not EMBEDDER_AVAILABLE:
-        return {
-            "status": "error",
-            "message": "Embedder not available"
-        }
-    
-    if MODEL_LOADING_STATUS["loaded"]:
-        return {
-            "status": "already_loaded",
-            "load_time": MODEL_LOADING_STATUS["load_time"],
-            "message": "Model is already loaded and ready"
-        }
-    
-    if MODEL_LOADING_STATUS["loading"]:
-        return {
-            "status": "loading",
-            "message": "Model is already loading in background"
-        }
-    
-    # Start background loading if not already started
-    logger.info("🔥 MANUAL MODEL WARMUP REQUESTED...")
-    from threading import Thread
-    background_thread = Thread(target=load_model_background, daemon=True)
-    background_thread.start()
-    
-    return {
-        "status": "initiated",
-        "message": "Background model loading initiated - check /admin/model_status for progress"
-    }
-
-# Health check endpoint that always responds quickly
-@app.get("/health")
-async def health_check():
-    """Fast health check that doesn't depend on model loading"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "app_ready": True,
-        "model_status": "loaded" if MODEL_LOADING_STATUS["loaded"] else ("loading" if MODEL_LOADING_STATUS["loading"] else "not_loaded"),
-        "version": "4.8.1_lifespan_fixed"
-    }
 
 # Create FastAPI app
 app = FastAPI(
@@ -337,8 +229,119 @@ def update_import_status(status: str, step: str = None, results: dict = None, er
         import_status["end_time"] = datetime.now().isoformat()
 
 # ============================================================================
-# EENHANCED METADATA LOADING SYSTEM WITH VECTOR SEARCH AWARENESS
+# ENDPOINTS
 # ============================================================================
+
+# Enhanced model status endpoint
+@app.get("/admin/model_status")
+async def check_model_status():
+    """Check embedding model loading status"""
+    global MODEL_LOADING_STATUS
+    
+    if not EMBEDDER_AVAILABLE:
+        return {
+            "model_loaded": False,
+            "embedder_available": False,
+            "message": "Embedder module not available"
+        }
+    
+    if MODEL_LOADING_STATUS["loaded"]:
+        # Test response time
+        try:
+            start_time = time.time()
+            from embedder import embed_text
+            test_embedding = embed_text("quick test")
+            response_time = time.time() - start_time
+            
+            return {
+                "model_loaded": True,
+                "embedder_available": True,
+                "background_load_time": MODEL_LOADING_STATUS["load_time"],
+                "current_response_time": round(response_time, 3),
+                "status": "ready",
+                "message": f"Model loaded in background ({MODEL_LOADING_STATUS['load_time']}s) and ready for fast responses"
+            }
+        except Exception as e:
+            return {
+                "model_loaded": False,
+                "error": str(e),
+                "message": "Model status check failed"
+            }
+    
+    elif MODEL_LOADING_STATUS["loading"]:
+        return {
+            "model_loaded": False,
+            "embedder_available": True,
+            "status": "loading",
+            "message": "Model is currently loading in background - first chat may be slow"
+        }
+    
+    elif MODEL_LOADING_STATUS["error"]:
+        return {
+            "model_loaded": False,
+            "embedder_available": True,
+            "status": "error",
+            "error": MODEL_LOADING_STATUS["error"],
+            "message": "Background model loading failed"
+        }
+    
+    else:
+        return {
+            "model_loaded": False,
+            "embedder_available": True,
+            "status": "not_started",
+            "message": "Model loading not yet initiated"
+        }
+
+# Manual warmup endpoint (now triggers background loading if not done)
+@app.post("/admin/warmup_model")
+async def warmup_embedding_model():
+    """Manually trigger model warmup"""
+    global MODEL_LOADING_STATUS
+    
+    if not EMBEDDER_AVAILABLE:
+        return {
+            "status": "error",
+            "message": "Embedder not available"
+        }
+    
+    if MODEL_LOADING_STATUS["loaded"]:
+        return {
+            "status": "already_loaded",
+            "load_time": MODEL_LOADING_STATUS["load_time"],
+            "message": "Model is already loaded and ready"
+        }
+    
+    if MODEL_LOADING_STATUS["loading"]:
+        return {
+            "status": "loading",
+            "message": "Model is already loading in background"
+        }
+    
+    # Start background loading if not already started
+    logger.info("🔥 MANUAL MODEL WARMUP REQUESTED...")
+    from threading import Thread
+    background_thread = Thread(target=load_model_background, daemon=True)
+    background_thread.start()
+    
+    return {
+        "status": "initiated",
+        "message": "Background model loading initiated - check /admin/model_status for progress"
+    }
+
+# Health check endpoint that always responds quickly
+@app.get("/health")
+async def health_check():
+    """Fast health check that doesn't depend on model loading"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "app_ready": True,
+        "model_status": "loaded" if MODEL_LOADING_STATUS["loaded"] else ("loading" if MODEL_LOADING_STATUS["loading"] else "not_loaded"),
+        "version": "4.8.1_lifespan_fixed"
+    }
+
+
 
 @health_router.get("/health")
 async def health_check():
