@@ -25,7 +25,7 @@ let filterOptions = {
     callTypes: []
 };
 
-// ✅ NEW: Vector search state tracking
+//  NEW: Vector search state tracking
 let vectorSearchStatus = {
     enabled: false,
     hybridAvailable: false,

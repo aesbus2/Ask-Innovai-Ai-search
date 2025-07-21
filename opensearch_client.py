@@ -1368,7 +1368,7 @@ if __name__ == "__main__":
         print(f"\n✅ All tests completed successfully!")
         print(f"🎉 OpenSearch Client v{VERSION} with VECTOR SEARCH is ready!")
         print(f"🔮 Vector search: {'ENABLED' if health.get('vector_support') else 'DISABLED'}")
-        print(f"🔥 Hybrid search: AVAILABLE")
+        print(f" Hybrid search: AVAILABLE")
         
     else:
         print(f"❌ Health check failed: {health.get('error', 'Unknown error')}")
