@@ -4051,12 +4051,61 @@ async def serve_metadata_debug_dashboard():
         )
 
 # Add startup event
+# FIXED: Background model loading to prevent health check timeouts
+
+import asyncio
+from threading import Thread
+
+# Global flag to track model loading status
+MODEL_LOADING_STATUS = {
+    "loaded": False,
+    "loading": False,
+    "load_time": None,
+    "error": None
+}
+
+def load_model_background():
+    """Load embedding model in background thread"""
+    global MODEL_LOADING_STATUS
+    
+    if not EMBEDDER_AVAILABLE:
+        MODEL_LOADING_STATUS["error"] = "Embedder not available"
+        return
+    
+    try:
+        MODEL_LOADING_STATUS["loading"] = True
+        logger.info("🔮 BACKGROUND: Starting embedding model load...")
+        
+        start_time = time.time()
+        
+        from embedder import preload_embedding_model, embed_text
+        
+        # Load the model
+        preload_embedding_model()
+        
+        # Test with actual embedding
+        test_embedding = embed_text("background preload test")
+        
+        load_time = time.time() - start_time
+        
+        MODEL_LOADING_STATUS["loaded"] = True
+        MODEL_LOADING_STATUS["loading"] = False
+        MODEL_LOADING_STATUS["load_time"] = round(load_time, 1)
+        
+        logger.info(f"✅ BACKGROUND: Model loaded successfully in {load_time:.1f}s")
+        logger.info("🚀 Chat requests will now be fast!")
+        
+    except Exception as e:
+        MODEL_LOADING_STATUS["loading"] = False
+        MODEL_LOADING_STATUS["error"] = str(e)
+        logger.error(f"❌ BACKGROUND: Model loading failed: {e}")
+
 @app.on_event("startup")
 async def startup_event():
-    """PRODUCTION: Enhanced startup with comprehensive logging and model preloading"""
+    """FIXED: Fast startup that doesn't block health checks"""
     try:
         logger.info("🚀 Ask InnovAI PRODUCTION starting...")
-        logger.info(f"   Version: 4.8.0_vector_enabled_preload")
+        logger.info(f"   Version: 4.8.0_vector_enabled_background_load")
         logger.info(f"   🔮 VECTOR SEARCH: {'✅ ENABLED' if VECTOR_SEARCH_READY else '❌ DISABLED'}")
         logger.info(f"   🔥 HYBRID SEARCH: {'✅ AVAILABLE' if VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
         logger.info(f"   📚 EMBEDDER: {'✅ LOADED' if EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
@@ -4083,113 +4132,135 @@ async def startup_event():
         logger.info(f"   GenAI: {'✅ Configured' if genai_configured else '❌ Missing'}")
         logger.info(f"   OpenSearch: {'✅ Configured' if opensearch_configured else '❌ Missing'}")
         
-        # 🎯 CRITICAL FIX: PRELOAD EMBEDDING MODEL DURING STARTUP
+        # 🎯 CRITICAL FIX: Start model loading in background to avoid health check timeout
         if EMBEDDER_AVAILABLE:
-            logger.info("🔮 PRELOADING EMBEDDING MODEL (this will take 20-30 seconds but makes chat fast)...")
-            preload_start = time.time()
+            logger.info("🔮 STARTING EMBEDDING MODEL LOAD IN BACKGROUND...")
+            logger.info("⏱️ This will take 20-30s but won't block app startup")
+            logger.info("📱 Health checks will pass immediately, model loads separately")
             
-            try:
-                # Method 1: Use the preload function
-                from embedder import preload_embedding_model, embed_text
-                preload_embedding_model()
-                
-                # Method 2: Force load with actual embedding to ensure it's ready
-                test_embedding = embed_text("startup preload test")
-                
-                preload_time = time.time() - preload_start
-                logger.info(f"✅ EMBEDDING MODEL SUCCESSFULLY PRELOADED in {preload_time:.1f}s")
-                logger.info(f"   Model dimension: {len(test_embedding)}")
-                logger.info("🚀 FIRST CHAT REQUEST WILL NOW BE FAST (~2-3 seconds instead of ~30s)!")
-                
-            except Exception as e:
-                preload_time = time.time() - preload_start
-                logger.error(f"❌ EMBEDDING MODEL PRELOAD FAILED after {preload_time:.1f}s: {e}")
-                logger.warning("⚠️ Vector search will work but first chat request will be slow (~30s)")
-                logger.warning("💡 Users should expect a delay on the first chat message only")
+            # Start background loading thread
+            background_thread = Thread(target=load_model_background, daemon=True)
+            background_thread.start()
+            
+            logger.info("✅ Background model loading initiated")
         else:
             logger.info("⚠️ No embedder available - skipping model preload")
         
-        logger.info("✅ PRODUCTION startup complete with CHAT FIX and MODEL PRELOADING")
+        logger.info("✅ PRODUCTION startup complete - HEALTH CHECKS WILL PASS")
         logger.info("📊 Ready for enhanced search with semantic similarity matching")
         logger.info("🔮 Vector search enables finding semantically similar content beyond keyword matching")
         logger.info("🔥 Hybrid search combines text matching with vector similarity for best results")
-        logger.info("💬 Chat endpoint should now work without 405 errors and respond quickly")
+        logger.info("💬 Chat endpoint should now work without 405 errors")
+        logger.info("⏱️ First chat may be slower (~30s) until background model loading completes")
         
     except Exception as e:
         logger.error(f"❌ PRODUCTION startup error: {e}")
         logger.error("🚨 Startup failed - some features may not work correctly")
 
-# Add these additional endpoints for model management
+# Enhanced model status endpoint
 @app.get("/admin/model_status")
 async def check_model_status():
-    """Check if embedding model is loaded and ready"""
-    try:
-        if not EMBEDDER_AVAILABLE:
-            return {
-                "model_loaded": False,
-                "embedder_available": False,
-                "message": "Embedder module not available"
-            }
-        
-        # Test if model responds quickly (already loaded)
-        start_time = time.time()
-        from embedder import embed_text
-        
-        test_embedding = embed_text("quick test")
-        response_time = time.time() - start_time
-        
-        return {
-            "model_loaded": True,
-            "embedder_available": True,
-            "response_time_seconds": round(response_time, 3),
-            "embedding_dimension": len(test_embedding),
-            "fast_response": response_time < 1.0,
-            "status": "ready" if response_time < 1.0 else "loading_on_demand",
-            "message": "Model preloaded and ready" if response_time < 1.0 else "Model loads on first use"
-        }
-        
-    except Exception as e:
+    """Check embedding model loading status"""
+    global MODEL_LOADING_STATUS
+    
+    if not EMBEDDER_AVAILABLE:
         return {
             "model_loaded": False,
-            "error": str(e),
-            "message": "Error checking model status"
+            "embedder_available": False,
+            "message": "Embedder module not available"
+        }
+    
+    if MODEL_LOADING_STATUS["loaded"]:
+        # Test response time
+        try:
+            start_time = time.time()
+            from embedder import embed_text
+            test_embedding = embed_text("quick test")
+            response_time = time.time() - start_time
+            
+            return {
+                "model_loaded": True,
+                "embedder_available": True,
+                "background_load_time": MODEL_LOADING_STATUS["load_time"],
+                "current_response_time": round(response_time, 3),
+                "status": "ready",
+                "message": f"Model loaded in background ({MODEL_LOADING_STATUS['load_time']}s) and ready for fast responses"
+            }
+        except Exception as e:
+            return {
+                "model_loaded": False,
+                "error": str(e),
+                "message": "Model status check failed"
+            }
+    
+    elif MODEL_LOADING_STATUS["loading"]:
+        return {
+            "model_loaded": False,
+            "embedder_available": True,
+            "status": "loading",
+            "message": "Model is currently loading in background - first chat may be slow"
+        }
+    
+    elif MODEL_LOADING_STATUS["error"]:
+        return {
+            "model_loaded": False,
+            "embedder_available": True,
+            "status": "error",
+            "error": MODEL_LOADING_STATUS["error"],
+            "message": "Background model loading failed"
+        }
+    
+    else:
+        return {
+            "model_loaded": False,
+            "embedder_available": True,
+            "status": "not_started",
+            "message": "Model loading not yet initiated"
         }
 
+# Manual warmup endpoint (now triggers background loading if not done)
 @app.post("/admin/warmup_model")
 async def warmup_embedding_model():
-    """Manual endpoint to warm up the embedding model if not preloaded"""
-    try:
-        if not EMBEDDER_AVAILABLE:
-            return {
-                "status": "error",
-                "message": "Embedder not available"
-            }
-            
-        logger.info("🔥 MANUAL MODEL WARMUP REQUESTED...")
-        start_time = time.time()
-        
-        from embedder import embed_text, preload_embedding_model
-        
-        # Preload the model
-        preload_embedding_model()
-        
-        # Test with actual embedding
-        test_embedding = embed_text("manual warmup test")
-        
-        warmup_time = time.time() - start_time
-        logger.info(f"✅ Manual model warmup completed in {warmup_time:.1f}s")
-        
-        return {
-            "status": "success",
-            "warmup_time_seconds": round(warmup_time, 2),
-            "embedding_dimension": len(test_embedding),
-            "message": f"Model manually warmed up in {warmup_time:.1f}s - chat should now be fast!"
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Manual model warmup failed: {e}")
+    """Manually trigger model warmup"""
+    global MODEL_LOADING_STATUS
+    
+    if not EMBEDDER_AVAILABLE:
         return {
             "status": "error",
-            "error": str(e),
-            "message": "Model warmup failed"
+            "message": "Embedder not available"
         }
+    
+    if MODEL_LOADING_STATUS["loaded"]:
+        return {
+            "status": "already_loaded",
+            "load_time": MODEL_LOADING_STATUS["load_time"],
+            "message": "Model is already loaded and ready"
+        }
+    
+    if MODEL_LOADING_STATUS["loading"]:
+        return {
+            "status": "loading",
+            "message": "Model is already loading in background"
+        }
+    
+    # Start background loading if not already started
+    logger.info("🔥 MANUAL MODEL WARMUP REQUESTED...")
+    background_thread = Thread(target=load_model_background, daemon=True)
+    background_thread.start()
+    
+    return {
+        "status": "initiated",
+        "message": "Background model loading initiated - check /admin/model_status for progress"
+    }
+
+# Health check endpoint that always responds quickly
+@app.get("/health")
+async def health_check():
+    """Fast health check that doesn't depend on model loading"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "app_ready": True,
+        "model_status": "loaded" if MODEL_LOADING_STATUS["loaded"] else ("loading" if MODEL_LOADING_STATUS["loading"] else "not_loaded"),
+        "version": "4.8.0_vector_enabled_background_load"
+    }
