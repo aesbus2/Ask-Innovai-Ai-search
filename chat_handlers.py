@@ -1166,8 +1166,8 @@ Respond in a clear, professional format with specific examples from the data."""
         
         # Try different URL formats
         possible_urls = [
-            f"{GENAI_ENDPOINT.rstrip('/')}/v1/chat/completions",
             f"{GENAI_ENDPOINT.rstrip('/')}/api/v1/chat/completions",
+            f"{GENAI_ENDPOINT.rstrip('/')}/v1/chat/completions",            
             f"{GENAI_ENDPOINT.rstrip('/')}/v1/completions",
             f"{GENAI_ENDPOINT.rstrip('/')}/completions",
             GENAI_ENDPOINT.rstrip('/')

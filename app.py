@@ -993,6 +993,14 @@ def split_transcript_by_speakers(transcript: str) -> List[Dict[str, Any]]:
 # ============================================================================
 # FILTER METADATA FUNCTIONS
 # ============================================================================
+@app.get("/status")
+async def status():
+    return {
+        "status": "running",
+        "timestamp": datetime.now().isoformat(),
+        "version": "4.8.1"
+    }
+
 
 @app.get("/filter_options_metadata")
 async def filter_options_metadata():
@@ -2505,7 +2513,7 @@ async def get_opensearch_statistics():
                 # Basic counts
                 "total_documents": total_documents,
                 "active_indices": active_indices,
-                "available_fields": sorted(list(available_meta_fields)),
+                "available_fields": sorted(list(available_metadata_fields)),
                 "cluster_status": cluster_status,
 
                 # NEW: Vector search capabilities
