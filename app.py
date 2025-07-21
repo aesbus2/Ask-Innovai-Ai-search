@@ -83,12 +83,12 @@ except ImportError as e:
 
 # Import embedder with fallback
 EMBEDDER_AVAILABLE = False
-ECTOR_SEARCH_READY = False
+VECTOR_SEARCH_READY = False
 PRELOAD_MODEL_ON_STARTUP = True
 try:
     from embedder import embed_text, get_embedding_stats, preload_embedding_model
-    EMBEDDER_AVAILABLE = True
-    VECTOR_SEARCH_READY = True
+    EMBEDDER_AVAILABLE = False # Disable for chat
+    VECTOR_SEARCH_READY = False # Disable for chat
     logger.info("✅ embedder imported successfully - VECTOR SEARCH READY")
 except ImportError as e:
     logger.warning(f"⚠️ embedder import failed: {e} - vector search will be disabled")
