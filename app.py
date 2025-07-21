@@ -24,12 +24,192 @@ from uuid import uuid4
 from collections import defaultdict
 from chat_handlers import chat_router, health_router
 from fastapi import APIRouter
+from contextlib import asynccontextmanager
+
+# FIXED: Lifespan event handler (replaces deprecated @app.on_event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    FIXED: Lifespan event handler (replaces deprecated @app.on_event)
+    Handles startup and shutdown events
+    """
+    # Startup
+    try:
+        logger.info("🚀 Ask InnovAI PRODUCTION starting...")
+        logger.info(f"   Version: 4.8.1_lifespan_fixed")
+        logger.info(f"   🔮 VECTOR SEARCH: {'✅ ENABLED' if VECTOR_SEARCH_READY else '❌ DISABLED'}")
+        logger.info(f"   🔥 HYBRID SEARCH: {'✅ AVAILABLE' if VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
+        logger.info(f"   📚 EMBEDDER: {'✅ LOADED' if EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
+        logger.info(f"   CHAT FIX: Endpoint moved directly to app.py")
+        logger.info(f"   405 Method Not Allowed error resolved")
+        logger.info(f"   Router conflicts eliminated")
+        logger.info(f"   CORS properly configured")
+        logger.info(f"   Features: Vector Search + Real Data Filters + Hybrid Search + Semantic Similarity")
+        logger.info(f"   Features: Real Data Filters + Efficient Metadata Loading + Evaluation Grouping")
+        logger.info(f"   Collection Strategy: Template_ID-based")
+        logger.info(f"   Document Strategy: Evaluation-grouped")
+        logger.info(f"   Program Extraction: Enhanced pattern matching")
+        logger.info(f"   Metadata Loading: Index-based efficient sampling")
+        logger.info(f"   Filter Caching: {_filter_metadata_cache['ttl_seconds']}s TTL")
+        logger.info(f"   Port: {os.getenv('PORT', '8080')}")
+        logger.info(f"   Memory Monitoring: {'✅ Available' if PSUTIL_AVAILABLE else '❌ Disabled'}")
+        
+        # Check configuration
+        api_configured = bool(API_AUTH_VALUE)
+        genai_configured = bool(GENAI_ACCESS_KEY)
+        opensearch_configured = bool(os.getenv("OPENSEARCH_HOST"))
+        
+        logger.info(f"   API Source: {'✅ Configured' if api_configured else '❌ Missing'}")
+        logger.info(f"   GenAI: {'✅ Configured' if genai_configured else '❌ Missing'}")
+        logger.info(f"   OpenSearch: {'✅ Configured' if opensearch_configured else '❌ Missing'}")
+        
+        # 🎯 CRITICAL FIX: Start model loading in background to avoid health check timeout
+        if EMBEDDER_AVAILABLE:
+            logger.info("🔮 STARTING EMBEDDING MODEL LOAD IN BACKGROUND...")
+            logger.info("⏱️ This will take 20-30s but won't block app startup")
+            logger.info("📱 Health checks will pass immediately, model loads separately")
+            
+            # Start background loading thread
+            from threading import Thread
+            background_thread = Thread(target=load_model_background, daemon=True)
+            background_thread.start()
+            
+            logger.info("✅ Background model loading initiated")
+        else:
+            logger.info("⚠️ No embedder available - skipping model preload")
+        
+        logger.info("✅ PRODUCTION startup complete - HEALTH CHECKS WILL PASS")
+        logger.info("📊 Ready for enhanced search with semantic similarity matching")
+        logger.info("🔮 Vector search enables finding semantically similar content beyond keyword matching")
+        logger.info("🔥 Hybrid search combines text matching with vector similarity for best results")
+        logger.info("💬 Chat endpoint should now work without 405 errors")
+        logger.info("⏱️ First chat may be slower (~30s) until background model loading completes")
+        
+    except Exception as e:
+        logger.error(f"❌ PRODUCTION startup error: {e}")
+        logger.error("🚨 Startup failed - some features may not work correctly")
+    
+    # App runs here
+    yield
+    
+    # Shutdown
+    logger.info("🛑 Ask InnovAI PRODUCTION shutting down...")
+
+# Enhanced model status endpoint
+@app.get("/admin/model_status")
+async def check_model_status():
+    """Check embedding model loading status"""
+    global MODEL_LOADING_STATUS
+    
+    if not EMBEDDER_AVAILABLE:
+        return {
+            "model_loaded": False,
+            "embedder_available": False,
+            "message": "Embedder module not available"
+        }
+    
+    if MODEL_LOADING_STATUS["loaded"]:
+        # Test response time
+        try:
+            start_time = time.time()
+            from embedder import embed_text
+            test_embedding = embed_text("quick test")
+            response_time = time.time() - start_time
+            
+            return {
+                "model_loaded": True,
+                "embedder_available": True,
+                "background_load_time": MODEL_LOADING_STATUS["load_time"],
+                "current_response_time": round(response_time, 3),
+                "status": "ready",
+                "message": f"Model loaded in background ({MODEL_LOADING_STATUS['load_time']}s) and ready for fast responses"
+            }
+        except Exception as e:
+            return {
+                "model_loaded": False,
+                "error": str(e),
+                "message": "Model status check failed"
+            }
+    
+    elif MODEL_LOADING_STATUS["loading"]:
+        return {
+            "model_loaded": False,
+            "embedder_available": True,
+            "status": "loading",
+            "message": "Model is currently loading in background - first chat may be slow"
+        }
+    
+    elif MODEL_LOADING_STATUS["error"]:
+        return {
+            "model_loaded": False,
+            "embedder_available": True,
+            "status": "error",
+            "error": MODEL_LOADING_STATUS["error"],
+            "message": "Background model loading failed"
+        }
+    
+    else:
+        return {
+            "model_loaded": False,
+            "embedder_available": True,
+            "status": "not_started",
+            "message": "Model loading not yet initiated"
+        }
+
+# Manual warmup endpoint (now triggers background loading if not done)
+@app.post("/admin/warmup_model")
+async def warmup_embedding_model():
+    """Manually trigger model warmup"""
+    global MODEL_LOADING_STATUS
+    
+    if not EMBEDDER_AVAILABLE:
+        return {
+            "status": "error",
+            "message": "Embedder not available"
+        }
+    
+    if MODEL_LOADING_STATUS["loaded"]:
+        return {
+            "status": "already_loaded",
+            "load_time": MODEL_LOADING_STATUS["load_time"],
+            "message": "Model is already loaded and ready"
+        }
+    
+    if MODEL_LOADING_STATUS["loading"]:
+        return {
+            "status": "loading",
+            "message": "Model is already loading in background"
+        }
+    
+    # Start background loading if not already started
+    logger.info("🔥 MANUAL MODEL WARMUP REQUESTED...")
+    from threading import Thread
+    background_thread = Thread(target=load_model_background, daemon=True)
+    background_thread.start()
+    
+    return {
+        "status": "initiated",
+        "message": "Background model loading initiated - check /admin/model_status for progress"
+    }
+
+# Health check endpoint that always responds quickly
+@app.get("/health")
+async def health_check():
+    """Fast health check that doesn't depend on model loading"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "app_ready": True,
+        "model_status": "loaded" if MODEL_LOADING_STATUS["loaded"] else ("loading" if MODEL_LOADING_STATUS["loading"] else "not_loaded"),
+        "version": "4.8.1_lifespan_fixed"
+    }
 
 # Create FastAPI app
 app = FastAPI(
     title="Ask InnovAI Production - Efficient Real Data Filter System",
     description="AI-Powered Knowledge Assistant with Real-Time Data Filters and Efficient Metadata Loading",
-    version="4.8.0"
+    version="4.8.1",
+    lifespan=lifespan
 )
 
 app.include_router(chat_router, prefix="/api")
@@ -4100,167 +4280,3 @@ def load_model_background():
         MODEL_LOADING_STATUS["error"] = str(e)
         logger.error(f"❌ BACKGROUND: Model loading failed: {e}")
 
-@app.on_event("startup")
-async def startup_event():
-    """FIXED: Fast startup that doesn't block health checks"""
-    try:
-        logger.info("🚀 Ask InnovAI PRODUCTION starting...")
-        logger.info(f"   Version: 4.8.0_vector_enabled_background_load")
-        logger.info(f"   🔮 VECTOR SEARCH: {'✅ ENABLED' if VECTOR_SEARCH_READY else '❌ DISABLED'}")
-        logger.info(f"   🔥 HYBRID SEARCH: {'✅ AVAILABLE' if VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
-        logger.info(f"   📚 EMBEDDER: {'✅ LOADED' if EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
-        logger.info(f"   CHAT FIX: Endpoint moved directly to app.py")
-        logger.info(f"   405 Method Not Allowed error resolved")
-        logger.info(f"   Router conflicts eliminated")
-        logger.info(f"   CORS properly configured")
-        logger.info(f"   Features: Vector Search + Real Data Filters + Hybrid Search + Semantic Similarity")
-        logger.info(f"   Features: Real Data Filters + Efficient Metadata Loading + Evaluation Grouping")
-        logger.info(f"   Collection Strategy: Template_ID-based")
-        logger.info(f"   Document Strategy: Evaluation-grouped")
-        logger.info(f"   Program Extraction: Enhanced pattern matching")
-        logger.info(f"   Metadata Loading: Index-based efficient sampling")
-        logger.info(f"   Filter Caching: {_filter_metadata_cache['ttl_seconds']}s TTL")
-        logger.info(f"   Port: {os.getenv('PORT', '8080')}")
-        logger.info(f"   Memory Monitoring: {'✅ Available' if PSUTIL_AVAILABLE else '❌ Disabled'}")
-        
-        # Check configuration
-        api_configured = bool(API_AUTH_VALUE)
-        genai_configured = bool(GENAI_ACCESS_KEY)
-        opensearch_configured = bool(os.getenv("OPENSEARCH_HOST"))
-        
-        logger.info(f"   API Source: {'✅ Configured' if api_configured else '❌ Missing'}")
-        logger.info(f"   GenAI: {'✅ Configured' if genai_configured else '❌ Missing'}")
-        logger.info(f"   OpenSearch: {'✅ Configured' if opensearch_configured else '❌ Missing'}")
-        
-        # 🎯 CRITICAL FIX: Start model loading in background to avoid health check timeout
-        if EMBEDDER_AVAILABLE:
-            logger.info("🔮 STARTING EMBEDDING MODEL LOAD IN BACKGROUND...")
-            logger.info("⏱️ This will take 20-30s but won't block app startup")
-            logger.info("📱 Health checks will pass immediately, model loads separately")
-            
-            # Start background loading thread
-            background_thread = Thread(target=load_model_background, daemon=True)
-            background_thread.start()
-            
-            logger.info("✅ Background model loading initiated")
-        else:
-            logger.info("⚠️ No embedder available - skipping model preload")
-        
-        logger.info("✅ PRODUCTION startup complete - HEALTH CHECKS WILL PASS")
-        logger.info("📊 Ready for enhanced search with semantic similarity matching")
-        logger.info("🔮 Vector search enables finding semantically similar content beyond keyword matching")
-        logger.info("🔥 Hybrid search combines text matching with vector similarity for best results")
-        logger.info("💬 Chat endpoint should now work without 405 errors")
-        logger.info("⏱️ First chat may be slower (~30s) until background model loading completes")
-        
-    except Exception as e:
-        logger.error(f"❌ PRODUCTION startup error: {e}")
-        logger.error("🚨 Startup failed - some features may not work correctly")
-
-# Enhanced model status endpoint
-@app.get("/admin/model_status")
-async def check_model_status():
-    """Check embedding model loading status"""
-    global MODEL_LOADING_STATUS
-    
-    if not EMBEDDER_AVAILABLE:
-        return {
-            "model_loaded": False,
-            "embedder_available": False,
-            "message": "Embedder module not available"
-        }
-    
-    if MODEL_LOADING_STATUS["loaded"]:
-        # Test response time
-        try:
-            start_time = time.time()
-            from embedder import embed_text
-            test_embedding = embed_text("quick test")
-            response_time = time.time() - start_time
-            
-            return {
-                "model_loaded": True,
-                "embedder_available": True,
-                "background_load_time": MODEL_LOADING_STATUS["load_time"],
-                "current_response_time": round(response_time, 3),
-                "status": "ready",
-                "message": f"Model loaded in background ({MODEL_LOADING_STATUS['load_time']}s) and ready for fast responses"
-            }
-        except Exception as e:
-            return {
-                "model_loaded": False,
-                "error": str(e),
-                "message": "Model status check failed"
-            }
-    
-    elif MODEL_LOADING_STATUS["loading"]:
-        return {
-            "model_loaded": False,
-            "embedder_available": True,
-            "status": "loading",
-            "message": "Model is currently loading in background - first chat may be slow"
-        }
-    
-    elif MODEL_LOADING_STATUS["error"]:
-        return {
-            "model_loaded": False,
-            "embedder_available": True,
-            "status": "error",
-            "error": MODEL_LOADING_STATUS["error"],
-            "message": "Background model loading failed"
-        }
-    
-    else:
-        return {
-            "model_loaded": False,
-            "embedder_available": True,
-            "status": "not_started",
-            "message": "Model loading not yet initiated"
-        }
-
-# Manual warmup endpoint (now triggers background loading if not done)
-@app.post("/admin/warmup_model")
-async def warmup_embedding_model():
-    """Manually trigger model warmup"""
-    global MODEL_LOADING_STATUS
-    
-    if not EMBEDDER_AVAILABLE:
-        return {
-            "status": "error",
-            "message": "Embedder not available"
-        }
-    
-    if MODEL_LOADING_STATUS["loaded"]:
-        return {
-            "status": "already_loaded",
-            "load_time": MODEL_LOADING_STATUS["load_time"],
-            "message": "Model is already loaded and ready"
-        }
-    
-    if MODEL_LOADING_STATUS["loading"]:
-        return {
-            "status": "loading",
-            "message": "Model is already loading in background"
-        }
-    
-    # Start background loading if not already started
-    logger.info("🔥 MANUAL MODEL WARMUP REQUESTED...")
-    background_thread = Thread(target=load_model_background, daemon=True)
-    background_thread.start()
-    
-    return {
-        "status": "initiated",
-        "message": "Background model loading initiated - check /admin/model_status for progress"
-    }
-
-# Health check endpoint that always responds quickly
-@app.get("/health")
-async def health_check():
-    """Fast health check that doesn't depend on model loading"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "app_ready": True,
-        "model_status": "loaded" if MODEL_LOADING_STATUS["loaded"] else ("loading" if MODEL_LOADING_STATUS["loading"] else "not_loaded"),
-        "version": "4.8.0_vector_enabled_background_load"
-    }
