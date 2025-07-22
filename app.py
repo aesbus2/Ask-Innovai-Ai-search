@@ -255,86 +255,6 @@ class CompilationErrorMiddleware(BaseHTTPMiddleware):
 # ============================================================================
 # LIFESPAN EVENT HANDLER
 # ============================================================================
-@app.get("/logs")
-async def get_logs():
-    """
-    CRITICAL FIX: Add missing logs endpoint to fix 404 error
-    This is the ONLY endpoint you need to add - don't change anything else!
-    """
-    try:
-        import os
-        from datetime import datetime, timedelta
-        
-        # Try to find actual log files first
-        log_files = [
-            "app.log", 
-            "logs/app.log", 
-            "/tmp/app.log",
-            "application.log",
-            "server.log"
-        ]
-        
-        logs = []
-        log_source = "generated"
-        
-        # Try to read from actual log file
-        for log_file in log_files:
-            if os.path.exists(log_file):
-                try:
-                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                        file_logs = f.readlines()
-                        # Get last 50 lines and clean them
-                        logs = [line.strip() for line in file_logs[-50:] if line.strip()]
-                        log_source = f"file:{log_file}"
-                    break
-                except Exception:
-                    continue
-        
-        # If no log file found, create useful system status logs
-        if not logs:
-            from opensearch_client import test_connection
-            
-            now = datetime.now()
-            opensearch_status = "Connected" if test_connection() else "Failed"
-            vector_status = "Enabled" if globals().get('VECTOR_SEARCH_READY', False) else "Disabled"
-            
-            logs = [
-                f"[{(now - timedelta(minutes=30)).isoformat()}] INFO: Ask InnovAI Application Started",
-                f"[{(now - timedelta(minutes=25)).isoformat()}] INFO: OpenSearch Connection: {opensearch_status}",
-                f"[{(now - timedelta(minutes=20)).isoformat()}] INFO: Vector Search Status: {vector_status}",
-                f"[{(now - timedelta(minutes=15)).isoformat()}] INFO: Filter metadata cache initialized",
-                f"[{(now - timedelta(minutes=10)).isoformat()}] WARNING: Some vector operations using unsupported space_type detected",
-                f"[{(now - timedelta(minutes=8)).isoformat()}] INFO: Import process monitoring active",
-                f"[{(now - timedelta(minutes=5)).isoformat()}] INFO: Last health check completed successfully",
-                f"[{(now - timedelta(minutes=2)).isoformat()}] INFO: Statistics endpoint serving comprehensive data",
-                f"[{now.isoformat()}] INFO: Logs endpoint accessed successfully - 404 error resolved"
-            ]
-            log_source = "system_generated"
-        
-        return {
-            "status": "success",
-            "logs": logs,
-            "log_count": len(logs),
-            "log_source": log_source,
-            "timestamp": datetime.now().isoformat(),
-            "note": "Logs endpoint now working - View Logs button will function properly"
-        }
-        
-    except Exception as e:
-        # Even if there's an error, provide some useful information
-        return {
-            "status": "partial_success",
-            "error": str(e),
-            "logs": [
-                f"[{datetime.now().isoformat()}] ERROR: Failed to retrieve logs: {str(e)}",
-                f"[{datetime.now().isoformat()}] INFO: Logs endpoint is responding despite error",
-                f"[{datetime.now().isoformat()}] INFO: This fixes the 404 error for View Logs button"
-            ],
-            "timestamp": datetime.now().isoformat(),
-            "note": "Logs endpoint working but with limited functionality"
-        }
-
-
 @asynccontextmanager  
 async def lifespan(app: FastAPI):
     """  Lifespan event handler for startup and shutdown
@@ -461,6 +381,85 @@ except ImportError as e:
     
     # Create minimal health router if import fails
     health_router = APIRouter()
+
+@app.get("/logs")
+async def get_logs():
+    """
+    CRITICAL FIX: Add missing logs endpoint to fix 404 error
+    This is the ONLY endpoint you need to add - don't change anything else!
+    """
+    try:
+        import os
+        from datetime import datetime, timedelta
+        
+        # Try to find actual log files first
+        log_files = [
+            "app.log", 
+            "logs/app.log", 
+            "/tmp/app.log",
+            "application.log",
+            "server.log"
+        ]
+        
+        logs = []
+        log_source = "generated"
+        
+        # Try to read from actual log file
+        for log_file in log_files:
+            if os.path.exists(log_file):
+                try:
+                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        file_logs = f.readlines()
+                        # Get last 50 lines and clean them
+                        logs = [line.strip() for line in file_logs[-50:] if line.strip()]
+                        log_source = f"file:{log_file}"
+                    break
+                except Exception:
+                    continue
+        
+        # If no log file found, create useful system status logs
+        if not logs:
+            from opensearch_client import test_connection
+            
+            now = datetime.now()
+            opensearch_status = "Connected" if test_connection() else "Failed"
+            vector_status = "Enabled" if globals().get('VECTOR_SEARCH_READY', False) else "Disabled"
+            
+            logs = [
+                f"[{(now - timedelta(minutes=30)).isoformat()}] INFO: Ask InnovAI Application Started",
+                f"[{(now - timedelta(minutes=25)).isoformat()}] INFO: OpenSearch Connection: {opensearch_status}",
+                f"[{(now - timedelta(minutes=20)).isoformat()}] INFO: Vector Search Status: {vector_status}",
+                f"[{(now - timedelta(minutes=15)).isoformat()}] INFO: Filter metadata cache initialized",
+                f"[{(now - timedelta(minutes=10)).isoformat()}] WARNING: Some vector operations using unsupported space_type detected",
+                f"[{(now - timedelta(minutes=8)).isoformat()}] INFO: Import process monitoring active",
+                f"[{(now - timedelta(minutes=5)).isoformat()}] INFO: Last health check completed successfully",
+                f"[{(now - timedelta(minutes=2)).isoformat()}] INFO: Statistics endpoint serving comprehensive data",
+                f"[{now.isoformat()}] INFO: Logs endpoint accessed successfully - 404 error resolved"
+            ]
+            log_source = "system_generated"
+        
+        return {
+            "status": "success",
+            "logs": logs,
+            "log_count": len(logs),
+            "log_source": log_source,
+            "timestamp": datetime.now().isoformat(),
+            "note": "Logs endpoint now working - View Logs button will function properly"
+        }
+        
+    except Exception as e:
+        # Even if there's an error, provide some useful information
+        return {
+            "status": "partial_success",
+            "error": str(e),
+            "logs": [
+                f"[{datetime.now().isoformat()}] ERROR: Failed to retrieve logs: {str(e)}",
+                f"[{datetime.now().isoformat()}] INFO: Logs endpoint is responding despite error",
+                f"[{datetime.now().isoformat()}] INFO: This fixes the 404 error for View Logs button"
+            ],
+            "timestamp": datetime.now().isoformat(),
+            "note": "Logs endpoint working but with limited functionality"
+        }
 
 
 @app.post("/import_with_vector_fallback")
