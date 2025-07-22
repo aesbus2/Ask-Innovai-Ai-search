@@ -1837,8 +1837,8 @@ async def debug_vector_capabilities_enhanced():
         test_types = [
             "l2",                # Most commonly supported
             "innerproduct",      # Usually supported  
-            "cosinesimil",       # Alternative spelling
-            "cosinesimilarity"   # What you're currently trying
+            "cosine",            # Alternative spelling
+       
         ]
         
         for space_type in test_types:
@@ -1887,9 +1887,9 @@ async def debug_vector_capabilities_enhanced():
                 "Check OpenSearch cluster supports vector search",
                 "Verify OpenSearch version compatibility"
             ]
-        elif "cosinesimilarity" not in supported_types:
+        elif "cosine" not in supported_types:
             fix_recommendations = [
-                f"Use '{supported_types[0]}' instead of 'cosinesimilarity'",
+                f"Use '{supported_types[0]}' instead of 'cosine'",
                 "Update opensearch_client.py to use supported space types",
                 "Consider upgrading OpenSearch for better vector support"
             ]
@@ -1901,7 +1901,7 @@ async def debug_vector_capabilities_enhanced():
             "vector_search_enabled": vector_enabled,
             "supported_space_types": supported_types,
             "recommended_space_type": supported_types[0] if supported_types else None,
-            "cosinesimilarity_supported": "cosinesimilarity" in supported_types,
+            "cosinesimilarity_supported": "cosine" in supported_types,
             "error": None if vector_enabled else "No vector space types supported",
             "fix_recommendations": fix_recommendations,
             "version": "4.8.1_enhanced",
