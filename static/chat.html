@@ -280,7 +280,7 @@
                     <div class="chat-header-top">
                         <div>
                             <div class="chat-title">Call Center Analytics Dashboard</div>
-                            <div class="chat-subtitle">Production AI-powered insights from real evaluation data</div>
+                            <div class="chat-subtitle">AI-powered insights from real evaluation data</div>
                         </div>
                         <div class="chat-stats">
                             <div class="stat-item">
@@ -304,7 +304,7 @@
                     <!-- Welcome Screen -->
                     <div class="welcome-screen" id="welcomeScreen">
                         <div class="welcome-icon">📞</div>
-                        <h2 class="welcome-title">Metro AI Call Center Analytics</h2>
+                        <h2 class="welcome-title">InnovAi Call Center Analytics</h2>
                         <p class="welcome-subtitle">
                             Ask InnovAI to analyze call dispositions, agent performance, site comparisons, and more from
                             your live evaluation database...
@@ -318,13 +318,13 @@
                                     data</p>
                             </div>
                             <div class="example-card"
-                                onclick="askQuestion('Identify customer satisfaction or frustration, patterns in unresolved issues,and call sub-dispositions for transactions.')">
-                                <h4>📈 Resolution</h4>
+                                onclick="askQuestion('Identify customer satisfaction or frustration, highlight patterns in unresolved issues, and call sub-dispositions for transactions.')">
+                                <h4>📈 Customer Satisfaction</h4>
                                 <p>Deep dive into call resolution analysis and performance optimization opportunities</p>
                             </div>
                             <div class="example-card"
-                                onclick="askQuestion('Identify at risk calls that require immediate action and provide coaching insights')">
-                                <h4>🔍 Quality Analysis</h4>
+                                onclick="askQuestion('Identify calls with a high Churn risk and provide coaching insights')">
+                                <h4>🔍 Identify Churn Risk</h4>
                                 <p>Identify low-scoring evaluations and suggest coaching or process
                                     enhancement</p>
                             </div>
@@ -377,91 +377,20 @@
     </div>
 
     <script>
-        // Production HTML integration functions for the enhanced filter system
-        function updateFilterCounts(filterOptions) {
-            const counts = [
-                { id: 'templateCount', data: filterOptions.templates, label: 'templates' },
-                { id: 'programCount', data: filterOptions.programs, label: 'programs' },
-                { id: 'partnerCount', data: filterOptions.partners, label: 'partners' },
-                { id: 'siteCount', data: filterOptions.sites, label: 'sites' },
-                { id: 'lobCount', data: filterOptions.lobs, label: 'LOBs' },
-                { id: 'dispositionCount', data: filterOptions.callDispositions, label: 'dispositions' },
-                { id: 'subDispositionCount', data: filterOptions.callSubDispositions, label: 'sub-dispositions' },
-                { id: 'languageCount', data: filterOptions.languages, label: 'languages' }
-            ];
+    // Production initialization - KEEP ONLY THIS
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log("🚀 Production Chat Interface v4.4.0 initializing...");
 
-            counts.forEach(({ id, data, label }) => {
-                const element = document.getElementById(id);
-                if (element) {
-                    const count = Array.isArray(data) ? data.length : 0;
-                    if (count > 0) {
-                        element.textContent = `(${count})`;
-                        element.className = 'count-indicator data-status-ok';
-                        element.title = `${count} ${label} found in database`;
-                    } else {
-                        element.textContent = '(0)';
-                        element.className = 'count-indicator data-status-warning';
-                        element.title = `No ${label} found in database`;
-                    }
-                }
-            });
-
-            updateDataStatusIndicators(filterOptions);
-        }
-
-        function updateDataStatusIndicators(filterOptions) {
-            const statusElements = [
-                { id: 'hierarchyDataStatus', categories: ['templates', 'programs', 'partners', 'sites', 'lobs'] },
-                { id: 'callDataStatus', categories: ['callDispositions', 'callSubDispositions'] },
-                { id: 'languageDataStatus', categories: ['languages'] }
-            ];
-
-            statusElements.forEach(({ id, categories }) => {
-                const element = document.getElementById(id);
-                if (!element) return;
-
-                const totalCategories = categories.length;
-                const populatedCategories = categories.filter(cat =>
-                    filterOptions[cat] && filterOptions[cat].length > 0
-                ).length;
-
-                if (populatedCategories === totalCategories) {
-                    element.textContent = '✅ All data loaded';
-                    element.className = 'data-status data-status-ok';
-                } else if (populatedCategories > 0) {
-                    element.textContent = `⚠️ ${populatedCategories}/${totalCategories} loaded`;
-                    element.className = 'data-status data-status-warning';
-                } else {
-                    element.textContent = '❌ No data found';
-                    element.className = 'data-status data-status-error';
-                }
-            });
-        }
-
-        function onFilterOptionsLoaded(filterOptions) {
-            // Remove loading state from all selects and inputs
-            const selects = document.querySelectorAll('.filter-select, .filter-input');
-            selects.forEach(select => {
-                select.classList.remove('loading-filter');
-            });
-
-            console.log(`📊 Production UI update complete: ${Object.keys(filterOptions).length} filter categories processed`);
-        }
-
-        // Production initialization
-        document.addEventListener('DOMContentLoaded', function () {
-            console.log("🚀 Production Chat Interface v4.3.0 initializing...");
-
-            // Set initial loading state
-            const selects = document.querySelectorAll('.filter-select');
-            selects.forEach(select => {
-                select.classList.add('loading-filter');
-                select.disabled = true;
-            });
-
-            // Track page load performance
-            window.pageLoadStart = performance.now();
+        // Set initial loading state
+        const selects = document.querySelectorAll('.filter-select');
+        selects.forEach(select => {
+            select.classList.add('loading-filter');
+            select.disabled = true;
         });
+
+        // Track page load performance
+        window.pageLoadStart = performance.now();
+    });
     </script>
 
     <script src="/static/chat.js"></script>
