@@ -348,27 +348,84 @@ function populateSelect(selectId, options) {
 }
 
 function updateFilterCounts(data) {
+    // ✅ PART 1: Update overall stats display (existing logic)
     const countsElement = document.getElementById('filterCounts');
-    if (!countsElement) return;
+    if (countsElement) {
+        const totalEvaluations = data.total_evaluations || 0;
+        const totalIndices = data.total_indices || 0;
+        const vectorEnabled = data.vector_search_enabled ? '🔮' : '';
+        
+        countsElement.innerHTML = `
+            <div style="font-size: 0.85em; color: #666; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; margin: 10px 0;">
+                📊 <strong>${totalEvaluations.toLocaleString()}</strong> evaluations available ${vectorEnabled}
+                <br>
+                <span style="font-size: 0.8em;">Across ${totalIndices} template collections</span>
+                ${vectorEnabled ? '<br><span style="color: #28a745;">🔮 Enhanced with vector search</span>' : ''}
+            </div>
+        `;
+    }
     
-    const totalEvaluations = data.total_evaluations || 0;
-    const totalIndices = data.total_indices || 0;
-    const vectorEnabled = data.vector_search_enabled ? '🔮' : '';
+    // ✅ PART 2: Update individual count indicators (was missing!)
+    const counts = [
+        { id: 'templateCount', data: data.templates, label: 'templates' },
+        { id: 'programCount', data: data.programs, label: 'programs' },
+        { id: 'partnerCount', data: data.partners, label: 'partners' },
+        { id: 'siteCount', data: data.sites, label: 'sites' },
+        { id: 'lobCount', data: data.lobs, label: 'LOBs' },
+        { id: 'dispositionCount', data: data.callDispositions, label: 'dispositions' },
+        { id: 'subDispositionCount', data: data.callSubDispositions, label: 'sub-dispositions' },
+        { id: 'languageCount', data: data.languages, label: 'languages' }
+    ];
+
+    counts.forEach(({ id, data, label }) => {
+        const element = document.getElementById(id);
+        if (element) {
+            const count = Array.isArray(data) ? data.length : 0;
+            if (count > 0) {
+                element.textContent = `(${count})`;
+                element.className = 'count-indicator data-status-ok';
+                element.title = `${count} ${label} found in database`;
+            } else {
+                element.textContent = '(0)';
+                element.className = 'count-indicator data-status-warning';
+                element.title = `No ${label} found in database`;
+            }
+        }
+    });
+
+    // ✅ PART 3: Update data status indicators
+    const statusElements = [
+        { id: 'hierarchyDataStatus', categories: ['templates', 'programs', 'partners', 'sites', 'lobs'] },
+        { id: 'callDataStatus', categories: ['callDispositions', 'callSubDispositions'] },
+        { id: 'languageDataStatus', categories: ['languages'] }
+    ];
+
+    statusElements.forEach(({ id, categories }) => {
+        const element = document.getElementById(id);
+        if (!element) return;
+
+        const totalCategories = categories.length;
+        const populatedCategories = categories.filter(cat =>
+            data[cat] && data[cat].length > 0
+        ).length;
+
+        if (populatedCategories === totalCategories) {
+            element.textContent = '✅ All data loaded';
+            element.className = 'data-status data-status-ok';
+        } else if (populatedCategories > 0) {
+            element.textContent = `⚠️ ${populatedCategories}/${totalCategories} loaded`;
+            element.className = 'data-status data-status-warning';
+        } else {
+            element.textContent = '❌ No data found';
+            element.className = 'data-status data-status-error';
+        }
+    });
     
-    countsElement.innerHTML = `
-        <div style="font-size: 0.85em; color: #666; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; margin: 10px 0;">
-            📊 <strong>${totalEvaluations.toLocaleString()}</strong> evaluations available ${vectorEnabled}
-            <br>
-            <span style="font-size: 0.8em;">Across ${totalIndices} template collections</span>
-            ${vectorEnabled ? '<br><span style="color: #28a745;">🔮 Enhanced with vector search</span>' : ''}
-        </div>
-    `;
-    
-    // ✅ ADD THIS: Remove loading state from all selects and inputs  
+    // ✅ PART 4: Remove loading states and enable filters (existing logic)
     const selects = document.querySelectorAll('.filter-select, .filter-input');
     selects.forEach(select => {
         select.classList.remove('loading-filter');
-        select.disabled = false;  // ✅ Also enable the elements
+        select.disabled = false;
     });
     
     console.log(`📊 Production UI update complete: ${Object.keys(data).length} filter categories processed`);
