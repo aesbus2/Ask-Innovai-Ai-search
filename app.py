@@ -51,6 +51,10 @@ API_AUTH_VALUE = os.getenv("API_AUTH_VALUE", "")
 # Import logs for tracking import events
 import_logs = []
 
+# Reduce vector search logging noise
+logging.getLogger("embedder").setLevel(logging.WARNING)
+logging.getLogger("opensearch_client").setLevel(logging.INFO)
+
 # Filter metadata cache (used for caching filter options)
 _filter_metadata_cache = {
     "data": None,
@@ -374,16 +378,6 @@ except ImportError as e:
     # Create minimal health router if import fails
     health_router = APIRouter()
     
-    @health_router.get("/health")
-    async def fallback_health():
-        return {
-            "status": "ok",
-            "timestamp": datetime.now().isoformat(),
-            "note": "fallback_health_endpoint"
-        }
-    
-    app.include_router(health_router)
-
 # ============================================================================
 # MAIN APPLICATION ROUTES
 # ============================================================================
@@ -431,17 +425,6 @@ async def ping():
     }
 
 # Health check endpoint that always responds quickly
-@app.get("/health")
-async def health_check():
-    """Fast health check that doesn't depend on model loading"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "app_ready": True,
-        "model_status": "loaded" if MODEL_LOADING_STATUS["loaded"] else ("loading" if MODEL_LOADING_STATUS["loading"] else "not_loaded"),
-        "version": "4.8.1_lifespan_fixed"
-    }
-
 @app.get("/chat", response_class=FileResponse)
 async def serve_chat_ui():
     try:

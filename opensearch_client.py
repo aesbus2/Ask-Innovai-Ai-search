@@ -267,7 +267,7 @@ def search_vector(query_vector: List[float], index_override: str = None,
         return []
     
     index_pattern = index_override or "eval-*"
-    logger.info(f"🔮 VECTOR SEARCH v{VERSION}: {len(query_vector)}-dim vector, size={size}")
+    logger.debug(f"🔮 VECTOR SEARCH v{VERSION}: {len(query_vector)}-dim vector, size={size}")
     
     try:
         # Build vector search query
@@ -376,7 +376,7 @@ def hybrid_search(query: str, query_vector: List[float] = None,
         return []
     
     index_pattern = index_override or "eval-*"
-    logger.info(f"🔥 HYBRID SEARCH v{VERSION}: text + vector, size={size}, vector_weight={vector_weight}")
+    logger.debug(f"🔥 HYBRID SEARCH v{VERSION}: text + vector, size={size}, vector_weight={vector_weight}")
     
     try:
         # Get available fields for safe queries
@@ -857,7 +857,7 @@ def search_opensearch(query: str, index_override: str = None,
             # Try to import embedder and generate vector
             from embedder import embed_text
             query_vector = embed_text(query)
-            logger.info(f"✅ Query vector generated: {len(query_vector)} dimensions")
+            logger.debug(f"✅ Query vector generated: {len(query_vector)} dimensions")
         except ImportError:
             logger.info("ℹ️ Embedder not available, using text-only search")
         except Exception as e:
