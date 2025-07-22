@@ -252,21 +252,41 @@ function ultraSafeString(str) {
 // ============================================================================
 
 async function loadOpenSearchStats() {
-    // Load comprehensive OpenSearch database statistics with bulletproof error handling
-    const container = document.getElementById('statisticsContainer');
-    if (!container) return;
+    console.log("📊 Loading OpenSearch statistics...");
     
+    const container = document.getElementById('statisticsContainer');
+    if (!container) {
+        console.error("❌ Statistics container not found");
+        return;
+    }
+    
+    // Show enhanced loading state
     container.innerHTML = `
-        <div class="loading-stats">
-            <div class="spinner"></div>
-            Loading database statistics...
+        <div class="stats-loading">
+            <div class="loading-spinner"></div>
+            <h3>Loading Statistics...</h3>
+            <p>Fetching data from OpenSearch cluster</p>
+            <small>This may take a few seconds</small>
         </div>
     `;
     
     try {
-        console.log("📊 Loading OpenSearch statistics...");
-        const response = await fetch('/opensearch_statistics');
+        // Use parallel loading for better performance
+        const startTime = performance.now();
         
+        const [statsResponse, vectorResponse] = await Promise.allSettled([
+            fetch('/opensearch_statistics'),
+            fetch('/opensearch_statistics').then(r => r.json()).then(data => data?.data?.vector_search)
+        ]);
+        
+        const loadTime = Math.round(performance.now() - startTime);
+        
+        // Handle stats response
+        if (statsResponse.status === 'rejected') {
+            throw new Error(`Failed to fetch statistics: ${statsResponse.reason}`);
+        }
+        
+        const response = statsResponse.value;
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -274,40 +294,131 @@ async function loadOpenSearchStats() {
         const result = await response.json();
         
         if (result && result.status === 'success') {
-            console.log("✅ Statistics loaded successfully", result.data);
-            displayStatistics(result.data || {}, result.timestamp || new Date().toISOString());
+            console.log(`✅ Statistics loaded successfully in ${loadTime}ms`, result.data);
+            
+            // Add performance metrics to the data
+            const enhancedData = {
+                ...result.data,
+                performance: {
+                    load_time_ms: loadTime,
+                    parallel_loading: true,
+                    vector_status_checked: vectorResponse.status === 'fulfilled'
+                }
+            };
+            
+            await displayStatistics(enhancedData, result.timestamp || new Date().toISOString());
+            
         } else {
             const errorMsg = ultraSafeString(result?.error || 'Unknown error from server');
             console.error("❌ Statistics error:", errorMsg);
-            container.innerHTML = `
-                <div class="stats-error">
-                    <strong>❌ Error loading statistics:</strong> ${errorMsg}
-                    <br><small>Check OpenSearch connection and try again.</small>
-                    <br><button onclick="loadOpenSearchStats()" style="margin-top: 8px; padding: 4px 8px; background: #6e32a0; color: white; border: none; border-radius: 4px; cursor: pointer;">🔄 Retry</button>
-                </div>
-            `;
+            displayStatisticsError(errorMsg, 'server_error');
         }
+        
     } catch (error) {
         console.error('Failed to load statistics:', error);
         
         // More specific error handling
         let errorMessage = ultraSafeString(error?.message || 'Unknown error occurred');
+        let errorType = 'unknown_error';
         
-        // Check if it's a JSON parsing error
-        if (errorMessage.includes('Unexpected token') || errorMessage.includes('JSON')) {
-            errorMessage = 'Server returned invalid response (not JSON)';
+        // Classify error types for better user guidance
+        if (errorMessage.includes('fetch')) {
+            errorType = 'network_error';
+            errorMessage = 'Unable to connect to server';
+        } else if (errorMessage.includes('JSON')) {
+            errorType = 'parse_error';
+            errorMessage = 'Server returned invalid response';
+        } else if (errorMessage.includes('timeout')) {
+            errorType = 'timeout_error';
+            errorMessage = 'Request timed out';
         }
         
-        container.innerHTML = `
-            <div class="stats-error">
-                <strong>❌ Failed to connect to server:</strong> ${errorMessage}
-                <br><small>Verify the backend is running and try refreshing.</small>
-                <br><button onclick="loadOpenSearchStats()" style="margin-top: 8px; padding: 4px 8px; background: #6e32a0; color: white; border: none; border-radius: 4px; cursor: pointer;">🔄 Retry</button>
-            </div>
-        `;
+        displayStatisticsError(errorMessage, errorType);
     }
 }
 
+async function getVectorSearchStatus() {
+    try {
+        const response = await fetch('/opensearch_statistics');
+        const result = await response.json();
+        
+        if (result?.data?.vector_search) {
+            const vs = result.data.vector_search;
+            return {
+                enabled: vs.cluster_support || false,
+                ready: vs.vector_search_ready || false,
+                coverage: vs.vector_coverage || 0,
+                embedder_available: vs.embedder_available || false,
+                documents_with_vectors: vs.documents_with_vectors || 0
+            };
+        }
+        
+        return { enabled: false, ready: false, coverage: 0 };
+    } catch (error) {
+        console.warn('Vector search status check failed:', error);
+        return { enabled: false, ready: false, coverage: 0, error: true };
+    }
+}
+
+// Missing error display function  
+function displayStatisticsError(errorMessage, errorType = 'unknown') {
+    const container = document.getElementById('statisticsContainer');
+    if (!container) return;
+    
+    const troubleshootingTips = {
+        network_error: [
+            'Check if the backend server is running',
+            'Verify your network connection', 
+            'Try refreshing the page'
+        ],
+        server_error: [
+            'Check OpenSearch connection in backend logs',
+            'Verify OpenSearch cluster is healthy',
+            'Check backend configuration'
+        ],
+        parse_error: [
+            'Backend may be returning HTML instead of JSON',
+            'Check backend logs for errors',
+            'Verify API endpoint is working correctly'
+        ],
+        timeout_error: [
+            'OpenSearch cluster may be slow to respond',
+            'Try again in a moment',
+            'Check cluster performance'
+        ],
+        unknown: [
+            'Check browser console for details',
+            'Try refreshing the page',
+            'Contact system administrator if problem persists'
+        ]
+    };
+    
+    const tips = troubleshootingTips[errorType] || troubleshootingTips.unknown;
+    
+    container.innerHTML = `
+        <div class="stats-error">
+            <div class="error-icon">❌</div>
+            <h3>Statistics Loading Failed</h3>
+            <p><strong>Error:</strong> ${ultraSafeString(errorMessage)}</p>
+            
+            <div class="error-details">
+                <h4>Troubleshooting Tips:</h4>
+                <ul>
+                    ${tips.map(tip => `<li>${ultraSafeString(tip)}</li>`).join('')}
+                </ul>
+            </div>
+            
+            <div class="error-actions">
+                <button onclick="loadOpenSearchStats()" class="btn primary">
+                    🔄 Retry Loading
+                </button>
+                <button onclick="window.location.reload()" class="btn secondary">
+                    ↻ Refresh Page
+                </button>
+            </div>
+        </div>
+    `;
+}
 function displayStatistics(data, timestamp) {
     // BULLETPROOF: Display comprehensive statistics with ultimate error handling
     const container = document.getElementById('statisticsContainer');
@@ -1225,23 +1336,127 @@ async function toggleLogs() {
     const container = document.getElementById('logsContainer');
     const content = document.getElementById('logsContent');
     
-    if (!container || !content) return;
+    if (!container || !content) {
+        console.error('Logs container elements not found in DOM');
+        return;
+    }
 
     if (container.classList.contains('hidden')) {
         try {
-            content.textContent = 'Loading logs...';
+            // Show loading state
+            content.innerHTML = `
+                <div class="logs-loading">
+                    <div class="spinner"></div>
+                    <span>Loading application logs...</span>
+                </div>
+            `;
             container.classList.remove('hidden');
             
+            // Fetch logs from our new endpoint
             const response = await fetch('/logs');
-            const data = await response.json();
-            const logs = ultraSafeArray(data?.logs);
             
-            // Show last 50 log entries
-            content.textContent = logs.slice(-50).join('\n') || 'No logs available';
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.status === 'success' || data.status === 'partial_success') {
+                const logs = ultraSafeArray(data.logs || []);
+                
+                if (logs.length === 0) {
+                    content.innerHTML = `
+                        <div class="logs-empty">
+                            <h4>📝 No Logs Available</h4>
+                            <p>No log entries found or logs may not be configured.</p>
+                            <small>Log source: ${ultraSafeString(data.log_source || 'unknown')}</small>
+                        </div>
+                    `;
+                } else {
+                    // Enhanced log display with syntax highlighting
+                    const logsHtml = logs.map(log => {
+                        const safeLog = ultraSafeString(log);
+                        
+                        // Determine log level and apply appropriate styling
+                        let logClass = 'log-info';
+                        let logIcon = 'ℹ️';
+                        
+                        if (safeLog.includes('ERROR') || safeLog.includes('❌')) {
+                            logClass = 'log-error';
+                            logIcon = '❌';
+                        } else if (safeLog.includes('WARNING') || safeLog.includes('⚠️')) {
+                            logClass = 'log-warning';
+                            logIcon = '⚠️';
+                        } else if (safeLog.includes('SUCCESS') || safeLog.includes('✅')) {
+                            logClass = 'log-success';
+                            logIcon = '✅';
+                        } else if (safeLog.includes('INFO')) {
+                            logIcon = 'ℹ️';
+                        }
+                        
+                        return `
+                            <div class="log-entry ${logClass}">
+                                <span class="log-icon">${logIcon}</span>
+                                <span class="log-text">${safeLog}</span>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    content.innerHTML = `
+                        <div class="logs-header">
+                            <h4>📜 Application Logs</h4>
+                            <div class="logs-meta">
+                                <span>📊 ${logs.length} entries</span>
+                                <span>🔄 Updated: ${new Date().toLocaleString()}</span>
+                                <span>📁 Source: ${ultraSafeString(data.log_source || 'system')}</span>
+                            </div>
+                        </div>
+                        <div class="logs-content">
+                            ${logsHtml}
+                        </div>
+                        <div class="logs-footer">
+                            <small>✅ Logs endpoint working properly - 404 error resolved</small>
+                        </div>
+                    `;
+                }
+                
+                // Add error info if partial success
+                if (data.status === 'partial_success' && data.error) {
+                    content.innerHTML += `
+                        <div class="logs-error-info">
+                            <h5>⚠️ Limited Functionality</h5>
+                            <p>Error: ${ultraSafeString(data.error)}</p>
+                            <small>The logs endpoint is working but encountered issues accessing log files.</small>
+                        </div>
+                    `;
+                }
+                
+            } else {
+                throw new Error(data.error || 'Failed to retrieve logs');
+            }
+            
         } catch (error) {
-            content.textContent = `Error loading logs: ${ultraSafeString(error.message)}`;
+            console.error('Failed to load logs:', error);
+            content.innerHTML = `
+                <div class="logs-error">
+                    <h4>❌ Logs Loading Error</h4>
+                    <p><strong>Error:</strong> ${ultraSafeString(error.message)}</p>
+                    <div class="error-details">
+                        <p>This could be caused by:</p>
+                        <ul>
+                            <li>Network connectivity issues</li>
+                            <li>Server configuration problems</li>
+                            <li>Log file access permissions</li>
+                        </ul>
+                    </div>
+                    <button class="btn secondary" onclick="toggleLogs(); setTimeout(toggleLogs, 100);">
+                        🔄 Retry
+                    </button>
+                </div>
+            `;
         }
     } else {
+        // Hide logs
         container.classList.add('hidden');
     }
 }
