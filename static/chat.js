@@ -316,7 +316,7 @@ function populateFilterOptions(options) {
     
     // Disposition filters
     populateSelect('callDispositionFilter', options.callDispositions);
-    populateSelect('callsubDispositionFilter', options.callSubDispositions);
+    populateSelect('callSubDispositionFilter', options.callSubDispositions);
     
     // Other filters
     populateSelect('languageFilter', options.languages);    

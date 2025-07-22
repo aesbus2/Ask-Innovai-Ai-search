@@ -425,6 +425,49 @@ async def ping():
     }
 
 # Health check endpoint that always responds quickly
+@app.get("/health")
+async def health_check():
+    """Fast health check that doesn't depend on model loading"""
+    try:
+        # Check actual OpenSearch connection
+        from opensearch_client import get_opensearch_client
+        client = get_opensearch_client()
+        opensearch_status = "connected" if client and client.ping() else "disconnected"
+        
+        # Check vector search capabilities
+        vector_status = "enabled" if VECTOR_SEARCH_READY else "disabled"
+        
+        return {
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "components": {
+                "opensearch": {"status": opensearch_status},
+                "embedding_service": {"status": "healthy" if EMBEDDER_AVAILABLE else "unavailable"},
+                "genai_agent": {"status": "configured"},
+                "vector_search": {"status": vector_status}
+            },
+            "enhancements": {
+                "document_structure": "enhanced v4.8.0",
+                "vector_search": "enabled" if VECTOR_SEARCH_READY else "disabled",
+                "hybrid_search": "enabled" if (VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE) else "disabled"
+            },
+            "app_ready": True,
+            "model_status": "loaded" if MODEL_LOADING_STATUS["loaded"] else ("loading" if MODEL_LOADING_STATUS["loading"] else "not_loaded"),
+            "version": "4.8.1_lifespan_fixed"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "components": {
+                "opensearch": {"status": "error"},
+                "embedding_service": {"status": "error"},
+                "genai_agent": {"status": "error"},
+                "vector_search": {"status": "error"}
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+
 @app.get("/chat", response_class=FileResponse)
 async def serve_chat_ui():
     try:
