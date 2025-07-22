@@ -363,6 +363,15 @@ function updateFilterCounts(data) {
             ${vectorEnabled ? '<br><span style="color: #28a745;">🔮 Enhanced with vector search</span>' : ''}
         </div>
     `;
+    
+    // ✅ ADD THIS: Remove loading state from all selects and inputs  
+    const selects = document.querySelectorAll('.filter-select, .filter-input');
+    selects.forEach(select => {
+        select.classList.remove('loading-filter');
+        select.disabled = false;  // ✅ Also enable the elements
+    });
+    
+    console.log(`📊 Production UI update complete: ${Object.keys(data).length} filter categories processed`);
 }
 
 function handleFilterLoadError(errorMessage) {
