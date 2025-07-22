@@ -865,7 +865,7 @@ def search_opensearch(query: str, index_override: str = None,
         
         # STEP 4: Use hybrid search if vector is available and supported
         if query_vector and available_fields.get("has_vector_support", False):
-    # Check if actual vector fields exist in the data
+            # Check if actual vector fields exist in the data
             try:
                 test_response = client.search(
                     index=index_pattern,
@@ -882,8 +882,8 @@ def search_opensearch(query: str, index_override: str = None,
                     return hybrid_search(query, query_vector, index_pattern, filters, size)
                 else:
                     logger.info("📝 No vector data found, using text-only search")
-            except:
-                logger.info("📝 Vector field check failed, using text-only search")
+            except Exception as e:
+                logger.info(f"📝 Vector field check failed: {e}, using text-only search")
         else:
             logger.info("📝 Using text-only search")
         

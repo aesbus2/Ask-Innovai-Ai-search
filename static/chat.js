@@ -315,12 +315,11 @@ function populateFilterOptions(options) {
     populateSelect('lobFilter', options.lobs);
     
     // Disposition filters
-    populateSelect('dispositionFilter', options.callDispositions);
-    populateSelect('subDispositionFilter', options.callSubDispositions);
+    populateSelect('callDispositionFilter', options.callDispositions);
+    populateSelect('callsubDispositionFilter', options.callSubDispositions);
     
     // Other filters
-    populateSelect('languageFilter', options.languages);
-    populateSelect('callTypeFilter', options.callTypes);
+    populateSelect('languageFilter', options.languages);    
     
     console.log("✅ Filter dropdowns populated");
 }
@@ -459,10 +458,9 @@ function applyFilters() {
         { id: 'partnerFilter', key: 'partner' },
         { id: 'siteFilter', key: 'site' },
         { id: 'lobFilter', key: 'lob' },
-        { id: 'dispositionFilter', key: 'disposition' },
-        { id: 'subDispositionFilter', key: 'sub_disposition' },
+        { id: 'callDispositionFilter', key: 'disposition' },
+        { id: 'callSubDispositionFilter', key: 'sub_disposition' },
         { id: 'languageFilter', key: 'language' },
-        { id: 'callTypeFilter', key: 'call_type' },
         { id: 'startCallDate', key: 'call_date_start' },
         { id: 'endCallDate', key: 'call_date_end' }
     ];
@@ -511,10 +509,9 @@ function removeFilter(filterKey) {
         'partner': 'partnerFilter',
         'site': 'siteFilter',
         'lob': 'lobFilter',
-        'disposition': 'dispositionFilter',
-        'sub_disposition': 'subDispositionFilter',
+        'disposition': 'callDispositionFilter',
+        'sub_disposition': 'callSubDispositionFilter',
         'language': 'languageFilter',
-        'call_type': 'callTypeFilter',
         'call_date_start': 'startCallDate',
         'call_date_end': 'endCallDate'
     };
