@@ -1,5 +1,5 @@
 # Enhanced requirements.txt for Ask InnovAI with Memory Management and Digital Ocean AI
-# Version: 3.4.0 - Added OpenAI client for Digital Ocean authentication
+# Version: 4.8.0 - Fixed missing transformers dependency for embedder
 
 # Core web framework (required)
 fastapi>=0.110.0
@@ -12,10 +12,11 @@ requests>=2.31.0
 
 # AI and embeddings (required for your use case)
 sentence-transformers>=3.0.0
+transformers>=4.30.0  # ADDED - Required by sentence-transformers
 torch>=2.0.0
 numpy>=1.22.0
 
-# OpenAI client for Digital Ocean AI Agent (NEW - REQUIRED)
+# OpenAI client for Digital Ocean AI Agent (REQUIRED)
 openai>=1.30.0
 
 # OpenSearch for vector database (required)
@@ -34,6 +35,12 @@ pydantic>=2.0.0
 asyncio-throttle>=1.0.0  # For rate limiting (optional)
 aiohttp>=3.8.0
 
+# Additional dependencies that may be needed for embedder
+tokenizers>=0.13.0  # ADDED - Required by transformers
+safetensors>=0.3.0  # ADDED - For safe model loading
+huggingface-hub>=0.16.0  # ADDED - For model downloads
+
 # Note: Install with: pip install -r requirements.txt
 # psutil is required for memory monitoring in app.py
 # openai is required for Digital Ocean AI Agent authentication
+# transformers is REQUIRED for sentence-transformers embedder functionality
