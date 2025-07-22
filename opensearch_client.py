@@ -20,31 +20,14 @@ except ImportError:
     OPENSEARCH_AVAILABLE = False
     logging.warning("opensearch-py not installed. Run: pip install opensearch-py")
 
-# Setup logging
+VERSION = "4.8.2"
 logger = logging.getLogger(__name__)
 
 # ✅ VECTOR SEARCH ENABLED
+_client = None
 _vector_support_detected = None  # Will be detected dynamically
 _vector_support_tested = False
 
-# Global client instance
-_client = None
-
-# Version information
-VERSION = "4.7.0"
-FIXES_APPLIED = [
-    "vector_search_enabled",
-    "hybrid_text_vector_search",
-    "embedder_integration",
-    "dynamic_vector_detection",
-    "timeout_configuration_fix",
-    "query_compilation_error_prevention", 
-    "field_validation_enhancement",
-    "safe_aggregation_queries",
-    "robust_error_handling",
-    "performance_improvements",
-    "api_field_integration"
-]
 
 # =============================================================================
 # FIXED CLIENT CREATION - ALL TIMEOUT ISSUES RESOLVED
@@ -130,20 +113,18 @@ def detect_vector_support(client) -> bool:
     try:
         # Test if we can create a vector mapping
         test_mapping = {
-            "mappings": {
-                "properties": {
-                    "test_vector": {
-                        "type": "knn_vector",
-                        "dimension": 384,
-                        "method": {
-                            "name": "hnsw",
-                            "space_type": "l2",
-                            "engine": "nmslib"
+        "settings": {
+            "index.knn": True
+        },
+        "mappings": {
+            "properties": {
+                "test_vector": {
+                    "type": "knn_vector",
+                    "dimension": 2
                         }
                     }
                 }
-            }
-        }
+            }        
         
         test_index = "vector-support-test"
         
@@ -180,7 +161,7 @@ def detect_vector_support(client) -> bool:
         _vector_support_tested = True
         return False
 
-def ensure_vector_mapping_exists(client, index_name: str, vector_dimension: int = 384):
+def ensure_vector_mapping_exists(client, index_name: str):
     """
     ✅ NEW: Ensure the index has proper vector field mapping
     """
@@ -189,8 +170,21 @@ def ensure_vector_mapping_exists(client, index_name: str, vector_dimension: int 
         if not client.indices.exists(index=index_name, request_timeout=5):
             logger.info(f"Index {index_name} doesn't exist, will be created with vector mapping")
             return
+        try:
+            settings_update = {
+                "index.knn": True
+            }
+            client.indices.put_settings(
+                index=index_name,
+                body=settings_update,
+                request_timeout=30
+            )
+            logger.info(f"✅ Enabled k-NN setting for existing index {index_name}")
+        except Exception as e:
+            logger.warning(f"Could not update k-NN setting for {index_name}: {e}")
+            return  # Don't add vector mappings if we can't enable k-NN
         
-        # Check current mapping
+        # THEN: Check current mapping and add vector fields if needed
         mapping_response = client.indices.get_mapping(index=index_name, request_timeout=10)
         
         for idx_name, mapping_data in mapping_response.items():
@@ -212,7 +206,7 @@ def ensure_vector_mapping_exists(client, index_name: str, vector_dimension: int 
                     "properties": {
                         "document_embedding": {
                             "type": "knn_vector",
-                            "dimension": vector_dimension,
+                            "dimension": 384,
                             "method": {
                                 "name": "hnsw",
                                 "space_type": "l2",
@@ -224,7 +218,7 @@ def ensure_vector_mapping_exists(client, index_name: str, vector_dimension: int 
                             "properties": {
                                 "embedding": {
                                     "type": "knn_vector",
-                                    "dimension": vector_dimension,
+                                    "dimension": 384,
                                     "method": {
                                         "name": "hnsw",
                                         "space_type": "l2",
@@ -351,8 +345,7 @@ def search_vector(query_vector: List[float], index_override: str = None,
                 "metadata": source.get("metadata", {}),
                 "best_matching_chunks": best_chunks,
                 "total_chunks": len(source.get("chunks", [])),
-                "search_type": "vector",
-                "vector_dimension": len(query_vector)
+                "search_type": "vector"                
             }
             
             results.append(result)
@@ -976,6 +969,10 @@ def ensure_evaluation_index_exists(client, index_name: str):
     
     # Enhanced mapping with vector fields if supported
     mapping = {
+        
+        "settings": {
+            "index.knn": True  # Enable kNN search
+        },
         "mappings": {
             "properties": {
                 # Core identification fields
