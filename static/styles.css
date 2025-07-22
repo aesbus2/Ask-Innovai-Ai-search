@@ -397,13 +397,7 @@ select:focus, input:focus {
     border-radius: 8px;
     background-color: #f8f9fa;
     overflow: hidden;
-}
-
-.logs-header {
-    padding: 15px 20px;
-    background: linear-gradient(135deg, #495057 0%, #6c757d 100%);
-    color: white;
-    border-bottom: 1px solid #dee2e6;
+    font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
 }
 
 .logs-header h4 {
@@ -625,8 +619,8 @@ margin: 20px 0;
     margin-top: 20px;
     max-height: 300px;
     overflow-y: auto;
-    background: #1a1a1a;
-    color: #00ff00;
+    background: #ffffff;
+    color: #252525;
     padding: 15px;
     border-radius: 6px;
     font-family: 'Courier New', monospace;

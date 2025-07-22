@@ -137,7 +137,7 @@ def detect_vector_support(client) -> bool:
                         "dimension": 384,
                         "method": {
                             "name": "hnsw",
-                            "space_type": "cosine",
+                            "space_type": "l2",
                             "engine": "nmslib"
                         }
                     }
@@ -215,7 +215,7 @@ def ensure_vector_mapping_exists(client, index_name: str, vector_dimension: int 
                             "dimension": vector_dimension,
                             "method": {
                                 "name": "hnsw",
-                                "space_type": "cosine",
+                                "space_type": "l2",
                                 "engine": "nmslib"
                             }
                         },
@@ -227,7 +227,7 @@ def ensure_vector_mapping_exists(client, index_name: str, vector_dimension: int 
                                     "dimension": vector_dimension,
                                     "method": {
                                         "name": "hnsw",
-                                        "space_type": "cosine",
+                                        "space_type": "l2",
                                         "engine": "nmslib"
                                     }
                                 }
@@ -1053,7 +1053,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
             "dimension": 384,  # Default for sentence transformers
             "method": {
                 "name": "hnsw",
-                "space_type": "cosine",
+                "space_type": "l2",
                 "engine": "nmslib"
             }
         }
@@ -1064,7 +1064,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
             "dimension": 384,
             "method": {
                 "name": "hnsw",
-                "space_type": "cosine",
+                "space_type": "l2",
                 "engine": "nmslib"
             }
         }
