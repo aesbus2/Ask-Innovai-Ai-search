@@ -1165,8 +1165,7 @@ def health_check() -> Dict[str, Any]:
                 "safe_aggregation_fields": safe_agg_fields,
                 "vector_fields": vector_fields,
                 "vector_support": vector_support_status,
-                "has_vector_mapping": has_vector_support,
-                "fixes_applied": FIXES_APPLIED,
+                "has_vector_mapping": has_vector_support,                
                 "capabilities": [
                     "hybrid_text_vector_search",
                     "vector_similarity_search", 
@@ -1286,8 +1285,7 @@ def get_opensearch_config():
         "ssl": True,
         "verify_certs": False,
         "version": VERSION,
-        "vector_search_enabled": True,
-        "fixes_applied": FIXES_APPLIED,
+        "vector_search_enabled": True,        
         "capabilities": [
             "hybrid_text_vector_search",
             "vector_similarity_search",
@@ -1323,11 +1321,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
     print(f"🧪 Testing OpenSearch Client v{VERSION} WITH VECTOR SEARCH")
-    print("=" * 70)
-    print("✅ FIXES APPLIED:")
-    for fix in FIXES_APPLIED:
-        print(f"   - {fix}")
-    print("=" * 70)
+    print("=" * 70)  
     
     # Test health check
     health = health_check()
@@ -1390,6 +1384,6 @@ if __name__ == "__main__":
 
 else:
     logger.info(f"🔌 OpenSearch Client v{VERSION} loaded successfully")
+    logger.info(f"   Fixes: vector_search_enabled, knn_settings_added")
     logger.info(f"   🔮 VECTOR SEARCH: ENABLED")
-    logger.info(f"   Fixes: {', '.join(FIXES_APPLIED)}")
     logger.info(f"   Ready for production use with vector search capabilities")
