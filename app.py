@@ -1,9 +1,6 @@
 # Enhanced Production App.py - Real Data Filter System with Efficient Metadata Loading
-# Version: 4.8.0 - Index-based metadata extraction with evaluation grouping
-# additions:
-# 1. added /logs endpoint to fix 404 error
-# 2. added /import_with_vector_fallback endpoint to handle vector search issues gracefully
-# 3. add /vector_status_simple endpoint to check vector search capabilities without affecting existing endpoints
+# Version: 5.0.0 - Index-based metadata extraction with evaluation grouping
+# Working Base Version (needs KNN to delete if available): 
 
 
 import os
@@ -3106,7 +3103,8 @@ async def health():
 @app.post("/analytics/stats")
 async def analytics_stats(request: dict):
     """
-    FIXED: Get analytics statistics showing CORRECT evaluation counts (not chunks)
+    REWRITTEN: Get analytics statistics with proper filter precedence
+    User-selected filters ALWAYS take priority over any other filtering
     """
     try:
         filters = request.get("filters", {})
@@ -3122,12 +3120,21 @@ async def analytics_stats(request: dict):
         
         client = get_opensearch_client()
         
-        # Build filter query for counting
+        # =============================================================================
+        # PRIORITY-BASED FILTER BUILDING
+        # User selections take absolute precedence
+        # =============================================================================
+        
         filter_query = {"match_all": {}}
         if filters:
             filter_clauses = []
             
-            # Date filters
+            # =============================================================================
+            # PRIORITY 1: USER-SELECTED FILTERS (HIGHEST PRIORITY)
+            # These are from UI dropdowns, date pickers, etc.
+            # =============================================================================
+            
+            # Date range filters (user selected from date pickers)
             if filters.get("call_date_start") or filters.get("call_date_end"):
                 date_range = {}
                 if filters.get("call_date_start"):
@@ -3135,26 +3142,121 @@ async def analytics_stats(request: dict):
                 if filters.get("call_date_end"):
                     date_range["lte"] = filters["call_date_end"]
                 filter_clauses.append({"range": {"metadata.call_date": date_range}})
+                logger.debug(f"Applied date filter: {date_range}")
             
-            # Keyword filters
-            keyword_filters = {
-                "template_name": "template_name.keyword",
-                "program": "metadata.program.keyword", 
-                "partner": "metadata.partner.keyword",
-                "site": "metadata.site.keyword",
-                "lob": "metadata.lob.keyword",
-                "agent": "metadata.agent.keyword",
-                "disposition": "metadata.disposition.keyword",
-                "sub_disposition": "metadata.sub_disposition.keyword",
-                "language": "metadata.language.keyword"
+            # Template filter (user selected from dropdown - HIGHEST PRIORITY)
+            if filters.get("template_name"):
+                template_name = str(filters["template_name"]).strip()
+                template_filter = {
+                    "bool": {
+                        "should": [
+                            # Strategy 1: Exact keyword match
+                            {"term": {"template_name.keyword": template_name}},
+                            # Strategy 2: Case insensitive keyword match
+                            {"term": {"template_name.keyword": template_name.lower()}},
+                            # Strategy 3: Text phrase match (works without .keyword field)
+                            {"match_phrase": {"template_name": template_name}},
+                            # Strategy 4: Wildcard match (partial matches)
+                            {"wildcard": {"template_name": f"*{template_name}*"}},
+                            # Strategy 5: Case insensitive wildcard
+                            {"wildcard": {"template_name": f"*{template_name.lower()}*"}}
+                        ],
+                        "minimum_should_match": 1
+                    }
+                }
+                filter_clauses.append(template_filter)
+                logger.debug(f"Applied template filter: {template_name}")
+            
+            # Organizational hierarchy filters (user selected from dropdowns)
+            organizational_filters = {
+                "program": ["metadata.program.keyword", "metadata.program"], 
+                "partner": ["metadata.partner.keyword", "metadata.partner"],
+                "site": ["metadata.site.keyword", "metadata.site"],
+                "lob": ["metadata.lob.keyword", "metadata.lob"]
             }
             
-            for filter_key, field_path in keyword_filters.items():
-                filter_value = filters.get(filter_key)
-                if filter_value and str(filter_value).strip():
-                    filter_clauses.append({"term": {field_path: filter_value}})
+            for filter_key, field_options in organizational_filters.items():
+                if filters.get(filter_key):
+                    filter_value = str(filters[filter_key]).strip()
+                    
+                    # Enhanced filter with multiple field strategies
+                    field_strategies = []
+                    for field_path in field_options:
+                        field_strategies.extend([
+                            {"term": {field_path: filter_value}},
+                            {"term": {field_path: filter_value.lower()}},
+                            {"match_phrase": {field_path: filter_value}}
+                        ])
+                    
+                    if field_strategies:
+                        org_filter = {
+                            "bool": {
+                                "should": field_strategies,
+                                "minimum_should_match": 1
+                            }
+                        }
+                        filter_clauses.append(org_filter)
+                        logger.debug(f"Applied {filter_key} filter: {filter_value}")
             
-            # Duration filters
+            # Call disposition filters (user selected from dropdowns)
+            disposition_filters = {
+                "disposition": ["metadata.disposition.keyword", "metadata.disposition"],
+                "sub_disposition": ["metadata.sub_disposition.keyword", "metadata.sub_disposition"]
+            }
+            
+            for filter_key, field_options in disposition_filters.items():
+                if filters.get(filter_key):
+                    filter_value = str(filters[filter_key]).strip()
+                    
+                    # Enhanced filter with multiple field strategies
+                    field_strategies = []
+                    for field_path in field_options:
+                        field_strategies.extend([
+                            {"term": {field_path: filter_value}},
+                            {"term": {field_path: filter_value.lower()}},
+                            {"match_phrase": {field_path: filter_value}}
+                        ])
+                    
+                    if field_strategies:
+                        disp_filter = {
+                            "bool": {
+                                "should": field_strategies,
+                                "minimum_should_match": 1
+                            }
+                        }
+                        filter_clauses.append(disp_filter)
+                        logger.debug(f"Applied {filter_key} filter: {filter_value}")
+            
+            # Agent and language filters (user selected from dropdowns)
+            agent_language_filters = {
+                "agent": ["metadata.agent.keyword", "metadata.agent"],
+                "language": ["metadata.language.keyword", "metadata.language"]
+            }
+            
+            for filter_key, field_options in agent_language_filters.items():
+                if filters.get(filter_key):
+                    filter_value = str(filters[filter_key]).strip()
+                    
+                    # Enhanced filter with multiple field strategies
+                    field_strategies = []
+                    for field_path in field_options:
+                        field_strategies.extend([
+                            {"term": {field_path: filter_value}},
+                            {"term": {field_path: filter_value.lower()}},
+                            {"match_phrase": {field_path: filter_value}}
+                        ])
+                    
+                    if field_strategies:
+                        al_filter = {
+                            "bool": {
+                                "should": field_strategies,
+                                "minimum_should_match": 1
+                            }
+                        }
+                        filter_clauses.append(al_filter)
+                        logger.debug(f"Applied {filter_key} filter: {filter_value}")
+            
+            # Duration filters (user selected from sliders/inputs)
             if filters.get("min_duration") or filters.get("max_duration"):
                 duration_range = {}
                 if filters.get("min_duration"):
@@ -3162,45 +3264,81 @@ async def analytics_stats(request: dict):
                 if filters.get("max_duration"):
                     duration_range["lte"] = int(filters["max_duration"])
                 filter_clauses.append({"range": {"metadata.call_duration": duration_range}})
+                logger.debug(f"Applied duration filter: {duration_range}")
+            
+            # =============================================================================
+            # Build final query with user filters taking absolute precedence
+            # =============================================================================
             
             if filter_clauses:
-                filter_query = {"bool": {"filter": filter_clauses}}
+                filter_query = {
+                    "bool": {
+                        "filter": filter_clauses
+                    }
+                }
+                logger.info(f"🎯 Applied {len(filter_clauses)} user-selected filters")
+            else:
+                logger.info("📊 No filters applied - showing all evaluations")
         
-        # FIXED: Count unique evaluations, not documents/chunks
-        response = client.search(
-            index="eval-*",
-            body={
-                "size": 0,  # Don't return documents, just count
-                "query": filter_query
+        # =============================================================================
+        # EXECUTE SEARCH WITH ROBUST ERROR HANDLING
+        # =============================================================================
+        
+        try:
+            # Count unique evaluations with applied filters
+            response = client.search(
+                index="eval-*",
+                body={
+                    "size": 0,  # Don't return documents, just count
+                    "query": filter_query,
+                    "timeout": "30s"
+                },
+                request_timeout=30
+            )
+            
+            # Get total count (represents unique evaluations)
+            total_hits = response.get("hits", {}).get("total", {})
+            if isinstance(total_hits, dict):
+                total_evaluations = total_hits.get("value", 0)
+            else:
+                total_evaluations = total_hits
+                
+        except Exception as search_error:
+            logger.error(f"❌ Search execution failed: {search_error}")
+            return {
+                "status": "error",
+                "error": f"Search failed: {str(search_error)}",
+                "totalRecords": 0,
+                "filters_applied": filters
             }
-        )
         
-        # Get total count (this represents unique evaluations since we store 1 doc per evaluation)
-        total_hits = response.get("hits", {}).get("total", {})
-        if isinstance(total_hits, dict):
-            total_evaluations = total_hits.get("value", 0)
-        else:
-            total_evaluations = total_hits
+        # =============================================================================
+        # RETURN RESULTS WITH DETAILED METADATA
+        # =============================================================================
         
         logger.info(f"📊 ANALYTICS STATS: {total_evaluations} evaluations match filters: {filters}")
         
         return {
             "status": "success",
-            "totalRecords": total_evaluations,  # This is now correct
+            "totalRecords": total_evaluations,
             "filters_applied": filters,
+            "filter_count": len(filter_clauses) if filters else 0,
             "timestamp": datetime.now().isoformat(),
-            "data_type": "unique_evaluations",  # Clarify what we're counting
-            "version": "4.4.0_fixed_counting"
+            "data_type": "unique_evaluations",
+            "search_strategy": "user_priority_filtering",
+            "version": "5.0.0_priority_based_filtering"
         }
         
     except Exception as e:
-        logger.error(f"Analytics stats error: {e}")
+        logger.error(f"❌ Analytics stats error: {e}")
         return {
             "status": "error",
             "error": str(e),
             "totalRecords": 0,
-            "filters_applied": filters
+            "filters_applied": filters,
+            "timestamp": datetime.now().isoformat()
         }
+    
 # Add this debug endpoint to your app.py to test metadata extraction
 @app.get("/debug/test_metadata_extraction_new_fields")
 async def test_metadata_extraction_new_fields():

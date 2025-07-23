@@ -1,5 +1,5 @@
 // Enhanced Metro AI Call Center Analytics Chat - VECTOR SEARCH ENABLED
-// Version: 4.9.0 - Production - CHAT-STATS FIXED
+// Version: 5.0.0 - Working Base
 // FIXES: Removed duplicate functions, fixed analytics integration, proper stats refresh
 
 // =============================================================================
@@ -1189,7 +1189,7 @@ function loadFormattingStyles() {
         }
         
         .assistant-message {
-            background: #f5f5f5;
+            background: #9646c3
             margin-right: 20%;
         }
         

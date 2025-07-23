@@ -1,5 +1,5 @@
 """
-embedder.py - Transformer-Based Text Embedding Service
+embedder.py - 5.0.0 Working base Transformer-Based Text Embedding Service
 PERFORMANCE OPTIMIZED: Fixes slow initial search with model preloading and better caching
 Endpoint structure: {id, url, program, name, lob, updated, content}
 """

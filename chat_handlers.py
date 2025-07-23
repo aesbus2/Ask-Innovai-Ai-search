@@ -1,8 +1,5 @@
-# chat_handlers.py - VERSION 4.8.0 - VECTOR SEARCH ENABLED
-# MAJOR UPDATE: Full vector search integration with hybrid text+vector search
-# FIXES: Enhanced RAG with vector similarity, proper debugging and filter application
-# NEW: Vector embeddings for queries, hybrid search strategy, improved relevance
-# METADATA ALIGNMENT FIX + Strict evaluation vs chunk counting + VECTOR SEARCH
+# chat_handlers.py - VERSION 5.1.0 - VECTOR SEARCH ENABLED
+# updated ensure_vector_mapping_exists to not try and update KNN if it already exists 7-23-25
 
 import os
 import logging

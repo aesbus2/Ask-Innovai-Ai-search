@@ -1,4 +1,4 @@
-# opensearch_client.py - VERSION 4.7.0
+# opensearch_client.py - VERSION 5.0.0 Working Base
 # VECTOR SEARCH ENABLED: Full vector + text hybrid search implementation
 # FIXES: All timeout configurations, vector search integration, hybrid scoring
 # NEW: Vector search enabled, embedding integration, hybrid search strategy
@@ -163,83 +163,33 @@ def detect_vector_support(client) -> bool:
 
 def ensure_vector_mapping_exists(client, index_name: str):
     """
-    ✅ NEW: Ensure the index has proper vector field mapping
+    ✅ FIXED: Skip vector mapping for existing indices without k-NN
     """
     try:
         # Check if index exists
         if not client.indices.exists(index=index_name, request_timeout=5):
             logger.info(f"Index {index_name} doesn't exist, will be created with vector mapping")
             return
+        
+        # For existing indices, just check if they have k-NN (don't try to update)
         try:
-            settings_update = {
-                "index.knn": True
-            }
-            client.indices.put_settings(
-                index=index_name,
-                body=settings_update,
-                request_timeout=30
-            )
-            logger.info(f"✅ Enabled k-NN setting for existing index {index_name}")
+            settings_response = client.indices.get_settings(index=index_name, request_timeout=10)
+            for idx_name, idx_settings in settings_response.items():
+                knn_enabled = idx_settings.get("settings", {}).get("index", {}).get("knn", "false")
+                if str(knn_enabled).lower() != "true":
+                    logger.warning(f"⚠️ Index {index_name} doesn't have k-NN enabled - skipping vector mapping")
+                    return  # Skip entirely
+                    
+            logger.info(f"✅ Index {index_name} has k-NN enabled")
+            
         except Exception as e:
-            logger.warning(f"Could not update k-NN setting for {index_name}: {e}")
-            return  # Don't add vector mappings if we can't enable k-NN
-        
-        # THEN: Check current mapping and add vector fields if needed
-        mapping_response = client.indices.get_mapping(index=index_name, request_timeout=10)
-        
-        for idx_name, mapping_data in mapping_response.items():
-            properties = mapping_data.get("mappings", {}).get("properties", {})
-            
-            # Check if vector fields exist
-            has_document_vector = "document_embedding" in properties
-            has_chunk_vectors = False
-            
-            if "chunks" in properties:
-                chunk_props = properties["chunks"].get("properties", {})
-                has_chunk_vectors = "embedding" in chunk_props
-            
-            if not has_document_vector or not has_chunk_vectors:
-                logger.info(f"Adding vector mapping to existing index {index_name}")
-                
-                # Add vector field mapping
-                vector_mapping = {
-                    "properties": {
-                        "document_embedding": {
-                            "type": "knn_vector",
-                            "dimension": 384,
-                            "method": {
-                                "name": "hnsw",
-                                "space_type": "l2",
-                                "engine": "nmslib"
-                            }
-                        },
-                        "chunks": {
-                            "type": "nested",
-                            "properties": {
-                                "embedding": {
-                                    "type": "knn_vector",
-                                    "dimension": 384,
-                                    "method": {
-                                        "name": "hnsw",
-                                        "space_type": "l2",
-                                        "engine": "nmslib"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                client.indices.put_mapping(
-                    index=index_name,
-                    body=vector_mapping,
-                    request_timeout=30
-                )
-                
-                logger.info(f"✅ Vector mapping added to {index_name}")
+            logger.warning(f"Could not check k-NN settings for {index_name}: {e}")
+            return
         
     except Exception as e:
         logger.error(f"Failed to ensure vector mapping for {index_name}: {e}")
+        
+
 
 # =============================================================================
 # ✅ VECTOR SEARCH IMPLEMENTATION - ENABLED
