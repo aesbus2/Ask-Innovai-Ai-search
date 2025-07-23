@@ -1,6 +1,8 @@
-# chat_handlers.py - VERSION 5.1.0 - VECTOR SEARCH ENABLED
+# chat_handlers.py - VERSION 5.1.1 - VECTOR SEARCH ENABLED
 # updated ensure_vector_mapping_exists to not try and update KNN if it already exists 7-23-25
 #updated  build_search_context to use a new function to remove filoations in search filters
+# added strict metadata verification to ensure all results comply with filters
+#added helper function extract_actual_metadata_values
 
 import os
 import logging
@@ -39,6 +41,17 @@ GENAI_ACCESS_KEY = os.getenv("GENAI_ACCESS_KEY", "")
 GENAI_MODEL = os.getenv("GENAI_MODEL", "n/a")
 GENAI_TEMPERATURE = float(os.getenv("GENAI_TEMPERATURE", "0.7"))
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
+
+CHAT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "200"))  # Increased from 100
+HYBRID_SEARCH_LIMIT = int(os.getenv("HYBRID_SEARCH_LIMIT", "150"))  # No artificial 30 limit
+VECTOR_SEARCH_LIMIT = int(os.getenv("VECTOR_SEARCH_LIMIT", "100"))  # No artificial 20 limit  
+TEXT_SEARCH_LIMIT = int(os.getenv("TEXT_SEARCH_LIMIT", "100"))    # No artificial 30 limit
+
+logger.info(f"📊 CHAT SEARCH CONFIGURATION:")
+logger.info(f"   Max total results: {CHAT_MAX_RESULTS}")
+logger.info(f"   Hybrid search limit: {HYBRID_SEARCH_LIMIT}")
+logger.info(f"   Vector search limit: {VECTOR_SEARCH_LIMIT}")
+logger.info(f"   Text search limit: {TEXT_SEARCH_LIMIT}")
 
 def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     """
@@ -405,6 +418,9 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
     ✅ ENHANCED: Build search context with VECTOR SEARCH integration + FILTER VALIDATION
     Now supports hybrid text+vector search for better relevance WITH strict filter enforcement
     """
+    if max_results is None:
+        max_results = CHAT_MAX_RESULTS
+
     logger.info(f"🔍 BUILDING ENHANCED SEARCH CONTEXT WITH VECTOR SEARCH + FILTER VALIDATION")
     logger.info(f"📋 Query: '{query}'")
     logger.info(f"🏷️ Filters: {filters}")
@@ -509,7 +525,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                     query=query,
                     query_vector=query_vector,
                     filters=filters,
-                    size=min(max_results, 30),
+                    size=min(max_results, HYBRID_SEARCH_LIMIT),
                     vector_weight=0.6  # 60% vector, 40% text
                 )
                 
@@ -542,13 +558,13 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 logger.error(f"❌ Hybrid search failed: {e}")
         
         # Strategy 2: Pure vector search as fallback/supplement
-        if query_vector and len(all_sources) < max_results // 2:
-            try:
+        if query_vector and len(all_sources) < max_results:  # ✅ FIXED: Proper indentation and condition
+            try:  # ✅ FIXED: Added missing try block
                 logger.info("🔮 Trying pure vector search...")
                 vector_results = search_vector(
                     query_vector=query_vector,
                     filters=filters,
-                    size=min(max_results - len(all_sources), 20)
+                    size=max_results - len(all_sources)  # ✅ FIXED: Direct calculation, no remaining_slots
                 )
                 
                 logger.info(f"📊 Vector search returned {len(vector_results)} hits")
@@ -586,13 +602,13 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 logger.error(f"❌ Vector search failed: {e}")
         
         # Strategy 3: Enhanced text search as fallback - WITH STRICT VALIDATION
-        if len(all_sources) < max_results // 3:
-            try:
+        if len(all_sources) < max_results:  # ✅ FIXED: Proper indentation and condition
+            try:  # ✅ FIXED: Added missing try block
                 logger.info("📝 Supplementing with enhanced text search...")
                 text_results = search_opensearch(
                     query=query,
                     filters=filters,
-                    size=min(max_results - len(all_sources), 30)
+                    size=max_results - len(all_sources)  # ✅ FIXED: Direct calculation, no remaining_slots
                 )
                 
                 logger.info(f"📊 Text search returned {len(text_results)} hits")
@@ -658,7 +674,21 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
             # ✅ REPORT FILTER COMPLIANCE
             template_names = set(s.get("template_name") for s in processed_sources)
             filter_compliance_status = "✅ ALL FILTERS RESPECTED" if len(template_names) == 1 and filters.get("template_name") in template_names else "🚨 FILTER VIOLATIONS DETECTED"
+        
+        logger.info("🔍 Performing metadata verification...")
+        metadata_summary = verify_metadata_alignment(processed_sources)
+
+        # STEP 6: Build enhanced context with metadata verification AND STRICT ENFORCEMENT
+        if processed_sources:
+            vector_enhanced_count = sum(1 for s in processed_sources if s.get("vector_enhanced", False))
             
+            # ✅ STEP 6A: Extract strict metadata constraints (ADD THIS)
+            strict_metadata = extract_actual_metadata_values(processed_sources)
+            
+            # Include metadata verification status
+            metadata_verified = metadata_summary.get("has_real_data", False)
+            verification_status = "VERIFIED_REAL_DATA" if metadata_verified else "NO_DATA_VERIFICATION"
+
             context = f"""
 VERIFIED EVALUATION DATA FOUND: {len(processed_sources)} unique evaluations
 
@@ -672,6 +702,20 @@ VERIFIED EVALUATION DATA FOUND: {len(processed_sources)} unique evaluations
 - Templates found: {list(template_names)}
 - Filters applied: {filters}
 
+🔒 CRITICAL: You can ONLY use these exact metadata values from the search results:
+
+ALLOWED DISPOSITIONS (ONLY THESE):
+{', '.join(strict_metadata['dispositions'])}
+
+ALLOWED PROGRAMS (ONLY THESE):  
+{', '.join(strict_metadata['programs'])}
+
+ALLOWED PARTNERS (ONLY THESE):
+{', '.join(strict_metadata['partners'])}
+
+ALLOWED SITES (ONLY THESE):
+{', '.join(strict_metadata['sites'])}
+
 SAMPLE CONTENT FROM TOP RESULT:
 {processed_sources[0].get('text', '')[:500]}...
 
@@ -679,7 +723,7 @@ EVALUATION DETAILS:
 """
             
             # Add details from first few evaluations
-            for i, source in enumerate(processed_sources[:5]):
+            for i, source in enumerate(processed_sources[:10]):
                 metadata = source.get("metadata", {})
                 search_type = source.get("search_type", "unknown")
                 score = source.get("score", 0)
@@ -698,18 +742,28 @@ EVALUATION DETAILS:
             
             context += f"""
 
-INSTRUCTIONS:
-- Use ONLY the data shown above from {len(processed_sources)} evaluations
-- All results have been validated to comply with applied filters: {filters}
-- Do not generate statistics not directly calculable from this data
-- Focus on patterns and insights from the actual content provided
-- Results are enhanced with {'vector similarity matching' if vector_enhanced_count > 0 else 'text matching only'}
-- Search methods used: {', '.join(search_methods_used)}
+ABSOLUTE PROHIBITIONS:
+
+1. NEVER use dispositions not in the allowed list above
+2. NEVER use program/partner/site names not in the allowed lists above
+3. NEVER generate statistics not directly countable from these {len(processed_sources)} evaluations
+4. NEVER estimate or extrapolate beyond the provided data
+
+REQUIRED BEHAVIOR:
+- Always specify "from these {len(processed_sources)} evaluations"  
+- Count exact occurrences when calculating percentages
+- Reference specific evaluation IDs when discussing individual cases
+- Quote directly from evaluation content when possible
+- Use ONLY the metadata values listed in the allowed lists above
+
+If information is not available in these {len(processed_sources)} evaluations, say so explicitly rather than guessing.
 """
             
-            logger.info(f"✅ ENHANCED CONTEXT BUILT: {len(context)} chars with {len(processed_sources)} FILTER-VALIDATED sources")
-            logger.info(f"🔮 Vector enhancement: {vector_enhanced_count}/{len(processed_sources)} results")
-            logger.info(f"🎯 Filter compliance: {filter_compliance_status}")
+        logger.info(f"✅ METADATA-ENFORCED CONTEXT BUILT: {len(context)} chars with {len(processed_sources)} sources")
+        logger.info(f"🔒 Strict metadata constraints: {len(strict_metadata['agents'])} agents, {len(strict_metadata['dispositions'])} dispositions")
+
+        for source in processed_sources:
+            source["metadata_verified"] = metadata_verified
             
             return context, processed_sources
         else:
@@ -720,232 +774,43 @@ INSTRUCTIONS:
         logger.error(f"❌ ENHANCED SEARCH CONTEXT BUILD FAILED: {e}")
         return create_empty_search_context("system_error", str(e)), []
 
-
-########################################################################################################################OLD build_search_Context
+def extract_actual_metadata_values(sources: List[dict]) -> Dict[str, List[str]]:
+    """
+    Extract the actual metadata values that AI is allowed to use
+    """
+    metadata_values = {
+        "agents": set(),
+        "dispositions": set(), 
+        "programs": set(),
+        "partners": set(),
+        "sites": set(),
+        "templates": set()
+    }
     
-#     try:
-#         from opensearch_client import get_opensearch_client, test_connection
+    for source in sources:
+        metadata = source.get("metadata", {})
         
-#         client = get_opensearch_client()
-#         if not client:
-#             logger.error("❌ No OpenSearch client available")
-#             return "Search system unavailable.", []
+        # Only add non-empty, non-unknown values
+        for field, constraint_key in [
+            ("agent", "agents"),
+            ("disposition", "dispositions"),
+            ("program", "programs"), 
+            ("partner", "partners"),
+            ("site", "sites")
+        ]:
+            if metadata.get(field):
+                value = str(metadata[field]).strip()
+                if value and value.lower() not in ["unknown", "null", "", "n/a", "not specified"]:
+                    metadata_values[constraint_key].add(value)
         
-#         if not test_connection():
-#             logger.warning("OpenSearch not available for search context")
-#             return create_empty_search_context("opensearch_unavailable"), []
-        
-#         logger.info("✅ OpenSearch connection verified for enhanced search")
-        
-#         # ✅ STEP 1: Try to generate query vector for enhanced search
-#         query_vector = None
-#         try:
-#             query_vector = embed_text(query)
-#             logger.info(f"✅ Query vector generated: {len(query_vector)} dimensions")
-#         except Exception as e:
-#             logger.warning(f"⚠️ Vector generation failed, falling back to text search: {e}")
-        
-#         # ✅ STEP 2: Use enhanced search strategies
-#         all_sources = []
-#         search_methods_used = []
-        
-#         # Strategy 1: Hybrid search (text + vector) if vector available
-#         if query_vector:
-#             try:
-#                 logger.info("🔥 Trying hybrid text+vector search...")
-#                 hybrid_results = hybrid_search(
-#                     query=query,
-#                     query_vector=query_vector,
-#                     filters=filters,
-#                     size=min(max_results, 30),
-#                     vector_weight=0.6  # 60% vector, 40% text
-#                 )
-                
-#                 logger.info(f"📊 Hybrid search returned {len(hybrid_results)} hits")
-                
-#                 for hit in hybrid_results:
-#                     source_info = {
-#                         "evaluationId": hit.get("evaluationId"),
-#                         "search_type": hit.get("search_type", "hybrid"),
-#                         "score": hit.get("_score", 0),
-#                         "hybrid_score": hit.get("hybrid_score", 0),
-#                         "template_name": hit.get("template_name", "Unknown"),
-#                         "template_id": hit.get("template_id"),
-#                         "text": hit.get("text", "")[:2000],
-#                         "evaluation": hit.get("evaluation", ""),
-#                         "transcript": hit.get("transcript", ""),
-#                         "metadata": hit.get("metadata", {}),
-#                         "content_type": "evaluation",
-#                         "_index": hit.get("_index"),
-#                         "vector_enhanced": True
-#                     }
-#                     all_sources.append(source_info)
-                
-#                 search_methods_used.append("hybrid_text_vector")
-                
-#             except Exception as e:
-#                 logger.error(f"❌ Hybrid search failed: {e}")
-        
-#         # Strategy 2: Pure vector search as fallback/supplement
-#         if query_vector and len(all_sources) < max_results // 2:
-#             try:
-#                 logger.info("🔮 Trying pure vector search...")
-#                 vector_results = search_vector(
-#                     query_vector=query_vector,
-#                     filters=filters,
-#                     size=min(max_results - len(all_sources), 20)
-#                 )
-                
-#                 logger.info(f"📊 Vector search returned {len(vector_results)} hits")
-                
-#                 # Add vector results that aren't already in all_sources
-#                 existing_ids = {s.get("evaluationId") for s in all_sources}
-                
-#                 for hit in vector_results:
-#                     evaluation_id = hit.get("evaluationId")
-#                     if evaluation_id not in existing_ids:
-#                         source_info = {
-#                             "evaluationId": evaluation_id,
-#                             "search_type": "vector",
-#                             "score": hit.get("_score", 0),
-#                             "template_name": hit.get("template_name", "Unknown"),
-#                             "template_id": hit.get("template_id"),
-#                             "text": hit.get("text", "")[:2000],
-#                             "evaluation": hit.get("evaluation", ""),
-#                             "transcript": hit.get("transcript", ""),
-#                             "metadata": hit.get("metadata", {}),
-#                             "content_type": "evaluation",
-#                             "_index": hit.get("_index"),
-#                             "vector_enhanced": True,
-#                             "best_matching_chunks": hit.get("best_matching_chunks", [])
-#                         }
-#                         all_sources.append(source_info)
-#                         existing_ids.add(evaluation_id)
-                
-#                 search_methods_used.append("pure_vector")
-                
-#             except Exception as e:
-#                 logger.error(f"❌ Vector search failed: {e}")
-        
-#         # Strategy 3: Enhanced text search as fallback
-#         if len(all_sources) < max_results // 3:
-#             try:
-#                 logger.info("📝 Supplementing with enhanced text search...")
-#                 text_results = search_opensearch(
-#                     query=query,
-#                     filters=filters,
-#                     size=min(max_results - len(all_sources), 30)
-#                 )
-                
-#                 logger.info(f"📊 Text search returned {len(text_results)} hits")
-                
-#                 # Add text results that aren't already included
-#                 existing_ids = {s.get("evaluationId") for s in all_sources}
-                
-#                 for hit in text_results:
-#                     evaluation_id = hit.get("evaluationId")
-#                     if evaluation_id not in existing_ids:
-#                         source_info = {
-#                             "evaluationId": evaluation_id,
-#                             "search_type": hit.get("search_type", "text"),
-#                             "score": hit.get("_score", 0),
-#                             "template_name": hit.get("template_name", "Unknown"),
-#                             "template_id": hit.get("template_id"),
-#                             "text": hit.get("text", "")[:2000],
-#                             "evaluation": hit.get("evaluation", ""),
-#                             "transcript": hit.get("transcript", ""),
-#                             "metadata": hit.get("metadata", {}),
-#                             "content_type": "evaluation",
-#                             "_index": hit.get("_index"),
-#                             "vector_enhanced": False
-#                         }
-#                         all_sources.append(source_info)
-#                         existing_ids.add(evaluation_id)
-                
-#                 search_methods_used.append("enhanced_text")
-                
-#             except Exception as e:
-#                 logger.error(f"❌ Enhanced text search failed: {e}")
-        
-#         # STEP 3: Process and verify results
-#         logger.info(f"🔗 TOTAL SOURCES FOUND: {len(all_sources)} using methods: {search_methods_used}")
-        
-#         if not all_sources:
-#             logger.warning("⚠️ NO SOURCES FOUND with enhanced search")
-#             return create_empty_search_context("no_data"), []
-        
-#         # STEP 4: Limit and deduplicate results
-#         processed_sources = []
-#         unique_evaluations = set()
-        
-#         # Sort by score (hybrid/vector scores are generally better)
-#         all_sources.sort(key=lambda x: x.get("score", 0), reverse=True)
-        
-#         for source in all_sources[:max_results]:
-#             evaluation_id = source.get("evaluationId")
-#             if evaluation_id and evaluation_id not in unique_evaluations:
-#                 unique_evaluations.add(evaluation_id)
-#                 processed_sources.append(source)
-        
-#         # STEP 5: Build enhanced context with vector search information
-#         if processed_sources:
-#             vector_enhanced_count = sum(1 for s in processed_sources if s.get("vector_enhanced", False))
-            
-#             context = f"""
-# VERIFIED EVALUATION DATA FOUND: {len(processed_sources)} unique evaluations
-
-# ✅ ENHANCED SEARCH RESULTS:
-# - Total evaluations: {len(unique_evaluations)}
-# - Content sources: {len(all_sources)}
-# - Search methods: {', '.join(search_methods_used)}
-# - Vector-enhanced results: {vector_enhanced_count}/{len(processed_sources)}
-# - Search quality: {'ENHANCED with semantic similarity' if vector_enhanced_count > 0 else 'Text-based matching'}
-
-# SAMPLE CONTENT FROM TOP RESULT:
-# {processed_sources[0].get('text', '')[:500]}...
-
-# EVALUATION DETAILS:
-# """
-            
-#             # Add details from first few evaluations
-#             for i, source in enumerate(processed_sources[:5]):
-#                 metadata = source.get("metadata", {})
-#                 search_type = source.get("search_type", "unknown")
-#                 score = source.get("score", 0)
-                
-#                 context += f"""
-# [Evaluation {i+1}] ID: {source['evaluationId']} (Score: {score:.3f}, Type: {search_type})
-# - Template: {source.get('template_name', 'Unknown')}
-# - Program: {metadata.get('program', 'Unknown')}
-# - Disposition: {metadata.get('disposition', 'Unknown')}
-# - Agent: {metadata.get('agent', 'Unknown')}
-# - Content: {source.get('text', '')[:200]}...
-# """
-            
-#             if len(processed_sources) > 5:
-#                 context += f"\n... and {len(processed_sources) - 5} more evaluations"
-            
-#             context += f"""
-
-# INSTRUCTIONS:
-# - Use ONLY the data shown above from {len(processed_sources)} evaluations
-# - Do not generate statistics not directly calculable from this data
-# - Focus on patterns and insights from the actual content provided
-# - Results are enhanced with {'vector similarity matching' if vector_enhanced_count > 0 else 'text matching only'}
-# - Search methods used: {', '.join(search_methods_used)}
-# """
-            
-#             logger.info(f"✅ ENHANCED CONTEXT BUILT: {len(context)} chars with {len(processed_sources)} sources")
-#             logger.info(f"🔮 Vector enhancement: {vector_enhanced_count}/{len(processed_sources)} results")
-            
-#             return context, processed_sources
-#         else:
-#             logger.warning("⚠️ NO VALID SOURCES AFTER PROCESSING")
-#             return create_empty_search_context("no_valid_sources"), []
-
-#     except Exception as e:
-#         logger.error(f"❌ ENHANCED SEARCH CONTEXT BUILD FAILED: {e}")
-#         return create_empty_search_context("system_error", str(e)), []
+        # Template names
+        if source.get("template_name"):
+            template = str(source["template_name"]).strip()
+            if template and template.lower() not in ["unknown", "null", ""]:
+                metadata_values["templates"].add(template)
+    
+    # Convert sets to sorted lists
+    return {key: sorted(list(values)) for key, values in metadata_values.items()}
 
 def create_empty_search_context(status="no_data", error_msg=""):
     """Create empty search context for error cases"""
