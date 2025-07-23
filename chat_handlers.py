@@ -1,5 +1,6 @@
 # chat_handlers.py - VERSION 5.1.0 - VECTOR SEARCH ENABLED
 # updated ensure_vector_mapping_exists to not try and update KNN if it already exists 7-23-25
+#updated  build_search_context to use a new function to remove filoations in search filters
 
 import os
 import logging
@@ -401,13 +402,78 @@ def detect_report_query(message: str) -> bool:
 
 def build_search_context(query: str, filters: dict, max_results: int = 100) -> Tuple[str, List[dict]]:
     """
-    ✅ ENHANCED: Build search context with VECTOR SEARCH integration
-    Now supports hybrid text+vector search for better relevance
+    ✅ ENHANCED: Build search context with VECTOR SEARCH integration + FILTER VALIDATION
+    Now supports hybrid text+vector search for better relevance WITH strict filter enforcement
     """
-    logger.info(f"🔍 BUILDING ENHANCED SEARCH CONTEXT WITH VECTOR SEARCH")
+    logger.info(f"🔍 BUILDING ENHANCED SEARCH CONTEXT WITH VECTOR SEARCH + FILTER VALIDATION")
     logger.info(f"📋 Query: '{query}'")
     logger.info(f"🏷️ Filters: {filters}")
     logger.info(f"📊 Max results: {max_results}")
+    
+    def validate_filter_compliance(results: List[dict], strategy_name: str) -> List[dict]:
+        """
+        ✅ NEW: Validate that search results comply with applied filters
+        """
+        if not filters or not results:
+            return results
+        
+        valid_results = []
+        violations = []
+        
+        for result in results:
+            is_valid = True
+            violation_reasons = []
+            
+            # Check template_name filter (most critical)
+            if filters.get("template_name"):
+                expected_template = filters["template_name"]
+                actual_template = result.get("template_name")
+                if actual_template != expected_template:
+                    is_valid = False
+                    violation_reasons.append(f"template_name: expected '{expected_template}', got '{actual_template}'")
+            
+            # Check program filter
+            if filters.get("program"):
+                expected_program = filters["program"]
+                actual_program = result.get("metadata", {}).get("program")
+                if actual_program != expected_program:
+                    is_valid = False
+                    violation_reasons.append(f"program: expected '{expected_program}', got '{actual_program}'")
+            
+            # Check partner filter
+            if filters.get("partner"):
+                expected_partner = filters["partner"]
+                actual_partner = result.get("metadata", {}).get("partner")
+                if actual_partner != expected_partner:
+                    is_valid = False
+                    violation_reasons.append(f"partner: expected '{expected_partner}', got '{actual_partner}'")
+            
+            # Check site filter
+            if filters.get("site"):
+                expected_site = filters["site"]
+                actual_site = result.get("metadata", {}).get("site")
+                if actual_site != expected_site:
+                    is_valid = False
+                    violation_reasons.append(f"site: expected '{expected_site}', got '{actual_site}'")
+            
+            if is_valid:
+                valid_results.append(result)
+            else:
+                violations.append({
+                    "evaluationId": result.get("evaluationId"),
+                    "strategy": strategy_name,
+                    "violations": violation_reasons
+                })
+        
+        if violations:
+            logger.error(f"🚨 FILTER VIOLATIONS in {strategy_name}: {len(violations)} results removed")
+            for violation in violations[:3]:  # Log first 3 violations
+                logger.error(f"   - ID {violation['evaluationId']}: {', '.join(violation['violations'])}")
+            if len(violations) > 3:
+                logger.error(f"   - ... and {len(violations) - 3} more violations")
+        
+        logger.info(f"✅ {strategy_name} filter validation: {len(valid_results)}/{len(results)} results valid")
+        return valid_results
     
     try:
         from opensearch_client import get_opensearch_client, test_connection
@@ -431,7 +497,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
         except Exception as e:
             logger.warning(f"⚠️ Vector generation failed, falling back to text search: {e}")
         
-        # ✅ STEP 2: Use enhanced search strategies
+        # ✅ STEP 2: Use enhanced search strategies WITH FILTER VALIDATION
         all_sources = []
         search_methods_used = []
         
@@ -449,7 +515,10 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 
                 logger.info(f"📊 Hybrid search returned {len(hybrid_results)} hits")
                 
-                for hit in hybrid_results:
+                # ✅ VALIDATE FILTERS BEFORE PROCESSING
+                validated_hybrid = validate_filter_compliance(hybrid_results, "hybrid_search")
+                
+                for hit in validated_hybrid:
                     source_info = {
                         "evaluationId": hit.get("evaluationId"),
                         "search_type": hit.get("search_type", "hybrid"),
@@ -484,10 +553,13 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 
                 logger.info(f"📊 Vector search returned {len(vector_results)} hits")
                 
+                # ✅ VALIDATE FILTERS BEFORE PROCESSING
+                validated_vector = validate_filter_compliance(vector_results, "vector_search")
+                
                 # Add vector results that aren't already in all_sources
                 existing_ids = {s.get("evaluationId") for s in all_sources}
                 
-                for hit in vector_results:
+                for hit in validated_vector:
                     evaluation_id = hit.get("evaluationId")
                     if evaluation_id not in existing_ids:
                         source_info = {
@@ -513,7 +585,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
             except Exception as e:
                 logger.error(f"❌ Vector search failed: {e}")
         
-        # Strategy 3: Enhanced text search as fallback
+        # Strategy 3: Enhanced text search as fallback - WITH STRICT VALIDATION
         if len(all_sources) < max_results // 3:
             try:
                 logger.info("📝 Supplementing with enhanced text search...")
@@ -525,10 +597,13 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 
                 logger.info(f"📊 Text search returned {len(text_results)} hits")
                 
+                # ✅ CRITICAL: VALIDATE FILTERS - This is where violations were coming from!
+                validated_text = validate_filter_compliance(text_results, "text_search")
+                
                 # Add text results that aren't already included
                 existing_ids = {s.get("evaluationId") for s in all_sources}
                 
-                for hit in text_results:
+                for hit in validated_text:
                     evaluation_id = hit.get("evaluationId")
                     if evaluation_id not in existing_ids:
                         source_info = {
@@ -553,12 +628,15 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
             except Exception as e:
                 logger.error(f"❌ Enhanced text search failed: {e}")
         
-        # STEP 3: Process and verify results
-        logger.info(f"🔗 TOTAL SOURCES FOUND: {len(all_sources)} using methods: {search_methods_used}")
+        # STEP 3: Final filter validation on combined results
+        logger.info(f"🔗 TOTAL SOURCES BEFORE FINAL VALIDATION: {len(all_sources)} using methods: {search_methods_used}")
+        
+        # ✅ FINAL SAFETY CHECK: Validate all combined results
+        all_sources = validate_filter_compliance(all_sources, "final_combined")
         
         if not all_sources:
-            logger.warning("⚠️ NO SOURCES FOUND with enhanced search")
-            return create_empty_search_context("no_data"), []
+            logger.warning("⚠️ NO SOURCES FOUND after filter validation")
+            return create_empty_search_context("no_data_after_filtering"), []
         
         # STEP 4: Limit and deduplicate results
         processed_sources = []
@@ -577,15 +655,22 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
         if processed_sources:
             vector_enhanced_count = sum(1 for s in processed_sources if s.get("vector_enhanced", False))
             
+            # ✅ REPORT FILTER COMPLIANCE
+            template_names = set(s.get("template_name") for s in processed_sources)
+            filter_compliance_status = "✅ ALL FILTERS RESPECTED" if len(template_names) == 1 and filters.get("template_name") in template_names else "🚨 FILTER VIOLATIONS DETECTED"
+            
             context = f"""
 VERIFIED EVALUATION DATA FOUND: {len(processed_sources)} unique evaluations
 
-✅ ENHANCED SEARCH RESULTS:
+✅ ENHANCED SEARCH RESULTS WITH FILTER VALIDATION:
 - Total evaluations: {len(unique_evaluations)}
 - Content sources: {len(all_sources)}
 - Search methods: {', '.join(search_methods_used)}
 - Vector-enhanced results: {vector_enhanced_count}/{len(processed_sources)}
 - Search quality: {'ENHANCED with semantic similarity' if vector_enhanced_count > 0 else 'Text-based matching'}
+- Filter compliance: {filter_compliance_status}
+- Templates found: {list(template_names)}
+- Filters applied: {filters}
 
 SAMPLE CONTENT FROM TOP RESULT:
 {processed_sources[0].get('text', '')[:500]}...
@@ -615,14 +700,16 @@ EVALUATION DETAILS:
 
 INSTRUCTIONS:
 - Use ONLY the data shown above from {len(processed_sources)} evaluations
+- All results have been validated to comply with applied filters: {filters}
 - Do not generate statistics not directly calculable from this data
 - Focus on patterns and insights from the actual content provided
 - Results are enhanced with {'vector similarity matching' if vector_enhanced_count > 0 else 'text matching only'}
 - Search methods used: {', '.join(search_methods_used)}
 """
             
-            logger.info(f"✅ ENHANCED CONTEXT BUILT: {len(context)} chars with {len(processed_sources)} sources")
+            logger.info(f"✅ ENHANCED CONTEXT BUILT: {len(context)} chars with {len(processed_sources)} FILTER-VALIDATED sources")
             logger.info(f"🔮 Vector enhancement: {vector_enhanced_count}/{len(processed_sources)} results")
+            logger.info(f"🎯 Filter compliance: {filter_compliance_status}")
             
             return context, processed_sources
         else:
@@ -632,6 +719,233 @@ INSTRUCTIONS:
     except Exception as e:
         logger.error(f"❌ ENHANCED SEARCH CONTEXT BUILD FAILED: {e}")
         return create_empty_search_context("system_error", str(e)), []
+
+
+########################################################################################################################OLD build_search_Context
+    
+#     try:
+#         from opensearch_client import get_opensearch_client, test_connection
+        
+#         client = get_opensearch_client()
+#         if not client:
+#             logger.error("❌ No OpenSearch client available")
+#             return "Search system unavailable.", []
+        
+#         if not test_connection():
+#             logger.warning("OpenSearch not available for search context")
+#             return create_empty_search_context("opensearch_unavailable"), []
+        
+#         logger.info("✅ OpenSearch connection verified for enhanced search")
+        
+#         # ✅ STEP 1: Try to generate query vector for enhanced search
+#         query_vector = None
+#         try:
+#             query_vector = embed_text(query)
+#             logger.info(f"✅ Query vector generated: {len(query_vector)} dimensions")
+#         except Exception as e:
+#             logger.warning(f"⚠️ Vector generation failed, falling back to text search: {e}")
+        
+#         # ✅ STEP 2: Use enhanced search strategies
+#         all_sources = []
+#         search_methods_used = []
+        
+#         # Strategy 1: Hybrid search (text + vector) if vector available
+#         if query_vector:
+#             try:
+#                 logger.info("🔥 Trying hybrid text+vector search...")
+#                 hybrid_results = hybrid_search(
+#                     query=query,
+#                     query_vector=query_vector,
+#                     filters=filters,
+#                     size=min(max_results, 30),
+#                     vector_weight=0.6  # 60% vector, 40% text
+#                 )
+                
+#                 logger.info(f"📊 Hybrid search returned {len(hybrid_results)} hits")
+                
+#                 for hit in hybrid_results:
+#                     source_info = {
+#                         "evaluationId": hit.get("evaluationId"),
+#                         "search_type": hit.get("search_type", "hybrid"),
+#                         "score": hit.get("_score", 0),
+#                         "hybrid_score": hit.get("hybrid_score", 0),
+#                         "template_name": hit.get("template_name", "Unknown"),
+#                         "template_id": hit.get("template_id"),
+#                         "text": hit.get("text", "")[:2000],
+#                         "evaluation": hit.get("evaluation", ""),
+#                         "transcript": hit.get("transcript", ""),
+#                         "metadata": hit.get("metadata", {}),
+#                         "content_type": "evaluation",
+#                         "_index": hit.get("_index"),
+#                         "vector_enhanced": True
+#                     }
+#                     all_sources.append(source_info)
+                
+#                 search_methods_used.append("hybrid_text_vector")
+                
+#             except Exception as e:
+#                 logger.error(f"❌ Hybrid search failed: {e}")
+        
+#         # Strategy 2: Pure vector search as fallback/supplement
+#         if query_vector and len(all_sources) < max_results // 2:
+#             try:
+#                 logger.info("🔮 Trying pure vector search...")
+#                 vector_results = search_vector(
+#                     query_vector=query_vector,
+#                     filters=filters,
+#                     size=min(max_results - len(all_sources), 20)
+#                 )
+                
+#                 logger.info(f"📊 Vector search returned {len(vector_results)} hits")
+                
+#                 # Add vector results that aren't already in all_sources
+#                 existing_ids = {s.get("evaluationId") for s in all_sources}
+                
+#                 for hit in vector_results:
+#                     evaluation_id = hit.get("evaluationId")
+#                     if evaluation_id not in existing_ids:
+#                         source_info = {
+#                             "evaluationId": evaluation_id,
+#                             "search_type": "vector",
+#                             "score": hit.get("_score", 0),
+#                             "template_name": hit.get("template_name", "Unknown"),
+#                             "template_id": hit.get("template_id"),
+#                             "text": hit.get("text", "")[:2000],
+#                             "evaluation": hit.get("evaluation", ""),
+#                             "transcript": hit.get("transcript", ""),
+#                             "metadata": hit.get("metadata", {}),
+#                             "content_type": "evaluation",
+#                             "_index": hit.get("_index"),
+#                             "vector_enhanced": True,
+#                             "best_matching_chunks": hit.get("best_matching_chunks", [])
+#                         }
+#                         all_sources.append(source_info)
+#                         existing_ids.add(evaluation_id)
+                
+#                 search_methods_used.append("pure_vector")
+                
+#             except Exception as e:
+#                 logger.error(f"❌ Vector search failed: {e}")
+        
+#         # Strategy 3: Enhanced text search as fallback
+#         if len(all_sources) < max_results // 3:
+#             try:
+#                 logger.info("📝 Supplementing with enhanced text search...")
+#                 text_results = search_opensearch(
+#                     query=query,
+#                     filters=filters,
+#                     size=min(max_results - len(all_sources), 30)
+#                 )
+                
+#                 logger.info(f"📊 Text search returned {len(text_results)} hits")
+                
+#                 # Add text results that aren't already included
+#                 existing_ids = {s.get("evaluationId") for s in all_sources}
+                
+#                 for hit in text_results:
+#                     evaluation_id = hit.get("evaluationId")
+#                     if evaluation_id not in existing_ids:
+#                         source_info = {
+#                             "evaluationId": evaluation_id,
+#                             "search_type": hit.get("search_type", "text"),
+#                             "score": hit.get("_score", 0),
+#                             "template_name": hit.get("template_name", "Unknown"),
+#                             "template_id": hit.get("template_id"),
+#                             "text": hit.get("text", "")[:2000],
+#                             "evaluation": hit.get("evaluation", ""),
+#                             "transcript": hit.get("transcript", ""),
+#                             "metadata": hit.get("metadata", {}),
+#                             "content_type": "evaluation",
+#                             "_index": hit.get("_index"),
+#                             "vector_enhanced": False
+#                         }
+#                         all_sources.append(source_info)
+#                         existing_ids.add(evaluation_id)
+                
+#                 search_methods_used.append("enhanced_text")
+                
+#             except Exception as e:
+#                 logger.error(f"❌ Enhanced text search failed: {e}")
+        
+#         # STEP 3: Process and verify results
+#         logger.info(f"🔗 TOTAL SOURCES FOUND: {len(all_sources)} using methods: {search_methods_used}")
+        
+#         if not all_sources:
+#             logger.warning("⚠️ NO SOURCES FOUND with enhanced search")
+#             return create_empty_search_context("no_data"), []
+        
+#         # STEP 4: Limit and deduplicate results
+#         processed_sources = []
+#         unique_evaluations = set()
+        
+#         # Sort by score (hybrid/vector scores are generally better)
+#         all_sources.sort(key=lambda x: x.get("score", 0), reverse=True)
+        
+#         for source in all_sources[:max_results]:
+#             evaluation_id = source.get("evaluationId")
+#             if evaluation_id and evaluation_id not in unique_evaluations:
+#                 unique_evaluations.add(evaluation_id)
+#                 processed_sources.append(source)
+        
+#         # STEP 5: Build enhanced context with vector search information
+#         if processed_sources:
+#             vector_enhanced_count = sum(1 for s in processed_sources if s.get("vector_enhanced", False))
+            
+#             context = f"""
+# VERIFIED EVALUATION DATA FOUND: {len(processed_sources)} unique evaluations
+
+# ✅ ENHANCED SEARCH RESULTS:
+# - Total evaluations: {len(unique_evaluations)}
+# - Content sources: {len(all_sources)}
+# - Search methods: {', '.join(search_methods_used)}
+# - Vector-enhanced results: {vector_enhanced_count}/{len(processed_sources)}
+# - Search quality: {'ENHANCED with semantic similarity' if vector_enhanced_count > 0 else 'Text-based matching'}
+
+# SAMPLE CONTENT FROM TOP RESULT:
+# {processed_sources[0].get('text', '')[:500]}...
+
+# EVALUATION DETAILS:
+# """
+            
+#             # Add details from first few evaluations
+#             for i, source in enumerate(processed_sources[:5]):
+#                 metadata = source.get("metadata", {})
+#                 search_type = source.get("search_type", "unknown")
+#                 score = source.get("score", 0)
+                
+#                 context += f"""
+# [Evaluation {i+1}] ID: {source['evaluationId']} (Score: {score:.3f}, Type: {search_type})
+# - Template: {source.get('template_name', 'Unknown')}
+# - Program: {metadata.get('program', 'Unknown')}
+# - Disposition: {metadata.get('disposition', 'Unknown')}
+# - Agent: {metadata.get('agent', 'Unknown')}
+# - Content: {source.get('text', '')[:200]}...
+# """
+            
+#             if len(processed_sources) > 5:
+#                 context += f"\n... and {len(processed_sources) - 5} more evaluations"
+            
+#             context += f"""
+
+# INSTRUCTIONS:
+# - Use ONLY the data shown above from {len(processed_sources)} evaluations
+# - Do not generate statistics not directly calculable from this data
+# - Focus on patterns and insights from the actual content provided
+# - Results are enhanced with {'vector similarity matching' if vector_enhanced_count > 0 else 'text matching only'}
+# - Search methods used: {', '.join(search_methods_used)}
+# """
+            
+#             logger.info(f"✅ ENHANCED CONTEXT BUILT: {len(context)} chars with {len(processed_sources)} sources")
+#             logger.info(f"🔮 Vector enhancement: {vector_enhanced_count}/{len(processed_sources)} results")
+            
+#             return context, processed_sources
+#         else:
+#             logger.warning("⚠️ NO VALID SOURCES AFTER PROCESSING")
+#             return create_empty_search_context("no_valid_sources"), []
+
+#     except Exception as e:
+#         logger.error(f"❌ ENHANCED SEARCH CONTEXT BUILD FAILED: {e}")
+#         return create_empty_search_context("system_error", str(e)), []
 
 def create_empty_search_context(status="no_data", error_msg=""):
     """Create empty search context for error cases"""
