@@ -1,3 +1,4 @@
+# Python version requirement: 3.11+
 # Enhanced requirements.txt for Ask InnovAI with Memory Management and Digital Ocean AI
 # Version: 4.8.0 - Fixed missing transformers dependency for embedder
 

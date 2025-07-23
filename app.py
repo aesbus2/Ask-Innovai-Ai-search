@@ -92,8 +92,8 @@ except ImportError as e:
     sys.exit(1)
 
 # Import embedder with fallback
-EMBEDDER_AVAILABLE = False
-VECTOR_SEARCH_READY = False
+EMBEDDER_AVAILABLE = True
+VECTOR_SEARCH_READY = True
 PRELOAD_MODEL_ON_STARTUP = True
 try:
     from embedder import embed_text, get_embedding_stats, preload_embedding_model
