@@ -1,9 +1,5 @@
 # opensearch_client.py - VERSION 5.0.0 Working Base
-# VECTOR SEARCH ENABLED: Full vector + text hybrid search implementation
-# FIXES: All timeout configurations, vector search integration, hybrid scoring
-# NEW: Vector search enabled, embedding integration, hybrid search strategy
-# API INTEGRATION: weight_score, url, evaluation, transcript, agentName, subDisposition
-# SEARCH IMPROVEMENTS: Hybrid text+vector search, improved relevance scoring
+# updated build_safe_filter_clause to use proper filtering when vector search is enabled
 
 import os
 import logging
@@ -663,26 +659,163 @@ def build_safe_search_query(query: str, available_fields: Dict[str, List[str]],
 
 def build_safe_filter_clauses(filters: Dict[str, Any], available_fields: Dict[str, List[str]]) -> List[Dict[str, Any]]:
     """
-    NEW: Build filter clauses with field validation
+    ENHANCED: Build filter clauses with priority-based filtering (same logic as app.py)
+    User-selected filters ALWAYS take priority over any other filtering
     """
     filter_clauses = []
     safe_agg_fields = available_fields.get("safe_aggregation_fields", {})
     
-    # Text-based filters
+    if not filters:
+        return filter_clauses
+    
+    # =============================================================================
+    # PRIORITY 1: USER-SELECTED FILTERS (HIGHEST PRIORITY)
+    # Same logic as analytics_stats in app.py
+    # =============================================================================
+    
+    # Template filter (user selected from dropdown - HIGHEST PRIORITY)
+    if filters.get("template_name"):
+        template_name = str(filters["template_name"]).strip()
+        template_filter = {
+            "bool": {
+                "should": [
+                    # Strategy 1: Exact keyword match
+                    {"term": {"template_name.keyword": template_name}},
+                    # Strategy 2: Case insensitive keyword match
+                    {"term": {"template_name.keyword": template_name.lower()}},
+                    # Strategy 3: Text phrase match (works without .keyword field)
+                    {"match_phrase": {"template_name": template_name}},
+                    # Strategy 4: Wildcard match (partial matches)
+                    {"wildcard": {"template_name": f"*{template_name}*"}},
+                    # Strategy 5: Case insensitive wildcard
+                    {"wildcard": {"template_name": f"*{template_name.lower()}*"}}
+                ],
+                "minimum_should_match": 1
+            }
+        }
+        filter_clauses.append(template_filter)
+        logger.debug(f"Added enhanced template filter: {template_name}")
+    
+    # Organizational hierarchy filters (user selected from dropdowns)
+    organizational_filters = {
+        "program": ["metadata.program.keyword", "metadata.program"], 
+        "partner": ["metadata.partner.keyword", "metadata.partner"],
+        "site": ["metadata.site.keyword", "metadata.site"],
+        "lob": ["metadata.lob.keyword", "metadata.lob"]
+    }
+    
+    for filter_key, field_options in organizational_filters.items():
+        if filters.get(filter_key):
+            filter_value = str(filters[filter_key]).strip()
+            
+            # Enhanced filter with multiple field strategies
+            field_strategies = []
+            for field_path in field_options:
+                field_strategies.extend([
+                    {"term": {field_path: filter_value}},
+                    {"term": {field_path: filter_value.lower()}},
+                    {"match_phrase": {field_path: filter_value}}
+                ])
+            
+            if field_strategies:
+                org_filter = {
+                    "bool": {
+                        "should": field_strategies,
+                        "minimum_should_match": 1
+                    }
+                }
+                filter_clauses.append(org_filter)
+                logger.debug(f"Added {filter_key} filter: {filter_value}")
+    
+    # Call disposition filters (user selected from dropdowns)
+    disposition_filters = {
+        "disposition": ["metadata.disposition.keyword", "metadata.disposition"],
+        "sub_disposition": ["metadata.sub_disposition.keyword", "metadata.sub_disposition"]
+    }
+    
+    for filter_key, field_options in disposition_filters.items():
+        if filters.get(filter_key):
+            filter_value = str(filters[filter_key]).strip()
+            
+            # Enhanced filter with multiple field strategies
+            field_strategies = []
+            for field_path in field_options:
+                field_strategies.extend([
+                    {"term": {field_path: filter_value}},
+                    {"term": {field_path: filter_value.lower()}},
+                    {"match_phrase": {field_path: filter_value}}
+                ])
+            
+            if field_strategies:
+                disp_filter = {
+                    "bool": {
+                        "should": field_strategies,
+                        "minimum_should_match": 1
+                    }
+                }
+                filter_clauses.append(disp_filter)
+                logger.debug(f"Added {filter_key} filter: {filter_value}")
+    
+    # Agent and language filters (user selected from dropdowns)
+    agent_language_filters = {
+        "agent": ["metadata.agent.keyword", "metadata.agent"],
+        "language": ["metadata.language.keyword", "metadata.language"]
+    }
+    
+    for filter_key, field_options in agent_language_filters.items():
+        if filters.get(filter_key):
+            filter_value = str(filters[filter_key]).strip()
+            
+            # Enhanced filter with multiple field strategies
+            field_strategies = []
+            for field_path in field_options:
+                field_strategies.extend([
+                    {"term": {field_path: filter_value}},
+                    {"term": {field_path: filter_value.lower()}},
+                    {"match_phrase": {field_path: filter_value}}
+                ])
+            
+            if field_strategies:
+                al_filter = {
+                    "bool": {
+                        "should": field_strategies,
+                        "minimum_should_match": 1
+                    }
+                }
+                filter_clauses.append(al_filter)
+                logger.debug(f"Added {filter_key} filter: {filter_value}")
+    
+    # =============================================================================
+    # REMAINING FILTER LOGIC (same as before but with fallbacks)
+    # =============================================================================
+    
+    # Handle any other filters not covered above using the safe_agg_fields approach
     for filter_key, filter_value in filters.items():
         if not filter_value or filter_key == "collection":
             continue
             
-        # Check if we have a safe field for this filter
+        # Skip filters we already handled above
+        if filter_key in ["template_name", "program", "partner", "site", "lob", "disposition", "sub_disposition", "agent", "language"]:
+            continue
+            
+        # Use safe aggregation fields for remaining filters
         if filter_key in safe_agg_fields:
             safe_field = safe_agg_fields[filter_key]
-            filter_clauses.append({
-                "term": {safe_field: filter_value}
-            })
-            logger.debug(f"Added safe filter: {safe_field} = {filter_value}")
+            enhanced_filter = {
+                "bool": {
+                    "should": [
+                        {"term": {safe_field: filter_value}},
+                        {"term": {safe_field: filter_value.lower()}},
+                        {"match_phrase": {safe_field.replace(".keyword", ""): filter_value}}
+                    ],
+                    "minimum_should_match": 1
+                }
+            }
+            filter_clauses.append(enhanced_filter)
+            logger.debug(f"Added enhanced filter: {safe_field} = {filter_value}")
         else:
-            logger.warning(f"No safe field found for filter: {filter_key}")
-    
+            logger.warning(f"No safe field found for filter: {filter_key} - skipping")
+
     # Date range filters
     if filters.get("call_date_start") or filters.get("call_date_end"):
         date_range = {}
@@ -718,6 +851,7 @@ def build_safe_filter_clauses(filters: Dict[str, Any], available_fields: Dict[st
                 logger.debug(f"Added duration filter: {duration_field}")
                 break
     
+    logger.info(f"🎯 Built {len(filter_clauses)} enhanced filter clauses with priority-based logic")
     return filter_clauses
 
 # =============================================================================
