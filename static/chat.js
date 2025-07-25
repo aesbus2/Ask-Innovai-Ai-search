@@ -377,10 +377,17 @@ function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
 }
 
 // Enhanced sendMessage function to handle transcript search
-async function sendMessageWithTranscriptSearch(message) {
+// Enhanced sendMessage function to handle transcript search
+async function sendMessageWithTranscriptSearch() {
+    // Get message from the same input your original function uses
+    const chatInput = document.getElementById('chatInput');
+    const message = chatInput.value.trim();
+    
+    if (!message || isLoading) return;
+    
     if (!transcriptSearchMode) {
         // Use existing sendMessage function for regular chat
-        return sendMessage(message);
+        return originalSendMessage();
     }
     
     console.log(`🎯 Performing transcript search for: "${message}"`);
@@ -388,6 +395,10 @@ async function sendMessageWithTranscriptSearch(message) {
     // Check if comprehensive search is enabled
     const comprehensiveToggle = document.getElementById('comprehensiveSearchToggle');
     const useComprehensive = comprehensiveToggle && comprehensiveToggle.checked;
+    
+    // Clear input (like the original function does)
+    chatInput.value = '';
+    chatInput.style.height = 'auto';
     
     // Show loading state
     showTranscriptSearchLoading(message, useComprehensive);
@@ -401,6 +412,8 @@ async function sendMessageWithTranscriptSearch(message) {
             highlight: true
         };
         
+        console.log("🔍 Sending transcript search request:", requestBody);
+        
         // Use appropriate endpoint
         const endpoint = useComprehensive ? '/search_transcripts_comprehensive' : '/search_transcripts';
         
@@ -413,6 +426,8 @@ async function sendMessageWithTranscriptSearch(message) {
         });
         
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error("API Error Response:", errorText);
             throw new Error(`Search failed: ${response.status} ${response.statusText}`);
         }
         
@@ -1623,11 +1638,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Override the existing sendMessage function to handle transcript search
 const originalSendMessage = window.sendMessage;
-window.sendMessage = function(message) {
+window.sendMessage = function() {
     if (transcriptSearchMode) {
-        return sendMessageWithTranscriptSearch(message);
+        return sendMessageWithTranscriptSearch();
     } else {
-        return originalSendMessage ? originalSendMessage(message) : console.warn('Original sendMessage not found');
+        return originalSendMessage ();
     }
 };
 
