@@ -246,7 +246,8 @@ function initializeTranscriptSearch() {
 
 function addTranscriptSearchToggle() {
     // Find the chat input container or create one
-    const chatContainer = document.querySelector('.chat-input-container') || 
+    const chatContainer = document.querySelector('.chat-input-area') || 
+                         document.querySelector('.chat-input-container') || 
                          document.querySelector('#chatContainer') ||
                          document.querySelector('.message-input-container');
     
@@ -288,6 +289,7 @@ function addTranscriptSearchToggle() {
         chatInput.parentNode.insertBefore(transcriptControls, chatInput);
     } else {
         chatContainer.insertAdjacentElement('afterbegin', transcriptControls);
+        console.log("✅ Transcript search controls added to chat-input-area");
     }
 }
 
