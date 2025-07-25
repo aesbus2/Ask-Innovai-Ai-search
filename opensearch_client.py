@@ -1049,6 +1049,200 @@ def _count_word_occurrences(text: str, query: str) -> int:
 # SEARCH TRANSCRIPTS - SEARCH FOR KEYWORDS
 # =============================================================================
 
+def search_transcripts_only(query: str, filters: Dict[str, Any] = None, 
+                           size: int = 50, highlight_words: bool = True) -> List[Dict]:
+    """
+    NEW: Search specifically within transcript content only (standard mode)
+    """
+    client = get_opensearch_client()
+    if not client:
+        logger.error("❌ OpenSearch client not available")
+        return []
+    
+    index_pattern = "eval-*"
+    logger.info(f"🎯 TRANSCRIPT-ONLY SEARCH: '{query}' (size={size})")
+    
+    try:
+        # Get available fields for safe queries
+        available_fields = get_available_fields(client, index_pattern)
+        
+        # Build transcript-specific query
+        transcript_query = {
+            "bool": {
+                "must": [
+                    {
+                        "bool": {
+                            "should": [
+                                # Exact phrase match in transcript
+                                {"match_phrase": {"transcript": {"query": query, "boost": 3.0}}},
+                                # Fuzzy word matching in transcript
+                                {"match": {"transcript": {"query": query, "fuzziness": "AUTO", "boost": 2.0}}},
+                                # Wildcard search for partial words
+                                {"wildcard": {"transcript": f"*{query.lower()}*"}}
+                            ],
+                            "minimum_should_match": 1
+                        }
+                    },
+                    # Ensure document has transcript content
+                    {"exists": {"field": "transcript"}},
+                    # Ensure transcript is not empty
+                    {"bool": {"must_not": {"term": {"transcript.keyword": ""}}}}
+                ]
+            }
+        }
+        
+        # Add filters if provided
+        if filters:
+            filter_clauses = build_safe_filter_clauses(filters, available_fields)
+            if filter_clauses:
+                transcript_query["bool"]["filter"] = filter_clauses
+        
+        # Build search body with highlighting
+        search_body = {
+            "query": transcript_query,
+            "size": size,
+            "sort": [{"_score": {"order": "desc"}}],
+            "_source": ["evaluationId", "internalId", "template_name", "template_id", 
+                       "transcript", "metadata", "evaluation"],
+        }
+        
+        # Add highlighting for matched words
+        if highlight_words:
+            search_body["highlight"] = {
+                "fields": {
+                    "transcript": {
+                        "fragment_size": 150,
+                        "number_of_fragments": 3,
+                        "pre_tags": ["<mark class='highlight'>"],
+                        "post_tags": ["</mark>"]
+                    }
+                },
+                "require_field_match": False
+            }
+        
+        # Execute search
+        response = safe_search_with_error_handling(client, index_pattern, search_body, timeout=30)
+        
+        # Process results
+        results = []
+        hits = response.get("hits", {}).get("hits", [])
+        
+        for hit in hits:
+            source = hit.get("_source", {})
+            transcript_content = source.get("transcript", "")
+            
+            # Skip if transcript is empty or too short
+            if not transcript_content or len(transcript_content.strip()) < 10:
+                continue
+            
+            # Extract highlighted snippets
+            highlights = hit.get("highlight", {}).get("transcript", [])
+            
+            # Extract key metadata for easy reference
+            metadata = source.get("metadata", {})
+            sub_disposition = metadata.get("sub_disposition") or metadata.get("subDisposition") or "Not specified"
+            disposition = metadata.get("disposition") or "Not specified"
+            
+            result = {
+                "_id": hit.get("_id"),
+                "_score": hit.get("_score", 0),
+                "_index": hit.get("_index"),
+                "evaluationId": source.get("evaluationId"),
+                "internalId": source.get("internalId"),
+                "template_name": source.get("template_name"),
+                "template_id": source.get("template_id"),
+                "transcript": transcript_content,
+                "transcript_length": len(transcript_content),
+                "metadata": metadata,
+                
+                # KEY REFERENCE FIELDS for investigation
+                "sub_disposition": sub_disposition,
+                "disposition": disposition,
+                "program": metadata.get("program", "Not specified"),
+                "partner": metadata.get("partner", "Not specified"),
+                "site": metadata.get("site", "Not specified"),
+                "call_date": metadata.get("call_date") or metadata.get("callDate"),
+                
+                "search_type": "transcript_only",
+                "highlighted_snippets": highlights,
+                "match_count": len(highlights) if highlights else _count_word_occurrences(transcript_content, query)
+            }
+            
+            results.append(result)
+        
+        logger.info(f"✅ Transcript search completed: {len(results)} results")
+        return results
+        
+    except Exception as e:
+        logger.error(f"❌ Transcript search failed: {e}")
+        return []
+
+def search_transcript_with_context(query: str, evaluation_id: str, 
+                                  context_chars: int = 200) -> Dict[str, Any]:
+    """
+    NEW: Search for specific words within a single transcript with surrounding context
+    """
+    client = get_opensearch_client()
+    if not client:
+        return {"error": "OpenSearch client not available"}
+    
+    try:
+        # Get the specific evaluation document
+        search_body = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {"term": {"evaluationId": evaluation_id}},
+                        {"exists": {"field": "transcript"}}
+                    ]
+                }
+            },
+            "size": 1,
+            "_source": ["transcript", "evaluationId", "template_name"]
+        }
+        
+        response = safe_search_with_error_handling(client, "eval-*", search_body)
+        hits = response.get("hits", {}).get("hits", [])
+        
+        if not hits:
+            return {"error": "Evaluation not found or no transcript available"}
+        
+        transcript = hits[0]["_source"].get("transcript", "")
+        if not transcript:
+            return {"error": "No transcript content found"}
+        
+        # Find all occurrences of the query with context
+        import re
+        matches = []
+        pattern = re.compile(re.escape(query.lower()))
+        
+        for match in pattern.finditer(transcript.lower()):
+            start_pos = max(0, match.start() - context_chars)
+            end_pos = min(len(transcript), match.end() + context_chars)
+            
+            context_snippet = transcript[start_pos:end_pos]
+            match_info = {
+                "position": match.start(),
+                "context": context_snippet,
+                "highlighted_context": context_snippet.replace(
+                    query, f"<mark class='highlight'>{query}</mark>"
+                )
+            }
+            matches.append(match_info)
+        
+        return {
+            "evaluation_id": evaluation_id,
+            "template_name": hits[0]["_source"].get("template_name"),
+            "query": query,
+            "total_matches": len(matches),
+            "transcript_length": len(transcript),
+            "matches": matches[:10]  # Limit to first 10 matches
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Transcript context search failed: {e}")
+        return {"error": str(e)}
+
 def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None, 
                                    display_size: int = 20, max_total_scan: int = 10000) -> Dict[str, Any]:
     """
