@@ -1,5 +1,5 @@
 # Enhanced Production App.py - Real Data Filter System with Efficient Metadata Loading
-# Version: 5.0.0 - Index-based metadata extraction with evaluation grouping
+# Version: 6.0.0 - Index-based metadata extraction with evaluation grouping
 # Working Base Version (needs KNN to delete if available): 
 
 
@@ -28,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse as StarletteJSONResponse
+from opensearch_client import search_transcripts_comprehensive, search_transcripts_only, search_transcript_with_context
 
 # Other imports
 from bs4 import BeautifulSoup
@@ -674,6 +675,136 @@ async def search_endpoint(q: str = Query(..., description="Search query")):
             "query": q,
             "results": []
         }
+# Standard transcript search (quick, limited results)
+@app.post("/search_transcripts")
+async def search_transcripts_endpoint(request: Request):
+    """
+    NEW: Endpoint for transcript-only word search (standard mode)
+    """
+    try:
+        body = await request.json()
+        query = body.get("query", "").strip()
+        filters = body.get("filters", {})
+        size = min(body.get("size", 20), 100)  # Limit max results
+        highlight = body.get("highlight", True)
+        
+        if not query:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Query parameter is required"}
+            )
+        
+        if len(query) < 2:
+            return JSONResponse(
+                status_code=400, 
+                content={"error": "Query must be at least 2 characters long"}
+            )
+        
+        logger.info(f"🎯 TRANSCRIPT SEARCH REQUEST: '{query}' with filters: {filters}")
+        
+        # Perform transcript-only search
+        results = search_transcripts_only(query, filters, size, highlight)
+        
+        # Calculate summary statistics
+        total_matches = sum(result.get("match_count", 0) for result in results)
+        transcripts_found = len(results)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "query": query,
+                "results": results,
+                "summary": {
+                    "transcripts_with_matches": transcripts_found,
+                    "total_word_occurrences": total_matches,
+                    "search_type": "transcript_only",
+                    "filters_applied": len(filters) > 0
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Transcript search endpoint failed: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Search failed: {str(e)}"}
+        )
+# Full scan with summary stats and download data
+@app.post("/search_transcripts_comprehensive")
+async def search_transcripts_comprehensive_endpoint(request: Request):
+    """
+    NEW: Comprehensive transcript search - scans all documents, shows summary, provides download
+    """
+    try:
+        body = await request.json()
+        query = body.get("query", "").strip()
+        filters = body.get("filters", {})
+        display_size = min(body.get("display_size", 20), 50)  # Max 50 for display
+        max_scan = min(body.get("max_scan", 10000), 25000)  # Max 25k for performance
+        
+        if not query:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Query parameter is required"}
+            )
+        
+        if len(query) < 2:
+            return JSONResponse(
+                status_code=400, 
+                content={"error": "Query must be at least 2 characters long"}
+            )
+        
+        logger.info(f"🔍 COMPREHENSIVE TRANSCRIPT SEARCH: '{query}' (display={display_size}, max_scan={max_scan})")
+        
+        # Perform comprehensive search
+        result = search_transcripts_comprehensive(query, filters, display_size, max_scan)
+        
+        if "error" in result:
+            return JSONResponse(
+                status_code=500,
+                content={"error": result["error"]}
+            )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                **result,
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Comprehensive transcript search endpoint failed: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Search failed: {str(e)}"}
+        )
+# Get all matches within a specific transcript
+@app.get("/search_transcript_context/{evaluation_id}")
+async def search_transcript_context_endpoint(
+    evaluation_id: str, 
+    query: str = Query(..., description="Word or phrase to search for"),
+    context: int = Query(200, description="Characters of context around matches")
+):
+    """
+    NEW: Get word matches with context from a specific transcript
+    """
+    try:
+        result = search_transcript_with_context(query, evaluation_id, context)
+        
+        if "error" in result:
+            return JSONResponse(status_code=404, content=result)
+        
+        return JSONResponse(status_code=200, content=result)
+        
+    except Exception as e:
+        logger.error(f"❌ Transcript context search failed: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Context search failed: {str(e)}"}
+        )
     
 # Manual warmup endpoint (now triggers background loading if not done)
 @app.post("/admin/warmup_model")

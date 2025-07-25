@@ -1,6 +1,6 @@
 // Enhanced Metro AI Call Center Analytics Chat - VECTOR SEARCH ENABLED
-// Version: 5.0.0 - Working Base
-// FIXES: Removed duplicate functions, fixed analytics integration, proper stats refresh
+// Version: 6.0.0 - Working Base
+// Updating for transcript search
 
 // =============================================================================
 // PRODUCTION CONFIGURATION & GLOBAL STATE
@@ -23,6 +23,10 @@ let filterOptions = {
     languages: [],
     callTypes: []
 };
+
+// Global state for transcript search
+let transcriptSearchMode = false;
+let lastTranscriptResults = [];
 
 // Vector search state tracking
 let vectorSearchStatus = {
@@ -227,6 +231,204 @@ function setupIdFieldValidation() {
             }
         });
     });
+}
+
+// Initialize transcript search functionality
+function initializeTranscriptSearch() {
+    console.log("🎯 Initializing transcript search functionality...");
+    
+    // Add transcript search toggle to the chat interface
+    addTranscriptSearchToggle();
+    
+    // Add transcript search results container
+    addTranscriptResultsContainer();
+}
+
+function addTranscriptSearchToggle() {
+    // Find the chat input container or create one
+    const chatContainer = document.querySelector('.chat-input-container') || 
+                         document.querySelector('#chatContainer') ||
+                         document.querySelector('.message-input-container');
+    
+    if (!chatContainer) {
+        console.warn("⚠️ Chat container not found, cannot add transcript search toggle");
+        return;
+    }
+    
+    // Create transcript search controls
+    const transcriptControls = document.createElement('div');
+    transcriptControls.id = 'transcriptSearchControls';
+    transcriptControls.className = 'transcript-search-controls';
+    transcriptControls.innerHTML = `
+        <div class="search-mode-toggle">
+            <label class="toggle-switch">
+                <input type="checkbox" id="transcriptSearchToggle" onchange="toggleTranscriptSearchMode()">
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Search Transcripts Only</span>
+            </label>
+            <div class="comprehensive-option" id="comprehensiveOption" style="display: none;">
+                <label class="toggle-switch secondary">
+                    <input type="checkbox" id="comprehensiveSearchToggle" checked>
+                    <span class="toggle-slider small"></span>
+                    <span class="toggle-label small">Comprehensive Analysis (scan all results)</span>
+                </label>
+            </div>
+            <div class="search-mode-help" id="searchModeHelp">
+                <small>🎯 When enabled, searches will only look for words within call transcripts</small>
+            </div>
+        </div>
+    `;
+    
+    // Insert before the chat input or at the top of container
+    const chatInput = chatContainer.querySelector('#messageInput') || 
+                     chatContainer.querySelector('input[type="text"]') ||
+                     chatContainer.querySelector('textarea');
+    
+    if (chatInput && chatInput.parentNode) {
+        chatInput.parentNode.insertBefore(transcriptControls, chatInput);
+    } else {
+        chatContainer.insertAdjacentElement('afterbegin', transcriptControls);
+    }
+}
+
+function addTranscriptResultsContainer() {
+    // Create a dedicated container for transcript search results
+    const resultsContainer = document.createElement('div');
+    resultsContainer.id = 'transcriptSearchResults';
+    resultsContainer.className = 'transcript-search-results hidden';
+    resultsContainer.innerHTML = `
+        <div class="results-header">
+            <h3>📝 Transcript Search Results</h3>
+            <button onclick="clearTranscriptResults()" class="clear-results-btn">Clear</button>
+        </div>
+        <div class="results-summary" id="transcriptResultsSummary"></div>
+        <div class="results-list" id="transcriptResultsList"></div>
+    `;
+    
+    // Insert into the main content area
+    const mainContent = document.querySelector('#chatMessages') || 
+                       document.querySelector('.chat-messages') ||
+                       document.querySelector('main') ||
+                       document.body;
+    
+    mainContent.appendChild(resultsContainer);
+}
+
+function toggleTranscriptSearchMode() {
+    const toggle = document.getElementById('transcriptSearchToggle');
+    const helpText = document.getElementById('searchModeHelp');
+    const comprehensiveOption = document.getElementById('comprehensiveOption');
+    
+    transcriptSearchMode = toggle.checked;
+    
+    console.log(`🎯 Transcript search mode: ${transcriptSearchMode ? 'ON' : 'OFF'}`);
+    
+    // Update UI to reflect the mode
+    if (transcriptSearchMode) {
+        // Show comprehensive option
+        if (comprehensiveOption) {
+            comprehensiveOption.style.display = 'block';
+        }
+        
+        helpText.innerHTML = `
+            <small style="color: #2196f3;">
+                🎯 <strong>Transcript Search Mode:</strong> Searching within call transcripts only<br>
+                📊 <strong>Comprehensive Analysis:</strong> Scans all results, shows summary + download list
+            </small>
+        `;
+        
+        // Update chat interface styling
+        updateChatInterfaceForTranscriptMode(true);
+    } else {
+        // Hide comprehensive option
+        if (comprehensiveOption) {
+            comprehensiveOption.style.display = 'none';
+        }
+        
+        helpText.innerHTML = `
+            <small>🔍 Regular search mode: Searching all evaluation content</small>
+        `;
+        
+        updateChatInterfaceForTranscriptMode(false);
+        clearTranscriptResults();
+    }
+}
+
+function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
+    const chatInput = document.getElementById('messageInput') || 
+                     document.querySelector('input[type="text"]') ||
+                     document.querySelector('textarea');
+    
+    if (chatInput) {
+        if (isTranscriptMode) {
+            chatInput.placeholder = "Search for specific words in call transcripts...";
+            chatInput.style.borderColor = "#2196f3";
+            chatInput.style.boxShadow = "0 0 0 2px rgba(33, 150, 243, 0.1)";
+        } else {
+            chatInput.placeholder = "Ask a question about the evaluation data...";
+            chatInput.style.borderColor = "";
+            chatInput.style.boxShadow = "";
+        }
+    }
+}
+
+// Enhanced sendMessage function to handle transcript search
+async function sendMessageWithTranscriptSearch(message) {
+    if (!transcriptSearchMode) {
+        // Use existing sendMessage function for regular chat
+        return sendMessage(message);
+    }
+    
+    console.log(`🎯 Performing transcript search for: "${message}"`);
+    
+    // Check if comprehensive search is enabled
+    const comprehensiveToggle = document.getElementById('comprehensiveSearchToggle');
+    const useComprehensive = comprehensiveToggle && comprehensiveToggle.checked;
+    
+    // Show loading state
+    showTranscriptSearchLoading(message, useComprehensive);
+    
+    try {
+        const requestBody = {
+            query: message,
+            filters: currentFilters || {},
+            display_size: 20,
+            max_scan: 10000,
+            highlight: true
+        };
+        
+        // Use appropriate endpoint
+        const endpoint = useComprehensive ? '/search_transcripts_comprehensive' : '/search_transcripts';
+        
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Search failed: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            if (useComprehensive) {
+                displayComprehensiveTranscriptResults(data, message);
+            } else {
+                displayTranscriptSearchResults(data, message);
+            }
+            lastTranscriptResults = data.display_results || data.results;
+        } else {
+            showTranscriptSearchError(data.error || 'Unknown error occurred');
+        }
+        
+    } catch (error) {
+        console.error('❌ Transcript search failed:', error);
+        showTranscriptSearchError(error.message);
+    }
 }
 
 // =============================================================================
@@ -1147,6 +1349,91 @@ async function checkVectorSearchCapabilities() {
     }
 }
 
+function showTranscriptSearchLoading(query, isComprehensive = false) {
+    const resultsContainer = document.getElementById('transcriptSearchResults');
+    const resultsList = document.getElementById('transcriptResultsList');
+    const resultsSummary = document.getElementById('transcriptResultsSummary');
+    
+    resultsContainer.classList.remove('hidden');
+    
+    const searchType = isComprehensive ? 'Comprehensive' : 'Standard';
+    const searchDescription = isComprehensive ? 
+        'Scanning all documents for complete analysis...' : 
+        `Searching transcripts for "${query}"...`;
+    
+    resultsSummary.innerHTML = `
+        <div class="loading-indicator">
+            <div class="spinner"></div>
+            <span>${searchType} search: ${searchDescription}</span>
+        </div>
+    `;
+    
+    resultsList.innerHTML = '';
+}
+
+function clearTranscriptResults() {
+    const resultsContainer = document.getElementById('transcriptSearchResults');
+    const resultsList = document.getElementById('transcriptResultsList');
+    const resultsSummary = document.getElementById('transcriptResultsSummary');
+    
+    resultsContainer.classList.add('hidden');
+    resultsList.innerHTML = '';
+    resultsSummary.innerHTML = '';
+    lastTranscriptResults = [];
+}
+
+function showTranscriptSearchError(error) {
+    const resultsSummary = document.getElementById('transcriptResultsSummary');
+    
+    resultsSummary.innerHTML = `
+        <div class="error-message">
+            <h4>❌ Search Error</h4>
+            <p>${error}</p>
+        </div>
+    `;
+}
+
+// Utility function to copy text to clipboard
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        // Show temporary feedback
+        showToast(`📋 Copied: ${text}`, 'success');
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
+        showToast('Failed to copy to clipboard', 'error');
+    });
+}
+
+// Enhanced toast notification system
+function showToast(message, type = 'info') {
+    // Remove any existing toast
+    const existingToast = document.querySelector('.transcript-toast');
+    if (existingToast) {
+        existingToast.remove();
+    }
+    
+    const toast = document.createElement('div');
+    toast.className = `transcript-toast toast-${type}`;
+    toast.innerHTML = `
+        <span class="toast-message">${message}</span>
+        <button onclick="this.parentElement.remove()" class="toast-close">×</button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, 3000);
+}
+
+function truncateText(text, maxLength) {
+    if (!text || text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+}
+
 // =============================================================================
 // STYLES AND FORMATTING
 // =============================================================================
@@ -1316,31 +1603,28 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error("❌ CRITICAL: Production initialization failed:", error);
         showCriticalError("Critical initialization failure: " + error.message);
     }
+
+        setTimeout(initializeTranscriptSearch, 1000);
+
+        console.log("✅ Metro AI Call Center Analytics v4.9.0 production loaded successfully");
+        console.log("🔧 FIXED: Chat-stats integration, duplicate functions removed, analytics connected");
+        console.log("🔮 Vector search: Enhanced relevance and semantic similarity support");
+        console.log("🔧 Debug mode:", PRODUCTION_CONFIG.DEBUG_MODE ? "ENABLED" : "DISABLED");
+        console.log("🎯 Transcript search: Initialization scheduled"); // ADD THIS LINE TOO
 });
 
-console.log("✅ Metro AI Call Center Analytics v4.9.0 production loaded successfully");
-console.log("🔧 FIXED: Chat-stats integration, duplicate functions removed, analytics connected");
-console.log("🔮 Vector search: Enhanced relevance and semantic similarity support");
-console.log("🔧 Debug mode:", PRODUCTION_CONFIG.DEBUG_MODE ? "ENABLED" : "DISABLED");
+// =============================================================================
+// TRANSCRIPT SEARCH MESSAGE OVERRIDE (ADD THIS AFTER YOUR DOMContentLoaded)
+// =============================================================================
 
-// =============================================================================
-// 🗑️ REMOVED FROM ORIGINAL FILE:
-// 
-// 1. Multiple duplicate updateFilterCounts function definitions
-// 2. Nested function definitions inside updateFilterCounts
-// 3. Conflicting updateDataStatusIndicators, updateSidebarStats, etc.
-// 4. Missing refreshAnalyticsStats() calls in filter functions
-// 5. Missing initial stats loading in initialization
-// 6. Broken syntax with nested functions
-// 7. Function conflicts between chat.js and chat.html versions
-// 
-// ✅ ADDED TO FIX ISSUES:
-// 
-// 1. Single, clean updateFilterCounts function
-// 2. Proper helper functions (not nested)
-// 3. refreshAnalyticsStats() calls in applyFilters, clearFilters, removeFilter
-// 4. Initial stats loading in initialization
-// 5. Proper error handling for analytics failures
-// 6. Clean function structure with no conflicts
-// 7. Integration with /analytics/stats endpoint
-// =============================================================================
+// Override the existing sendMessage function to handle transcript search
+const originalSendMessage = window.sendMessage;
+window.sendMessage = function(message) {
+    if (transcriptSearchMode) {
+        return sendMessageWithTranscriptSearch(message);
+    } else {
+        return originalSendMessage ? originalSendMessage(message) : console.warn('Original sendMessage not found');
+    }
+};
+
+console.log("🎯 Transcript search: sendMessage override applied");

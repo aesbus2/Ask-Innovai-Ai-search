@@ -1,5 +1,5 @@
-# opensearch_client.py - VERSION 5.0.0 Working Base
-# updated build_safe_filter_clause to use proper filtering when vector search is enabled
+# opensearch_client.py - VERSION 6.0.0 Working Base
+# Added keyword search and word counts 7-25-25
 
 import os
 import logging
@@ -434,6 +434,7 @@ def hybrid_search(query: str, query_vector: List[float] = None,
         # Fallback to text-only search
         logger.info("🔄 Falling back to text-only search")
         return search_opensearch(query, index_override, filters, size)
+    
 
 # =============================================================================
 # ENHANCED FIELD DETECTION - PREVENTS COMPILATION ERRORS
@@ -1031,6 +1032,210 @@ def search_opensearch(query: str, index_override: str = None,
     except Exception as e:
         logger.error(f"Enhanced search failed with error: {e}")
         return []
+    
+# =============================================================================
+# Count Search word occurrences in transcript
+# =============================================================================
+
+def _count_word_occurrences(text: str, query: str) -> int:
+    """Helper function to count word occurrences in text"""
+    import re
+    # Create regex pattern for word boundaries
+    pattern = r'\b' + re.escape(query.lower()) + r'\b'
+    matches = re.findall(pattern, text.lower())
+    return len(matches)
+    
+# =============================================================================
+# SEARCH TRANSCRIPTS - SEARCH FOR KEYWORDS
+# =============================================================================
+
+def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None, 
+                                   display_size: int = 20, max_total_scan: int = 10000) -> Dict[str, Any]:
+    """
+    NEW: Comprehensive transcript search - scans ALL matching documents but returns limited results for display
+    plus complete summary and evaluation ID list for download
+    """
+    client = get_opensearch_client()
+    if not client:
+        logger.error("❌ OpenSearch client not available")
+        return {"error": "OpenSearch client not available"}
+    
+    index_pattern = "eval-*"
+    logger.info(f"🔍 COMPREHENSIVE TRANSCRIPT SEARCH: '{query}' (display={display_size}, max_scan={max_total_scan})")
+    
+    try:
+        # Get available fields for safe queries
+        available_fields = get_available_fields(client, index_pattern)
+        
+        # Build transcript-specific query (same as before)
+        transcript_query = {
+            "bool": {
+                "must": [
+                    {
+                        "bool": {
+                            "should": [
+                                {"match_phrase": {"transcript": {"query": query, "boost": 3.0}}},
+                                {"match": {"transcript": {"query": query, "fuzziness": "AUTO", "boost": 2.0}}},
+                                {"wildcard": {"transcript": f"*{query.lower()}*"}}
+                            ],
+                            "minimum_should_match": 1
+                        }
+                    },
+                    {"exists": {"field": "transcript"}},
+                    {"bool": {"must_not": {"term": {"transcript.keyword": ""}}}}
+                ]
+            }
+        }
+        
+        # Add filters if provided
+        if filters:
+            filter_clauses = build_safe_filter_clauses(filters, available_fields)
+            if filter_clauses:
+                transcript_query["bool"]["filter"] = filter_clauses
+        
+        # STEP 1: Get total count of evaluations in date range (without transcript search)
+        total_count_query = {"match_all": {}}
+        if filters:
+            filter_clauses = build_safe_filter_clauses(filters, available_fields)
+            if filter_clauses:
+                total_count_query = {"bool": {"filter": filter_clauses}}
+        
+        total_count_response = safe_search_with_error_handling(
+            client, index_pattern, 
+            {"query": total_count_query, "size": 0, "track_total_hits": True}, 
+            timeout=30
+        )
+        total_evaluations = total_count_response.get("hits", {}).get("total", {}).get("value", 0)
+        
+        # STEP 2: Comprehensive search for ALL matching transcripts (for summary)
+        comprehensive_search_body = {
+            "query": transcript_query,
+            "size": max_total_scan,  # Scan up to 10k results
+            "sort": [{"_score": {"order": "desc"}}],
+            "_source": ["evaluationId", "template_name", "metadata", "_score"],
+            "track_total_hits": True
+        }
+        
+        comprehensive_response = safe_search_with_error_handling(
+            client, index_pattern, comprehensive_search_body, timeout=60
+        )
+        
+        all_hits = comprehensive_response.get("hits", {}).get("hits", [])
+        total_matches = comprehensive_response.get("hits", {}).get("total", {}).get("value", 0)
+        
+        # Extract all evaluation IDs with matches
+        all_evaluation_ids = []
+        evaluation_details = []
+        
+        for hit in all_hits:
+            source = hit.get("_source", {})
+            eval_id = source.get("evaluationId")
+            if eval_id:
+                metadata = source.get("metadata", {})
+                
+                eval_detail = {
+                    "evaluationId": eval_id,
+                    "template_name": source.get("template_name", "Unknown"),
+                    "sub_disposition": metadata.get("sub_disposition") or metadata.get("subDisposition") or "Not specified",
+                    "disposition": metadata.get("disposition", "Not specified"),
+                    "program": metadata.get("program", "Not specified"),
+                    "partner": metadata.get("partner", "Not specified"),
+                    "site": metadata.get("site", "Not specified"),
+                    "call_date": metadata.get("call_date") or metadata.get("callDate"),
+                    "score": hit.get("_score", 0)
+                }
+                
+                all_evaluation_ids.append(eval_id)
+                evaluation_details.append(eval_detail)
+        
+        # STEP 3: Get detailed results for first N results (for display)
+        display_search_body = {
+            "query": transcript_query,
+            "size": display_size,
+            "sort": [{"_score": {"order": "desc"}}],
+            "_source": True,
+            "highlight": {
+                "fields": {
+                    "transcript": {
+                        "fragment_size": 150,
+                        "number_of_fragments": 3,
+                        "pre_tags": ["<mark class='highlight'>"],
+                        "post_tags": ["</mark>"]
+                    }
+                },
+                "require_field_match": False
+            }
+        }
+        
+        display_response = safe_search_with_error_handling(
+            client, index_pattern, display_search_body, timeout=30
+        )
+        
+        # Process display results (same as original function)
+        display_results = []
+        display_hits = display_response.get("hits", {}).get("hits", [])
+        
+        for hit in display_hits:
+            source = hit.get("_source", {})
+            transcript_content = source.get("transcript", "")
+            
+            if not transcript_content or len(transcript_content.strip()) < 10:
+                continue
+            
+            highlights = hit.get("highlight", {}).get("transcript", [])
+            metadata = source.get("metadata", {})
+            
+            result = {
+                "_id": hit.get("_id"),
+                "_score": hit.get("_score", 0),
+                "_index": hit.get("_index"),
+                "evaluationId": source.get("evaluationId"),
+                "internalId": source.get("internalId"),
+                "template_name": source.get("template_name"),
+                "template_id": source.get("template_id"),
+                "transcript": transcript_content,
+                "transcript_length": len(transcript_content),
+                "metadata": metadata,
+                "sub_disposition": metadata.get("sub_disposition") or metadata.get("subDisposition") or "Not specified",
+                "disposition": metadata.get("disposition", "Not specified"),
+                "program": metadata.get("program", "Not specified"),
+                "partner": metadata.get("partner", "Not specified"),
+                "site": metadata.get("site", "Not specified"),
+                "call_date": metadata.get("call_date") or metadata.get("callDate"),
+                "search_type": "transcript_comprehensive",
+                "highlighted_snippets": highlights,
+                "match_count": len(highlights) if highlights else _count_word_occurrences(transcript_content, query)
+            }
+            
+            display_results.append(result)
+        
+        # Calculate additional statistics
+        unique_templates = len(set(detail["template_name"] for detail in evaluation_details))
+        unique_sub_dispositions = len(set(detail["sub_disposition"] for detail in evaluation_details if detail["sub_disposition"] != "Not specified"))
+        
+        return {
+            "status": "success",
+            "query": query,
+            "display_results": display_results,
+            "comprehensive_summary": {
+                "total_evaluations_searched": total_evaluations,
+                "evaluations_with_matches": len(all_evaluation_ids),
+                "match_percentage": round((len(all_evaluation_ids) / total_evaluations) * 100, 1) if total_evaluations > 0 else 0,
+                "unique_templates": unique_templates,
+                "unique_sub_dispositions": unique_sub_dispositions,
+                "total_document_matches": total_matches,
+                "display_limit": display_size,
+                "max_scanned": len(all_hits)
+            },
+            "evaluation_ids_for_download": all_evaluation_ids,
+            "evaluation_details_for_download": evaluation_details,
+            "filters_applied": filters is not None and len(filters) > 0,
+            "search_type": "comprehensive_transcript"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Comprehensive transcript search failed: {e}")
+        return {"error": str(e)}
 
 # =============================================================================
 # INDEX MANAGEMENT - ENHANCED WITH VECTOR SUPPORT
