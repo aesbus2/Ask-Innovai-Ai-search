@@ -245,7 +245,7 @@ function initializeTranscriptSearch() {
 }
 
 function addTranscriptSearchToggle() {
-    // Find the chat input container or create one
+    // FIXED: Use the correct container name from your app
     const chatContainer = document.querySelector('.chat-input-area') || 
                          document.querySelector('.chat-input-container') || 
                          document.querySelector('#chatContainer') ||
@@ -255,7 +255,7 @@ function addTranscriptSearchToggle() {
         console.warn("⚠️ Chat container not found, cannot add transcript search toggle");
         return;
     }
-
+    
     console.log("✅ Found chat container:", chatContainer);
     
     // Create transcript search controls
@@ -282,84 +282,22 @@ function addTranscriptSearchToggle() {
         </div>
     `;
     
-    // Insert before the chat input or at the top of container
-    const chatInput = chatContainer.querySelector('#messageInput') || 
+    // FIX: Look for the correct input ID (#chatInput, not #messageInput)
+    const chatInput = chatContainer.querySelector('#chatInput') || 
                      chatContainer.querySelector('input[type="text"]') ||
                      chatContainer.querySelector('textarea');
     
     if (chatInput && chatInput.parentNode) {
         chatInput.parentNode.insertBefore(transcriptControls, chatInput);
+        console.log("✅ Transcript controls inserted before #chatInput");
     } else {
         chatContainer.insertAdjacentElement('afterbegin', transcriptControls);
         console.log("✅ Transcript search controls added to chat-input-area");
     }
 }
 
-function addTranscriptResultsContainer() {
-    // Create a dedicated container for transcript search results
-    const resultsContainer = document.createElement('div');
-    resultsContainer.id = 'transcriptSearchResults';
-    resultsContainer.className = 'transcript-search-results hidden';
-    resultsContainer.innerHTML = `
-        <div class="results-header">
-            <h3>📝 Transcript Search Results</h3>
-            <button onclick="clearTranscriptResults()" class="clear-results-btn">Clear</button>
-        </div>
-        <div class="results-summary" id="transcriptResultsSummary"></div>
-        <div class="results-list" id="transcriptResultsList"></div>
-    `;
-    
-    // Insert into the main content area
-    const mainContent = document.querySelector('#chatMessages') || 
-                       document.querySelector('.chat-messages') ||
-                       document.querySelector('main') ||
-                       document.body;
-    
-    mainContent.appendChild(resultsContainer);
-}
-
-function toggleTranscriptSearchMode() {
-    const toggle = document.getElementById('transcriptSearchToggle');
-    const helpText = document.getElementById('searchModeHelp');
-    const comprehensiveOption = document.getElementById('comprehensiveOption');
-    
-    transcriptSearchMode = toggle.checked;
-    
-    console.log(`🎯 Transcript search mode: ${transcriptSearchMode ? 'ON' : 'OFF'}`);
-    
-    // Update UI to reflect the mode
-    if (transcriptSearchMode) {
-        // Show comprehensive option
-        if (comprehensiveOption) {
-            comprehensiveOption.style.display = 'block';
-        }
-        
-        helpText.innerHTML = `
-            <small style="color: #2196f3;">
-                🎯 <strong>Transcript Search Mode:</strong> Searching within call transcripts only<br>
-                📊 <strong>Comprehensive Analysis:</strong> Scans all results, shows summary + download list
-            </small>
-        `;
-        
-        // Update chat interface styling
-        updateChatInterfaceForTranscriptMode(true);
-    } else {
-        // Hide comprehensive option
-        if (comprehensiveOption) {
-            comprehensiveOption.style.display = 'none';
-        }
-        
-        helpText.innerHTML = `
-            <small>🔍 Regular search mode: Searching all evaluation content</small>
-        `;
-        
-        updateChatInterfaceForTranscriptMode(false);
-        clearTranscriptResults();
-    }
-}
-
 function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
-    const chatInput = document.getElementById('messageInput') || 
+    const chatInput = document.getElementById('chatInput') || 
                      document.querySelector('input[type="text"]') ||
                      document.querySelector('textarea');
     
@@ -378,15 +316,27 @@ function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
 
 // Enhanced sendMessage function to handle transcript search
 // Enhanced sendMessage function to handle transcript search
+// Enhanced sendMessage function to handle transcript search (FIXED TIMING)
 async function sendMessageWithTranscriptSearch() {
-    // Get message from the same input your original function uses
-    const chatInput = document.getElementById('chatInput');
-    const message = chatInput.value.trim();
+    console.log("🔍 DEBUG: sendMessageWithTranscriptSearch called");
     
-    if (!message || isLoading) return;
+    // FIX: Get message BEFORE the original function can clear it
+    const chatInput = document.getElementById('chatInput');
+    if (!chatInput) {
+        console.error("🔍 DEBUG: #chatInput not found!");
+        return;
+    }
+    
+    const message = chatInput.value?.trim();
+    console.log("🔍 DEBUG: Message captured:", message);
+    
+    if (!message || isLoading) {
+        console.log("🔍 DEBUG: No message or loading, exiting");
+        return;
+    }
     
     if (!transcriptSearchMode) {
-        // Use existing sendMessage function for regular chat
+        console.log("🔍 DEBUG: Not in transcript mode, calling original");
         return originalSendMessage();
     }
     
@@ -396,7 +346,7 @@ async function sendMessageWithTranscriptSearch() {
     const comprehensiveToggle = document.getElementById('comprehensiveSearchToggle');
     const useComprehensive = comprehensiveToggle && comprehensiveToggle.checked;
     
-    // Clear input (like the original function does)
+    // Clear input immediately (like original function)
     chatInput.value = '';
     chatInput.style.height = 'auto';
     
@@ -404,6 +354,9 @@ async function sendMessageWithTranscriptSearch() {
     showTranscriptSearchLoading(message, useComprehensive);
     
     try {
+        // Set loading state to prevent double-clicks
+        window.isLoading = true;
+        
         const requestBody = {
             query: message,
             filters: currentFilters || {},
@@ -447,6 +400,9 @@ async function sendMessageWithTranscriptSearch() {
     } catch (error) {
         console.error('❌ Transcript search failed:', error);
         showTranscriptSearchError(error.message);
+    } finally {
+        // Clear loading state
+        window.isLoading = false;
     }
 }
 
