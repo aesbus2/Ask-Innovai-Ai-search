@@ -529,6 +529,66 @@ function populateSelect(selectId, options) {
 // Removed all conflicting versions, this is the only one
 // =============================================================================
 
+function toggleTranscriptSearchMode() {
+    console.log("🎯 Toggling transcript search mode...");
+    
+    const toggle = document.getElementById('transcriptSearchToggle');
+    const comprehensiveOption = document.getElementById('comprehensiveOption');
+    const searchModeHelp = document.getElementById('searchModeHelp');
+    
+    if (!toggle) {
+        console.error("❌ Transcript search toggle not found!");
+        return;
+    }
+    
+    // Update global state
+    transcriptSearchMode = toggle.checked;
+    
+    console.log(`🎯 Transcript search mode: ${transcriptSearchMode ? 'ENABLED' : 'DISABLED'}`);
+    
+    // Show/hide comprehensive search option
+    if (comprehensiveOption) {
+        comprehensiveOption.style.display = transcriptSearchMode ? 'block' : 'none';
+    }
+    
+    // Update help text and styling
+    if (searchModeHelp) {
+        if (transcriptSearchMode) {
+            searchModeHelp.innerHTML = `
+                <small>✅ <strong>Transcript Search Mode Active</strong> - Only call transcript content will be searched</small>
+            `;
+            searchModeHelp.style.color = '#2196f3';
+            searchModeHelp.style.fontWeight = '500';
+        } else {
+            searchModeHelp.innerHTML = `
+                <small>🎯 When enabled, searches will only look for words within call transcripts</small>
+            `;
+            searchModeHelp.style.color = '#666';
+            searchModeHelp.style.fontWeight = 'normal';
+        }
+    }
+    
+    // Update chat interface styling
+    updateChatInterfaceForTranscriptMode(transcriptSearchMode);
+    
+    // Clear any existing transcript results when toggling off
+    if (!transcriptSearchMode) {
+        clearTranscriptResults();
+    }
+    
+    // Show feedback toast (if showToast function exists)
+    if (typeof showToast === 'function') {
+        showToast(
+            transcriptSearchMode ? 
+            '🎯 Transcript Search Mode Enabled - Searching call transcripts only' : 
+            '💬 Normal Chat Mode Enabled - Full system search available',
+            transcriptSearchMode ? 'info' : 'success'
+        );
+    }
+}
+
+console.log("✅ Missing transcript search functions added: addTranscriptResultsContainer, toggleTranscriptSearchMode");
+
 function updateFilterCounts(data) {
     console.log("📊 Updating filter counts with data:", data);
     
@@ -1355,6 +1415,56 @@ function clearTranscriptResults() {
     resultsList.innerHTML = '';
     resultsSummary.innerHTML = '';
     lastTranscriptResults = [];
+}
+
+function addTranscriptResultsContainer() {
+    console.log("🎯 Adding transcript search results container...");
+    
+    // Check if container already exists
+    if (document.getElementById('transcriptSearchResults')) {
+        console.log("✅ Transcript results container already exists");
+        return;
+    }
+    
+    // Find a suitable container to add the results to
+    const chatContainer = document.querySelector('.chat-messages') || 
+                         document.querySelector('.chat-container') || 
+                         document.querySelector('.main-content') || 
+                         document.querySelector('#chatMessages') ||
+                         document.querySelector('.chat-area') ||
+                         document.body;
+    
+    if (!chatContainer) {
+        console.warn("⚠️ Could not find suitable container for transcript results");
+        return;
+    }
+    
+    // Create the results container
+    const resultsContainer = document.createElement('div');
+    resultsContainer.id = 'transcriptSearchResults';
+    resultsContainer.className = 'transcript-search-results hidden';
+    resultsContainer.innerHTML = `
+        <div class="results-header">
+            <h3>🎯 Transcript Search Results</h3>
+            <button class="clear-results-btn" onclick="clearTranscriptResults()" title="Clear Results">
+                ✕
+            </button>
+        </div>
+        <div id="transcriptResultsSummary" class="results-summary"></div>
+        <div id="transcriptResultsList" class="results-list"></div>
+    `;
+    
+    // Insert the container - try to place it intelligently
+    const chatInputArea = document.querySelector('.chat-input-area');
+    if (chatInputArea && chatInputArea.parentNode) {
+        // Insert before the chat input area
+        chatInputArea.parentNode.insertBefore(resultsContainer, chatInputArea);
+        console.log("✅ Transcript results container inserted before chat input area");
+    } else {
+        // Fallback: insert at the beginning of the chat container
+        chatContainer.insertBefore(resultsContainer, chatContainer.firstChild);
+        console.log("✅ Transcript results container inserted at beginning of container");
+    }
 }
 
 function showTranscriptSearchError(error) {
