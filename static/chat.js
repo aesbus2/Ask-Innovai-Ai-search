@@ -255,6 +255,8 @@ function addTranscriptSearchToggle() {
         console.warn("⚠️ Chat container not found, cannot add transcript search toggle");
         return;
     }
+
+    console.log("✅ Found chat container:", chatContainer);
     
     // Create transcript search controls
     const transcriptControls = document.createElement('div');
