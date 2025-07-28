@@ -1366,6 +1366,391 @@ function downloadCategoryData() {
 // VECTOR SEARCH CAPABILITIES
 // =============================================================================
 
+// ===================================================================
+// MISSING DISPLAY FUNCTIONS - Add these to your chat.js file
+// These functions handle displaying the transcript search results
+// ===================================================================
+
+// Function to display standard transcript search results
+function displayTranscriptSearchResults(data, query) {
+    console.log("🎯 Displaying standard transcript search results:", data);
+    
+    const resultsContainer = document.getElementById('transcriptSearchResults');
+    const resultsList = document.getElementById('transcriptResultsList');
+    const resultsSummary = document.getElementById('transcriptResultsSummary');
+    
+    if (!resultsContainer || !resultsList || !resultsSummary) {
+        console.error("❌ Transcript results containers not found!");
+        return;
+    }
+    
+    // Show container
+    resultsContainer.classList.remove('hidden');
+    
+    // Reset loading state
+    window.isLoading = false;
+    
+    const results = data.display_results || data.results || [];
+    const totalMatches = data.total_matches || results.length;
+    const searchTime = data.search_time_ms || 0;
+    
+    // Update summary
+    resultsSummary.innerHTML = `
+        <div class="search-summary">
+            <h4>🎯 Standard Search Results</h4>
+            <div class="summary-stats">
+                <span class="stat">
+                    <strong>${totalMatches}</strong> matches found
+                </span>
+                <span class="stat">
+                    Query: <strong>"${query}"</strong>
+                </span>
+                <span class="stat">
+                    ${searchTime}ms
+                </span>
+            </div>
+        </div>
+    `;
+    
+    // Display results
+    if (results.length === 0) {
+        resultsList.innerHTML = `
+            <div class="no-results">
+                <h4>🔍 No matches found</h4>
+                <p>No transcript content matched your search for "<strong>${query}</strong>"</p>
+                <p>Try:</p>
+                <ul>
+                    <li>Different keywords or phrases</li>
+                    <li>Broader search terms</li>
+                    <li>Check spelling</li>
+                </ul>
+            </div>
+        `;
+        return;
+    }
+    
+    let resultsHtml = '';
+    results.forEach((result, index) => {
+        const evaluationId = result.evaluationId || result.evaluation_id || 'Unknown';
+        const transcript = result.highlighted_text || result.highlighted_snippets?.join(' ') || result.transcript || '';
+        const score = result._score || result.score || 0;
+        const partner = result.metadata?.partner || result.partner || 'N/A';
+        const program = result.metadata?.program || result.program || 'N/A';
+        const callDate = result.metadata?.call_date || result.call_date || 'N/A';
+        const matchCount = result.match_count || 1;
+        
+        resultsHtml += `
+            <div class="search-result-item">
+                <div class="result-header">
+                    <div class="result-title">
+                        <strong>Evaluation ${evaluationId}</strong>
+                        ${score > 0 ? `<span class="score-badge">Score: ${(score * 100).toFixed(1)}%</span>` : ''}
+                        <span class="match-badge">${matchCount} match${matchCount !== 1 ? 'es' : ''}</span>
+                    </div>
+                </div>
+                <div class="result-meta">
+                    <div class="reference-grid">
+                        <div class="ref-item">
+                            <span class="ref-label">Partner:</span>
+                            <span class="ref-value">${partner}</span>
+                        </div>
+                        <div class="ref-item">
+                            <span class="ref-label">Program:</span>
+                            <span class="ref-value">${program}</span>
+                        </div>
+                        <div class="ref-item">
+                            <span class="ref-label">Date:</span>
+                            <span class="ref-value">${callDate}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="result-content">
+                    <div class="highlighted-snippet">${transcript}</div>
+                </div>
+                <div class="result-actions">
+                    <button class="btn-primary" onclick="copyToClipboard('${transcript.replace(/'/g, "\\'")}')">
+                        📋 Copy Text
+                    </button>
+                    <button class="btn-secondary" onclick="askQuestion('Tell me more about evaluation ${evaluationId}')">
+                        🔍 Analyze This
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    resultsList.innerHTML = resultsHtml;
+}
+
+// Function to display comprehensive transcript search results with enhanced analytics
+function displayComprehensiveTranscriptResults(data, query) {
+    console.log("🎯 Displaying comprehensive transcript search results:", data);
+    
+    const resultsContainer = document.getElementById('transcriptSearchResults');
+    const resultsList = document.getElementById('transcriptResultsList');
+    const resultsSummary = document.getElementById('transcriptResultsSummary');
+    
+    if (!resultsContainer || !resultsList || !resultsSummary) {
+        console.error("❌ Transcript results containers not found!");
+        return;
+    }
+    
+    // Show container
+    resultsContainer.classList.remove('hidden');
+    
+    // Reset loading state
+    window.isLoading = false;
+    
+    const results = data.display_results || [];
+    const summary = data.comprehensive_summary || {};
+    const searchTime = data.search_time_ms || 0;
+    
+    // Update comprehensive summary
+    resultsSummary.innerHTML = `
+        <div class="comprehensive-summary">
+            <h4>📊 Comprehensive Analysis for "${query}"</h4>
+            
+            <div class="summary-grid">
+                <div class="stat">
+                    <strong>${summary.total_evaluations_searched || 0}</strong>
+                    <span>Total Searched</span>
+                </div>
+                <div class="stat">
+                    <strong>${summary.evaluations_with_matches || 0}</strong>
+                    <span>With Matches</span>
+                </div>
+                <div class="stat">
+                    <strong>${summary.match_percentage || 0}%</strong>
+                    <span>Match Rate</span>
+                </div>
+                <div class="stat">
+                    <strong>${summary.total_document_matches || 0}</strong>
+                    <span>Total Matches</span>
+                </div>
+                <div class="stat">
+                    <strong>${summary.unique_templates || 0}</strong>
+                    <span>Templates</span>
+                </div>
+                <div class="stat">
+                    <strong>${searchTime}ms</strong>
+                    <span>Search Time</span>
+                </div>
+            </div>
+            
+            ${summary.top_patterns && summary.top_patterns.length > 0 ? `
+                <div class="pattern-analysis">
+                    <h5>🔍 Most Common Patterns:</h5>
+                    <div class="pattern-list">
+                        ${summary.top_patterns.slice(0, 5).map(pattern => 
+                            `<span class="pattern-tag">${pattern.phrase || pattern} (${pattern.count || ''}x)</span>`
+                        ).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            
+            <div class="download-section">
+                <h5>📥 Export Options:</h5>
+                <div class="download-buttons">
+                    <button class="btn-download" onclick="downloadTranscriptResults('csv', '${query}')">
+                        📊 Download CSV
+                    </button>
+                    <button class="btn-download" onclick="downloadTranscriptResults('json', '${query}')">
+                        🔧 Download JSON
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Display results using the same format as standard search
+    if (results.length === 0) {
+        resultsList.innerHTML = `
+            <div class="no-results">
+                <h4>🔍 No matches found in comprehensive scan</h4>
+                <p>No transcript content matched your search for "<strong>${query}</strong>" across ${summary.total_evaluations_searched || 0} evaluations.</p>
+                <p>Try:</p>
+                <ul>
+                    <li>Different keywords or phrases</li>
+                    <li>Broader search terms</li>
+                    <li>Check spelling and try synonyms</li>
+                </ul>
+            </div>
+        `;
+        return;
+    }
+    
+    let resultsHtml = '';
+    results.forEach((result, index) => {
+        const evaluationId = result.evaluationId || result.evaluation_id || 'Unknown';
+        const highlights = result.highlighted_snippets || [];
+        const transcript = highlights.length > 0 ? highlights.join('<br><br>') : result.transcript || '';
+        const score = result._score || result.score || 0;
+        const matchCount = result.match_count || highlights.length || 1;
+        
+        // Enhanced metadata display
+        const partner = result.metadata?.partner || result.partner || 'N/A';
+        const program = result.metadata?.program || result.program || 'N/A';
+        const disposition = result.disposition || result.metadata?.disposition || 'N/A';
+        const subDisposition = result.sub_disposition || result.metadata?.sub_disposition || 'N/A';
+        const callDate = result.metadata?.call_date || result.call_date || 'N/A';
+        
+        resultsHtml += `
+            <div class="search-result-item">
+                <div class="result-header">
+                    <div class="result-title">
+                        <strong>Evaluation ${evaluationId}</strong>
+                        ${score > 0 ? `<span class="score-badge">Score: ${(score * 100).toFixed(1)}%</span>` : ''}
+                        <span class="match-badge">${matchCount} match${matchCount !== 1 ? 'es' : ''}</span>
+                    </div>
+                </div>
+                <div class="result-meta">
+                    <div class="reference-grid">
+                        <div class="ref-item">
+                            <span class="ref-label">Partner:</span>
+                            <span class="ref-value">${partner}</span>
+                        </div>
+                        <div class="ref-item">
+                            <span class="ref-label">Program:</span>
+                            <span class="ref-value">${program}</span>
+                        </div>
+                        <div class="ref-item">
+                            <span class="ref-label">Date:</span>
+                            <span class="ref-value">${callDate}</span>
+                        </div>
+                        <div class="ref-item">
+                            <span class="ref-label">Disposition:</span>
+                            <span class="ref-value disposition-tag">${disposition}</span>
+                        </div>
+                        <div class="ref-item">
+                            <span class="ref-label">Sub-Disp:</span>
+                            <span class="ref-value">${subDisposition}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="result-content">
+                    ${highlights.length > 0 ? 
+                        highlights.map(highlight => `<div class="highlighted-snippet">${highlight}</div>`).join('') :
+                        `<div class="transcript-preview">${transcript.substring(0, 300)}${transcript.length > 300 ? '...' : ''}</div>`
+                    }
+                </div>
+                <div class="result-actions">
+                    <button class="btn-primary" onclick="copyToClipboard('${transcript.replace(/'/g, "\\'")}')">
+                        📋 Copy Text
+                    </button>
+                    <button class="btn-secondary" onclick="askQuestion('Analyze evaluation ${evaluationId} in detail')">
+                        🔍 Deep Analysis
+                    </button>
+                    <button class="btn-filter" onclick="applyQuickFilter('partner', '${partner}')">
+                        🔧 Filter by Partner
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    resultsList.innerHTML = resultsHtml;
+}
+
+// Helper function to download transcript search results
+function downloadTranscriptResults(format, query) {
+    if (!lastTranscriptResults || lastTranscriptResults.length === 0) {
+        showToast('❌ No results to download', 'error');
+        return;
+    }
+    
+    console.log(`📥 Downloading transcript results as ${format.toUpperCase()}`);
+    
+    let content, filename, mimeType;
+    
+    if (format === 'csv') {
+        // Create CSV content
+        const headers = ['Evaluation ID', 'Partner', 'Program', 'Call Date', 'Disposition', 'Sub Disposition', 'Match Count', 'Match Text', 'Score'];
+        const csvRows = [headers.join(',')];
+        
+        lastTranscriptResults.forEach(result => {
+            const row = [
+                result.evaluationId || result.evaluation_id || '',
+                result.metadata?.partner || result.partner || '',
+                result.metadata?.program || result.program || '',
+                result.metadata?.call_date || result.call_date || '',
+                result.disposition || result.metadata?.disposition || '',
+                result.sub_disposition || result.metadata?.sub_disposition || '',
+                result.match_count || 1,
+                `"${(result.transcript || result.highlighted_text || '').replace(/"/g, '""')}"`, // Escape quotes
+                result._score || result.score || 0
+            ];
+            csvRows.push(row.join(','));
+        });
+        
+        content = csvRows.join('\n');
+        filename = `transcript_search_${query.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+        mimeType = 'text/csv';
+        
+    } else if (format === 'json') {
+        content = JSON.stringify({
+            query: query,
+            timestamp: new Date().toISOString(),
+            total_results: lastTranscriptResults.length,
+            search_type: 'transcript_search',
+            results: lastTranscriptResults
+        }, null, 2);
+        filename = `transcript_search_${query.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
+        mimeType = 'application/json';
+    }
+    
+    // Create and trigger download
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showToast(`📥 Downloaded ${filename}`, 'success');
+}
+
+// Helper function to apply quick filters from search results
+function applyQuickFilter(filterType, filterValue) {
+    console.log(`🔧 Applying quick filter: ${filterType} = ${filterValue}`);
+    
+    // Map filter types to actual filter IDs
+    const filterMappings = {
+        'partner': 'partnerFilter',
+        'program': 'programFilter',
+        'template': 'templateFilter',
+        'disposition': 'callDispositionFilter'
+    };
+    
+    const filterId = filterMappings[filterType];
+    if (!filterId) {
+        console.warn(`Unknown filter type: ${filterType}`);
+        return;
+    }
+    
+    const filterSelect = document.getElementById(filterId);
+    if (!filterSelect) {
+        console.warn(`Filter element not found: ${filterId}`);
+        return;
+    }
+    
+    // Set the filter value
+    filterSelect.value = filterValue;
+    
+    // Apply the filters
+    if (typeof applyFilters === 'function') {
+        applyFilters();
+        showToast(`🔧 Applied ${filterType} filter: ${filterValue}`, 'info');
+    } else {
+        console.warn('applyFilters function not available');
+    }
+}
+
+console.log("✅ Transcript search display functions added successfully");
+console.log("🎯 Functions added: displayTranscriptSearchResults, displayComprehensiveTranscriptResults, downloadTranscriptResults, applyQuickFilter");
+
 async function checkVectorSearchCapabilities() {
     try {
         const response = await fetch('/debug/vector_capabilities');
