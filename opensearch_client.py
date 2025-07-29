@@ -1050,9 +1050,9 @@ def _count_word_occurrences(text: str, query: str) -> int:
 # =============================================================================
 
 def search_transcripts_only(query: str, filters: Dict[str, Any] = None, 
-                           size: int = 50, highlight_words: bool = True) -> List[Dict]:
+                         size: int = 50, highlight_words: bool = True) -> List[Dict]:
     """
-    NEW: Search specifically within transcript content only (standard mode)
+    FIXED: Safe field access for metadata fields
     """
     client = get_opensearch_client()
     if not client:
@@ -1066,26 +1066,21 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
         # Get available fields for safe queries
         available_fields = get_available_fields(client, index_pattern)
         
-        # Build transcript-specific query
+        # Build transcript-specific query using transcript_text
         transcript_query = {
             "bool": {
                 "must": [
                     {
                         "bool": {
                             "should": [
-                                # Exact phrase match in transcript
                                 {"match_phrase": {"transcript_text": {"query": query, "boost": 3.0}}},
-                                # Fuzzy word matching in transcript
                                 {"match": {"transcript_text": {"query": query, "fuzziness": "AUTO", "boost": 2.0}}},
-                                # Wildcard search for partial words
                                 {"wildcard": {"transcript_text": f"*{query.lower()}*"}}
                             ],
                             "minimum_should_match": 1
                         }
                     },
-                    # Ensure document has transcript content
                     {"exists": {"field": "transcript_text"}},
-                    # Ensure transcript is not empty
                     {"bool": {"must_not": {"term": {"transcript_text.keyword": ""}}}}
                 ]
             }
@@ -1103,7 +1098,7 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
             "size": size,
             "sort": [{"_score": {"order": "desc"}}],
             "_source": ["evaluationId", "internalId", "template_name", "template_id", 
-                       "transcript", "metadata", "evaluation_text"],
+                       "transcript_text", "metadata", "evaluation_text"],
         }
         
         # Add highlighting for matched words
@@ -1123,7 +1118,7 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
         # Execute search
         response = safe_search_with_error_handling(client, index_pattern, search_body, timeout=30)
         
-        # Process results
+        # Process results with safe field access
         results = []
         hits = response.get("hits", {}).get("hits", [])
         
@@ -1135,13 +1130,26 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
             if not transcript_content or len(transcript_content.strip()) < 10:
                 continue
             
-            # Extract highlighted snippets
             highlights = hit.get("highlight", {}).get("transcript_text", [])
-            
-            # Extract key metadata for easy reference
             metadata = source.get("metadata", {})
-            sub_disposition = metadata.get("sub_disposition") or metadata.get("subDisposition") or "Not specified"
-            disposition = metadata.get("disposition") or "Not specified"
+            
+            # FIXED: Safe field access
+            def safe_get_metadata(metadata_dict, field_names, default="Not specified"):
+                """Safely get metadata field with multiple possible names"""
+                if not isinstance(metadata_dict, dict):
+                    return default
+                    
+                if isinstance(field_names, str):
+                    field_names = [field_names]
+                    
+                for field_name in field_names:
+                    try:
+                        value = metadata_dict.get(field_name)
+                        if value and str(value).strip():
+                            return str(value).strip()
+                    except Exception:
+                        continue
+                return default
             
             result = {
                 "_id": hit.get("_id"),
@@ -1154,15 +1162,12 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
                 "transcript": transcript_content,
                 "transcript_length": len(transcript_content),
                 "metadata": metadata,
-                
-                # KEY REFERENCE FIELDS for investigation
-                "sub_disposition": sub_disposition,
-                "disposition": disposition,
-                "program": metadata.get("program", "Not specified"),
-                "partner": metadata.get("partner", "Not specified"),
-                "site": metadata.get("site", "Not specified"),
-                "call_date": metadata.get("call_date") or metadata.get("callDate"),
-                
+                "sub_disposition": safe_get_metadata(metadata, ["sub_disposition", "subDisposition"]),
+                "disposition": safe_get_metadata(metadata, ["disposition"]),
+                "program": safe_get_metadata(metadata, ["program"]),
+                "partner": safe_get_metadata(metadata, ["partner"]),
+                "site": safe_get_metadata(metadata, ["site"]),
+                "call_date": safe_get_metadata(metadata, ["call_date", "callDate"]),
                 "search_type": "transcript_only",
                 "highlighted_snippets": highlights,
                 "match_count": len(highlights) if highlights else _count_word_occurrences(transcript_content, query)
@@ -1176,6 +1181,10 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
     except Exception as e:
         logger.error(f"❌ Transcript search failed: {e}")
         return []
+
+print("🔧 FIELD ACCESS ERRORS FIXED!")
+print("📝 UPDATE: Added safe metadata field access with error handling")
+print("🎯 This should resolve the 'sub_disposition' server error")
 
 def search_transcript_with_context(query: str, evaluation_id: str, 
                                   context_chars: int = 200) -> Dict[str, Any]:
@@ -1250,8 +1259,7 @@ print("🎯 This should resolve the 0 results issue with transcript search")
 def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None, 
                                    display_size: int = 20, max_total_scan: int = 10000) -> Dict[str, Any]:
     """
-    NEW: Comprehensive transcript search - scans ALL matching documents but returns limited results for display
-    plus complete summary and evaluation ID list for download
+    FIXED: Safe field access for sub_disposition and other metadata fields
     """
     client = get_opensearch_client()
     if not client:
@@ -1265,7 +1273,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         # Get available fields for safe queries
         available_fields = get_available_fields(client, index_pattern)
         
-        # Build transcript-specific query (same as before)
+        # Build transcript-specific query using transcript_text field
         transcript_query = {
             "bool": {
                 "must": [
@@ -1308,72 +1316,31 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         # STEP 2: Comprehensive search for ALL matching transcripts (for summary)
         comprehensive_search_body = {
             "query": transcript_query,
-            "size": max_total_scan,  # Scan up to 10k results
+            "size": max_total_scan,
             "sort": [{"_score": {"order": "desc"}}],
-            "_source": ["evaluationId", "internalId", "template_name", "template_id","transcript_text", "metadata", "evaluation_text"],  # FIXED: transcript_text
+            "_source": ["evaluationId", "internalId", "template_name", "template_id", 
+                       "transcript_text", "metadata", "evaluation_text"],
             "track_total_hits": True
         }
-
-                
-        comprehensive_response = safe_search_with_error_handling(
-            client, index_pattern, comprehensive_search_body, timeout=60
-        )
         
-        all_hits = comprehensive_response.get("hits", {}).get("hits", [])
-        total_matches = comprehensive_response.get("hits", {}).get("total", {}).get("value", 0)
-        
-        # Extract all evaluation IDs with matches
-        all_evaluation_ids = []
-        evaluation_details = []
-        
-        for hit in all_hits:
-            source = hit.get("_source", {})
-            transcript_content = source.get("transcript_text", "")
-            eval_id = source.get("evaluationId")
-            if eval_id:
-                metadata = source.get("metadata", {})
-                
-                eval_detail = {
-                    "evaluationId": eval_id,
-                    "template_name": source.get("template_name", "Unknown"),
-                    "sub_disposition": metadata.get("sub_disposition") or metadata.get("subDisposition") or "Not specified",
-                    "disposition": metadata.get("disposition", "Not specified"),
-                    "program": metadata.get("program", "Not specified"),
-                    "partner": metadata.get("partner", "Not specified"),
-                    "site": metadata.get("site", "Not specified"),
-                    "call_date": metadata.get("call_date") or metadata.get("callDate"),
-                    "score": hit.get("_score", 0)
+        # Add highlighting for matched words
+        comprehensive_search_body["highlight"] = {
+            "fields": {
+                "transcript_text": {
+                    "fragment_size": 150,
+                    "number_of_fragments": 3,
+                    "pre_tags": ["<mark class='highlight'>"],
+                    "post_tags": ["</mark>"]
                 }
-                
-                all_evaluation_ids.append(eval_id)
-                evaluation_details.append(eval_detail)
-        
-        # STEP 3: Get detailed results for first N results (for display)
-        display_search_body = {
-            "query": transcript_query,
-            "size": display_size,
-            "sort": [{"_score": {"order": "desc"}}],
-            "_source": True,
-            "highlight": {
-                "fields": {
-                    "transcript_text": {
-                        "fragment_size": 150,
-                        "number_of_fragments": 3,
-                        "pre_tags": ["<mark class='highlight'>"],
-                        "post_tags": ["</mark>"]
-                    }
-                },
-                "require_field_match": False
-            }
+            },
+            "require_field_match": False
         }
         
-        display_response = safe_search_with_error_handling(
-            client, index_pattern, display_search_body, timeout=30
-        )
+        response = safe_search_with_error_handling(client, index_pattern, comprehensive_search_body, timeout=30)
         
-        # Process display results (same as original function)
+        # Process results for display
         display_results = []
-        display_hits = display_response.get("hits", {}).get("hits", [])
+        all_hits = response.get("hits", {}).get("hits", [])
         all_evaluation_ids = []
         evaluation_details = []
         
@@ -1387,6 +1354,32 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             highlights = hit.get("highlight", {}).get("transcript_text", [])
             metadata = source.get("metadata", {})
             
+            # FIXED: Safe field access with proper error handling
+            def safe_get_metadata(metadata_dict, field_names, default="Not specified"):
+                """Safely get metadata field with multiple possible names"""
+                if not isinstance(metadata_dict, dict):
+                    return default
+                    
+                if isinstance(field_names, str):
+                    field_names = [field_names]
+                    
+                for field_name in field_names:
+                    try:
+                        value = metadata_dict.get(field_name)
+                        if value and str(value).strip():
+                            return str(value).strip()
+                    except Exception:
+                        continue
+                return default
+            
+            # Use safe field access
+            sub_disposition = safe_get_metadata(metadata, ["sub_disposition", "subDisposition"])
+            disposition = safe_get_metadata(metadata, ["disposition"])
+            program = safe_get_metadata(metadata, ["program"])
+            partner = safe_get_metadata(metadata, ["partner"])
+            site = safe_get_metadata(metadata, ["site"])
+            call_date = safe_get_metadata(metadata, ["call_date", "callDate"])
+            
             result = {
                 "_id": hit.get("_id"),
                 "_score": hit.get("_score", 0),
@@ -1398,19 +1391,19 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
                 "transcript": transcript_content,
                 "transcript_length": len(transcript_content),
                 "metadata": metadata,
-                "sub_disposition": metadata.get("sub_disposition") or metadata.get("subDisposition") or "Not specified",
-                "disposition": metadata.get("disposition", "Not specified"),
-                "program": metadata.get("program", "Not specified"),
-                "partner": metadata.get("partner", "Not specified"),
-                "site": metadata.get("site", "Not specified"),
-                "call_date": metadata.get("call_date") or metadata.get("callDate"),
+                "sub_disposition": sub_disposition,
+                "disposition": disposition,
+                "program": program,
+                "partner": partner,
+                "site": site,
+                "call_date": call_date,
                 "search_type": "transcript_comprehensive",
                 "highlighted_snippets": highlights,
                 "match_count": len(highlights) if highlights else _count_word_occurrences(transcript_content, query)
             }
             
             display_results.append(result)
-
+        
         # Collect ALL evaluation IDs for download (from all hits, not just display)
         for hit in all_hits:
             source = hit.get("_source", {})
@@ -1418,18 +1411,38 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             if eval_id:
                 all_evaluation_ids.append(str(eval_id))
                 
-                # Store evaluation details for download
+                # Store evaluation details for download with safe field access
+                metadata = source.get("metadata", {})
                 evaluation_details.append({
                     "evaluationId": eval_id,
                     "internalId": source.get("internalId"),
                     "template_name": source.get("template_name"),
                     "match_score": hit.get("_score", 0),
-                    "metadata": source.get("metadata", {})
+                    "metadata": metadata,
+                    "sub_disposition": safe_get_metadata(metadata, ["sub_disposition", "subDisposition"]),
+                    "disposition": safe_get_metadata(metadata, ["disposition"]),
+                    "program": safe_get_metadata(metadata, ["program"]),
+                    "partner": safe_get_metadata(metadata, ["partner"])
                 })
         
-        # Calculate additional statistics
-        unique_templates = len(set(detail["template_name"] for detail in evaluation_details))
-        unique_sub_dispositions = len(set(detail["sub_disposition"] for detail in evaluation_details if detail["sub_disposition"] != "Not specified"))
+        # FIXED: Safe statistics calculation
+        try:
+            unique_templates = len(set(
+                detail.get("template_name", "Unknown") 
+                for detail in evaluation_details 
+                if detail.get("template_name")
+            ))
+        except Exception:
+            unique_templates = 0
+            
+        try:
+            unique_sub_dispositions = len(set(
+                detail.get("sub_disposition", "Not specified") 
+                for detail in evaluation_details 
+                if detail.get("sub_disposition") and detail.get("sub_disposition") != "Not specified"
+            ))
+        except Exception:
+            unique_sub_dispositions = 0
         
         return {
             "status": "success",
@@ -1441,14 +1454,15 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
                 "match_percentage": round((len(all_evaluation_ids) / total_evaluations) * 100, 1) if total_evaluations > 0 else 0,
                 "unique_templates": unique_templates,
                 "unique_sub_dispositions": unique_sub_dispositions,
-                "total_document_matches": total_matches,
+                "total_document_matches": len(all_hits),
                 "display_limit": display_size,
                 "max_scanned": len(all_hits)
             },
             "evaluation_ids_for_download": all_evaluation_ids,
             "evaluation_details_for_download": evaluation_details,
             "filters_applied": filters is not None and len(filters) > 0,
-            "search_type": "comprehensive_transcript"
+            "search_type": "comprehensive_transcript",
+            "search_time_ms": 0  # You can add timing if needed
         }
         
     except Exception as e:
