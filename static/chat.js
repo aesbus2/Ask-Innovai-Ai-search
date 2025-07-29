@@ -296,6 +296,7 @@ function addTranscriptSearchToggle() {
     }
 }
 
+
 function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
     const chatInput = document.getElementById('chatInput') || 
                      document.querySelector('input[type="text"]') ||
@@ -303,16 +304,78 @@ function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
     
     if (chatInput) {
         if (isTranscriptMode) {
-            chatInput.placeholder = "Search for specific words in call transcripts...";
-            chatInput.style.borderColor = "#2196f3";
-            chatInput.style.boxShadow = "0 0 0 2px rgba(33, 150, 243, 0.1)";
+            // Clear, specific placeholder with examples
+            chatInput.placeholder = "Enter words or phrases to find in call transcripts (e.g., cancel, billing issue, refund request)";
+            chatInput.classList.add('transcript-mode');
+            
+            // Add helpful guidance text below input
+            addTranscriptSearchGuidance();
         } else {
             chatInput.placeholder = "Ask a question about the evaluation data...";
+            chatInput.classList.remove('transcript-mode');
             chatInput.style.borderColor = "";
             chatInput.style.boxShadow = "";
+            
+            // Remove guidance text
+            removeTranscriptSearchGuidance();
         }
     }
 }
+
+// ADD this new function to your chat.js
+function addTranscriptSearchGuidance() {
+    // Check if guidance already exists
+    if (document.getElementById('transcriptSearchGuidance')) {
+        return;
+    }
+    
+    const chatInput = document.getElementById('chatInput');
+    if (!chatInput) return;
+    
+    const guidanceDiv = document.createElement('div');
+    guidanceDiv.id = 'transcriptSearchGuidance';
+    guidanceDiv.className = 'transcript-search-guidance';
+    guidanceDiv.innerHTML = `
+        <div class="guidance-content">
+            <div class="guidance-header">
+                <span class="guidance-icon">💡</span>
+                <strong>Transcript Search Tips:</strong>
+            </div>
+            <div class="guidance-examples">
+                <div class="example-row">
+                    <span class="example-label">Single words:</span>
+                    <code>cancel</code>, <code>billing</code>, <code>refund</code>
+                </div>
+                <div class="example-row">
+                    <span class="example-label">Exact phrases:</span>
+                    <code>"cancel my service"</code>, <code>"billing issue"</code>
+                </div>
+                <div class="example-row">
+                    <span class="example-label">Multiple terms:</span>
+                    <code>account password reset</code>
+                </div>
+            </div>
+            <div class="guidance-note">
+                <small>💡 Enter the exact words you want to find - no need for full sentences</small>
+            </div>
+        </div>
+    `;
+    
+    // Insert guidance after the chat input
+    if (chatInput.parentNode) {
+        chatInput.parentNode.insertBefore(guidanceDiv, chatInput.nextSibling);
+    }
+}
+
+// ADD this new function to your chat.js
+function removeTranscriptSearchGuidance() {
+    const guidanceDiv = document.getElementById('transcriptSearchGuidance');
+    if (guidanceDiv) {
+        guidanceDiv.remove();
+    }
+}
+
+console.log("✅ Complete transcript search UI functions added to chat.js");
 
 // Enhanced sendMessage function to handle transcript search
 // Enhanced sendMessage function to handle transcript search

@@ -1060,31 +1060,47 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
         return []
     
     index_pattern = "eval-*"
-    logger.info(f"🎯 TRANSCRIPT-ONLY SEARCH: '{query}' (size={size})")
+    clean_query = query.strip()
+    is_quoted_phrase = clean_query.startswith('"') and clean_query.endswith('"')
+    if is_quoted_phrase:
+        clean_query = clean_query.strip('"')
     
+    logger.info(f"🎯 DIRECT TRANSCRIPT SEARCH: '{clean_query}' (size={size})")
+
     try:
         # Get available fields for safe queries
         available_fields = get_available_fields(client, index_pattern)
         
-        # Build transcript-specific query using transcript_text
-        transcript_query = {
-            "bool": {
-                "must": [
-                    {
-                        "bool": {
-                            "should": [
-                                {"match_phrase": {"transcript_text": {"query": query, "boost": 3.0}}},
-                                {"match": {"transcript_text": {"query": query, "fuzziness": "AUTO", "boost": 2.0}}},
-                                {"wildcard": {"transcript_text": f"*{query.lower()}*"}}
-                            ],
-                            "minimum_should_match": 1
-                        }
-                    },
-                    {"exists": {"field": "transcript_text"}},
-                    {"bool": {"must_not": {"term": {"transcript_text.keyword": ""}}}}
-                ]
+        # Build transcript-specific query
+        if is_quoted_phrase:
+            transcript_query = {
+                "bool": {
+                    "must": [
+                        {"match_phrase": {"transcript_text": {"query": clean_query}}},
+                        {"exists": {"field": "transcript_text"}},
+                        {"range": {"transcript_text": {"gte": "   "}}}
+                    ]
+                }
             }
-        }
+        else:
+            transcript_query = {
+                "bool": {
+                    "must": [
+                        {
+                            "bool": {
+                                "should": [
+                                    {"match_phrase": {"transcript_text": {"query": clean_query, "boost": 3.0}}},
+                                    {"match": {"transcript_text": {"query": clean_query, "operator": "and", "boost": 2.0}}},
+                                    {"match": {"transcript_text": {"query": clean_query, "boost": 1.0}}}
+                                ],
+                                "minimum_should_match": 1
+                            }
+                        },
+                        {"exists": {"field": "transcript_text"}},
+                        {"range": {"transcript_text": {"gte": "   "}}}
+                    ]
+                }
+            }
         
         # Add filters if provided
         if filters:
@@ -1112,7 +1128,7 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
                         "post_tags": ["</mark>"]
                     }
                 },
-                "require_field_match": False
+                "require_field_match": True
             }
         
         # Execute search
@@ -1122,13 +1138,27 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
         results = []
         hits = response.get("hits", {}).get("hits", [])
         
+        # Define search_words for use in validation
+        search_words = clean_query.lower().split()
+        
         for hit in hits:
             source = hit.get("_source", {})
             transcript_content = source.get("transcript_text", "")
             
             # Skip if transcript is empty or too short
-            if not transcript_content or len(transcript_content.strip()) < 10:
+            if not transcript_content or len(transcript_content.strip()) < 50:
                 continue
+            
+            content_lower = transcript_content.lower()
+            
+            # Validate content contains search terms
+            if is_quoted_phrase:
+                if clean_query.lower() not in content_lower:
+                    continue
+            else:
+                words_found = [word for word in search_words if word in content_lower]
+                if not words_found:
+                    continue
             
             highlights = hit.get("highlight", {}).get("transcript_text", [])
             metadata = source.get("metadata", {})
@@ -1264,7 +1294,7 @@ print("🎯 This should resolve the 0 results issue with transcript search")
 def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None, 
                                    display_size: int = 20, max_total_scan: int = 10000) -> Dict[str, Any]:
     """
-    FIXED: Exact match only - no fuzzy matching that causes false positives
+    SIMPLIFIED: Direct search with user's exact terms - no complex processing
     """
     client = get_opensearch_client()
     if not client:
@@ -1272,41 +1302,33 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         return {"error": "OpenSearch client not available"}
     
     index_pattern = "eval-*"
-    logger.info(f"🔍 COMPREHENSIVE TRANSCRIPT SEARCH: '{query}' (display={display_size}, max_scan={max_total_scan})")
+    
+    # Clean the query (just trim whitespace and handle quotes)
+    clean_query = query.strip()
+    is_quoted_phrase = clean_query.startswith('"') and clean_query.endswith('"')
+    if is_quoted_phrase:
+        clean_query = clean_query.strip('"')
+    
+    logger.info(f"🔍 DIRECT TRANSCRIPT SEARCH: '{clean_query}' {('(exact phrase)' if is_quoted_phrase else '')} (display={display_size})")
     
     try:
         # Get available fields for safe queries
         available_fields = get_available_fields(client, index_pattern)
         
-        # FIXED: EXACT MATCH ONLY - No fuzzy matching
-        # For single words: exact word boundary matching
-        # For phrases: exact phrase matching
-        query_words = query.strip().split()
-        
-        if len(query_words) == 1:
-            # Single word - use exact term matching with word boundaries
-            single_word = query_words[0].lower()
+        # SIMPLE: Build direct search query based on user input
+        if is_quoted_phrase:
+            # User wants exact phrase matching
             transcript_query = {
                 "bool": {
                     "must": [
-                        {
-                            "bool": {
-                                "should": [
-                                    # Exact phrase match (case insensitive)
-                                    {"match_phrase": {"transcript_text": {"query": query, "boost": 3.0}}},
-                                    # Exact word match using regex
-                                    {"regexp": {"transcript_text": f".*\\b{re.escape(single_word)}\\b.*"}}
-                                ],
-                                "minimum_should_match": 1
-                            }
-                        },
+                        {"match_phrase": {"transcript_text": {"query": clean_query}}},
                         {"exists": {"field": "transcript_text"}},
-                        {"range": {"transcript_text": {"gte": "   "}}}  # Not empty
+                        {"range": {"transcript_text": {"gte": "   "}}}
                     ]
                 }
             }
         else:
-            # Multiple words - require exact phrase OR all words present
+            # Regular search - prioritize phrase matches but allow word matches
             transcript_query = {
                 "bool": {
                     "must": [
@@ -1314,9 +1336,13 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
                             "bool": {
                                 "should": [
                                     # Exact phrase match (highest priority)
-                                    {"match_phrase": {"transcript_text": {"query": query, "boost": 5.0}}},
-                                    # All words must be present (no fuzziness)
-                                    {"match": {"transcript_text": {"query": query, "operator": "and", "fuzziness": "0"}}}
+                                    {"match_phrase": {"transcript_text": {"query": clean_query, "boost": 5.0}}},
+                                    # All words present (high priority)
+                                    {"match": {"transcript_text": {"query": clean_query, "operator": "and", "boost": 3.0}}},
+                                    # Most words present (medium priority) 
+                                    {"match": {"transcript_text": {"query": clean_query, "minimum_should_match": "75%", "boost": 2.0}}},
+                                    # Any words present (low priority)
+                                    {"match": {"transcript_text": {"query": clean_query, "boost": 1.0}}}
                                 ],
                                 "minimum_should_match": 1
                             }
@@ -1333,9 +1359,6 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             if filter_clauses:
                 transcript_query["bool"]["filter"] = filter_clauses
         
-        # Log the query for debugging
-        logger.info(f"🔍 Exact match query for '{query}': {transcript_query}")
-        
         # STEP 1: Get total count of evaluations
         total_count_query = {"match_all": {}}
         if filters:
@@ -1350,7 +1373,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         )
         total_evaluations = total_count_response.get("hits", {}).get("total", {}).get("value", 0)
         
-        # STEP 2: Execute the exact match search
+        # STEP 2: Execute the search
         comprehensive_search_body = {
             "query": transcript_query,
             "size": max_total_scan,
@@ -1360,7 +1383,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             "track_total_hits": True
         }
         
-        # Highlighting with exact matches only
+        # Highlighting for exact terms
         comprehensive_search_body["highlight"] = {
             "fields": {
                 "transcript_text": {
@@ -1374,17 +1397,17 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         }
         
         response = safe_search_with_error_handling(client, index_pattern, comprehensive_search_body, timeout=30)
-        
-        # Get actual hit count from response
-        actual_hit_count = response.get("hits", {}).get("total", {}).get("value", 0)
         all_hits = response.get("hits", {}).get("hits", [])
         
-        logger.info(f"🔍 Exact search for '{query}' found {actual_hit_count} matches")
+        logger.info(f"🔍 Direct search found {len(all_hits)} potential matches")
         
-        # STRICT VALIDATION: Only include results that actually contain the search terms
+        # VALIDATION: Ensure results actually contain search terms
         validated_results = []
         all_evaluation_ids = []
         evaluation_details = []
+        
+        # Split query into words for validation
+        search_words = clean_query.lower().split()
         
         for hit in all_hits[:display_size]:
             source = hit.get("_source", {})
@@ -1393,24 +1416,17 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             if not transcript_content or len(transcript_content.strip()) < 50:
                 continue
             
-            # CRITICAL: Validate that the content actually contains the search terms
             content_lower = transcript_content.lower()
-            query_lower = query.lower()
             
-            # For single words, check exact word boundaries
-            if len(query_words) == 1:
-                import re
-                word_pattern = r'\b' + re.escape(query_lower) + r'\b'
-                if not re.search(word_pattern, content_lower):
-                    logger.info(f"🚫 Skipping false positive - '{query}' not found in evaluation {source.get('evaluationId')}")
+            # Validation logic
+            if is_quoted_phrase:
+                # For quoted phrases, require exact phrase
+                if clean_query.lower() not in content_lower:
                     continue
             else:
-                # For phrases, check if exact phrase exists OR all words exist
-                phrase_exists = query_lower in content_lower
-                all_words_exist = all(word.lower() in content_lower for word in query_words)
-                
-                if not (phrase_exists or all_words_exist):
-                    logger.info(f"🚫 Skipping false positive - '{query}' not found in evaluation {source.get('evaluationId')}")
+                # For regular queries, require at least one search word
+                words_found = [word for word in search_words if word in content_lower]
+                if not words_found:
                     continue
             
             # This is a valid match
@@ -1448,9 +1464,10 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
                 "partner": safe_get_metadata(metadata, ["partner"]),
                 "site": safe_get_metadata(metadata, ["site"]),
                 "call_date": safe_get_metadata(metadata, ["call_date", "callDate"]),
-                "search_type": "transcript_comprehensive_exact",
+                "search_type": "transcript_direct",
                 "highlighted_snippets": highlights,
-                "match_count": len(highlights) if highlights else 1
+                "match_count": len(highlights) if highlights else 1,
+                "search_mode": "exact_phrase" if is_quoted_phrase else "word_search"
             }
             
             validated_results.append(result)
@@ -1467,7 +1484,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
                     "metadata": metadata
                 })
         
-        # Calculate correct statistics based on validated results
+        # Calculate statistics
         actual_matches = len(validated_results)
         
         try:
@@ -1491,6 +1508,8 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         return {
             "status": "success",
             "query": query,
+            "search_terms": clean_query,
+            "search_mode": "exact_phrase" if is_quoted_phrase else "word_search",
             "display_results": validated_results,
             "comprehensive_summary": {
                 "total_evaluations_searched": total_evaluations,
@@ -1500,30 +1519,18 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
                 "unique_sub_dispositions": unique_sub_dispositions,
                 "total_document_matches": actual_matches,
                 "display_limit": display_size,
-                "max_scanned": len(all_hits),
-                "validation_applied": True
+                "max_scanned": len(all_hits)
             },
             "evaluation_ids_for_download": all_evaluation_ids,
             "evaluation_details_for_download": evaluation_details,
             "filters_applied": filters is not None and len(filters) > 0,
-            "search_type": "comprehensive_transcript_exact",
+            "search_type": "comprehensive_transcript_direct",
             "search_time_ms": 0
         }
         
     except Exception as e:
-        logger.error(f"❌ Comprehensive transcript search failed: {e}")
+        logger.error(f"❌ Direct transcript search failed: {e}")
         return {"error": str(e)}
-
-# Don't forget to import re at the top of your file
-import re
-
-print("🔧 EXACT MATCH TRANSCRIPT SEARCH IMPLEMENTED!")
-print("📝 CHANGES:")
-print("- Removed ALL fuzzy matching")
-print("- Added word boundary validation") 
-print("- Added content verification before including results")
-print("- Fixed match counting")
-print("🎯 Should now return ZERO matches for terms that don't actually exist")
 
 # =============================================================================
 # INDEX MANAGEMENT - ENHANCED WITH VECTOR SUPPORT
