@@ -377,97 +377,222 @@ function removeTranscriptSearchGuidance() {
 
 console.log("✅ Complete transcript search UI functions added to chat.js");
 
-// Enhanced sendMessage function to handle transcript search
-// Enhanced sendMessage function to handle transcript search
-// Enhanced sendMessage function to handle transcript search (FIXED TIMING)
 async function sendMessageWithTranscriptSearch() {
-    console.log("🔍 DEBUG: sendMessageWithTranscriptSearch called");
-    
-    // FIX: Get message BEFORE the original function can clear it
-    const chatInput = document.getElementById('chatInput');
-    if (!chatInput) {
-        console.error("🔍 DEBUG: #chatInput not found!");
-        return;
-    }
-    
-    const message = chatInput.value?.trim();
-    console.log("🔍 DEBUG: Message captured:", message);
-    
-    if (!message || isLoading) {
-        console.log("🔍 DEBUG: No message or loading, exiting");
-        return;
-    }
-    
-    if (!transcriptSearchMode) {
-        console.log("🔍 DEBUG: Not in transcript mode, calling original");
-        return originalSendMessage();
-    }
-    
-    console.log(`🎯 Performing transcript search for: "${message}"`);
-    
-    // Check if comprehensive search is enabled
-    const comprehensiveToggle = document.getElementById('comprehensiveSearchToggle');
-    const useComprehensive = comprehensiveToggle && comprehensiveToggle.checked;
-    
-    // Clear input immediately (like original function)
-    chatInput.value = '';
-    chatInput.style.height = 'auto';
-    
-    // Show loading state
-    showTranscriptSearchLoading(message, useComprehensive);
-    
-    try {
-        // Set loading state to prevent double-clicks
-        window.isLoading = true;
-        
-        const requestBody = {
-            query: message,
-            filters: currentFilters || {},
-            display_size: 20,
-            max_scan: 10000,
-            highlight: true
-        };
-        
-        console.log("🔍 Sending transcript search request:", requestBody);
-        
-        // Use appropriate endpoint
-        const endpoint = useComprehensive ? '/search_transcripts_comprehensive' : '/search_transcripts';
-        
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
-        });
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("API Error Response:", errorText);
-            throw new Error(`Search failed: ${response.status} ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.status === 'success') {
-            if (useComprehensive) {
-                displayComprehensiveTranscriptResults(data, message);
-            } else {
-                displayTranscriptSearchResults(data, message);
+    // PERFORMANCE: Use requestAnimationFrame to prevent UI blocking
+    return new Promise((resolve) => {
+        requestAnimationFrame(async () => {
+            const performanceStart = performance.now();
+            console.log("🔍 DEBUG: sendMessageWithTranscriptSearch called");
+            
+            try {
+                // STEP 1: Fast validation and setup
+                const chatInput = document.getElementById('chatInput');
+                if (!chatInput) {
+                    console.error("🔍 DEBUG: #chatInput not found!");
+                    resolve();
+                    return;
+                }
+                
+                // PERFORMANCE: Capture message immediately before any async operations
+                const message = chatInput.value?.trim();
+                console.log("🔍 DEBUG: Message captured:", message);
+                
+                // Early exit validations
+                if (!message) {
+                    console.log("🔍 DEBUG: No message provided");
+                    resolve();
+                    return;
+                }
+                
+                if (window.isLoading) {
+                    console.log("🔍 DEBUG: Already loading, preventing duplicate request");
+                    resolve();
+                    return;
+                }
+                
+                if (!transcriptSearchMode) {
+                    console.log("🔍 DEBUG: Not in transcript mode, calling original sendMessage");
+                    resolve(originalSendMessage?.());
+                    return;
+                }
+                
+                // STEP 2: Set loading state immediately
+                window.isLoading = true;
+                
+                // PERFORMANCE: Clear input and update UI synchronously
+                chatInput.value = '';
+                chatInput.style.height = 'auto';
+                
+                // Determine search type
+                const comprehensiveToggle = document.getElementById('comprehensiveSearchToggle');
+                const useComprehensive = comprehensiveToggle?.checked ?? false;
+                
+                console.log(`🎯 Performing transcript search for: "${message}" (comprehensive: ${useComprehensive})`);
+                
+                // STEP 3: Show loading state asynchronously (non-blocking)
+                setTimeout(() => {
+                    showTranscriptSearchLoading(message, useComprehensive);
+                }, 0);
+                
+                // STEP 4: Prepare request configuration
+                const BASE_URL = 'https://ask-innovai-g8jbr.ondigitalocean.app';
+                const endpoint = useComprehensive ? 
+                    `${BASE_URL}/search_transcripts_comprehensive` : 
+                    `${BASE_URL}/search_transcripts`;
+                
+                const requestBody = {
+                    query: message,
+                    filters: currentFilters || {},
+                    display_size: 20,
+                    max_scan: 10000,
+                    highlight: true
+                };
+                
+                console.log("🔍 Sending transcript search request:", {
+                    endpoint,
+                    query: message,
+                    comprehensive: useComprehensive,
+                    filtersCount: Object.keys(currentFilters || {}).length
+                });
+                
+                // STEP 5: Create abort controller for timeout handling
+                const abortController = new AbortController();
+                const timeoutId = setTimeout(() => {
+                    abortController.abort();
+                    console.warn("⏰ Request timeout after 30 seconds");
+                }, 30000);
+                
+                try {
+                    // STEP 6: Execute fetch request
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify(requestBody),
+                        signal: abortController.signal
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    // STEP 7: Handle response
+                    if (!response.ok) {
+                        let errorText;
+                        try {
+                            errorText = await response.text();
+                            console.error("API Error Response:", errorText);
+                        } catch (e) {
+                            errorText = `HTTP ${response.status} ${response.statusText}`;
+                        }
+                        
+                        throw new Error(`Search failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log("🔍 Search response received:", {
+                        status: data.status,
+                        resultCount: data.results?.length || 0,
+                        totalMatches: data.summary?.total_word_occurrences || 0
+                    });
+                    
+                    // STEP 8: Process successful response
+                    if (data.status === 'success') {
+                        // PERFORMANCE: Update UI asynchronously
+                        setTimeout(() => {
+                            try {
+                                if (useComprehensive) {
+                                    displayComprehensiveTranscriptResults(data, message);
+                                } else {
+                                    displayTranscriptSearchResults(data, message);
+                                }
+                                
+                                // Cache results for potential reuse
+                                lastTranscriptResults = data.display_results || data.results || [];
+                                
+                                // Show success toast
+                                if (typeof showToast === 'function') {
+                                    const resultCount = lastTranscriptResults.length;
+                                    const totalMatches = data.summary?.total_word_occurrences || 0;
+                                    showToast(
+                                        `✅ Found ${resultCount} transcripts with ${totalMatches} total matches for "${message}"`,
+                                        'success'
+                                    );
+                                }
+                                
+                            } catch (displayError) {
+                                console.error("❌ Error displaying results:", displayError);
+                                showTranscriptSearchError(`Display error: ${displayError.message}`);
+                            }
+                        }, 0);
+                        
+                    } else {
+                        // Handle API-level errors
+                        const errorMessage = data.error || 'Unknown error occurred';
+                        console.error("🔍 Search API error:", errorMessage);
+                        setTimeout(() => showTranscriptSearchError(errorMessage), 0);
+                    }
+                    
+                } catch (fetchError) {
+                    clearTimeout(timeoutId);
+                    
+                    // STEP 9: Handle fetch errors
+                    console.error('❌ Transcript search request failed:', fetchError);
+                    
+                    let userErrorMessage;
+                    if (fetchError.name === 'AbortError') {
+                        userErrorMessage = 'Search request timed out. Please try again with a shorter query.';
+                    } else if (fetchError.message.includes('Failed to fetch')) {
+                        userErrorMessage = 'Network error. Please check your connection and try again.';
+                    } else if (fetchError.message.includes('500')) {
+                        userErrorMessage = 'Server error. Please try again or contact support if the issue persists.';
+                    } else {
+                        userErrorMessage = `Search failed: ${fetchError.message}`;
+                    }
+                    
+                    setTimeout(() => showTranscriptSearchError(userErrorMessage), 0);
+                }
+                
+            } catch (criticalError) {
+                console.error('❌ CRITICAL: Unexpected error in sendMessageWithTranscriptSearch:', criticalError);
+                
+                // STEP 10: Handle critical errors
+                setTimeout(() => {
+                    showTranscriptSearchError('A critical error occurred. Please refresh the page and try again.');
+                    
+                    // Optional: Show more detailed error in development
+                    if (PRODUCTION_CONFIG?.DEBUG_MODE) {
+                        console.error('DEBUG: Critical error details:', criticalError.stack);
+                    }
+                }, 0);
+                
+            } finally {
+                // STEP 11: Cleanup (always executed)
+                setTimeout(() => {
+                    window.isLoading = false;
+                    
+                    // Performance logging
+                    const performanceEnd = performance.now();
+                    const duration = performanceEnd - performanceStart;
+                    console.log(`🚀 sendMessageWithTranscriptSearch completed in ${duration.toFixed(2)}ms`);
+                    
+                    // Track performance metrics if monitoring is enabled
+                    if (typeof performanceMetrics !== 'undefined') {
+                        performanceMetrics.chatResponseTimes.push(duration);
+                        // Keep only last 50 measurements
+                        if (performanceMetrics.chatResponseTimes.length > 50) {
+                            performanceMetrics.chatResponseTimes.shift();
+                        }
+                    }
+                    
+                }, 100); // Small delay to ensure UI updates complete
+                
+                resolve();
             }
-            lastTranscriptResults = data.display_results || data.results;
-        } else {
-            showTranscriptSearchError(data.error || 'Unknown error occurred');
-        }
-        
-    } catch (error) {
-        console.error('❌ Transcript search failed:', error);
-        showTranscriptSearchError(error.message);
-    } finally {
-        // Clear loading state
-        window.isLoading = false;
-    }
+        });
+    });
 }
+
 
 // =============================================================================
 // FILTER MANAGEMENT
@@ -1833,25 +1958,111 @@ async function checkVectorSearchCapabilities() {
 }
 
 function showTranscriptSearchLoading(query, isComprehensive = false) {
-    const resultsContainer = document.getElementById('transcriptSearchResults');
-    const resultsList = document.getElementById('transcriptResultsList');
-    const resultsSummary = document.getElementById('transcriptResultsSummary');
-    
-    resultsContainer.classList.remove('hidden');
-    
-    const searchType = isComprehensive ? 'Comprehensive' : 'Standard';
-    const searchDescription = isComprehensive ? 
-        'Scanning all documents for complete analysis...' : 
-        `Searching transcripts for "${query}"...`;
-    
-    resultsSummary.innerHTML = `
-        <div class="loading-indicator">
-            <div class="spinner"></div>
-            <span>${searchType} search: ${searchDescription}</span>
-        </div>
-    `;
-    
-    resultsList.innerHTML = '';
+    try {
+        const resultsContainer = document.getElementById('transcriptSearchResults') || 
+                               document.querySelector('.transcript-search-results');
+        
+        if (!resultsContainer) {
+            console.warn("⚠️ No results container found for loading state");
+            return;
+        }
+        
+        const loadingHTML = `
+            <div class="transcript-search-loading">
+                <div class="loading-content">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">
+                        <h4>🔍 Searching transcripts${isComprehensive ? ' (comprehensive)' : ''}...</h4>
+                        <p>Looking for: <strong>"${escapeHtml(query)}"</strong></p>
+                        <div class="loading-progress">
+                            <div class="progress-bar"></div>
+                        </div>
+                        <small class="loading-tip">
+                            ${isComprehensive ? 
+                                'Scanning all available transcripts for matches...' : 
+                                'Searching recent transcripts for quick results...'
+                            }
+                        </small>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        resultsContainer.innerHTML = loadingHTML;
+        resultsContainer.style.display = 'block';
+        
+        // Add CSS for loading animation if not already present
+        if (!document.getElementById('transcript-loading-styles')) {
+            const loadingStyles = document.createElement('style');
+            loadingStyles.id = 'transcript-loading-styles';
+            loadingStyles.textContent = `
+                .transcript-search-loading {
+                    padding: 40px 20px;
+                    text-align: center;
+                    background: white;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                }
+                
+                .loading-content {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 16px;
+                }
+                
+                .loading-spinner {
+                    width: 32px;
+                    height: 32px;
+                    border: 3px solid #f3f3f3;
+                    border-top: 3px solid #2196f3;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                }
+                
+                .loading-text h4 {
+                    margin: 0;
+                    color: #333;
+                    font-size: 1.1rem;
+                }
+                
+                .loading-text p {
+                    margin: 8px 0;
+                    color: #666;
+                }
+                
+                .loading-progress {
+                    width: 200px;
+                    height: 4px;
+                    background: #f0f0f0;
+                    border-radius: 2px;
+                    overflow: hidden;
+                }
+                
+                .progress-bar {
+                    height: 100%;
+                    background: linear-gradient(90deg, #2196f3, #21cbf3);
+                    border-radius: 2px;
+                    animation: progress 2s ease-in-out infinite;
+                }
+                
+                .loading-tip {
+                    color: #888;
+                    font-style: italic;
+                }
+                
+                @keyframes progress {
+                    0% { width: 0%; }
+                    50% { width: 70%; }
+                    100% { width: 100%; }
+                }
+            `;
+            document.head.appendChild(loadingStyles);
+        }
+        
+    } catch (error) {
+        console.error("❌ Error showing loading state:", error);
+    }
 }
 
 function clearTranscriptResults() {
@@ -1914,17 +2125,107 @@ function addTranscriptResultsContainer() {
         console.log("✅ Transcript results container inserted at beginning of container");
     }
 }
-
-function showTranscriptSearchError(error) {
-    const resultsSummary = document.getElementById('transcriptResultsSummary');
-    
-    resultsSummary.innerHTML = `
-        <div class="error-message">
-            <h4>❌ Search Error</h4>
-            <p>${error}</p>
-        </div>
-    `;
+function retryLastTranscriptSearch() {
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput && window.lastSearchQuery) {
+        chatInput.value = window.lastSearchQuery;
+        sendMessageWithTranscriptSearch();
+    } else {
+        showToast('❌ No previous search to retry', 'warning');
+    }
 }
+
+/**
+ * UTILITY: Clear transcript results
+ */
+function clearTranscriptResults() {
+    const resultsContainer = document.getElementById('transcriptSearchResults') || 
+                           document.querySelector('.transcript-search-results');
+    
+    if (resultsContainer) {
+        resultsContainer.style.display = 'none';
+        resultsContainer.innerHTML = '';
+    }
+    
+    // Clear cached results
+    lastTranscriptResults = [];
+    
+    console.log("🧹 Transcript results cleared");
+}
+
+// Store last search query for retry functionality
+let originalSendMessageWithTranscriptSearch = sendMessageWithTranscriptSearch;
+sendMessageWithTranscriptSearch = function() {
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput && chatInput.value?.trim()) {
+        window.lastSearchQuery = chatInput.value.trim();
+    }
+    return originalSendMessageWithTranscriptSearch();
+};
+
+console.log("✅ Fully optimized sendMessageWithTranscriptSearch function loaded");
+function showTranscriptSearchError(errorMessage) {
+    try {
+        const resultsContainer = document.getElementById('transcriptSearchResults') || 
+                               document.querySelector('.transcript-search-results');
+        
+        if (!resultsContainer) {
+            // Fallback: show toast notification
+            if (typeof showToast === 'function') {
+                showToast(`❌ Transcript Search Error: ${errorMessage}`, 'error');
+            } else {
+                console.error("❌ Transcript Search Error:", errorMessage);
+                alert(`Transcript Search Error: ${errorMessage}`);
+            }
+            return;
+        }
+        
+        const errorHTML = `
+            <div class="transcript-search-error">
+                <div class="error-content">
+                    <div class="error-icon">❌</div>
+                    <h4>Search Error</h4>
+                    <p class="error-message">${escapeHtml(errorMessage)}</p>
+                    <div class="error-actions">
+                        <button class="transcript-btn transcript-btn--primary" onclick="retryLastTranscriptSearch()">
+                            🔄 Try Again
+                        </button>
+                        <button class="transcript-btn transcript-btn--secondary" onclick="clearTranscriptResults()">
+                            ✕ Clear
+                        </button>
+                    </div>
+                    <details class="error-help">
+                        <summary>💡 Troubleshooting Tips</summary>
+                        <ul>
+                            <li>Try a simpler search term (single words work best)</li>
+                            <li>Check your internet connection</li>
+                            <li>Avoid special characters in search queries</li>
+                            <li>Try refreshing the page if errors persist</li>
+                        </ul>
+                    </details>
+                </div>
+            </div>
+        `;
+        
+        resultsContainer.innerHTML = errorHTML;
+        resultsContainer.style.display = 'block';
+        
+    } catch (displayError) {
+        console.error("❌ Error displaying error message:", displayError);
+        // Ultimate fallback
+        alert(`Error: ${errorMessage}`);
+    }
+}
+
+/**
+ * UTILITY: Escape HTML to prevent XSS
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 
 // Utility function to copy text to clipboard
 function copyToClipboard(text) {
