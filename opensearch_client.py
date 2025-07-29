@@ -1074,19 +1074,19 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
                         "bool": {
                             "should": [
                                 # Exact phrase match in transcript
-                                {"match_phrase": {"transcript": {"query": query, "boost": 3.0}}},
+                                {"match_phrase": {"transcript_text": {"query": query, "boost": 3.0}}},
                                 # Fuzzy word matching in transcript
-                                {"match": {"transcript": {"query": query, "fuzziness": "AUTO", "boost": 2.0}}},
+                                {"match": {"transcript_text": {"query": query, "fuzziness": "AUTO", "boost": 2.0}}},
                                 # Wildcard search for partial words
-                                {"wildcard": {"transcript": f"*{query.lower()}*"}}
+                                {"wildcard": {"transcript_text": f"*{query.lower()}*"}}
                             ],
                             "minimum_should_match": 1
                         }
                     },
                     # Ensure document has transcript content
-                    {"exists": {"field": "transcript"}},
+                    {"exists": {"field": "transcript_text"}},
                     # Ensure transcript is not empty
-                    {"bool": {"must_not": {"term": {"transcript.keyword": ""}}}}
+                    {"bool": {"must_not": {"term": {"transcript_text.keyword": ""}}}}
                 ]
             }
         }
@@ -1103,14 +1103,14 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
             "size": size,
             "sort": [{"_score": {"order": "desc"}}],
             "_source": ["evaluationId", "internalId", "template_name", "template_id", 
-                       "transcript", "metadata", "evaluation"],
+                       "transcript", "metadata", "evaluation_text"],
         }
         
         # Add highlighting for matched words
         if highlight_words:
             search_body["highlight"] = {
                 "fields": {
-                    "transcript": {
+                    "transcript_text": {
                         "fragment_size": 150,
                         "number_of_fragments": 3,
                         "pre_tags": ["<mark class='highlight'>"],
@@ -1129,14 +1129,14 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
         
         for hit in hits:
             source = hit.get("_source", {})
-            transcript_content = source.get("transcript", "")
+            transcript_content = source.get("transcript_text", "")
             
             # Skip if transcript is empty or too short
             if not transcript_content or len(transcript_content.strip()) < 10:
                 continue
             
             # Extract highlighted snippets
-            highlights = hit.get("highlight", {}).get("transcript", [])
+            highlights = hit.get("highlight", {}).get("transcript_text", [])
             
             # Extract key metadata for easy reference
             metadata = source.get("metadata", {})
@@ -1193,12 +1193,12 @@ def search_transcript_with_context(query: str, evaluation_id: str,
                 "bool": {
                     "must": [
                         {"term": {"evaluationId": evaluation_id}},
-                        {"exists": {"field": "transcript"}}
+                        {"exists": {"field": "transcript_text"}}
                     ]
                 }
             },
             "size": 1,
-            "_source": ["transcript", "evaluationId", "template_name"]
+            "_source": ["transcript_text", "evaluationId", "template_name"]
         }
         
         response = safe_search_with_error_handling(client, "eval-*", search_body)
@@ -1242,6 +1242,10 @@ def search_transcript_with_context(query: str, evaluation_id: str,
     except Exception as e:
         logger.error(f"❌ Transcript context search failed: {e}")
         return {"error": str(e)}
+    
+print("🔧 TRANSCRIPT SEARCH FIELD NAMES FIXED!")
+print("📝 UPDATE: All functions now search 'transcript_text' field instead of 'transcript'")
+print("🎯 This should resolve the 0 results issue with transcript search")
 
 def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None, 
                                    display_size: int = 20, max_total_scan: int = 10000) -> Dict[str, Any]:
@@ -1268,15 +1272,15 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
                     {
                         "bool": {
                             "should": [
-                                {"match_phrase": {"transcript": {"query": query, "boost": 3.0}}},
-                                {"match": {"transcript": {"query": query, "fuzziness": "AUTO", "boost": 2.0}}},
-                                {"wildcard": {"transcript": f"*{query.lower()}*"}}
+                                {"match_phrase": {"transcript_text": {"query": query, "boost": 3.0}}},
+                                {"match": {"transcript_text": {"query": query, "fuzziness": "AUTO", "boost": 2.0}}},
+                                {"wildcard": {"transcript_text": f"*{query.lower()}*"}}
                             ],
                             "minimum_should_match": 1
                         }
                     },
-                    {"exists": {"field": "transcript"}},
-                    {"bool": {"must_not": {"term": {"transcript.keyword": ""}}}}
+                    {"exists": {"field": "transcript_text"}},
+                    {"bool": {"must_not": {"term": {"transcript_text.keyword": ""}}}}
                 ]
             }
         }
@@ -1306,10 +1310,11 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             "query": transcript_query,
             "size": max_total_scan,  # Scan up to 10k results
             "sort": [{"_score": {"order": "desc"}}],
-            "_source": ["evaluationId", "template_name", "metadata", "_score"],
+            "_source": ["evaluationId", "internalId", "template_name", "template_id","transcript_text", "metadata", "evaluation_text"],  # FIXED: transcript_text
             "track_total_hits": True
         }
-        
+
+                
         comprehensive_response = safe_search_with_error_handling(
             client, index_pattern, comprehensive_search_body, timeout=60
         )
@@ -1323,6 +1328,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         
         for hit in all_hits:
             source = hit.get("_source", {})
+            transcript_content = source.get("transcript_text", "")
             eval_id = source.get("evaluationId")
             if eval_id:
                 metadata = source.get("metadata", {})
@@ -1350,7 +1356,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             "_source": True,
             "highlight": {
                 "fields": {
-                    "transcript": {
+                    "transcript_text": {
                         "fragment_size": 150,
                         "number_of_fragments": 3,
                         "pre_tags": ["<mark class='highlight'>"],
@@ -1368,15 +1374,17 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         # Process display results (same as original function)
         display_results = []
         display_hits = display_response.get("hits", {}).get("hits", [])
+        all_evaluation_ids = []
+        evaluation_details = []
         
-        for hit in display_hits:
+        for hit in all_hits[:display_size]:
             source = hit.get("_source", {})
-            transcript_content = source.get("transcript", "")
+            transcript_content = source.get("transcript_text", "")
             
             if not transcript_content or len(transcript_content.strip()) < 10:
                 continue
             
-            highlights = hit.get("highlight", {}).get("transcript", [])
+            highlights = hit.get("highlight", {}).get("transcript_text", [])
             metadata = source.get("metadata", {})
             
             result = {
@@ -1402,6 +1410,22 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             }
             
             display_results.append(result)
+
+        # Collect ALL evaluation IDs for download (from all hits, not just display)
+        for hit in all_hits:
+            source = hit.get("_source", {})
+            eval_id = source.get("evaluationId")
+            if eval_id:
+                all_evaluation_ids.append(str(eval_id))
+                
+                # Store evaluation details for download
+                evaluation_details.append({
+                    "evaluationId": eval_id,
+                    "internalId": source.get("internalId"),
+                    "template_name": source.get("template_name"),
+                    "match_score": hit.get("_score", 0),
+                    "metadata": source.get("metadata", {})
+                })
         
         # Calculate additional statistics
         unique_templates = len(set(detail["template_name"] for detail in evaluation_details))
