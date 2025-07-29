@@ -1256,10 +1256,15 @@ print("🔧 TRANSCRIPT SEARCH FIELD NAMES FIXED!")
 print("📝 UPDATE: All functions now search 'transcript_text' field instead of 'transcript'")
 print("🎯 This should resolve the 0 results issue with transcript search")
 
+# ===================================================================
+# EXACT MATCH TRANSCRIPT SEARCH FIX
+# Replace the query building section to eliminate false positives
+# ===================================================================
+
 def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None, 
                                    display_size: int = 20, max_total_scan: int = 10000) -> Dict[str, Any]:
     """
-    FIXED: Safe field access for sub_disposition and other metadata fields
+    FIXED: Exact match only - no fuzzy matching that causes false positives
     """
     client = get_opensearch_client()
     if not client:
@@ -1273,25 +1278,54 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         # Get available fields for safe queries
         available_fields = get_available_fields(client, index_pattern)
         
-        # Build transcript-specific query using transcript_text field
-        transcript_query = {
-            "bool": {
-                "must": [
-                    {
-                        "bool": {
-                            "should": [
-                                {"match_phrase": {"transcript_text": {"query": query, "boost": 3.0}}},
-                                {"match": {"transcript_text": {"query": query, "fuzziness": "AUTO", "boost": 2.0}}},
-                                {"wildcard": {"transcript_text": f"*{query.lower()}*"}}
-                            ],
-                            "minimum_should_match": 1
-                        }
-                    },
-                    {"exists": {"field": "transcript_text"}},
-                    {"bool": {"must_not": {"term": {"transcript_text.keyword": ""}}}}
-                ]
+        # FIXED: EXACT MATCH ONLY - No fuzzy matching
+        # For single words: exact word boundary matching
+        # For phrases: exact phrase matching
+        query_words = query.strip().split()
+        
+        if len(query_words) == 1:
+            # Single word - use exact term matching with word boundaries
+            single_word = query_words[0].lower()
+            transcript_query = {
+                "bool": {
+                    "must": [
+                        {
+                            "bool": {
+                                "should": [
+                                    # Exact phrase match (case insensitive)
+                                    {"match_phrase": {"transcript_text": {"query": query, "boost": 3.0}}},
+                                    # Exact word match using regex
+                                    {"regexp": {"transcript_text": f".*\\b{re.escape(single_word)}\\b.*"}}
+                                ],
+                                "minimum_should_match": 1
+                            }
+                        },
+                        {"exists": {"field": "transcript_text"}},
+                        {"range": {"transcript_text": {"gte": "   "}}}  # Not empty
+                    ]
+                }
             }
-        }
+        else:
+            # Multiple words - require exact phrase OR all words present
+            transcript_query = {
+                "bool": {
+                    "must": [
+                        {
+                            "bool": {
+                                "should": [
+                                    # Exact phrase match (highest priority)
+                                    {"match_phrase": {"transcript_text": {"query": query, "boost": 5.0}}},
+                                    # All words must be present (no fuzziness)
+                                    {"match": {"transcript_text": {"query": query, "operator": "and", "fuzziness": "0"}}}
+                                ],
+                                "minimum_should_match": 1
+                            }
+                        },
+                        {"exists": {"field": "transcript_text"}},
+                        {"range": {"transcript_text": {"gte": "   "}}}
+                    ]
+                }
+            }
         
         # Add filters if provided
         if filters:
@@ -1299,7 +1333,10 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             if filter_clauses:
                 transcript_query["bool"]["filter"] = filter_clauses
         
-        # STEP 1: Get total count of evaluations in date range (without transcript search)
+        # Log the query for debugging
+        logger.info(f"🔍 Exact match query for '{query}': {transcript_query}")
+        
+        # STEP 1: Get total count of evaluations
         total_count_query = {"match_all": {}}
         if filters:
             filter_clauses = build_safe_filter_clauses(filters, available_fields)
@@ -1313,7 +1350,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         )
         total_evaluations = total_count_response.get("hits", {}).get("total", {}).get("value", 0)
         
-        # STEP 2: Comprehensive search for ALL matching transcripts (for summary)
+        # STEP 2: Execute the exact match search
         comprehensive_search_body = {
             "query": transcript_query,
             "size": max_total_scan,
@@ -1323,24 +1360,29 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             "track_total_hits": True
         }
         
-        # Add highlighting for matched words
+        # Highlighting with exact matches only
         comprehensive_search_body["highlight"] = {
             "fields": {
                 "transcript_text": {
-                    "fragment_size": 150,
+                    "fragment_size": 200,
                     "number_of_fragments": 3,
                     "pre_tags": ["<mark class='highlight'>"],
                     "post_tags": ["</mark>"]
                 }
             },
-            "require_field_match": False
+            "require_field_match": True
         }
         
         response = safe_search_with_error_handling(client, index_pattern, comprehensive_search_body, timeout=30)
         
-        # Process results for display
-        display_results = []
+        # Get actual hit count from response
+        actual_hit_count = response.get("hits", {}).get("total", {}).get("value", 0)
         all_hits = response.get("hits", {}).get("hits", [])
+        
+        logger.info(f"🔍 Exact search for '{query}' found {actual_hit_count} matches")
+        
+        # STRICT VALIDATION: Only include results that actually contain the search terms
+        validated_results = []
         all_evaluation_ids = []
         evaluation_details = []
         
@@ -1348,21 +1390,38 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             source = hit.get("_source", {})
             transcript_content = source.get("transcript_text", "")
             
-            if not transcript_content or len(transcript_content.strip()) < 10:
+            if not transcript_content or len(transcript_content.strip()) < 50:
                 continue
             
+            # CRITICAL: Validate that the content actually contains the search terms
+            content_lower = transcript_content.lower()
+            query_lower = query.lower()
+            
+            # For single words, check exact word boundaries
+            if len(query_words) == 1:
+                import re
+                word_pattern = r'\b' + re.escape(query_lower) + r'\b'
+                if not re.search(word_pattern, content_lower):
+                    logger.info(f"🚫 Skipping false positive - '{query}' not found in evaluation {source.get('evaluationId')}")
+                    continue
+            else:
+                # For phrases, check if exact phrase exists OR all words exist
+                phrase_exists = query_lower in content_lower
+                all_words_exist = all(word.lower() in content_lower for word in query_words)
+                
+                if not (phrase_exists or all_words_exist):
+                    logger.info(f"🚫 Skipping false positive - '{query}' not found in evaluation {source.get('evaluationId')}")
+                    continue
+            
+            # This is a valid match
             highlights = hit.get("highlight", {}).get("transcript_text", [])
             metadata = source.get("metadata", {})
             
-            # FIXED: Safe field access with proper error handling
             def safe_get_metadata(metadata_dict, field_names, default="Not specified"):
-                """Safely get metadata field with multiple possible names"""
                 if not isinstance(metadata_dict, dict):
                     return default
-                    
                 if isinstance(field_names, str):
                     field_names = [field_names]
-                    
                 for field_name in field_names:
                     try:
                         value = metadata_dict.get(field_name)
@@ -1371,14 +1430,6 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
                     except Exception:
                         continue
                 return default
-            
-            # Use safe field access
-            sub_disposition = safe_get_metadata(metadata, ["sub_disposition", "subDisposition"])
-            disposition = safe_get_metadata(metadata, ["disposition"])
-            program = safe_get_metadata(metadata, ["program"])
-            partner = safe_get_metadata(metadata, ["partner"])
-            site = safe_get_metadata(metadata, ["site"])
-            call_date = safe_get_metadata(metadata, ["call_date", "callDate"])
             
             result = {
                 "_id": hit.get("_id"),
@@ -1391,41 +1442,34 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
                 "transcript": transcript_content,
                 "transcript_length": len(transcript_content),
                 "metadata": metadata,
-                "sub_disposition": sub_disposition,
-                "disposition": disposition,
-                "program": program,
-                "partner": partner,
-                "site": site,
-                "call_date": call_date,
-                "search_type": "transcript_comprehensive",
+                "sub_disposition": safe_get_metadata(metadata, ["sub_disposition", "subDisposition"]),
+                "disposition": safe_get_metadata(metadata, ["disposition"]),
+                "program": safe_get_metadata(metadata, ["program"]),
+                "partner": safe_get_metadata(metadata, ["partner"]),
+                "site": safe_get_metadata(metadata, ["site"]),
+                "call_date": safe_get_metadata(metadata, ["call_date", "callDate"]),
+                "search_type": "transcript_comprehensive_exact",
                 "highlighted_snippets": highlights,
-                "match_count": len(highlights) if highlights else _count_word_occurrences(transcript_content, query)
+                "match_count": len(highlights) if highlights else 1
             }
             
-            display_results.append(result)
-        
-        # Collect ALL evaluation IDs for download (from all hits, not just display)
-        for hit in all_hits:
-            source = hit.get("_source", {})
+            validated_results.append(result)
+            
+            # Add to download lists
             eval_id = source.get("evaluationId")
             if eval_id:
                 all_evaluation_ids.append(str(eval_id))
-                
-                # Store evaluation details for download with safe field access
-                metadata = source.get("metadata", {})
                 evaluation_details.append({
                     "evaluationId": eval_id,
                     "internalId": source.get("internalId"),
                     "template_name": source.get("template_name"),
                     "match_score": hit.get("_score", 0),
-                    "metadata": metadata,
-                    "sub_disposition": safe_get_metadata(metadata, ["sub_disposition", "subDisposition"]),
-                    "disposition": safe_get_metadata(metadata, ["disposition"]),
-                    "program": safe_get_metadata(metadata, ["program"]),
-                    "partner": safe_get_metadata(metadata, ["partner"])
+                    "metadata": metadata
                 })
         
-        # FIXED: Safe statistics calculation
+        # Calculate correct statistics based on validated results
+        actual_matches = len(validated_results)
+        
         try:
             unique_templates = len(set(
                 detail.get("template_name", "Unknown") 
@@ -1437,9 +1481,9 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             
         try:
             unique_sub_dispositions = len(set(
-                detail.get("sub_disposition", "Not specified") 
-                for detail in evaluation_details 
-                if detail.get("sub_disposition") and detail.get("sub_disposition") != "Not specified"
+                result.get("sub_disposition", "Not specified") 
+                for result in validated_results 
+                if result.get("sub_disposition") and result.get("sub_disposition") != "Not specified"
             ))
         except Exception:
             unique_sub_dispositions = 0
@@ -1447,27 +1491,39 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         return {
             "status": "success",
             "query": query,
-            "display_results": display_results,
+            "display_results": validated_results,
             "comprehensive_summary": {
                 "total_evaluations_searched": total_evaluations,
-                "evaluations_with_matches": len(all_evaluation_ids),
-                "match_percentage": round((len(all_evaluation_ids) / total_evaluations) * 100, 1) if total_evaluations > 0 else 0,
+                "evaluations_with_matches": actual_matches,
+                "match_percentage": round((actual_matches / total_evaluations) * 100, 1) if total_evaluations > 0 else 0,
                 "unique_templates": unique_templates,
                 "unique_sub_dispositions": unique_sub_dispositions,
-                "total_document_matches": len(all_hits),
+                "total_document_matches": actual_matches,
                 "display_limit": display_size,
-                "max_scanned": len(all_hits)
+                "max_scanned": len(all_hits),
+                "validation_applied": True
             },
             "evaluation_ids_for_download": all_evaluation_ids,
             "evaluation_details_for_download": evaluation_details,
             "filters_applied": filters is not None and len(filters) > 0,
-            "search_type": "comprehensive_transcript",
-            "search_time_ms": 0  # You can add timing if needed
+            "search_type": "comprehensive_transcript_exact",
+            "search_time_ms": 0
         }
         
     except Exception as e:
         logger.error(f"❌ Comprehensive transcript search failed: {e}")
         return {"error": str(e)}
+
+# Don't forget to import re at the top of your file
+import re
+
+print("🔧 EXACT MATCH TRANSCRIPT SEARCH IMPLEMENTED!")
+print("📝 CHANGES:")
+print("- Removed ALL fuzzy matching")
+print("- Added word boundary validation") 
+print("- Added content verification before including results")
+print("- Fixed match counting")
+print("🎯 Should now return ZERO matches for terms that don't actually exist")
 
 # =============================================================================
 # INDEX MANAGEMENT - ENHANCED WITH VECTOR SUPPORT
