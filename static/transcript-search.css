@@ -387,6 +387,355 @@ mark.highlight {
 }
 
 /* =============================================================================
+   ENHANCED HIGHLIGHTING STYLES - Add to transcript-search.css
+   ============================================================================= */
+
+/* Focused highlighting container */
+.highlighted-content {
+    background: #f8f9fa;
+    border-left: 4px solid #2196f3;
+    padding: 16px;
+    margin: 12px 0;
+    border-radius: 0 6px 6px 0;
+}
+
+/* Individual highlight snippets */
+.highlight-snippet {
+    background: white;
+    border: 1px solid #e1e8ed;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 8px;
+    line-height: 1.6;
+    font-size: 0.9rem;
+    color: #333;
+    position: relative;
+}
+
+.highlight-snippet:last-child {
+    margin-bottom: 0;
+}
+
+.highlight-snippet::before {
+    content: "🔍";
+    position: absolute;
+    top: -8px;
+    left: 12px;
+    background: white;
+    padding: 0 4px;
+    font-size: 0.8rem;
+    color: #2196f3;
+}
+
+/* Enhanced search term highlighting */
+.highlight-snippet mark.highlight,
+.highlight-snippet .highlight {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border: 1px solid #f1c40f;
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-weight: 600;
+    color: #8b4513;
+    box-shadow: 0 1px 2px rgba(241, 196, 15, 0.2);
+    animation: highlightPulse 0.3s ease-in-out;
+}
+
+@keyframes highlightPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* No content states */
+.no-content, .no-matches {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px dashed #ddd;
+}
+
+/* Enhanced comprehensive summary */
+.comprehensive-summary {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.comprehensive-summary h4 {
+    color: #1565c0;
+    margin-bottom: 16px;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: 1px solid #e3f2fd;
+}
+
+.stat-number {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1976d2;
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: #666;
+    line-height: 1.3;
+}
+
+/* Enhanced download section */
+.download-section {
+    border-top: 1px solid rgba(255,255,255,0.3);
+    padding-top: 16px;
+}
+
+.download-section h5 {
+    color: #1565c0;
+    margin-bottom: 12px;
+    font-size: 0.95rem;
+}
+
+.download-buttons {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.btn-download {
+    background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-download:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(25, 118, 210, 0.3);
+}
+
+/* Enhanced search result items */
+.search-result-item {
+    border: 1px solid #e1e8ed;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    background: white;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.search-result-item:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+}
+
+/* Enhanced result header */
+.result-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 16px 20px;
+    border-bottom: 1px solid #e1e8ed;
+}
+
+.result-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.result-icon {
+    font-size: 1.2rem;
+    color: #2196f3;
+}
+
+.score-badge {
+    background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.match-badge {
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* Enhanced metadata grid */
+.reference-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.ref-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ref-label {
+    font-size: 0.75rem;
+    color: #666;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ref-value {
+    font-size: 0.85rem;
+    color: #333;
+    font-weight: 500;
+}
+
+/* Enhanced action buttons */
+.result-actions {
+    padding: 16px 20px;
+    border-top: 1px solid #f0f0f0;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-primary, .btn-secondary, .btn-filter {
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+    border: none;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%);
+    color: white;
+}
+
+.btn-secondary {
+    background: #f8f9fa;
+    color: #666;
+    border: 1px solid #e1e8ed;
+}
+
+.btn-filter {
+    background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+    color: white;
+}
+
+.btn-primary:hover, .btn-secondary:hover, .btn-filter:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+/* Enhanced search suggestions */
+.search-suggestions {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 6px;
+    padding: 16px;
+    margin-top: 16px;
+}
+
+.search-suggestions h5 {
+    color: #8b4513;
+    margin-bottom: 8px;
+}
+
+.search-suggestions ul {
+    color: #8b4513;
+    margin: 0;
+    padding-left: 20px;
+}
+
+.search-suggestions li {
+    margin-bottom: 4px;
+}
+
+/* =============================================================================
+   RESPONSIVE DESIGN FOR FOCUSED HIGHLIGHTS
+   ============================================================================= */
+
+@media (max-width: 768px) {
+    .summary-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .download-buttons {
+        flex-direction: column;
+    }
+    
+    .reference-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .result-actions {
+        flex-direction: column;
+    }
+    
+    .highlight-snippet {
+        padding: 8px;
+        font-size: 0.85rem;
+    }
+    
+    .highlighted-content {
+        padding: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .result-title {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .stat-number {
+        font-size: 1.2rem;
+    }
+    
+    .highlight-snippet::before {
+        display: none;
+    }
+}
+
+/* =============================================================================
    TRANSCRIPT-SPECIFIC BUTTON STYLES (NO CONFLICTS)
    ============================================================================= */
 

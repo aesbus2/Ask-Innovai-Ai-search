@@ -237,17 +237,16 @@ function setupIdFieldValidation() {
 function initializeTranscriptSearch() {
     console.log("🎯 Initializing transcript search functionality...");
     
-    // The toggle is now in the HTML, so we DON'T call addTranscriptSearchToggle()
-    // Just add the results container
+    // First, try to add toggle to header if it's missing
+    addToggleToHeader();
+    
+    // Add transcript search results container
     addTranscriptResultsContainer();
     
-    // Verify the toggle exists in HTML
-    const toggle = document.getElementById('transcriptSearchToggleInput');
-    if (toggle) {
-        console.log("✅ Transcript toggle found in HTML");
-    } else {
-        console.warn("⚠️ Transcript toggle NOT found in HTML - check your HTML file");
-    }
+    // Verify everything is working
+    setTimeout(() => {
+        debugTranscriptToggle();
+    }, 200);
 }
 
 
@@ -1640,9 +1639,6 @@ function displayTranscriptSearchResults(data, query) {
 function displayComprehensiveTranscriptResults(data, query) {
     console.log("🎯 Displaying comprehensive transcript search results:", data);
    
-    const containers = ensureTranscriptContainersReady();
-    containers.container.style.display = 'block';
-    
     const resultsContainer = document.getElementById('transcriptSearchResults');
     const resultsList = document.getElementById('transcriptResultsList');
     const resultsSummary = document.getElementById('transcriptResultsSummary');
@@ -1652,58 +1648,31 @@ function displayComprehensiveTranscriptResults(data, query) {
         return;
     }
     
-    // Show container
+    // Show results container
     resultsContainer.classList.remove('hidden');
+    resultsContainer.style.display = 'block';
     
-    // Reset loading state
-    window.isLoading = false;
+    const results = data.display_results || data.results || [];
+    const summary = data.summary || {};
     
-    const results = data.display_results || [];
-    const summary = data.comprehensive_summary || {};
-    const searchTime = data.search_time_ms || 0;
-    
-    // Update comprehensive summary
+    // Enhanced summary with focus on search terms
     resultsSummary.innerHTML = `
         <div class="comprehensive-summary">
-            <h4>📊 Comprehensive Analysis for "${query}"</h4>
-            
+            <h4>🔍 Comprehensive Transcript Search Results</h4>
             <div class="summary-grid">
-                <div class="stat">
-                    <strong>${summary.total_evaluations_searched || 0}</strong>
-                    <span>Total Searched</span>
+                <div class="stat-card">
+                    <div class="stat-number">${results.length}</div>
+                    <div class="stat-label">Transcripts Found</div>
                 </div>
-                <div class="stat">
-                    <strong>${summary.evaluations_with_matches || 0}</strong>
-                    <span>With Matches</span>
+                <div class="stat-card">
+                    <div class="stat-number">${summary.total_word_occurrences || 0}</div>
+                    <div class="stat-label">Total Matches for "<strong>${query}</strong>"</div>
                 </div>
-                <div class="stat">
-                    <strong>${summary.match_percentage || 0}%</strong>
-                    <span>Match Rate</span>
-                </div>
-                <div class="stat">
-                    <strong>${summary.total_document_matches || 0}</strong>
-                    <span>Total Matches</span>
-                </div>
-                <div class="stat">
-                    <strong>${summary.unique_templates || 0}</strong>
-                    <span>Templates</span>
-                </div>
-                <div class="stat">
-                    <strong>${searchTime}ms</strong>
-                    <span>Search Time</span>
+                <div class="stat-card">
+                    <div class="stat-number">${summary.total_evaluations_searched || 0}</div>
+                    <div class="stat-label">Evaluations Scanned</div>
                 </div>
             </div>
-            
-            ${summary.top_patterns && summary.top_patterns.length > 0 ? `
-                <div class="pattern-analysis">
-                    <h5>🔍 Most Common Patterns:</h5>
-                    <div class="pattern-list">
-                        ${summary.top_patterns.slice(0, 5).map(pattern => 
-                            `<span class="pattern-tag">${pattern.phrase || pattern} (${pattern.count || ''}x)</span>`
-                        ).join('')}
-                    </div>
-                </div>
-            ` : ''}
             
             <div class="download-section">
                 <h5>📥 Export Options:</h5>
@@ -1719,18 +1688,21 @@ function displayComprehensiveTranscriptResults(data, query) {
         </div>
     `;
     
-    // Display results using the same format as standard search
+    // Display results with focused highlighting
     if (results.length === 0) {
         resultsList.innerHTML = `
             <div class="no-results">
                 <h4>🔍 No matches found in comprehensive scan</h4>
                 <p>No transcript content matched your search for "<strong>${query}</strong>" across ${summary.total_evaluations_searched || 0} evaluations.</p>
-                <p>Try:</p>
-                <ul>
-                    <li>Different keywords or phrases</li>
-                    <li>Broader search terms</li>
-                    <li>Check spelling and try synonyms</li>
-                </ul>
+                <div class="search-suggestions">
+                    <h5>Try:</h5>
+                    <ul>
+                        <li>Different keywords or phrases</li>
+                        <li>Broader search terms</li>
+                        <li>Check spelling and try synonyms</li>
+                        <li>Remove quotes for broader matching</li>
+                    </ul>
+                </div>
             </div>
         `;
         return;
@@ -1739,27 +1711,45 @@ function displayComprehensiveTranscriptResults(data, query) {
     let resultsHtml = '';
     results.forEach((result, index) => {
         const evaluationId = result.evaluationId || result.evaluation_id || 'Unknown';
-        const highlights = result.highlighted_snippets || [];
-        const transcript = highlights.length > 0 ? highlights.join('<br><br>') : result.transcript || '';
         const score = result._score || result.score || 0;
-        const matchCount = result.match_count || highlights.length || 1;
+        const matchCount = result.match_count || 1;
         
         // Enhanced metadata display
         const partner = result.metadata?.partner || result.partner || 'N/A';
         const program = result.metadata?.program || result.program || 'N/A';
         const disposition = result.disposition || result.metadata?.disposition || 'N/A';
-        const subDisposition = result.sub_disposition || result.metadata?.sub_disposition || 'N/A';
         const callDate = result.metadata?.call_date || result.call_date || 'N/A';
+        
+        // ===============================================
+        // KEY UPDATE: Focus on highlighting only search terms
+        // ===============================================
+        
+        // Get highlighted snippets from OpenSearch or create our own
+        let highlightedContent = '';
+        
+        if (result.highlighted_snippets && result.highlighted_snippets.length > 0) {
+            // Use OpenSearch highlights (already contains <mark> tags)
+            highlightedContent = result.highlighted_snippets
+                .map(snippet => `<div class="highlight-snippet">${snippet}</div>`)
+                .join('');
+        } else if (result.transcript) {
+            // Create focused highlights manually
+            highlightedContent = createFocusedHighlights(result.transcript, query);
+        } else {
+            highlightedContent = '<div class="no-content">No transcript content available</div>';
+        }
         
         resultsHtml += `
             <div class="search-result-item">
                 <div class="result-header">
                     <div class="result-title">
-                        <strong>Evaluation ${evaluationId}</strong>
+                        <span class="result-icon">📞</span>
+                        <strong>Call ${evaluationId}</strong>
                         ${score > 0 ? `<span class="score-badge">Score: ${(score * 100).toFixed(1)}%</span>` : ''}
                         <span class="match-badge">${matchCount} match${matchCount !== 1 ? 'es' : ''}</span>
                     </div>
                 </div>
+                
                 <div class="result-meta">
                     <div class="reference-grid">
                         <div class="ref-item">
@@ -1771,31 +1761,28 @@ function displayComprehensiveTranscriptResults(data, query) {
                             <span class="ref-value">${program}</span>
                         </div>
                         <div class="ref-item">
+                            <span class="ref-label">Disposition:</span>
+                            <span class="ref-value">${disposition}</span>
+                        </div>
+                        <div class="ref-item">
                             <span class="ref-label">Date:</span>
                             <span class="ref-value">${callDate}</span>
                         </div>
-                        <div class="ref-item">
-                            <span class="ref-label">Disposition:</span>
-                            <span class="ref-value disposition-tag">${disposition}</span>
-                        </div>
-                        <div class="ref-item">
-                            <span class="ref-label">Sub-Disp:</span>
-                            <span class="ref-value">${subDisposition}</span>
-                        </div>
                     </div>
                 </div>
+                
                 <div class="result-content">
-                    ${highlights.length > 0 ? 
-                        highlights.map(highlight => `<div class="highlighted-snippet">${highlight}</div>`).join('') :
-                        `<div class="transcript-preview">${transcript.substring(0, 300)}${transcript.length > 300 ? '...' : ''}</div>`
-                    }
+                    <div class="highlighted-content">
+                        ${highlightedContent}
+                    </div>
                 </div>
+                
                 <div class="result-actions">
-                    <button class="btn-primary" onclick="copyToClipboard('${transcript.replace(/'/g, "\\'")}')">
+                    <button class="btn-primary" onclick="copyTranscriptToClipboard('${result.transcript ? result.transcript.replace(/'/g, "\\'") : ''}')">
                         📋 Copy Text
                     </button>
-                    <button class="btn-secondary" onclick="askQuestion('Analyze evaluation ${evaluationId} in detail')">
-                        🔍 Deep Analysis
+                    <button class="btn-secondary" onclick="analyzeCall('${evaluationId}')">
+                        🔍 Analyze Call
                     </button>
                     <button class="btn-filter" onclick="applyQuickFilter('partner', '${partner}')">
                         🔧 Filter by Partner
@@ -1806,6 +1793,11 @@ function displayComprehensiveTranscriptResults(data, query) {
     });
     
     resultsList.innerHTML = resultsHtml;
+    
+    // Scroll results into view
+    resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    console.log(`✅ Displayed ${results.length} comprehensive transcript search results with focused highlighting`);
 }
 
 // Helper function to download transcript search results
@@ -2463,6 +2455,58 @@ function truncateText(text, maxLength) {
 // =============================================================================
 // STYLES AND FORMATTING
 // =============================================================================
+
+function addToggleToHeader() {
+    console.log("🔧 Adding transcript toggle to header via JavaScript...");
+    
+    const chatHeaderFilters = document.getElementById('chatHeaderFilters');
+    
+    if (!chatHeaderFilters) {
+        console.error("❌ chatHeaderFilters not found");
+        return;
+    }
+    
+    // Check if toggle already exists
+    if (document.getElementById('transcriptToggle')) {
+        console.log("✅ Toggle already exists");
+        return;
+    }
+    
+    // Create the toggle HTML
+    const toggleDiv = document.createElement('div');
+    toggleDiv.id = 'transcriptToggle';
+    toggleDiv.className = 'header-transcript-toggle';
+    toggleDiv.innerHTML = `
+        <label class="toggle-switch header-toggle">
+            <input type="checkbox" id="transcriptSearchToggleInput" onchange="toggleTranscriptSearchMode()">
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">Search Transcripts Only</span>
+        </label>
+        <div class="comprehensive-option" id="comprehensiveOption" style="display: none;">
+            <label class="toggle-switch secondary">
+                <input type="checkbox" id="comprehensiveSearchToggle" checked>
+                <span class="toggle-slider small"></span>
+                <span class="toggle-label small">Comprehensive Analysis</span>
+            </label>
+        </div>
+    `;
+    
+    // Add to the beginning of chatHeaderFilters
+    chatHeaderFilters.insertBefore(toggleDiv, chatHeaderFilters.firstChild);
+    
+    console.log("✅ Toggle added to header!");
+    
+    // Verify it worked
+    setTimeout(() => {
+        const toggle = document.getElementById('transcriptSearchToggleInput');
+        if (toggle) {
+            console.log("🎯 Toggle verification: SUCCESS");
+        } else {
+            console.log("❌ Toggle verification: FAILED");
+        }
+    }, 100);
+}
+
 
 function loadFormattingStyles() {
     const style = document.createElement('style');
