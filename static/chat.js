@@ -236,64 +236,9 @@ function setupIdFieldValidation() {
 // Initialize transcript search functionality
 function initializeTranscriptSearch() {
     console.log("🎯 Initializing transcript search functionality...");
-    
-    // Add transcript search toggle to the chat interface
-    addTranscriptSearchToggle();
-    
+        
     // Add transcript search results container
     addTranscriptResultsContainer();
-}
-
-function addTranscriptSearchToggle() {
-    // FIXED: Use the correct container name from your app
-    const chatContainer = document.querySelector('.chat-input-area') || 
-                         document.querySelector('.chat-input-container') || 
-                         document.querySelector('#chatContainer') ||
-                         document.querySelector('.message-input-container');
-    
-    if (!chatContainer) {
-        console.warn("⚠️ Chat container not found, cannot add transcript search toggle");
-        return;
-    }
-    
-    console.log("✅ Found chat container:", chatContainer);
-    
-    // Create transcript search controls
-    const transcriptControls = document.createElement('div');
-    transcriptControls.id = 'transcriptSearchControls';
-    transcriptControls.className = 'transcript-search-controls';
-    transcriptControls.innerHTML = `
-        <div class="search-mode-toggle">
-            <label class="toggle-switch">
-                <input type="checkbox" id="transcriptSearchToggle" onchange="toggleTranscriptSearchMode()">
-                <span class="toggle-slider"></span>
-                <span class="toggle-label">Search Transcripts Only</span>
-            </label>
-            <div class="comprehensive-option" id="comprehensiveOption" style="display: none;">
-                <label class="toggle-switch secondary">
-                    <input type="checkbox" id="comprehensiveSearchToggle" checked>
-                    <span class="toggle-slider small"></span>
-                    <span class="toggle-label small">Comprehensive Analysis (scan all results)</span>
-                </label>
-            </div>
-            <div class="search-mode-help" id="searchModeHelp">
-                <small>🎯 When enabled, searches will only look for words within call transcripts</small>
-            </div>
-        </div>
-    `;
-    
-    // FIX: Look for the correct input ID (#chatInput, not #messageInput)
-    const chatInput = chatContainer.querySelector('#chatInput') || 
-                     chatContainer.querySelector('input[type="text"]') ||
-                     chatContainer.querySelector('textarea');
-    
-    if (chatInput && chatInput.parentNode) {
-        chatInput.parentNode.insertBefore(transcriptControls, chatInput);
-        console.log("✅ Transcript controls inserted before #chatInput");
-    } else {
-        chatContainer.insertAdjacentElement('afterbegin', transcriptControls);
-        console.log("✅ Transcript search controls added to chat-input-area");
-    }
 }
 
 
@@ -720,9 +665,10 @@ function populateSelect(selectId, options) {
 function toggleTranscriptSearchMode() {
     console.log("🎯 Toggling transcript search mode...");
     
-    const toggle = document.getElementById('transcriptSearchToggle');
+    const toggle = document.getElementById('transcriptSearchToggleInput');
+    const toggleContainer = document.getElementById('transcriptToggle');
     const comprehensiveOption = document.getElementById('comprehensiveOption');
-    const searchModeHelp = document.getElementById('searchModeHelp');
+    const chatInput = document.getElementById('chatInput');
     
     if (!toggle) {
         console.error("❌ Transcript search toggle not found!");
@@ -734,34 +680,34 @@ function toggleTranscriptSearchMode() {
     
     console.log(`🎯 Transcript search mode: ${transcriptSearchMode ? 'ENABLED' : 'DISABLED'}`);
     
-    // Show/hide comprehensive search option
-    if (comprehensiveOption) {
-        comprehensiveOption.style.display = transcriptSearchMode ? 'block' : 'none';
-    }
-    
-    // Update help text and styling
-    if (searchModeHelp) {
-        if (transcriptSearchMode) {
-            searchModeHelp.innerHTML = `
-                <small>✅ <strong>Transcript Search Mode Active</strong> - Only call transcript content will be searched</small>
-            `;
-            searchModeHelp.style.color = '#2196f3';
-            searchModeHelp.style.fontWeight = '500';
-        } else {
-            searchModeHelp.innerHTML = `
-                <small>🎯 When enabled, searches will only look for words within call transcripts</small>
-            `;
-            searchModeHelp.style.color = '#666';
-            searchModeHelp.style.fontWeight = 'normal';
-        }
-    }
-    
-    // Update chat interface styling
-    updateChatInterfaceForTranscriptMode(transcriptSearchMode);
-    
-    // Clear any existing transcript results when toggling off
-    if (!transcriptSearchMode) {
+    // Update visual states
+    if (transcriptSearchMode) {
+        // Activate header toggle styling
+        toggleContainer.classList.add('active');
+        
+        // Show comprehensive search option in header
+        comprehensiveOption.style.display = 'inline-flex';
+        
+        // Update chat input
+        chatInput.classList.add('transcript-mode');
+        chatInput.placeholder = "Enter words or phrases to find in call transcripts...";
+        
+        console.log("✅ Transcript search mode activated");
+    } else {
+        // Deactivate header toggle styling
+        toggleContainer.classList.remove('active');
+        
+        // Hide comprehensive search option
+        comprehensiveOption.style.display = 'none';
+        
+        // Reset chat input
+        chatInput.classList.remove('transcript-mode');
+        chatInput.placeholder = "Ask specific questions about calls, dispositions, site performance, quality metrics, or any evaluation data from your live database...";
+        
+        // Clear any existing transcript results
         clearTranscriptResults();
+        
+        console.log("✅ Normal chat mode activated");
     }
     
     // Show feedback toast (if showToast function exists)
@@ -774,8 +720,6 @@ function toggleTranscriptSearchMode() {
         );
     }
 }
-
-console.log("✅ Missing transcript search functions added: addTranscriptResultsContainer, toggleTranscriptSearchMode");
 
 function updateFilterCounts(data) {
     console.log("📊 Updating filter counts with data:", data);
@@ -2200,6 +2144,160 @@ function clearTranscriptResults() {
     }
     
     console.log("🧹 Transcript results cleared");
+}
+
+// Display transcript search results
+function displayTranscriptSearchResults(data, query) {
+    console.log("🎯 Displaying transcript search results:", data);
+    
+    const resultsContainer = document.getElementById('transcriptSearchResults');
+    const resultsList = document.getElementById('transcriptResultsList');
+    const resultsSummary = document.getElementById('transcriptResultsSummary');
+    
+    if (!resultsContainer || !resultsList || !resultsSummary) {
+        console.error("❌ Transcript results containers not found!");
+        return;
+    }
+    
+    // Show results container
+    resultsContainer.classList.remove('hidden');
+    
+    // Display summary
+    const totalResults = data.results ? data.results.length : 0;
+    const totalMatches = data.total_matches || totalResults;
+    
+    resultsSummary.innerHTML = `
+        <div class="summary-stats">
+            <div class="stat-item">
+                <span class="stat-number">${totalResults}</span>
+                <span class="stat-label">calls found</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">${totalMatches}</span>
+                <span class="stat-label">total matches</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">"${query}"</span>
+                <span class="stat-label">search query</span>
+            </div>
+        </div>
+    `;
+    
+    // Display results
+    if (totalResults === 0) {
+        resultsList.innerHTML = `
+            <div class="no-results">
+                <div class="no-results-icon">🔍</div>
+                <h3>No matches found</h3>
+                <p>No call transcripts contain the search term "<strong>${query}</strong>"</p>
+                <div class="search-suggestions">
+                    <h4>Try searching for:</h4>
+                    <ul>
+                        <li>Different keywords or phrases</li>
+                        <li>Common call center terms like "billing", "cancel", "refund"</li>
+                        <li>Broader terms instead of specific phrases</li>
+                    </ul>
+                </div>
+            </div>
+        `;
+    } else {
+        const resultsHTML = data.results.map((result, index) => {
+            const highlights = result.highlights || [];
+            const metadata = result.metadata || {};
+            
+            return `
+                <div class="transcript-result-item">
+                    <div class="result-header">
+                        <div class="result-title">
+                            <span class="result-icon">📞</span>
+                            Call ${metadata.call_id || result.call_id || `#${index + 1}`}
+                        </div>
+                        <div class="result-meta">
+                            <span class="result-date">${metadata.date || result.date || 'Unknown date'}</span>
+                            <span class="result-score">Score: ${(result.score || 0).toFixed(2)}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="result-content">
+                        <div class="result-text">
+                            ${highlights.length > 0 ? highlights.join('... ') : (result.content || result.text || 'No content available')}
+                        </div>
+                        
+                        ${metadata.agent_id ? `<div class="result-agent">Agent: ${metadata.agent_id}</div>` : ''}
+                        ${metadata.disposition ? `<div class="result-disposition">Disposition: ${metadata.disposition}</div>` : ''}
+                    </div>
+                    
+                    <div class="result-actions">
+                        <button class="result-btn" onclick="viewFullTranscript('${result.call_id || index}')">
+                            <span class="material-icons">description</span>
+                            View Full Transcript
+                        </button>
+                        <button class="result-btn" onclick="analyzeCall('${result.call_id || index}')">
+                            <span class="material-icons">analytics</span>
+                            Analyze Call
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        resultsList.innerHTML = resultsHTML;
+    }
+    
+    // Scroll results into view
+    resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    console.log(`✅ Displayed ${totalResults} transcript search results`);
+}
+
+// Show loading state for transcript search
+function showTranscriptSearchLoading(query) {
+    const resultsContainer = document.getElementById('transcriptSearchResults');
+    const resultsList = document.getElementById('transcriptResultsList');
+    const resultsSummary = document.getElementById('transcriptResultsSummary');
+    
+    if (!resultsContainer || !resultsList || !resultsSummary) {
+        console.warn("⚠️ Transcript results containers not found for loading state");
+        return;
+    }
+    
+    // Show container
+    resultsContainer.classList.remove('hidden');
+    
+    // Show loading in summary
+    resultsSummary.innerHTML = `
+        <div class="loading-summary">
+            <div class="loading-spinner"></div>
+            <span>Searching transcripts for "<strong>${query}</strong>"...</span>
+        </div>
+    `;
+    
+    // Show loading in results
+    resultsList.innerHTML = `
+        <div class="transcript-search-loading">
+            <div class="loading-spinner"></div>
+            <p>Analyzing call transcripts...</p>
+        </div>
+    `;
+    
+    console.log(`🔄 Showing transcript search loading for query: "${query}"`);
+}
+
+// Placeholder functions for result actions
+function viewFullTranscript(callId) {
+    console.log(`📄 Viewing full transcript for call: ${callId}`);
+    // Implement full transcript viewing logic
+    if (typeof showToast === 'function') {
+        showToast(`Opening full transcript for call ${callId}`, 'info');
+    }
+}
+
+function analyzeCall(callId) {
+    console.log(`📊 Analyzing call: ${callId}`);
+    // Implement call analysis logic
+    if (typeof showToast === 'function') {
+        showToast(`Starting analysis for call ${callId}`, 'info');
+    }
 }
 
 function ensureTranscriptContainersReady() {
