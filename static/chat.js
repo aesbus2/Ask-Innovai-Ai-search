@@ -236,9 +236,18 @@ function setupIdFieldValidation() {
 // Initialize transcript search functionality
 function initializeTranscriptSearch() {
     console.log("🎯 Initializing transcript search functionality...");
-        
-    // Add transcript search results container
+    
+    // The toggle is now in the HTML, so we DON'T call addTranscriptSearchToggle()
+    // Just add the results container
     addTranscriptResultsContainer();
+    
+    // Verify the toggle exists in HTML
+    const toggle = document.getElementById('transcriptSearchToggleInput');
+    if (toggle) {
+        console.log("✅ Transcript toggle found in HTML");
+    } else {
+        console.warn("⚠️ Transcript toggle NOT found in HTML - check your HTML file");
+    }
 }
 
 
@@ -665,13 +674,14 @@ function populateSelect(selectId, options) {
 function toggleTranscriptSearchMode() {
     console.log("🎯 Toggling transcript search mode...");
     
+    // Use the correct IDs from the HTML
     const toggle = document.getElementById('transcriptSearchToggleInput');
-    const toggleContainer = document.getElementById('transcriptToggle');
+    const toggleContainer = document.getElementById('transcriptToggle');  
     const comprehensiveOption = document.getElementById('comprehensiveOption');
     const chatInput = document.getElementById('chatInput');
     
     if (!toggle) {
-        console.error("❌ Transcript search toggle not found!");
+        console.error("❌ Transcript search toggle not found! Check HTML file.");
         return;
     }
     
@@ -683,26 +693,38 @@ function toggleTranscriptSearchMode() {
     // Update visual states
     if (transcriptSearchMode) {
         // Activate header toggle styling
-        toggleContainer.classList.add('active');
+        if (toggleContainer) {
+            toggleContainer.classList.add('active');
+        }
         
         // Show comprehensive search option in header
-        comprehensiveOption.style.display = 'inline-flex';
+        if (comprehensiveOption) {
+            comprehensiveOption.style.display = 'inline-flex';
+        }
         
         // Update chat input
-        chatInput.classList.add('transcript-mode');
-        chatInput.placeholder = "Enter words or phrases to find in call transcripts...";
+        if (chatInput) {
+            chatInput.classList.add('transcript-mode');
+            chatInput.placeholder = "Enter words or phrases to find in call transcripts...";
+        }
         
         console.log("✅ Transcript search mode activated");
     } else {
         // Deactivate header toggle styling
-        toggleContainer.classList.remove('active');
+        if (toggleContainer) {
+            toggleContainer.classList.remove('active');
+        }
         
         // Hide comprehensive search option
-        comprehensiveOption.style.display = 'none';
+        if (comprehensiveOption) {
+            comprehensiveOption.style.display = 'none';
+        }
         
         // Reset chat input
-        chatInput.classList.remove('transcript-mode');
-        chatInput.placeholder = "Ask specific questions about calls, dispositions, site performance, quality metrics, or any evaluation data from your live database...";
+        if (chatInput) {
+            chatInput.classList.remove('transcript-mode');
+            chatInput.placeholder = "Ask specific questions about calls, dispositions, site performance, quality metrics, or any evaluation data from your live database...";
+        }
         
         // Clear any existing transcript results
         clearTranscriptResults();
@@ -2519,6 +2541,38 @@ function debugChatSystem() {
     console.log("Filter Options:", filterOptions);
     console.log("Performance Metrics:", performanceMetrics);
     console.log("Vector Search Status:", vectorSearchStatus);
+}
+
+function debugTranscriptToggle() {
+    console.log("🔍 Debugging transcript toggle...");
+    
+    const elements = {
+        'transcriptSearchToggleInput': document.getElementById('transcriptSearchToggleInput'),
+        'transcriptToggle': document.getElementById('transcriptToggle'),
+        'comprehensiveOption': document.getElementById('comprehensiveOption'),
+        'chatHeaderFilters': document.getElementById('chatHeaderFilters'),
+        'chatInput': document.getElementById('chatInput')
+    };
+    
+    Object.entries(elements).forEach(([name, element]) => {
+        if (element) {
+            console.log(`✅ ${name}: Found`);
+        } else {
+            console.log(`❌ ${name}: NOT FOUND`);
+        }
+    });
+    
+    // Check if CSS is loaded
+    const testElement = document.createElement('div');
+    testElement.className = 'header-transcript-toggle';
+    document.body.appendChild(testElement);
+    const styles = window.getComputedStyle(testElement);
+    const hasStyles = styles.display !== 'block'; // Default div display
+    document.body.removeChild(testElement);
+    
+    console.log(`🎨 CSS loaded: ${hasStyles ? 'YES' : 'NO'}`);
+    
+    return elements;
 }
 
 // =============================================================================
