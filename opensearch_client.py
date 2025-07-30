@@ -2,6 +2,7 @@
 # Added keyword search and word counts 7-25-25
 
 import os
+import re
 import logging
 import json
 import time
@@ -1039,7 +1040,6 @@ def search_opensearch(query: str, index_override: str = None,
 
 def _count_word_occurrences(text: str, query: str) -> int:
     """Helper function to count word occurrences in text"""
-    import re
     # Create regex pattern for word boundaries
     pattern = r'\b' + re.escape(query.lower()) + r'\b'
     matches = re.findall(pattern, text.lower())
