@@ -1251,7 +1251,6 @@ def search_transcript_with_context(query: str, evaluation_id: str,
             return {"error": "No transcript content found"}
         
         # Find all occurrences of the query with context
-        import re
         matches = []
         pattern = re.compile(re.escape(query.lower()))
         
