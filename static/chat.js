@@ -1673,6 +1673,9 @@ function displayTranscriptSearchResults(data, query) {
 // Function to display comprehensive transcript search results with enhanced analytics
 function displayComprehensiveTranscriptResults(data, query) {
     console.log("🎯 Displaying comprehensive transcript search results:", data);
+   
+    const containers = ensureTranscriptContainersReady();
+    containers.container.style.display = 'block';
     
     const resultsContainer = document.getElementById('transcriptSearchResults');
     const resultsList = document.getElementById('transcriptResultsList');
@@ -2082,49 +2085,84 @@ function addTranscriptResultsContainer() {
     // Check if container already exists
     if (document.getElementById('transcriptSearchResults')) {
         console.log("✅ Transcript results container already exists");
-        return;
+        // MAKE SURE it's visible and properly structured
+        const existing = document.getElementById('transcriptSearchResults');
+        if (!document.getElementById('transcriptResultsSummary') || !document.getElementById('transcriptResultsList')) {
+            console.log("🔧 Fixing incomplete container structure...");
+            existing.innerHTML = `
+                <div class="transcript-results-header" style="background: #f8f9fa; border-bottom: 1px solid #e9ecef; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0; color: #333; font-size: 1.2rem;">🎯 Transcript Search Results</h3>
+                    <button onclick="clearTranscriptResults()" style="background: none; border: none; color: #666; cursor: pointer; font-size: 18px; padding: 4px; border-radius: 50%; width: 28px; height: 28px;">✕</button>
+                </div>
+                <div id="transcriptResultsSummary" class="results-summary" style="background: #e8f5e8; border-bottom: 1px solid #e9ecef; padding: 16px 20px;"></div>
+                <div id="transcriptResultsList" class="results-list" style="max-height: 600px; overflow-y: auto; padding: 0 20px 20px 20px;"></div>
+            `;
+        }
+        return existing;
     }
     
-    // Find a suitable container to add the results to
-    const chatContainer = document.querySelector('.chat-messages') || 
-                         document.querySelector('.chat-container') || 
-                         document.querySelector('.main-content') || 
-                         document.querySelector('#chatMessages') ||
-                         document.querySelector('.chat-area') ||
-                         document.body;
-    
-    if (!chatContainer) {
-        console.warn("⚠️ Could not find suitable container for transcript results");
-        return;
-    }
-    
-    // Create the results container
+    // Create the results container with INLINE STYLES to ensure it works
     const resultsContainer = document.createElement('div');
     resultsContainer.id = 'transcriptSearchResults';
-    resultsContainer.className = 'transcript-search-results hidden';
-    resultsContainer.innerHTML = `
-        <div class="results-header">
-            <h3>🎯 Transcript Search Results</h3>
-            <button class="clear-results-btn" onclick="clearTranscriptResults()" title="Clear Results">
-                ✕
-            </button>
-        </div>
-        <div id="transcriptResultsSummary" class="results-summary"></div>
-        <div id="transcriptResultsList" class="results-list"></div>
+    resultsContainer.className = 'transcript-search-results';
+    // REMOVE 'hidden' class - we'll control visibility with display style
+    resultsContainer.style.cssText = `
+        background: white;
+        border: 1px solid #e1e8ed;
+        border-radius: 12px;
+        margin: 20px 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        display: none;
     `;
     
-    // Insert the container - try to place it intelligently
-    const chatInputArea = document.querySelector('.chat-input-area');
-    if (chatInputArea && chatInputArea.parentNode) {
-        // Insert before the chat input area
-        chatInputArea.parentNode.insertBefore(resultsContainer, chatInputArea);
-        console.log("✅ Transcript results container inserted before chat input area");
-    } else {
-        // Fallback: insert at the beginning of the chat container
-        chatContainer.insertBefore(resultsContainer, chatContainer.firstChild);
-        console.log("✅ Transcript results container inserted at beginning of container");
+    resultsContainer.innerHTML = `
+        <div class="transcript-results-header" style="background: #f8f9fa; border-bottom: 1px solid #e9ecef; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0; color: #333; font-size: 1.2rem;">🎯 Transcript Search Results</h3>
+            <button onclick="clearTranscriptResults()" style="background: none; border: none; color: #666; cursor: pointer; font-size: 18px; padding: 4px; border-radius: 50%; width: 28px; height: 28px;">✕</button>
+        </div>
+        <div id="transcriptResultsSummary" class="results-summary" style="background: #e8f5e8; border-bottom: 1px solid #e9ecef; padding: 16px 20px;"></div>
+        <div id="transcriptResultsList" class="results-list" style="max-height: 600px; overflow-y: auto; padding: 0 20px 20px 20px;"></div>
+    `;
+    
+    // IMPROVED: Better container finding with your actual HTML structure
+    let insertLocation = null;
+    let insertBefore = null;
+    
+    // Try to find the best location in your chat interface
+    const locations = [
+        // Option 1: Your main chat area
+        { container: document.querySelector('.chat-area'), before: document.querySelector('.chat-input-area') },
+        // Option 2: Main layout area
+        { container: document.querySelector('.main-layout'), before: null },
+        // Option 3: Messages container parent
+        { container: document.querySelector('.messages-container')?.parentNode, before: document.querySelector('.chat-input-area') },
+        // Option 4: Fallback to body
+        { container: document.body, before: null }
+    ];
+    
+    for (const location of locations) {
+        if (location.container) {
+            insertLocation = location.container;
+            insertBefore = location.before;
+            console.log("📍 Found insertion location:", location.container.className || location.container.tagName);
+            break;
+        }
     }
+    
+    // Insert the container
+    if (insertBefore) {
+        insertLocation.insertBefore(resultsContainer, insertBefore);
+        console.log("✅ Transcript results container inserted before chat input");
+    } else {
+        insertLocation.appendChild(resultsContainer);
+        console.log("✅ Transcript results container appended to container");
+    }
+    
+    return resultsContainer;
 }
+
+
+
 function retryLastTranscriptSearch() {
     const chatInput = document.getElementById('chatInput');
     if (chatInput && window.lastSearchQuery) {
@@ -2139,19 +2177,51 @@ function retryLastTranscriptSearch() {
  * UTILITY: Clear transcript results
  */
 function clearTranscriptResults() {
-    const resultsContainer = document.getElementById('transcriptSearchResults') || 
-                           document.querySelector('.transcript-search-results');
+    const resultsContainer = document.getElementById('transcriptSearchResults');
+    const resultsList = document.getElementById('transcriptResultsList');
+    const resultsSummary = document.getElementById('transcriptResultsSummary');
     
     if (resultsContainer) {
+        // Use display instead of addClass('hidden') for better control
         resultsContainer.style.display = 'none';
-        resultsContainer.innerHTML = '';
+    }
+    
+    if (resultsList) {
+        resultsList.innerHTML = '';
+    }
+    
+    if (resultsSummary) {
+        resultsSummary.innerHTML = '';
     }
     
     // Clear cached results
-    lastTranscriptResults = [];
+    if (typeof lastTranscriptResults !== 'undefined') {
+        lastTranscriptResults = [];
+    }
     
     console.log("🧹 Transcript results cleared");
 }
+
+function ensureTranscriptContainersReady() {
+    console.log("🔧 Ensuring transcript containers are ready...");
+    
+    // Make sure the main container exists
+    const mainContainer = addTranscriptResultsContainer();
+    
+    // Verify the sub-containers exist
+    const summary = document.getElementById('transcriptResultsSummary');
+    const list = document.getElementById('transcriptResultsList');
+    
+    if (!summary || !list) {
+        console.error("❌ Sub-containers missing, recreating...");
+        addTranscriptResultsContainer(); // This will fix the structure
+    }
+    
+    console.log("✅ All transcript containers verified and ready");
+    return { container: mainContainer, summary, list };
+}
+
+
 
 // Store last search query for retry functionality
 let originalSendMessageWithTranscriptSearch = sendMessageWithTranscriptSearch;
@@ -2216,6 +2286,8 @@ function showTranscriptSearchError(errorMessage) {
         alert(`Error: ${errorMessage}`);
     }
 }
+
+
 
 /**
  * UTILITY: Escape HTML to prevent XSS
