@@ -1525,11 +1525,16 @@ function downloadCategoryData() {
 // ===================================================================
 
 // Function to display standard transcript search results
+// =============================================================================
+// FIXED: displayTranscriptSearchResults function
+// Replace this function in your chat.js
+// =============================================================================
+
 function displayTranscriptSearchResults(data, query) {
-    console.log("🎯 Displaying standard transcript search results:", data);
+    console.log("🎯 Displaying transcript search results:", data);
     
     const resultsContainer = document.getElementById('transcriptSearchResults');
-    const resultsList = document.getElementById('transcriptResultsList');
+    const resultsList = document.getElementById('transcriptResultsList');  
     const resultsSummary = document.getElementById('transcriptResultsSummary');
     
     if (!resultsContainer || !resultsList || !resultsSummary) {
@@ -1537,104 +1542,125 @@ function displayTranscriptSearchResults(data, query) {
         return;
     }
     
-    // Show container
+    // 🔧 FIX: FORCE SHOW THE CONTAINER
     resultsContainer.classList.remove('hidden');
+    resultsContainer.style.display = 'block';
+    resultsContainer.style.visibility = 'visible';
     
-    // Reset loading state
-    window.isLoading = false;
+    console.log("✅ Container should now be visible");
     
-    const results = data.display_results || data.results || [];
-    const totalMatches = data.total_matches || results.length;
-    const searchTime = data.search_time_ms || 0;
+    const results = data.results || [];
+    const totalResults = results.length;
     
-    // Update summary
+    // Display summary
     resultsSummary.innerHTML = `
-        <div class="search-summary">
-            <h4>🎯 Standard Search Results</h4>
-            <div class="summary-stats">
-                <span class="stat">
-                    <strong>${totalMatches}</strong> matches found
-                </span>
-                <span class="stat">
-                    Query: <strong>"${query}"</strong>
-                </span>
-                <span class="stat">
-                    ${searchTime}ms
-                </span>
+        <div class="summary-stats">
+            <div class="stat-item">
+                <span class="stat-number">${totalResults}</span>
+                <span class="stat-label">transcripts found</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">"${query}"</span>
+                <span class="stat-label">search query</span>
             </div>
         </div>
     `;
     
     // Display results
-    if (results.length === 0) {
+    if (totalResults === 0) {
         resultsList.innerHTML = `
             <div class="no-results">
-                <h4>🔍 No matches found</h4>
-                <p>No transcript content matched your search for "<strong>${query}</strong>"</p>
-                <p>Try:</p>
-                <ul>
-                    <li>Different keywords or phrases</li>
-                    <li>Broader search terms</li>
-                    <li>Check spelling</li>
-                </ul>
+                <div class="no-results-icon">🔍</div>
+                <h3>No matches found</h3>
+                <p>No call transcripts contain the search term "<strong>${query}</strong>"</p>
+                <div class="search-suggestions">
+                    <h4>Try searching for:</h4>
+                    <ul>
+                        <li>Different keywords or phrases</li>
+                        <li>Common call center terms like "billing", "cancel", "refund"</li>
+                        <li>Broader terms instead of specific phrases</li>
+                    </ul>
+                </div>
             </div>
         `;
-        return;
+    } else {
+        const resultsHTML = results.map((result, index) => {
+            const evaluationId = result.evaluationId || result.evaluation_id || `Call #${index + 1}`;
+            const transcript = result.transcript || result.content || 'No transcript available';
+            const score = result._score || result.score || 0;
+            const metadata = result.metadata || {};
+            
+            // Create highlighted version of transcript
+            const highlightedTranscript = highlightSearchTerms(transcript, query);
+            
+            return `
+                <div class="transcript-result-item">
+                    <div class="result-header">
+                        <div class="result-title">
+                            <span class="result-icon">📞</span>
+                            <strong>Call ${evaluationId}</strong>
+                            ${score > 0 ? `<span class="score-badge">Score: ${(score * 100).toFixed(1)}%</span>` : ''}
+                        </div>
+                        <div class="result-meta">
+                            <span class="result-date">${metadata.call_date || 'Unknown date'}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="result-content">
+                        <div class="result-text">
+                            ${highlightedTranscript}
+                        </div>
+                        
+                        ${metadata.partner ? `<div class="result-partner">Partner: ${metadata.partner}</div>` : ''}
+                        ${metadata.program ? `<div class="result-program">Program: ${metadata.program}</div>` : ''}
+                        ${metadata.disposition ? `<div class="result-disposition">Disposition: ${metadata.disposition}</div>` : ''}
+                    </div>
+                    
+                    <div class="result-actions">
+                        <button class="result-btn" onclick="copyTranscriptToClipboard('${transcript.replace(/'/g, "\\'")}')">
+                            <span class="material-icons">content_copy</span>
+                            Copy Text
+                        </button>
+                        <button class="result-btn" onclick="analyzeCall('${evaluationId}')">
+                            <span class="material-icons">analytics</span>
+                            Analyze Call
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        resultsList.innerHTML = resultsHTML;
     }
     
-    let resultsHtml = '';
-    results.forEach((result, index) => {
-        const evaluationId = result.evaluationId || result.evaluation_id || 'Unknown';
-        const transcript = result.highlighted_text || result.highlighted_snippets?.join(' ') || result.transcript || '';
-        const score = result._score || result.score || 0;
-        const partner = result.metadata?.partner || result.partner || 'N/A';
-        const program = result.metadata?.program || result.program || 'N/A';
-        const callDate = result.metadata?.call_date || result.call_date || 'N/A';
-        const matchCount = result.match_count || 1;
-        
-        resultsHtml += `
-            <div class="search-result-item">
-                <div class="result-header">
-                    <div class="result-title">
-                        <strong>Evaluation ${evaluationId}</strong>
-                        ${score > 0 ? `<span class="score-badge">Score: ${(score * 100).toFixed(1)}%</span>` : ''}
-                        <span class="match-badge">${matchCount} match${matchCount !== 1 ? 'es' : ''}</span>
-                    </div>
-                </div>
-                <div class="result-meta">
-                    <div class="reference-grid">
-                        <div class="ref-item">
-                            <span class="ref-label">Partner:</span>
-                            <span class="ref-value">${partner}</span>
-                        </div>
-                        <div class="ref-item">
-                            <span class="ref-label">Program:</span>
-                            <span class="ref-value">${program}</span>
-                        </div>
-                        <div class="ref-item">
-                            <span class="ref-label">Date:</span>
-                            <span class="ref-value">${callDate}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="result-content">
-                    <div class="highlighted-snippet">${transcript}</div>
-                </div>
-                <div class="result-actions">
-                    <button class="btn-primary" onclick="copyToClipboard('${transcript.replace(/'/g, "\\'")}')">
-                        📋 Copy Text
-                    </button>
-                    <button class="btn-secondary" onclick="askQuestion('Tell me more about evaluation ${evaluationId}')">
-                        🔍 Analyze This
-                    </button>
-                </div>
-            </div>
-        `;
-    });
+    // Scroll results into view
+    resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
-    resultsList.innerHTML = resultsHtml;
+    console.log(`✅ Displayed ${totalResults} transcript search results - container should be visible`);
 }
 
+// Helper function to highlight search terms
+function highlightSearchTerms(text, query) {
+    if (!text || !query) return text;
+    
+    const searchTerm = query.trim();
+    if (!searchTerm) return text;
+    
+    // Create case-insensitive regex for the search term
+    const regex = new RegExp(`(${escapeRegex(searchTerm)})`, 'gi');
+    
+    // Replace matches with highlighted version, but limit to first 500 characters for performance
+    const limitedText = text.length > 500 ? text.substring(0, 500) + '...' : text;
+    
+    return limitedText.replace(regex, '<mark class="highlight">$1</mark>');
+}
+
+// Helper function to escape regex special characters
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+console.log("✅ Fixed displayTranscriptSearchResults function loaded - this should show results properly!");
 // Function to display comprehensive transcript search results with enhanced analytics
 function displayComprehensiveTranscriptResults(data, query) {
     console.log("🎯 Displaying comprehensive transcript search results:", data);
