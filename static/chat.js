@@ -251,27 +251,90 @@ function initializeTranscriptSearch() {
 
 
 function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
+    console.log(`🔄 FIXED: Updating interface for transcript mode: ${isTranscriptMode}`);
+    
     const chatInput = document.getElementById('chatInput') || 
                      document.querySelector('input[type="text"]') ||
                      document.querySelector('textarea');
     
-    if (chatInput) {
-        if (isTranscriptMode) {
-            // Clear, specific placeholder with examples
-            chatInput.placeholder = "Enter words or phrases to find in call transcripts (e.g., cancel, billing issue, refund request)";
+    const sendButton = document.getElementById('sendButton') || document.querySelector('.send-btn');
+    const quickQuestions = document.getElementById('quickQuestions') || document.querySelector('.quick-questions');
+    const welcomeExamples = document.querySelector('.example-grid') || document.querySelector('.example-cards');
+    
+    if (isTranscriptMode) {
+        // TRANSCRIPT SEARCH MODE
+        console.log("🎯 Enabling transcript search mode");
+        
+        // Update input placeholder and styling
+        if (chatInput) {
+            chatInput.placeholder = "🔍 Enter words or phrases to find in call transcripts (e.g., 'billing issue', 'cancel account', 'refund')";
+            chatInput.style.borderColor = "#6e32a0";
+            chatInput.style.background = "#f8f4ff";
             chatInput.classList.add('transcript-mode');
-            
-            // Add helpful guidance text below input
-            addTranscriptSearchGuidance();
-        } else {
-            chatInput.placeholder = "Ask a question about the evaluation data...";
-            chatInput.classList.remove('transcript-mode');
-            chatInput.style.borderColor = "";
-            chatInput.style.boxShadow = "";
-            
-            // Remove guidance text
-            removeTranscriptSearchGuidance();
         }
+        
+        // Update send button
+        if (sendButton) {
+            sendButton.innerHTML = '🔍 Search Transcripts';
+            sendButton.style.background = "linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%)";
+        }
+        
+        // Hide regular chat elements
+        if (quickQuestions) {
+            quickQuestions.style.display = 'none';
+        }
+        
+        if (welcomeExamples) {
+            welcomeExamples.style.display = 'none';
+        }
+        
+        // Show transcript-specific guidance
+        addTranscriptSearchGuidance();
+        
+        // Hide any existing chat messages/results that aren't transcript results
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages && !chatMessages.classList.contains('transcript-results')) {
+            chatMessages.style.display = 'none';
+        }
+        
+    } else {
+        // REGULAR SEARCH MODE
+        console.log("💬 Enabling regular chat mode");
+        
+        // Restore input
+        if (chatInput) {
+            chatInput.placeholder = "Ask a question about the evaluation data...";
+            chatInput.style.borderColor = "";
+            chatInput.style.background = "";
+            chatInput.classList.remove('transcript-mode');
+        }
+        
+        // Restore send button
+        if (sendButton) {
+            sendButton.innerHTML = '↗ Send';
+            sendButton.style.background = "";
+        }
+        
+        // Show regular chat elements
+        if (quickQuestions) {
+            quickQuestions.style.display = 'block';
+        }
+        
+        if (welcomeExamples) {
+            welcomeExamples.style.display = 'grid';
+        }
+        
+        // Remove transcript guidance
+        removeTranscriptSearchGuidance();
+        
+        // Show chat messages
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages) {
+            chatMessages.style.display = 'block';
+        }
+        
+        // Clear any transcript results when switching back
+        clearTranscriptResults();
     }
 }
 
@@ -285,265 +348,252 @@ function addTranscriptSearchGuidance() {
     const chatInput = document.getElementById('chatInput');
     if (!chatInput) return;
     
-    const guidanceDiv = document.createElement('div');
-    guidanceDiv.id = 'transcriptSearchGuidance';
-    guidanceDiv.className = 'transcript-search-guidance';
-    guidanceDiv.innerHTML = `
-        <div class="guidance-content">
-            <div class="guidance-header">
-                <span class="guidance-icon">💡</span>
-                <strong>Transcript Search Tips:</strong>
-            </div>
-            <div class="guidance-examples">
-                <div class="example-row">
-                    <span class="example-label">Single words:</span>
-                    <code>cancel</code>, <code>billing</code>, <code>refund</code>
-                </div>
-                <div class="example-row">
-                    <span class="example-label">Exact phrases:</span>
-                    <code>"cancel my service"</code>, <code>"billing issue"</code>
-                </div>
-                <div class="example-row">
-                    <span class="example-label">Multiple terms:</span>
-                    <code>account password reset</code>
-                </div>
-            </div>
-            <div class="guidance-note">
-                <small>💡 Enter the exact words you want to find - no need for full sentences</small>
+    const guidance = document.createElement('div');
+    guidance.id = 'transcriptSearchGuidance';
+    guidance.innerHTML = `
+        <div style="
+            background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
+            border: 1px solid #ce93d8;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 8px 0;
+            font-size: 0.85rem;
+            color: #4a148c;
+        ">
+            <div style="font-weight: 600; margin-bottom: 6px;">🎯 Transcript Search Tips:</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">
+                <div>• Use quotes for exact phrases: <code>"billing issue"</code></div>
+                <div>• Multiple words: <code>cancel account refund</code></div>
+                <div>• Single keywords: <code>frustrated</code></div>
+                <div>• Agent responses: <code>policy procedure</code></div>
             </div>
         </div>
     `;
     
-    // Insert guidance after the chat input
-    if (chatInput.parentNode) {
-        chatInput.parentNode.insertBefore(guidanceDiv, chatInput.nextSibling);
-    }
+    // Insert after chat input
+    chatInput.parentNode.insertBefore(guidance, chatInput.nextSibling);
 }
 
-// ADD this new function to your chat.js
 function removeTranscriptSearchGuidance() {
-    const guidanceDiv = document.getElementById('transcriptSearchGuidance');
-    if (guidanceDiv) {
-        guidanceDiv.remove();
+    const guidance = document.getElementById('transcriptSearchGuidance');
+    if (guidance) {
+        guidance.remove();
     }
 }
 
-console.log("✅ Complete transcript search UI functions added to chat.js");
+function handleTranscriptToggleChange() {
+    const toggleSwitch = document.getElementById('transcriptSearchToggle') || 
+                        document.querySelector('input[type="checkbox"][id*="transcript"]');
+    
+    if (!toggleSwitch) {
+        console.warn("⚠️ Transcript toggle not found");
+        return;
+    }
+    
+    const isTranscriptMode = toggleSwitch.checked;
+    console.log(`🔄 FIXED: Transcript toggle changed: ${isTranscriptMode}`);
+    
+    // Update the entire interface
+    updateChatInterfaceForTranscriptMode(isTranscriptMode);
+    
+    // Update the send function
+    updateSendFunction(isTranscriptMode);
+    
+    // Clear any existing results when switching modes
+    if (isTranscriptMode) {
+        // Clear regular chat results
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages) {
+            chatMessages.innerHTML = '';
+        }
+    } else {
+        // Clear transcript results
+        clearTranscriptResults();
+    }
+    
+    // Focus the input
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+        chatInput.focus();
+    }
+}console.log("✅ Complete transcript search UI functions added to chat.js");
 
-async function sendMessageWithTranscriptSearch() {
-    // PERFORMANCE: Use requestAnimationFrame to prevent UI blocking
-    return new Promise((resolve) => {
-        requestAnimationFrame(async () => {
-            const performanceStart = performance.now();
-            console.log("🔍 DEBUG: sendMessageWithTranscriptSearch called");
-            
-            try {
-                // STEP 1: Fast validation and setup
-                const chatInput = document.getElementById('chatInput');
-                if (!chatInput) {
-                    console.error("🔍 DEBUG: #chatInput not found!");
-                    resolve();
-                    return;
-                }
-                
-                // PERFORMANCE: Capture message immediately before any async operations
-                const message = chatInput.value?.trim();
-                console.log("🔍 DEBUG: Message captured:", message);
-                
-                // Early exit validations
-                if (!message) {
-                    console.log("🔍 DEBUG: No message provided");
-                    resolve();
-                    return;
-                }
-                
-                if (window.isLoading) {
-                    console.log("🔍 DEBUG: Already loading, preventing duplicate request");
-                    resolve();
-                    return;
-                }
-                
-                if (!transcriptSearchMode) {
-                    console.log("🔍 DEBUG: Not in transcript mode, calling original sendMessage");
-                    resolve(originalSendMessage?.());
-                    return;
-                }
-                
-                // STEP 2: Set loading state immediately
-                window.isLoading = true;
-                
-                // PERFORMANCE: Clear input and update UI synchronously
-                chatInput.value = '';
-                chatInput.style.height = 'auto';
-                
-                // Determine search type
-                const comprehensiveToggle = document.getElementById('comprehensiveSearchToggle');
-                const useComprehensive = comprehensiveToggle?.checked ?? false;
-                
-                console.log(`🎯 Performing transcript search for: "${message}" (comprehensive: ${useComprehensive})`);
-                
-                // STEP 3: Show loading state asynchronously (non-blocking)
-                setTimeout(() => {
-                    showTranscriptSearchLoading(message, useComprehensive);
-                }, 0);
-                
-                // STEP 4: Prepare request configuration
-                const BASE_URL = 'https://ask-innovai-g8jbr.ondigitalocean.app';
-                const endpoint = useComprehensive ? 
-                    `${BASE_URL}/search_transcripts_comprehensive` : 
-                    `${BASE_URL}/search_transcripts`;
-                
-                const requestBody = {
-                    query: message,
-                    filters: currentFilters || {},
-                    display_size: 20,
-                    max_scan: 10000,
-                    highlight: true
-                };
-                
-                console.log("🔍 Sending transcript search request:", {
-                    endpoint,
-                    query: message,
-                    comprehensive: useComprehensive,
-                    filtersCount: Object.keys(currentFilters || {}).length
-                });
-                
-                // STEP 5: Create abort controller for timeout handling
-                const abortController = new AbortController();
-                const timeoutId = setTimeout(() => {
-                    abortController.abort();
-                    console.warn("⏰ Request timeout after 30 seconds");
-                }, 30000);
-                
-                try {
-                    // STEP 6: Execute fetch request
-                    const response = await fetch(endpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify(requestBody),
-                        signal: abortController.signal
-                    });
-                    
-                    clearTimeout(timeoutId);
-                    
-                    // STEP 7: Handle response
-                    if (!response.ok) {
-                        let errorText;
-                        try {
-                            errorText = await response.text();
-                            console.error("API Error Response:", errorText);
-                        } catch (e) {
-                            errorText = `HTTP ${response.status} ${response.statusText}`;
-                        }
-                        
-                        throw new Error(`Search failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
-                    }
-                    
-                    const data = await response.json();
-                    console.log("🔍 Search response received:", {
-                        status: data.status,
-                        resultCount: data.results?.length || 0,
-                        totalMatches: data.summary?.total_word_occurrences || 0
-                    });
-                    
-                    // STEP 8: Process successful response
-                    if (data.status === 'success') {
-                        // PERFORMANCE: Update UI asynchronously
-                        setTimeout(() => {
-                            try {
-                                if (useComprehensive) {
-                                    displayComprehensiveTranscriptResults(data, message);
-                                } else {
-                                    displayTranscriptSearchResults(data, message);
-                                }
-                                
-                                // Cache results for potential reuse
-                                lastTranscriptResults = data.display_results || data.results || [];
-                                
-                                // Show success toast
-                                if (typeof showToast === 'function') {
-                                    const resultCount = lastTranscriptResults.length;
-                                    const totalMatches = data.summary?.total_word_occurrences || 0;
-                                    showToast(
-                                        `✅ Found ${resultCount} transcripts with ${totalMatches} total matches for "${message}"`,
-                                        'success'
-                                    );
-                                }
-                                
-                            } catch (displayError) {
-                                console.error("❌ Error displaying results:", displayError);
-                                showTranscriptSearchError(`Display error: ${displayError.message}`);
-                            }
-                        }, 0);
-                        
-                    } else {
-                        // Handle API-level errors
-                        const errorMessage = data.error || 'Unknown error occurred';
-                        console.error("🔍 Search API error:", errorMessage);
-                        setTimeout(() => showTranscriptSearchError(errorMessage), 0);
-                    }
-                    
-                } catch (fetchError) {
-                    clearTimeout(timeoutId);
-                    
-                    // STEP 9: Handle fetch errors
-                    console.error('❌ Transcript search request failed:', fetchError);
-                    
-                    let userErrorMessage;
-                    if (fetchError.name === 'AbortError') {
-                        userErrorMessage = 'Search request timed out. Please try again with a shorter query.';
-                    } else if (fetchError.message.includes('Failed to fetch')) {
-                        userErrorMessage = 'Network error. Please check your connection and try again.';
-                    } else if (fetchError.message.includes('500')) {
-                        userErrorMessage = 'Server error. Please try again or contact support if the issue persists.';
-                    } else {
-                        userErrorMessage = `Search failed: ${fetchError.message}`;
-                    }
-                    
-                    setTimeout(() => showTranscriptSearchError(userErrorMessage), 0);
-                }
-                
-            } catch (criticalError) {
-                console.error('❌ CRITICAL: Unexpected error in sendMessageWithTranscriptSearch:', criticalError);
-                
-                // STEP 10: Handle critical errors
-                setTimeout(() => {
-                    showTranscriptSearchError('A critical error occurred. Please refresh the page and try again.');
-                    
-                    // Optional: Show more detailed error in development
-                    if (PRODUCTION_CONFIG?.DEBUG_MODE) {
-                        console.error('DEBUG: Critical error details:', criticalError.stack);
-                    }
-                }, 0);
-                
-            } finally {
-                // STEP 11: Cleanup (always executed)
-                setTimeout(() => {
-                    window.isLoading = false;
-                    
-                    // Performance logging
-                    const performanceEnd = performance.now();
-                    const duration = performanceEnd - performanceStart;
-                    console.log(`🚀 sendMessageWithTranscriptSearch completed in ${duration.toFixed(2)}ms`);
-                    
-                    // Track performance metrics if monitoring is enabled
-                    if (typeof performanceMetrics !== 'undefined') {
-                        performanceMetrics.chatResponseTimes.push(duration);
-                        // Keep only last 50 measurements
-                        if (performanceMetrics.chatResponseTimes.length > 50) {
-                            performanceMetrics.chatResponseTimes.shift();
-                        }
-                    }
-                    
-                }, 100); // Small delay to ensure UI updates complete
-                
-                resolve();
+function updateSendFunction(isTranscriptMode) {
+    const sendButton = document.getElementById('sendButton') || document.querySelector('.send-btn');
+    const chatInput = document.getElementById('chatInput');
+    
+    if (!sendButton || !chatInput) {
+        console.warn("⚠️ Send button or chat input not found");
+        return;
+    }
+    
+    // Remove existing event listeners by cloning the elements
+    const newSendButton = sendButton.cloneNode(true);
+    sendButton.parentNode.replaceChild(newSendButton, sendButton);
+    
+    const newChatInput = chatInput.cloneNode(true);
+    chatInput.parentNode.replaceChild(newChatInput, chatInput);
+    
+    if (isTranscriptMode) {
+        // Add transcript search functionality
+        newSendButton.addEventListener('click', sendMessageWithTranscriptSearch);
+        newChatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessageWithTranscriptSearch();
             }
         });
-    });
+        console.log("✅ FIXED: Transcript search functions attached");
+    } else {
+        // Add regular chat functionality
+        newSendButton.addEventListener('click', sendMessage); // Assuming sendMessage exists
+        newChatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage(); // Assuming sendMessage exists
+            }
+        });
+        console.log("✅ FIXED: Regular chat functions attached");
+    }
+}
+
+// =============================================================================
+// Initialize the enhanced system
+// =============================================================================
+function initializeEnhancedTranscriptSearch() {
+    console.log("🚀 FIXED: Initializing enhanced transcript search system...");
+    
+    // Find and setup the toggle
+    const toggle = document.getElementById('transcriptSearchToggle') || 
+                  document.querySelector('input[type="checkbox"][id*="transcript"]');
+    
+    if (toggle) {
+        // Remove existing listeners and add new one
+        toggle.addEventListener('change', handleTranscriptToggleChange);
+        
+        // Set initial state
+        const isTranscriptMode = toggle.checked;
+        updateChatInterfaceForTranscriptMode(isTranscriptMode);
+        updateSendFunction(isTranscriptMode);
+        
+        console.log("✅ FIXED: Enhanced transcript search initialized");
+    } else {
+        console.warn("⚠️ Transcript toggle not found during initialization");
+    }
+}
+
+async function sendMessageWithTranscriptSearch() {
+    console.log("🎯 FIXED: Starting transcript search with increased limits...");
+    
+    const chatInput = document.getElementById('chatInput');
+    const sendButton = document.getElementById('sendButton') || document.querySelector('.send-btn');
+    
+    if (!chatInput) {
+        console.error("❌ Chat input not found");
+        return;
+    }
+    
+    const message = chatInput.value?.trim();
+    if (!message) {
+        console.log("⚠️ Empty search query");
+        return;
+    }
+    
+    // Store the search query
+    window.lastSearchQuery = message;
+    
+    // Get current filters
+    const currentFilters = (typeof getAppliedFilters === 'function') ? getAppliedFilters() : {};
+    const useComprehensive = document.getElementById('comprehensiveToggle')?.checked || false;
+    
+    try {
+        // Disable inputs during search
+        chatInput.disabled = true;
+        if (sendButton) sendButton.disabled = true;
+        
+        // Show loading state
+        if (useComprehensive) {
+            showTranscriptSearchLoading(message, true);
+        } else {
+            showTranscriptSearchLoading(message, false);
+        }
+        
+        // FIXED: Increased limits and better parameters
+        const endpoint = useComprehensive ? 
+            `${BASE_URL}/search_transcripts_comprehensive` : 
+            `${BASE_URL}/search_transcripts`;
+        
+        const requestBody = {
+            query: message,
+            filters: currentFilters || {},
+            display_size: useComprehensive ? 100 : 75,  // INCREASED from 20 to 75/100
+            size: useComprehensive ? 100 : 75,          // Also set size parameter
+            max_scan: useComprehensive ? 25000 : 10000, // Increased scan limit
+            highlight: true
+        };
+        
+        console.log("🔍 FIXED: Sending transcript search with increased limits:", {
+            endpoint,
+            query: message,
+            comprehensive: useComprehensive,
+            display_size: requestBody.display_size,
+            max_scan: requestBody.max_scan,
+            filtersCount: Object.keys(currentFilters || {}).length
+        });
+        
+        // Execute search with timeout
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => {
+            abortController.abort();
+            console.warn("⏰ Request timeout after 45 seconds");
+        }, 45000); // Increased timeout for larger searches
+        
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(requestBody),
+            signal: abortController.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            let errorText;
+            try {
+                errorText = await response.text();
+                console.error("API Error Response:", errorText);
+            } catch (e) {
+                errorText = `HTTP ${response.status} ${response.statusText}`;
+            }
+            throw new Error(`Search failed: ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log("✅ FIXED: Transcript search response:", data);
+        
+        // Display results with the appropriate function
+        if (useComprehensive) {
+            displayComprehensiveTranscriptResults(data, message);
+        } else {
+            displayTranscriptSearchResults(data, message);
+        }
+        
+        // Clear the input
+        chatInput.value = '';
+        chatInput.style.height = 'auto';
+        
+    } catch (error) {
+        console.error("❌ Transcript search error:", error);
+        showTranscriptSearchError(error.message || 'Search failed');
+    } finally {
+        // Re-enable inputs
+        chatInput.disabled = false;
+        if (sendButton) sendButton.disabled = false;
+        chatInput.focus();
+    }
 }
 
 
@@ -1646,15 +1696,50 @@ function highlightSearchTerms(text, query) {
     const searchTerm = query.trim();
     if (!searchTerm) return text;
     
-    // Create case-insensitive regex for the search term
-    const regex = new RegExp(`(${escapeRegex(searchTerm)})`, 'gi');
+    console.log("🎨 FIXED: Highlighting search terms:", {
+        originalQuery: query,
+        searchTerm: searchTerm,
+        textLength: text.length
+    });
     
-    // Replace matches with highlighted version, but limit to first 500 characters for performance
-    const limitedText = text.length > 500 ? text.substring(0, 500) + '...' : text;
+    // Handle quoted phrases vs individual words
+    const isQuoted = searchTerm.startsWith('"') && searchTerm.endsWith('"');
     
-    return limitedText.replace(regex, '<mark style="background: #ffeb3b; color: #333; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>');
+    if (isQuoted) {
+        // FIXED: Exact phrase highlighting only
+        const phrase = searchTerm.slice(1, -1).trim();
+        if (!phrase) return text;
+        
+        const regex = new RegExp(`(${escapeRegex(phrase)})`, 'gi');
+        return text.replace(regex, '<mark style="background: #ffeb3b; color: #333; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>');
+        
+    } else {
+        // FIXED: Highlight the complete search term first, then individual significant words
+        let highlightedText = text;
+        
+        // First, try to highlight the complete search term as a phrase
+        const completeTermRegex = new RegExp(`(${escapeRegex(searchTerm)})`, 'gi');
+        const completeMatches = text.match(completeTermRegex);
+        
+        if (completeMatches && completeMatches.length > 0) {
+            // If complete term found, highlight it
+            highlightedText = highlightedText.replace(completeTermRegex, '<mark style="background: #ffeb3b; color: #333; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>');
+            console.log("✅ FIXED: Highlighted complete search term");
+        } else {
+            // If complete term not found, highlight significant individual words (length > 2)
+            const words = searchTerm.split(/\s+/).filter(word => word.length > 2); // Only highlight significant words
+            
+            words.forEach(word => {
+                const wordRegex = new RegExp(`\\b(${escapeRegex(word)})\\b`, 'gi');
+                highlightedText = highlightedText.replace(wordRegex, '<mark style="background: #ffeb3b; color: #333; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>');
+            });
+            
+            console.log(`✅ FIXED: Highlighted ${words.length} significant words`);
+        }
+        
+        return highlightedText;
+    }
 }
-
 // Helper function to escape regex special characters
 function escapeRegex(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -3075,13 +3160,14 @@ document.addEventListener('DOMContentLoaded', function() {
         showCriticalError("Critical initialization failure: " + error.message);
     }
 
-        setTimeout(initializeTranscriptSearch, 1000);
+    // 🔧 UPDATED: Use enhanced transcript search initialization
+    setTimeout(initializeEnhancedTranscriptSearch, 1000);
 
-        console.log("✅ Metro AI Call Center Analytics v4.9.0 production loaded successfully");
-        console.log("🔧 FIXED: Chat-stats integration, duplicate functions removed, analytics connected");
-        console.log("🔮 Vector search: Enhanced relevance and semantic similarity support");
-        console.log("🔧 Debug mode:", PRODUCTION_CONFIG.DEBUG_MODE ? "ENABLED" : "DISABLED");
-        console.log("🎯 Transcript search: Initialization scheduled"); // ADD THIS LINE TOO
+    console.log("✅ Metro AI Call Center Analytics v4.9.0 production loaded successfully");
+    console.log("🔧 FIXED: Chat-stats integration, duplicate functions removed, analytics connected");
+    console.log("🔮 Vector search: Enhanced relevance and semantic similarity support");
+    console.log("🔧 Debug mode:", PRODUCTION_CONFIG.DEBUG_MODE ? "ENABLED" : "DISABLED");
+    console.log("🎯 Enhanced transcript search: Initialization scheduled with fixes for limits, highlighting, and interface switching");
 });
 
 // =============================================================================
