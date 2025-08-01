@@ -463,23 +463,46 @@ function updateSendFunction(isTranscriptMode) {
 function initializeEnhancedTranscriptSearch() {
     console.log("🚀 FIXED: Initializing enhanced transcript search system...");
     
-    // Find and setup the toggle
-    const toggle = document.getElementById('transcriptSearchToggle') || 
-                  document.querySelector('input[type="checkbox"][id*="transcript"]');
+    // STEP 1: Create the toggle (this was missing!)
+    addToggleToHeader();
     
-    if (toggle) {
-        // Remove existing listeners and add new one
-        toggle.addEventListener('change', handleTranscriptToggleChange);
+    // STEP 2: Add transcript search results container
+    addTranscriptResultsContainer();
+    
+    // STEP 3: Wait a moment for DOM to update, then find and setup the toggle
+    setTimeout(() => {
+        // Look for the actual toggle ID that gets created by addToggleToHeader()
+        const toggle = document.getElementById('transcriptSearchToggleInput') || 
+                      document.getElementById('transcriptSearchToggle') || 
+                      document.querySelector('input[type="checkbox"][id*="transcript"]');
         
-        // Set initial state
-        const isTranscriptMode = toggle.checked;
-        updateChatInterfaceForTranscriptMode(isTranscriptMode);
-        updateSendFunction(isTranscriptMode);
-        
-        console.log("✅ FIXED: Enhanced transcript search initialized");
-    } else {
-        console.warn("⚠️ Transcript toggle not found during initialization");
-    }
+        if (toggle) {
+            console.log("✅ Found transcript toggle:", toggle.id);
+            
+            // Remove any existing event listeners and add our enhanced handler
+            toggle.removeEventListener('change', toggleTranscriptSearchMode); // Remove original
+            toggle.addEventListener('change', handleEnhancedTranscriptToggleChange);
+            
+            // Set initial state based on toggle
+            const isTranscriptMode = toggle.checked;
+            updateChatInterfaceForTranscriptMode(isTranscriptMode);
+            updateSendFunction(isTranscriptMode);
+            
+            console.log("✅ FIXED: Enhanced transcript search initialized with toggle");
+        } else {
+            console.warn("⚠️ Transcript toggle still not found after creation attempt");
+            // Try to debug what's in the header
+            const header = document.getElementById('chatHeaderFilters');
+            if (header) {
+                console.log("Header contents:", header.innerHTML);
+            }
+        }
+    }, 200);
+    
+    // STEP 4: Verify everything is working (like the original did)
+    setTimeout(() => {
+        debugTranscriptToggle();
+    }, 400);
 }
 
 async function sendMessageWithTranscriptSearch() {
