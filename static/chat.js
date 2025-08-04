@@ -1820,6 +1820,75 @@ function showQuickQuestions() {
     }
 }
 
+// =============================================================================
+// MISSING FUNCTION: highlightSearchTerms - Add this to your chat.js
+// =============================================================================
+
+function highlightSearchTerms(text, query) {
+    if (!text || !query) return text;
+    
+    const searchTerm = query.trim();
+    if (!searchTerm) return text;
+    
+    console.log("🎨 BALANCED: Highlighting search terms and variations:", {
+        originalQuery: query,
+        searchTerm: searchTerm
+    });
+    
+    // Handle quoted phrases vs individual words
+    const isQuoted = searchTerm.startsWith('"') && searchTerm.endsWith('"');
+    
+    if (isQuoted) {
+        // EXACT PHRASE: Only highlight the complete phrase inside quotes
+        const phrase = searchTerm.slice(1, -1).trim();
+        if (!phrase) return text;
+        
+        console.log("🎯 Highlighting exact phrase:", phrase);
+        const regex = new RegExp(`(${escapeRegex(phrase)})`, 'gi');
+        return text.replace(regex, '<mark style="background: #ffeb3b; color: #333; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>');
+        
+    } else {
+        // INDIVIDUAL WORDS: Highlight search terms and their variations, but be selective
+        let highlightedText = text;
+        
+        // Split the search term into individual words and clean them
+        const searchWords = searchTerm
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(word => word.length > 0)
+            .map(word => word.replace(/[^\w]/g, '')) // Remove punctuation
+            .filter(word => word.length >= 3); // Only highlight words with 3+ characters
+        
+        console.log("🎯 Highlighting these search words and variations:", searchWords);
+        
+        // Highlight each search word and its variations
+        searchWords.forEach(word => {
+            if (word.length >= 3) {
+                // Create flexible regex that catches the word and its variations
+                // This will match the word at the beginning of other words (like "bill" in "billing")
+                const flexibleRegex = new RegExp(`\\b(${escapeRegex(word)}\\w*)`, 'gi');
+                
+                highlightedText = highlightedText.replace(flexibleRegex, '<mark style="background: #ffeb3b; color: #333; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>');
+            }
+        });
+        
+        console.log(`✅ BALANCED: Highlighted ${searchWords.length} search terms and their variations`);
+        return highlightedText;
+    }
+}
+
+// Helper function to escape regex special characters
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Helper function to identify common words that shouldn't be highlighted
+function isCommonWord(word) {
+    const commonWords = [
+        'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'who', 'boy', 'did', 'does', 'each', 'she', 'they', 'them', 'been', 'have', 'that', 'this', 'will', 'with', 'were', 'said', 'what', 'when', 'where', 'why', 'how', 'would', 'could', 'should'
+    ];
+    return commonWords.includes(word.toLowerCase());
+}
 // Function to display comprehensive transcript search results with enhanced analytics
 function displayComprehensiveTranscriptResults(data, query) {
     console.log("🎯 Displaying comprehensive transcript search results:", data);
