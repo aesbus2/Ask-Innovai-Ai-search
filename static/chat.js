@@ -1802,7 +1802,23 @@ function displayTranscriptSearchResults(data, query) {
     console.log(`✅ Displayed ${totalResults} results with BALANCED highlighting for: "${query}"`);
 }
 
+function hideQuickQuestions() {
+    const quickQuestions = document.getElementById('quickQuestions') || 
+                          document.querySelector('.quick-questions');
+    if (quickQuestions) {
+        quickQuestions.style.display = 'none';
+        console.log("✅ Quick questions hidden during transcript search");
+    }
+}
 
+function showQuickQuestions() {
+    const quickQuestions = document.getElementById('quickQuestions') || 
+                          document.querySelector('.quick-questions');
+    if (quickQuestions) {
+        quickQuestions.style.display = 'block';
+        console.log("✅ Quick questions restored");
+    }
+}
 
 // Function to display comprehensive transcript search results with enhanced analytics
 function displayComprehensiveTranscriptResults(data, query) {
