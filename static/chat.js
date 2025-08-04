@@ -1657,7 +1657,14 @@ function downloadCategoryData() {
 // =============================================================================
 
 function displayTranscriptSearchResults(data, query) {
-    console.log("🎯 Displaying transcript search results:", data);
+    console.log("🎯 Displaying transcript search results with BALANCED highlighting:", data);
+    
+    // Hide quick questions directly (instead of calling hideQuickQuestions)
+    const quickQuestions = document.getElementById('quickQuestions') || 
+                          document.querySelector('.quick-questions');
+    if (quickQuestions) {
+        quickQuestions.style.display = 'none';
+    }
     
     const resultsContainer = document.getElementById('transcriptSearchResults');
     const resultsList = document.getElementById('transcriptResultsList');  
@@ -1665,92 +1672,122 @@ function displayTranscriptSearchResults(data, query) {
     
     if (!resultsContainer || !resultsList || !resultsSummary) {
         console.error("❌ Transcript results containers not found!");
+        addTranscriptResultsContainer();
         return;
     }
     
-    // 🔧 FIX: FORCE SHOW THE CONTAINER
+    // Hide welcome screen
+    const welcomeScreen = document.getElementById('welcomeScreen') || 
+                         document.querySelector('.welcome-screen');
+    if (welcomeScreen) {
+        welcomeScreen.style.display = 'none';
+    }
+    
+    // Show and populate the results container
     resultsContainer.classList.remove('hidden');
     resultsContainer.style.display = 'block';
-    resultsContainer.style.visibility = 'visible';
     
-    console.log("✅ Container should now be visible");
-    
-    const results = data.results || [];
+    // Extract data from response
+    const results = data.display_results || data.results || [];
+    const summary = data.comprehensive_summary || data.summary || {};
     const totalResults = results.length;
+    const totalMatches = summary.total_document_matches || totalResults;
+    const totalEvaluationsScanned = summary.total_evaluations_searched || 0;
     
-    // Display summary
+    // Store results globally for export
+    window.lastTranscriptResults = results;
+    
+    console.log(`🎨 BALANCED: Will highlight search terms and variations from: "${query}"`);
+    
+    // Create compact summary
     resultsSummary.innerHTML = `
-        <div class="summary-stats">
-            <div class="stat-item">
-                <span class="stat-number">${totalResults}</span>
-                <span class="stat-label">transcripts found</span>
+        <div style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); padding: 12px 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="color: #1565c0; margin: 0; font-size: 1rem;">
+                    🔍 "<strong>${query}</strong>" - ${totalResults} matches
+                </h4>
+                <span style="font-size: 0.85rem; color: #666;">
+                    ${totalEvaluationsScanned} transcripts scanned
+                </span>
             </div>
-            <div class="stat-item">
-                <span class="stat-number">"${query}"</span>
-                <span class="stat-label">search query</span>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <button onclick="downloadTranscriptResults('csv', '${query}')" style="
+                    background: #1976d2; color: white; border: none; padding: 6px 12px;
+                    border-radius: 16px; cursor: pointer; font-size: 0.8rem;
+                ">📊 Export CSV</button>
+                <button onclick="downloadTranscriptResults('json', '${query}')" style="
+                    background: #1976d2; color: white; border: none; padding: 6px 12px;
+                    border-radius: 16px; cursor: pointer; font-size: 0.8rem;
+                ">📄 Export JSON</button>
+                <button onclick="clearTranscriptResults()" style="
+                    background: #f44336; color: white; border: none; padding: 6px 12px;
+                    border-radius: 16px; cursor: pointer; font-size: 0.8rem;
+                ">✕ Clear</button>
             </div>
         </div>
     `;
     
-    // Display results
+    // Create results list with BALANCED highlighting
     if (totalResults === 0) {
         resultsList.innerHTML = `
-            <div class="no-results">
-                <div class="no-results-icon">🔍</div>
-                <h3>No matches found</h3>
-                <p>No call transcripts contain the search term "<strong>${query}</strong>"</p>
-                <div class="search-suggestions">
-                    <h4>Try searching for:</h4>
-                    <ul>
-                        <li>Different keywords or phrases</li>
-                        <li>Common call center terms like "billing", "cancel", "refund"</li>
-                        <li>Broader terms instead of specific phrases</li>
-                    </ul>
-                </div>
+            <div style="text-align: center; padding: 40px; color: #666;">
+                <h3>🔍 No matches found for "${query}"</h3>
+                <p>Try different search terms or check your filters.</p>
             </div>
         `;
     } else {
-        const resultsHTML = results.map((result, index) => {
-            const evaluationId = result.evaluationId || result.evaluation_id || `Call #${index + 1}`;
-            const transcript = result.transcript || result.content || 'No transcript available';
-            const score = result._score || result.score || 0;
+        const resultsHTML = results.map(result => {
+            const evaluationId = result.evaluationId || result.evaluation_id || result.id;
             const metadata = result.metadata || {};
+            const transcript = result.transcript || result.highlighted_text || result.text || '';
+            const score = result._score || result.score || 0;
             
-            // Create highlighted version of transcript
+            // BALANCED HIGHLIGHTING: Search terms and variations, but not everything
             const highlightedTranscript = highlightSearchTerms(transcript, query);
+            const truncatedTranscript = highlightedTranscript.length > 400 ? 
+                                      highlightedTranscript.substring(0, 400) + '...' : 
+                                      highlightedTranscript;
             
             return `
-                <div class="transcript-result-item">
-                    <div class="result-header">
-                        <div class="result-title">
-                            <span class="result-icon">📞</span>
-                            <strong>Call ${evaluationId}</strong>
-                            ${score > 0 ? `<span class="score-badge">Score: ${(score * 100).toFixed(1)}%</span>` : ''}
+                <div style="border-bottom: 1px solid #e1e8ed; padding: 12px 0; margin-bottom: 8px;">
+                    <!-- Compact header -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <strong style="color: #1976d2; font-size: 0.9rem;">ID: ${evaluationId}</strong>
+                            ${metadata.partner ? `<span style="background: #e3f2fd; color: #1565c0; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem;">${metadata.partner}</span>` : ''}
+                            ${metadata.call_date ? `<span style="color: #666; font-size: 0.8rem;">${metadata.call_date}</span>` : ''}
                         </div>
-                        <div class="result-meta">
-                            <span class="result-date">${metadata.call_date || 'Unknown date'}</span>
-                        </div>
+                        ${score > 0 ? `<span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 8px; font-size: 0.75rem;">Score: ${(score * 100).toFixed(1)}%</span>` : ''}
                     </div>
                     
-                    <div class="result-content">
-                        <div class="result-text">
-                            ${highlightedTranscript}
-                        </div>
-                        
-                        ${metadata.partner ? `<div class="result-partner">Partner: ${metadata.partner}</div>` : ''}
-                        ${metadata.program ? `<div class="result-program">Program: ${metadata.program}</div>` : ''}
-                        ${metadata.disposition ? `<div class="result-disposition">Disposition: ${metadata.disposition}</div>` : ''}
+                    <!-- Transcript with BALANCED highlighting -->
+                    <div style="
+                        background: #f8f9fa; 
+                        border-left: 3px solid #1976d2; 
+                        padding: 8px 12px; 
+                        font-size: 0.85rem; 
+                        line-height: 1.4;
+                        margin-bottom: 6px;
+                    ">
+                        ${truncatedTranscript}
                     </div>
                     
-                    <div class="result-actions">
-                        <button class="result-btn" onclick="copyTranscriptToClipboard('${transcript.replace(/'/g, "\\'")}')">
-                            <span class="material-icons">content_copy</span>
-                            Copy Text
-                        </button>
-                        <button class="result-btn" onclick="analyzeCall('${evaluationId}')">
-                            <span class="material-icons">analytics</span>
-                            Analyze Call
-                        </button>
+                    <!-- Compact metadata and actions -->
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; gap: 12px; font-size: 0.8rem; color: #666;">
+                            ${metadata.program ? `Program: ${metadata.program}` : ''}
+                            ${metadata.disposition ? `• ${metadata.disposition}` : ''}
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button onclick="copyTranscriptToClipboard('${transcript.replace(/'/g, "\\'")}')'" style="
+                                background: #6e32a0; color: white; border: none; 
+                                padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+                            ">📋 Copy</button>
+                            <button onclick="analyzeCall('${evaluationId}')" style="
+                                background: #f8f9fa; color: #666; border: 1px solid #e1e8ed;
+                                padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+                            ">🔍 Analyze</button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -1762,68 +1799,10 @@ function displayTranscriptSearchResults(data, query) {
     // Scroll results into view
     resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
-    console.log(`✅ Displayed ${totalResults} transcript search results - container should be visible`);
+    console.log(`✅ Displayed ${totalResults} results with BALANCED highlighting for: "${query}"`);
 }
 
-// Helper function to highlight search terms
-function highlightSearchTerms(text, query) {
-    if (!text || !query) return text;
-    
-    const searchTerm = query.trim();
-    if (!searchTerm) return text;
-    
-    console.log("🎨 BALANCED: Highlighting search terms and variations:", {
-        originalQuery: query,
-        searchTerm: searchTerm
-    });
-    
-    // Handle quoted phrases vs individual words
-    const isQuoted = searchTerm.startsWith('"') && searchTerm.endsWith('"');
-    
-    if (isQuoted) {
-        // EXACT PHRASE: Only highlight the complete phrase inside quotes
-        const phrase = searchTerm.slice(1, -1).trim();
-        if (!phrase) return text;
-        
-        console.log("🎯 Highlighting exact phrase:", phrase);
-        const regex = new RegExp(`(${escapeRegex(phrase)})`, 'gi');
-        return text.replace(regex, '<mark style="background: #ffeb3b; color: #333; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>');
-        
-    } else {
-        // INDIVIDUAL WORDS: Highlight search terms and their variations, but be selective
-        let highlightedText = text;
-        
-        // Split the search term into individual words and clean them
-        const searchWords = searchTerm
-            .toLowerCase()
-            .split(/\s+/)
-            .filter(word => word.length > 0)
-            .map(word => word.replace(/[^\w]/g, '')) // Remove punctuation
-            .filter(word => word.length >= 3); // Only highlight words with 3+ characters
-        
-        console.log("🎯 Highlighting these search words and variations:", searchWords);
-        
-        // Highlight each search word and its variations
-        searchWords.forEach(word => {
-            if (word.length >= 3) {
-                // Create flexible regex that catches the word and its variations
-                // This will match the word at the beginning of other words (like "bill" in "billing")
-                const flexibleRegex = new RegExp(`\\b(${escapeRegex(word)}\\w*)`, 'gi');
-                
-                highlightedText = highlightedText.replace(flexibleRegex, '<mark style="background: #ffeb3b; color: #333; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>');
-            }
-        });
-        
-        console.log(`✅ BALANCED: Highlighted ${searchWords.length} search terms and their variations`);
-        return highlightedText;
-    }
-}
-// Helper function to escape regex special characters
-function escapeRegex(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
-console.log("✅ Fixed displayTranscriptSearchResults function loaded - this should show results properly!");
 
 // Function to display comprehensive transcript search results with enhanced analytics
 function displayComprehensiveTranscriptResults(data, query) {
@@ -2483,15 +2462,49 @@ function showTranscriptSearchLoading(query, isComprehensive = false) {
     }
 }
 
+// =============================================================================
+// UPDATED: clearTranscriptResults function with showQuickQuestions
+// =============================================================================
 function clearTranscriptResults() {
     const resultsContainer = document.getElementById('transcriptSearchResults');
     const resultsList = document.getElementById('transcriptResultsList');
     const resultsSummary = document.getElementById('transcriptResultsSummary');
     
-    resultsContainer.classList.add('hidden');
-    resultsList.innerHTML = '';
-    resultsSummary.innerHTML = '';
-    lastTranscriptResults = [];
+    if (resultsContainer) {
+        resultsContainer.classList.add('hidden');
+        resultsContainer.style.display = 'none';
+    }
+    
+    if (resultsList) {
+        resultsList.innerHTML = '';
+    }
+    
+    if (resultsSummary) {
+        resultsSummary.innerHTML = '';
+    }
+    
+    // Show welcome screen again when clearing results
+    const welcomeScreen = document.getElementById('welcomeScreen') || 
+                         document.querySelector('.welcome-screen');
+    if (welcomeScreen) {
+        welcomeScreen.style.display = 'block';
+        console.log("✅ Welcome screen restored");
+    }
+    
+    // Show quick questions again (use direct approach)
+    const quickQuestions = document.getElementById('quickQuestions') || 
+                          document.querySelector('.quick-questions');
+    if (quickQuestions) {
+        quickQuestions.style.display = 'block';
+        console.log("✅ Quick questions restored");
+    }
+    
+    // Clear stored results
+    if (typeof window.lastTranscriptResults !== 'undefined') {
+        window.lastTranscriptResults = [];
+    }
+    
+    console.log("🧹 Transcript search results cleared, welcome screen and quick questions restored");
 }
 
 function addTranscriptResultsContainer() {
