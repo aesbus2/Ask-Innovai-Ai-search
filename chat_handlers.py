@@ -42,7 +42,7 @@ GENAI_MODEL = os.getenv("GENAI_MODEL", "n/a")
 GENAI_TEMPERATURE = float(os.getenv("GENAI_TEMPERATURE", "0.7"))
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 
-CHAT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "200"))  # Increased from 100
+CHAT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "10000"))  # Increased from 100
 HYBRID_SEARCH_LIMIT = int(os.getenv("HYBRID_SEARCH_LIMIT", "150"))  # No artificial 30 limit
 VECTOR_SEARCH_LIMIT = int(os.getenv("VECTOR_SEARCH_LIMIT", "100"))  # No artificial 20 limit  
 TEXT_SEARCH_LIMIT = int(os.getenv("TEXT_SEARCH_LIMIT", "100"))    # No artificial 30 limit
@@ -1450,7 +1450,7 @@ async def relay_chat_rag(request: Request):
         logger.info(f"📊 REPORT REQUEST DETECTED: {is_report_request}")
 
         # STEP 1: Build context with VECTOR SEARCH integration
-        context, sources = build_search_context(req.message, req.filters)
+        context, sources = build_search_context(req.message, req.filters, max_results=CHAT_MAX_RESULTS)
         
         logger.info(f"📋 ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
         if not context:
