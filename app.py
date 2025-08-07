@@ -1,6 +1,6 @@
-# Enhanced Production App.py - Real Data Filter System with Efficient Metadata Loading
-# Version: 6.0.0 - Index-based metadata extraction with evaluation grouping
-# Working Base Version (needs KNN to delete if available): 
+# App.py - Real Data Filter System with Efficient Metadata Loading
+# Version: 6.0.0 - UPdated to Match API data exactly
+
 
 
 import os
@@ -782,9 +782,9 @@ async def search_transcripts_comprehensive_endpoint(request: Request):
             content={"error": f"Search failed: {str(e)}"}
         )
 # Get all matches within a specific transcript
-@app.get("/search_transcript_context/{evaluation_id}")
+@app.get("/search_transcript_context/{evaluationId}")
 async def search_transcript_context_endpoint(
-    evaluation_id: str, 
+    evaluationId: str, 
     query: str = Query(..., description="Word or phrase to search for"),
     context: int = Query(200, description="Characters of context around matches")
 ):
@@ -792,7 +792,7 @@ async def search_transcript_context_endpoint(
     NEW: Get word matches with context from a specific transcript
     """
     try:
-        result = search_transcript_with_context(query, evaluation_id, context)
+        result = search_transcript_with_context(query, evaluationId, context)
         
         if "error" in result:
             return JSONResponse(status_code=404, content=result)
@@ -1001,36 +1001,17 @@ def extract_program_from_template(template_name: str, template_id: str = None, e
     program_mappings = [
         {
             "program": "Metro",
-            "patterns": ["metro", "corporate", "sptr", "metro by t-mobile", "corporate sptr"]
+            "patterns": ["metro","metro by t-mobile"]
         },
         {
             "program": "T-Mobile Prepaid",
-            "patterns": ["t-mobile", "tmobile", "prepaid", "t-mobile prepaid", "pre-paid", "prepay"]
+            "patterns": ["TMO prepaid","t-mobile prepaid",]
         },
         {
             "program": "ASW", 
-            "patterns": ["asw", "authorized", "dealer", "authorized dealer", "agent", "indirect"]
+            "patterns": ["asw", "assurance wireless"]
         },
-        {
-            "program": "Technical Support",
-            "patterns": ["technical", "tech support", "support", "troubleshooting", "device support"]
-        },
-        {
-            "program": "Customer Service",
-            "patterns": ["customer service", "cs", "customer care", "care", "service"]
-        },
-        {
-            "program": "Sales",
-            "patterns": ["sales", "revenue", "acquisition", "new customer", "upgrade"]
-        },
-        {
-            "program": "Billing",
-            "patterns": ["billing", "payment", "finance", "collections", "account management"]
-        },
-        {
-            "program": "Quality Assurance",
-            "patterns": ["quality", "qa", "evaluation", "assessment", "review", "monitoring"]
-        }
+     
     ]
     
     # First pass: Look for exact matches or strong indicators
@@ -1047,24 +1028,16 @@ def extract_program_from_template(template_name: str, template_id: str = None, e
         lob = evaluation_data.get("lob", "").lower()
         
         # Partner-based program detection
-        if any(keyword in partner for keyword in ["metro", "corporate"]):
+        if any(keyword in partner for keyword in ["metro", "metro by t-mobile"]):
             return "Metro"
-        elif any(keyword in partner for keyword in ["prepaid", "t-mobile"]):
+        elif any(keyword in partner for keyword in ["TMO prepaid", "t-mobile prepaid"]):
             return "T-Mobile Prepaid"
-        elif any(keyword in partner for keyword in ["asw", "dealer", "indirect"]):
-            return "ASW"
-        
-        # LOB-based program detection
-        if any(keyword in lob for keyword in ["tech", "support"]):
-            return "Technical Support"
-        elif any(keyword in lob for keyword in ["sales", "revenue"]):
-            return "Sales"
-        elif any(keyword in lob for keyword in ["billing", "payment"]):
-            return "Billing"
+        elif any(keyword in partner for keyword in ["asw", "assurance wireless", "assurance"]):
+            return "ASW"       
     
     # Final fallback for PRODUCTION
     log_import(f"⚠️ Could not extract program from template '{template_name}' - using fallback")
-    return "Corporate"  # Default to Corporate instead of "Unknown Program"
+    return "Not Captured"  # Default to Corporate instead of "Unknown Program"
 
 def clean_field_value(value, default=None):
     """PRODUCTION: Clean and normalize field values for consistent filtering"""
@@ -1094,72 +1067,74 @@ def safe_int(value, default=0):
     except (ValueError, TypeError):
         return default
 
-def generate_agent_id(agent_name):
+def generate_agent_id(agentName):
     """PRODUCTION: Generate consistent agent ID from agent name"""
-    if not agent_name or agent_name.strip().lower() in ["unknown", "null", ""]:
+    if not agentName .strip().lower() in ["unknown", "null", ""]:
         return "00000000"
     
     try:
         # Create a consistent hash for PRODUCTION
-        hash_object = hashlib.md5(agent_name.encode())
+        hash_object = hashlib.md5(agentName.encode())
         return hash_object.hexdigest()[:8]
     except:
         # Fallback method
-        return str(hash(agent_name) % 100000000).zfill(8)
+        return str(hash(agentName) % 100000000).zfill(8)
 
 def extract_comprehensive_metadata(evaluation: Dict) -> Dict[str, Any]:
     """
-    PRODUCTION: Extract all metadata for real data filters with enhanced field mapping
-    VERSION: 4.5.0 - Now includes weighted_score and url fields
+    TRULY API-CONSISTENT: Use EXACT field names from your API response
+    NO field name transformations - direct mapping only
     """
+    
     template_name = evaluation.get("template_name", "Unknown Template")
     template_id = evaluation.get("template_id", "")
     
     # Enhanced program extraction with evaluation context
     program = extract_program_from_template(template_name, template_id, evaluation)
     
-    # PRODUCTION: Comprehensive metadata extraction
+    # ✅ EXACT API FIELD NAMES - No transformations whatsoever
     metadata = {
-        # Primary identifiers
-        "evaluationId": evaluation.get("evaluationId"),
-        "internalId": evaluation.get("internalId"),
-        "template_id": template_id,
-        "template_name": template_name,    
+        # PRIMARY IDENTIFIERS (exact from your API)
+        "evaluationId": evaluation.get("evaluationId"),           # camelCase from API
+        "internalId": evaluation.get("internalId"),               # camelCase from API
+        "template_id": template_id,                               # snake_case from API
+        "template_name": template_name,                           # snake_case from API
+        
+        # ✅ AGENT FIELDS (exact from your API)
+        "agentName": evaluation.get("agentName"),                 # camelCase from API
+        "agentId": evaluation.get("agentId"),                     # camelCase from API
         
         # ENHANCED: Program as separate field
         "program": program,
         
-        # NEWLY ADDED: Previously missing fields ✅
-        "weighted_score": safe_int(evaluation.get("weighted_score"), 0),  # ✅ FIXED: was commented out
-        "url": clean_field_value(evaluation.get("url")),  # ✅ ADDED: was completely missing
-        
-        # Organizational hierarchy - clean and normalize
+        # ORGANIZATIONAL HIERARCHY (exact from your API)
         "partner": clean_field_value(evaluation.get("partner"), "Unknown Partner"),
         "site": clean_field_value(evaluation.get("site"), "Unknown Site"),
         "lob": clean_field_value(evaluation.get("lob"), "Unknown LOB"),
         
-        # Agent information - clean and normalize
-        "agent": clean_field_value(evaluation.get("agentName"), "Unknown Agent"),
-        "agentId": evaluation.get("agentId") or evaluation.get("agent_id"),
-        
-        # Call details - clean and normalize
+        # ✅ CALL DISPOSITION (exact from your API)
         "disposition": clean_field_value(evaluation.get("disposition"), "Unknown Disposition"),
-        "sub_disposition": clean_field_value(evaluation.get("subDisposition"), "Unknown Sub-Disposition"),
-        "language": clean_field_value(evaluation.get("language"), "English"),  # Default to English
+        "subDisposition": clean_field_value(evaluation.get("subDisposition"), None),  # camelCase from API
         
-        # Date and timing
-        "call_date": evaluation.get("call_date"),
-        "call_duration": safe_int(evaluation.get("call_duration"), 0),
-        "created_on": evaluation.get("created_on"),
+        # ✅ ENHANCED FIELDS (exact from your API)
+        "weighted_score": safe_int(evaluation.get("weighted_score")),    # snake_case from API
+        "url": clean_field_value(evaluation.get("url")),                 # exact from API
         
-        # Additional contact information (if available and not sensitive)
-        #"phone_number": clean_field_value(evaluation.get("phoneNumber")),
-        #"contact_id": clean_field_value(evaluation.get("contactId")),
-        #"ucid": clean_field_value(evaluation.get("ucid")),
-        "call_type": clean_field_value(evaluation.get("callType"), "CSR")  # Default to CSR
+        # TEMPORAL FIELDS (exact from your API)
+        "call_date": clean_field_value(evaluation.get("call_date")),     # snake_case from API
+        "created_on": clean_field_value(evaluation.get("created_on")),   # snake_case from API
+        "call_duration": safe_int(evaluation.get("call_duration")),      # snake_case from API
+        
+        # ADDITIONAL FIELDS (exact from your API)
+        "language": clean_field_value(evaluation.get("language"), "english"),
+        
+        # SYSTEM FIELDS
+        "indexed_at": datetime.now().isoformat(),
+        "data_version": "5.0.0_truly_api_consistent"
     }
     
     return metadata
+
 
 # I will use this for Weighted Score value
 def safe_float(value, default=0.0):
@@ -1382,9 +1357,9 @@ async def filter_options_metadata():
             "partners": metadata_values.get("partners", []),
             "sites": metadata_values.get("sites", []),
             "lobs": metadata_values.get("lobs", []),
-            "callDispositions": metadata_values.get("dispositions", []),
-            "callSubDispositions": metadata_values.get("sub_dispositions", []),
-            "agentNames": metadata_values.get("agents", []),
+            "Dispositions": metadata_values.get("dispositions", []),
+            "SubDispositions": metadata_values.get("subDispositions", []),
+            "agentNames": metadata_values.get("agentName", []),
             "languages": metadata_values.get("languages", []),
             "callTypes": metadata_values.get("call_types", []),
             
@@ -1544,8 +1519,8 @@ async def get_available_metadata_fields(client, indices_info):
     except Exception as e:
         logger.warning(f"Could not check field mappings: {e}")
         # Return expected fields as fallback
-        return ["program", "partner", "site", "lob", "agent", "disposition", 
-        "sub_disposition", "language", "call_type", "weighted_score", "url"]
+        return ["program", "partner", "site", "lob", "agentName", "disposition", 
+        "subDisposition", "language", "call_type", "weighted_score", "url"]
 
 async def get_metadata_values_efficiently(client, indices_info, available_fields):
     """
@@ -1557,7 +1532,7 @@ async def get_metadata_values_efficiently(client, indices_info, available_fields
         "sites": set(),
         "lobs": set(),
         "dispositions": set(),
-        "sub_dispositions": set(),
+        "subDispositions": set(),
         "agents": set(),
         "languages": set(),
         "call_types": set(),
@@ -1571,8 +1546,8 @@ async def get_metadata_values_efficiently(client, indices_info, available_fields
         "site": "sites", 
         "lob": "lobs",
         "disposition": "dispositions",
-        "sub_disposition": "sub_dispositions",
-        "agent": "agents",
+        "subDisposition": "subDispositions",
+        "agentName": "agents",
         "language": "languages",
         "call_type": "call_types",
         "weighted_score": "weighted_scores",
@@ -1798,7 +1773,7 @@ async def debug_test_vector_search(query: str = "customer service"):
         for i, result in enumerate(vector_results):
             analysis = {
                 "result_index": i + 1,
-                "evaluation_id": result.get("evaluationId"),
+                "evaluationId": result.get("evaluationId"),
                 "score": result.get("_score", 0),
                 "search_type": result.get("search_type"),
                 "template_name": result.get("template_name"),
@@ -1889,7 +1864,7 @@ async def debug_test_hybrid_search(query: str = "call dispositions"):
                     "search_types": list(set(r.get("search_type") for r in hybrid_results)),
                     "sample_results": [
                         {
-                            "evaluation_id": r.get("evaluationId"),
+                            "evaluationId": r.get("evaluationId"),
                             "score": r.get("_score", 0),
                             "hybrid_score": r.get("hybrid_score", 0),
                             "search_type": r.get("search_type"),
@@ -1914,7 +1889,7 @@ async def debug_test_hybrid_search(query: str = "call dispositions"):
             "analysis": {
                 "best_weight": max(test_weights, key=lambda w: hybrid_test_results.get(f"weight_{w}", {}).get("results_count", 0)),
                 "total_unique_results": len(set().union(*[
-                    [r["evaluation_id"] for r in hybrid_test_results.get(f"weight_{w}", {}).get("sample_results", [])]
+                    [r["evaluationId"] for r in hybrid_test_results.get(f"weight_{w}", {}).get("sample_results", [])]
                     for w in test_weights
                 ])),
                 "search_quality": "hybrid text+vector search active"
@@ -2142,8 +2117,8 @@ async def process_evaluation(evaluation: Dict) -> Dict:
         comprehensive_metadata = extract_comprehensive_metadata(evaluation)
         
         # Validation
-        evaluation_id = evaluation.get("evaluationId")
-        if not evaluation_id:
+        evaluationId =evaluation.get("evaluationId")
+        if not evaluationId:
             return {"status": "skipped", "reason": "missing_eval_id"}
         
         template_id = evaluation.get("template_id")
@@ -2151,17 +2126,39 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             return {"status": "skipped", "reason": "missing_template_id"}
         
         # Document ID and collection
-        doc_id = str(evaluation_id)
+        doc_id = str(evaluationId)
         collection = clean_template_id_for_index(template_id)
         
-        # PRODUCTION logging
-        log_import(f" PRODUCTION METADATA for {evaluation_id}:")
-        log_import(f"    Template: '{comprehensive_metadata['template_name']}'")
-        log_import(f"    Program: '{comprehensive_metadata['program']}'")
-        log_import(f"    Partner: '{comprehensive_metadata['partner']}'")
-        log_import(f"    Site: '{comprehensive_metadata['site']}'")
-        log_import(f"    LOB: '{comprehensive_metadata['lob']}'")
-        log_import(f"    Agent: '{comprehensive_metadata['agent']}'")
+       # ✅ PRODUCTION LOGGING with API-consistent field names
+        log_import(f"✅ API-CONSISTENT METADATA for {evaluationId}:")
+        log_import(f"   agentId: {comprehensive_metadata.get('agentId')} (from API field 'agentId')")
+        log_import(f"   agentName: {comprehensive_metadata.get('agentName')} (from API field 'agentName')")
+        log_import(f"   subDisposition: {comprehensive_metadata.get('subDisposition')} (from API field 'subDisposition')")
+        log_import(f"   template_name: {comprehensive_metadata.get('template_name')}")
+        log_import(f"   program: {comprehensive_metadata.get('program')} (extracted)")
+
+        # ✅ CREATE DOCUMENT WITH API-CONSISTENT STRUCTURE
+        document_body = {
+            # Use comprehensive metadata (now API-consistent)
+            **comprehensive_metadata,
+            
+            # Content fields (keep same as before)
+            "evaluation_text": evaluation_text,
+            "transcript_text": transcript_text,
+            "text": f"{evaluation_text}\n\n{transcript_text}".strip(),
+            "full_text": f"{evaluation_text}\n\n{transcript_text}".strip(),
+            
+            # Chunks structure (keep same as before)
+            "chunks": [],
+            "total_chunks": len(all_chunks),
+            "content_types": list(set(chunk["content_type"] for chunk in all_chunks)),
+            
+            # System fields (keep same as before)
+            "document_type": "evaluation_grouped",
+            "collection_name": collection,
+            "collection_source": f"template_id_{template_id}",
+            "version": "5.0.0_api_consistent"
+        }
         
         # Generate embeddings
         chunk_embeddings = []
@@ -2185,13 +2182,13 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                         await asyncio.sleep(0.1)
                         
             except Exception as e:
-                log_import(f"⚠️ Embedding failed for evaluation {evaluation_id}: {str(e)[:50]}")
+                log_import(f"⚠️ Embedding failed for evaluation {evaluationId}: {str(e)[:50]}")
                 chunk_embeddings = []
         
         # CREATE SINGLE DOCUMENT WITH COMPREHENSIVE METADATA
         document_body = {
             # Primary identification
-            "evaluationId": evaluation_id,
+            "evaluationId": evaluationId,
             "internalId": comprehensive_metadata["internalId"],
             "template_id": template_id,
             "template_name": comprehensive_metadata["template_name"],
@@ -2257,19 +2254,23 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             for retry in range(max_retries):
                 try:
                     index_document(doc_id, document_body, index_override=collection)
-                    log_import(f"✅ PRODUCTION INDEXED: Eval {evaluation_id} | Template: '{comprehensive_metadata['template_name']}' | Program: '{comprehensive_metadata['program']}' | {len(all_chunks)} chunks")
+                    log_import(f"✅ PRODUCTION INDEXED: Eval {evaluationId}")
+                    log_import(f"   Template: '{comprehensive_metadata['template_name']}'")
+                    log_import(f"   Program: '{comprehensive_metadata['program']}'")
+                    log_import(f"   Agent: '{comprehensive_metadata['agentName']}'")  # API field name
+                    log_import(f"   {len(all_chunks)} chunks")
                     break
                     
                 except Exception as index_error:
                     if retry < max_retries - 1:
                         delay = (retry + 1) * 2
-                        log_import(f"⚠️ Retry {retry + 1}/{max_retries} for eval {evaluation_id} in {delay}s: {str(index_error)[:50]}")
+                        log_import(f"⚠️ Retry {retry + 1}/{max_retries} for eval {evaluationId} in {delay}s: {str(index_error)[:50]}")
                         time.sleep(delay)
                     else:
                         raise index_error
             
         except Exception as e:
-            error_msg = f"Failed to index evaluation {evaluation_id}: {str(e)}"
+            error_msg = f"Failed to index evaluation {evaluationId}: {str(e)}"
             log_import(f"❌ {error_msg}")
             
             if any(keyword in str(e).lower() for keyword in ["timeout", "connection", "unreachable", "opensearch"]):
@@ -2277,29 +2278,47 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             
             return {"status": "error", "error": str(e)}
         
+        # ✅ RETURN WITH EXACT API FIELD NAMES - No mixing of conventions!
         return {
             "status": "success",
             "document_id": doc_id,
-            "evaluationId": evaluation_id,
-            "template_id": template_id,
-            "template_name": comprehensive_metadata["template_name"],
-            "program": comprehensive_metadata["program"],
-            "partner": comprehensive_metadata["partner"],
-            "site": comprehensive_metadata["site"],
-            "lob": comprehensive_metadata["lob"],
+            
+            # ✅ USE EXACT API FIELD NAMES throughout
+            "evaluationId": evaluationId,                        # API: evaluationId (camelCase)
+            "template_id": template_id,                           # API: template_id (snake_case)
+            "template_name": comprehensive_metadata["template_name"], # API: template_name (snake_case)
+            "agentName": comprehensive_metadata.get("agentName"), # API: agentName (camelCase)
+            "agentId": comprehensive_metadata.get("agentId"),     # API: agentId (camelCase)
+            "subDisposition": comprehensive_metadata.get("subDisposition"), # API: subDisposition (camelCase)
+            "weighted_score": comprehensive_metadata.get("weighted_score"), # API: weighted_score (snake_case)
+            "partner": comprehensive_metadata.get("partner"),     # API: partner
+            "site": comprehensive_metadata.get("site"),           # API: site
+            "lob": comprehensive_metadata.get("lob"),             # API: lob
+            "call_date": comprehensive_metadata.get("call_date"), # API: call_date (snake_case)
+            "call_duration": comprehensive_metadata.get("call_duration"), # API: call_duration (snake_case)
+            "url": comprehensive_metadata.get("url"),             # API: url
+            "language": comprehensive_metadata.get("language"),   # API: language
+            
+            # Processing metadata
+            "program": comprehensive_metadata.get("program"),     # Extracted field
             "collection": collection,
             "total_chunks": len(all_chunks),
-            "agent_id": comprehensive_metadata["agent_id"],
-            "agent_name": comprehensive_metadata["agent"],
             "evaluation_chunks": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
             "transcript_chunks": len([c for c in all_chunks if c["content_type"] == "transcript"]),
             "total_content_length": sum(len(chunk["text"]) for chunk in all_chunks),
-            "has_embeddings": bool(chunk_embeddings)
+            "has_embeddings": bool(chunk_embeddings),
+            "api_consistent": True
         }
         
     except Exception as e:
         logger.error(f"PRODUCTION: Failed to process evaluation: {e}")
-        return {"status": "error", "error": str(e)}
+        # Enhanced error logging for debugging
+        if isinstance(evaluation, dict):
+            log_import(f"   Available API fields: {list(evaluation.keys())}")
+            if 'agentId' in evaluation:
+                log_import(f"   agentId found: {evaluation['agentId']}")
+            if 'agentName' in evaluation:
+                log_import(f"   agentName found: {evaluation['agentName']}")
 
 # ============================================================================
 # PRODUCTION API FETCHING (Keeping existing)
@@ -2715,7 +2734,7 @@ async def get_opensearch_statistics():
             "sites": set(),
             "lobs": set(),
             "dispositions": set(),
-            "sub_dispositions": set(),
+            "subDispositions": set(),
             "agents": set(),
             "languages": set(),
             "call_types": set(),
@@ -2742,10 +2761,9 @@ async def get_opensearch_statistics():
                     "_source": [
                         "template_name", "template_id", "evaluationId", "internalId",
                         "metadata.program", "metadata.partner", "metadata.site", 
-                        "metadata.lob", "metadata.disposition", "metadata.sub_disposition",
-                        "metadata.subDisposition", "metadata.agent", "metadata.agentName",
+                        "metadata.lob", "metadata.disposition", "metadata.subDisposition", "metadata.agentName",
                         "metadata.language", "metadata.call_type", "metadata.weighted_score",
-                        "metadata.url", "metadata.call_duration"
+                        "metadata.url", "metadata.call_duration",
                         "document_embedding", "chunks.embedding"
                     ]
                 },
@@ -2760,9 +2778,9 @@ async def get_opensearch_statistics():
                 metadata = source.get("metadata", {})
                 
                 # Track unique evaluations
-                evaluation_id = source.get("evaluationId") or source.get("internalId")
-                if evaluation_id:
-                    evaluations_sampled.add(evaluation_id)
+                evaluationId =source.get("evaluationId") or source.get("internalId")
+                if evaluationId:
+                    evaluations_sampled.add(evaluationId)
                 
                 # Extract template information
                 if source.get("template_name"):
@@ -2781,12 +2799,12 @@ async def get_opensearch_statistics():
                     statistics["dispositions"].add(metadata["disposition"])
                     
                 # Handle both sub_disposition and subDisposition
-                sub_disp = metadata.get("sub_disposition") or metadata.get("subDisposition")
+                sub_disp = metadata.get("subDisposition")
                 if sub_disp:
-                    statistics["sub_dispositions"].add(sub_disp)
+                    statistics["subDispositions"].add(sub_disp)
                     
                 # Handle both agent and agentName
-                agent = metadata.get("agent") or metadata.get("agentName")
+                agent = metadata.get("agentName") or metadata.get("agentName")
                 if agent:
                     statistics["agents"].add(agent)
                     
@@ -2883,7 +2901,7 @@ async def get_opensearch_statistics():
                 "sites": len(statistics["sites"]),
                 "lobs": len(statistics["lobs"]),
                 "dispositions": len(statistics["dispositions"]),
-                "sub_dispositions": len(statistics["sub_dispositions"]),
+                "subDispositions": len(statistics["subDispositions"]),
                 "agents": len(statistics["agents"]),
                 "languages": len(statistics["languages"]),
                 "call_types": len(statistics["call_types"]),
@@ -3332,7 +3350,7 @@ async def analytics_stats(request: dict):
             # Call disposition filters (user selected from dropdowns)
             disposition_filters = {
                 "disposition": ["metadata.disposition.keyword", "metadata.disposition"],
-                "sub_disposition": ["metadata.sub_disposition.keyword", "metadata.sub_disposition"]
+                "subDisposition": ["metadata.subDisposition.keyword", "metadata.subDisposition"]
             }
             
             for filter_key, field_options in disposition_filters.items():
@@ -3360,7 +3378,7 @@ async def analytics_stats(request: dict):
             
             # Agent and language filters (user selected from dropdowns)
             agent_language_filters = {
-                "agent": ["metadata.agent.keyword", "metadata.agent"],
+                "agentName": ["metadata.agentName.keyword", "metadata.agentName"],
                 "language": ["metadata.language.keyword", "metadata.language"]
             }
             
@@ -3561,9 +3579,9 @@ async def debug_test_metadata_extraction():
                 "result_index": i + 1,
                 "has_source": "_source" in result,
                 "source_keys": list(source.keys()) if source else [],
-                "evaluation_id_sources": {
+                "evaluationId_sources": {
                     "evaluationId": source.get("evaluationId"),
-                    "evaluation_id": source.get("evaluation_id"), 
+                    "evaluationId": source.get("evaluationId"), 
                     "internalId": source.get("internalId"),
                     "metadata.evaluationId": source.get("metadata", {}).get("evaluationId") if source.get("metadata") else None
                 },
@@ -3575,7 +3593,7 @@ async def debug_test_metadata_extraction():
                         "partner": source.get("metadata", {}).get("partner"),
                         "site": source.get("metadata", {}).get("site"),
                         "lob": source.get("metadata", {}).get("lob"),
-                        "agent": source.get("metadata", {}).get("agent"),
+                        "agentName": source.get("metadata", {}).get("agentName"),
                         "disposition": source.get("metadata", {}).get("disposition")
                     } if source.get("metadata") else {}
                 },
@@ -3594,12 +3612,12 @@ async def debug_test_metadata_extraction():
                 "has_real_data": metadata_summary["has_real_data"],
                 "programs_found": metadata_summary["programs"],
                 "dispositions_found": metadata_summary["dispositions"],
-                "evaluation_ids_found": len(metadata_summary["evaluation_ids"])
+                "evaluationIds_found": len(metadata_summary["evaluationIds"])
             },
             "detailed_analysis": detailed_analysis,
             "recommendations": [
                 "Check if 'has_real_data' is True",
-                "Verify that evaluation_ids_found > 0", 
+                "Verify that evaluationIds_found > 0", 
                 "Ensure programs_found and dispositions_found are not empty",
                 "Look at detailed_analysis to see metadata structure"
             ],
@@ -3743,7 +3761,7 @@ async def debug_opensearch_data():
                         "partner": source.get("metadata", {}).get("partner"),
                         "site": source.get("metadata", {}).get("site"),
                         "lob": source.get("metadata", {}).get("lob"),
-                        "agent": source.get("metadata", {}).get("agent"),
+                        "agentName": source.get("metadata", {}).get("agentName"),
                         "disposition": source.get("metadata", {}).get("disposition"),
                         "language": source.get("metadata", {}).get("language"),
                         "weighted_score": source.get("metadata", {}).get("weighted_score"),
@@ -3941,49 +3959,6 @@ async def debug_check_chat_route():
     except Exception as e:
         return {"error": str(e)}
     
-@app.get("/debug/test_chat_context")
-async def debug_test_chat_context(q: str = "What are the most common call dispositions?"):
-    """DEBUG: Test chat context building"""
-    try:
-        from chat_handlers import build_search_context
-        
-        # Test with no filters
-        logger.info(f"🔍 DEBUG CHAT CONTEXT: query='{q}'")
-        
-        context, sources = build_search_context(q, {})
-        
-        return {
-            "status": "success",
-            "query": q,
-            "context_length": len(context),
-            "context_preview": context[:500] + ("..." if len(context) > 500 else ""),
-            "sources_count": len(sources),
-            "sources_summary": [
-                {
-                    "evaluationId": s.get("evaluationId"),
-                    "search_type": s.get("search_type"),
-                    "content_type": s.get("content_type"),
-                    "text_length": len(s.get("text", "")),
-                    "score": s.get("score"),
-                    "template_name": s.get("template_name"),
-                    "metadata": s.get("metadata", {})
-                }
-                for s in sources[:3]
-            ],
-            "has_context": bool(context),
-            "message": "Chat context test - verify if context is built from your data",
-            "version": "4.3.2_debug"
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ DEBUG CHAT CONTEXT FAILED: {e}")
-        return {
-            "status": "error",
-            "error": str(e),
-            "query": q,
-            "version": "4.3.2_debug"
-        }
-
 @app.get("/debug/test_filters")
 async def debug_test_filters():
     """DEBUG: Test filter options and search with filters"""
@@ -4250,12 +4225,12 @@ async def debug_verify_metadata_alignment():
             "_source": [
                 "evaluationId", 
                 "metadata.disposition", 
-                "metadata.sub_disposition",
+                "metadata.subDisposition",
                 "metadata.program",
                 "metadata.partner", 
                 "metadata.site",
                 "metadata.lob",
-                "metadata.agent",
+                "metadata.agentName",
                 "metadata.call_date",
                 "template_name"
             ]
@@ -4283,24 +4258,24 @@ async def debug_verify_metadata_alignment():
         for hit in hits:
             source = hit.get("_source", {})
             metadata = source.get("metadata", {})
-            evaluation_id = source.get("evaluationId")
+            evaluationId =source.get("evaluationId")
             
             # Track unique evaluations vs total hits
-            if evaluation_id:
-                metadata_analysis["unique_evaluations_sampled"].add(evaluation_id)
+            if evaluationId:
+                metadata_analysis["unique_evaluations_sampled"].add(evaluationId)
             
             # Check if metadata exists
             if not metadata:
                 metadata_analysis["metadata_structure_issues"].append(
-                    f"Evaluation {evaluation_id or 'Unknown'} has no metadata field"
+                    f"Evaluation {evaluationId or 'Unknown'} has no metadata field"
                 )
                 continue
             
             # Collect all unique values
             if metadata.get("disposition"):
                 metadata_analysis["dispositions_found"].add(metadata["disposition"])
-            if metadata.get("sub_disposition"):
-                metadata_analysis["sub_dispositions_found"].add(metadata["sub_disposition"])
+            if metadata.get("subDisposition"):
+                metadata_analysis["sub_dispositions_found"].add(metadata["subDisposition"])
             if metadata.get("program"):
                 metadata_analysis["programs_found"].add(metadata["program"])
             if metadata.get("partner"):
@@ -4309,23 +4284,23 @@ async def debug_verify_metadata_alignment():
                 metadata_analysis["sites_found"].add(metadata["site"])
             if metadata.get("lob"):
                 metadata_analysis["lobs_found"].add(metadata["lob"])
-            if metadata.get("agent"):
-                metadata_analysis["agents_found"].add(metadata["agent"])
+            if metadata.get("agentName"):
+                metadata_analysis["agents_found"].add(metadata["agentName"])
             if source.get("template_name"):
                 metadata_analysis["templates_found"].add(source["template_name"])
             
             # Add sample record
             metadata_analysis["sample_records"].append({
-                "evaluationId": evaluation_id,
+                "evaluationId": evaluationId,
                 "template_name": source.get("template_name"),
                 "metadata": {
                     "disposition": metadata.get("disposition"),
-                    "sub_disposition": metadata.get("sub_disposition"),
+                    "subDisposition": metadata.get("subDisposition"),
                     "program": metadata.get("program"),
                     "partner": metadata.get("partner"),
                     "site": metadata.get("site"),
                     "lob": metadata.get("lob"),
-                    "agent": metadata.get("agent"),
+                    "agentName": metadata.get("agentName"),
                     "call_date": metadata.get("call_date")
                 }
             })
@@ -4505,18 +4480,18 @@ async def debug_test_disposition_search(query: str = "call dispositions"):
         
         # Analyze sources with correct counting
         for i, source in enumerate(sources[:5]):
-            evaluation_id = source.get("evaluationId")
-            if evaluation_id:
-                analysis["unique_evaluations_found"].add(evaluation_id)
+            evaluationId =source.get("evaluationId")
+            if evaluationId:
+                analysis["unique_evaluations_found"].add(evaluationId)
                 
             source_summary = {
                 "source_number": i + 1,
-                "evaluation_id": evaluation_id,
+                "evaluationId": evaluationId,
                 "search_type": source.get("search_type"),
                 "template_name": source.get("template_name"),
                 "metadata_preview": {
                     "disposition": source.get("metadata", {}).get("disposition"),
-                    "sub_disposition": source.get("metadata", {}).get("sub_disposition"),
+                    "subDisposition": source.get("metadata", {}).get("subDisposition"),
                     "program": source.get("metadata", {}).get("program"),
                     "partner": source.get("metadata", {}).get("partner")
                 },

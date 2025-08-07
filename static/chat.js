@@ -1186,7 +1186,7 @@ function applyFilters() {
         'siteFilter': 'site',
         'lobFilter': 'lob',
         'callDispositionFilter': 'disposition',
-        'callSubDispositionFilter': 'sub_disposition',
+        'callSubDispositionFilter': 'subDisposition',
         'languageFilter': 'language',
         'startCallDate': 'call_date_start',
         'endCallDate': 'call_date_end'
@@ -1254,7 +1254,7 @@ function removeFilter(filterKey) {
         'site': 'siteFilter',
         'lob': 'lobFilter',
         'disposition': 'callDispositionFilter',
-        'sub_disposition': 'callSubDispositionFilter',
+        'subDisposition': 'callSubDispositionFilter',
         'language': 'languageFilter',
         'call_date_start': 'startCallDate',
         'call_date_end': 'endCallDate'
@@ -1294,7 +1294,7 @@ function updateActiveFiltersDisplay() {
         'site': 'Site',
         'lob': 'LOB',
         'disposition': 'Disposition',
-        'sub_disposition': 'Sub-Disposition',
+        'subDisposition': 'Sub-Disposition',
         'language': 'Language',
         'call_type': 'Call Type',
         'call_date_start': 'Start Date',
@@ -2370,12 +2370,12 @@ function downloadTranscriptResults(format, query) {
             // Handle both possible data structures
             const metadata = result.metadata || {};
             const evaluationId = result.evaluationId || result.evaluation_id || result.id || '';
-            const internalId = result.internalId || result.internal_id || '';
+            const internalId = result.internalId || result.evaluationId || '';
             const partner = metadata.partner || result.partner || '';
             const program = metadata.program || result.program || '';
             const callDate = metadata.call_date || result.call_date || metadata.callDate || '';
             const disposition = result.disposition || metadata.disposition || '';
-            const subDisposition = result.sub_disposition || metadata.sub_disposition || '';
+            const subDisposition = result.sub_disposition || metadata.subDisposition || '';
             const score = result._score || result.score || 0;
             
             // Get transcript content from various possible fields

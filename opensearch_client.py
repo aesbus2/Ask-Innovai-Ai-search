@@ -732,7 +732,7 @@ def build_safe_filter_clauses(filters: Dict[str, Any], available_fields: Dict[st
     # Call disposition filters (user selected from dropdowns)
     disposition_filters = {
         "disposition": ["metadata.disposition.keyword", "metadata.disposition"],
-        "sub_disposition": ["metadata.sub_disposition.keyword", "metadata.sub_disposition"]
+        "subDisposition": ["metadata.subDisposition.keyword", "metadata.subDisposition"]
     }
     
     for filter_key, field_options in disposition_filters.items():
@@ -760,7 +760,7 @@ def build_safe_filter_clauses(filters: Dict[str, Any], available_fields: Dict[st
     
     # Agent and language filters (user selected from dropdowns)
     agent_language_filters = {
-        "agent": ["metadata.agent.keyword", "metadata.agent"],
+        "agentName": ["metadata.agentName.keyword", "metadata.agentName"],
         "language": ["metadata.language.keyword", "metadata.language"]
     }
     
@@ -797,7 +797,7 @@ def build_safe_filter_clauses(filters: Dict[str, Any], available_fields: Dict[st
             continue
             
         # Skip filters we already handled above
-        if filter_key in ["template_name", "program", "partner", "site", "lob", "disposition", "sub_disposition", "agent", "language"]:
+        if filter_key in ["template_name", "program", "partner", "site", "lob", "disposition", "subDisposition", "agentName", "language"]:
             continue
             
         # Use safe aggregation fields for remaining filters
@@ -1192,7 +1192,7 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
                 "transcript": transcript_content,
                 "transcript_length": len(transcript_content),
                 "metadata": metadata,
-                "sub_disposition": safe_get_metadata(metadata, ["sub_disposition", "subDisposition"]),
+                "subDisposition": safe_get_metadata(metadata, ["subDisposition", "subDisposition"]),
                 "disposition": safe_get_metadata(metadata, ["disposition"]),
                 "program": safe_get_metadata(metadata, ["program"]),
                 "partner": safe_get_metadata(metadata, ["partner"]),
@@ -1269,7 +1269,7 @@ def search_transcript_with_context(query: str, evaluation_id: str,
             matches.append(match_info)
         
         return {
-            "evaluation_id": evaluation_id,
+            "evaluationId": evaluation_id,
             "template_name": hits[0]["_source"].get("template_name"),
             "query": query,
             "total_matches": len(matches),
@@ -1457,7 +1457,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
                 "transcript": transcript_content,
                 "transcript_length": len(transcript_content),
                 "metadata": metadata,
-                "sub_disposition": safe_get_metadata(metadata, ["sub_disposition", "subDisposition"]),
+                "subDisposition": safe_get_metadata(metadata, ["subDisposition", "subDisposition"]),
                 "disposition": safe_get_metadata(metadata, ["disposition"]),
                 "program": safe_get_metadata(metadata, ["program"]),
                 "partner": safe_get_metadata(metadata, ["partner"]),
@@ -1497,9 +1497,9 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             
         try:
             unique_sub_dispositions = len(set(
-                result.get("sub_disposition", "Not specified") 
+                result.get("subDisposition", "Not specified") 
                 for result in validated_results 
-                if result.get("sub_disposition") and result.get("sub_disposition") != "Not specified"
+                if result.get("subDisposition") and result.get("subDisposition") != "Not specified"
             ))
         except Exception:
             unique_sub_dispositions = 0
@@ -1602,7 +1602,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
                         "agentId": {"type": "keyword"},
                         "subDisposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "disposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "sub_disposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                        "subDisposition": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "language": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                         "call_date": {"type": "date"},
                         "call_duration": {"type": "integer"},

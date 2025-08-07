@@ -53,188 +53,82 @@ logger.info(f"   Hybrid search limit: {HYBRID_SEARCH_LIMIT}")
 logger.info(f"   Vector search limit: {VECTOR_SEARCH_LIMIT}")
 logger.info(f"   Text search limit: {TEXT_SEARCH_LIMIT}")
 
-def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
-    """
-    UPDATED: Complete metadata verification including weighted_score and url fields
-    """
-    metadata_summary = {
-        # Keep existing structure for backward compatibility
-        "dispositions": set(),
-        "sub_dispositions": set(),
-        "programs": set(),
-        "partners": set(),
-        "sites": set(),
-        "lobs": set(),
-        "agents": set(),
-        "languages": set(),
-        "call_dates": [],
-        "evaluation_ids": set(),
-        "has_real_data": False,
-        "total_evaluations": 0,
-        "total_chunks_found": 0,
-        "data_verification": "VERIFIED_REAL_DATA",
-        
-        # Essential fields tracking
-        "essential_fields": {
-            "evaluationId": set(),
-            "template_name": set(),
-            "agentName": set(),
-            "created_on": set()
-        },
-        
-        # Enhanced fields
-        "weighted_scores": set(),
-        "urls": set(),
-        "call_durations": set(),
-        "phone_numbers": set(),
-        "contact_ids": set(),
-        "ucids": set(),
-        "call_types": set(),
-        
-        # ✅ NEW: Vector search metadata
-        "vector_search_used": False,
-        "hybrid_search_used": False,
-        "search_types": set()
+def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
+    """Extract and organize metadata from search results using correct API field names"""
+    metadata = {
+        "evaluations": set(),
+        "dispositions": [],
+        "programs": [],
+        "agents": [],  # Will use agentName from API
+        "subDispositions": [],  # Will use subDisposition from API
+        "partners": [],
+        "sites": [],
+        "lobs": [],
+        "weighted_scores": [],
+        "urls": []
     }
     
-    seen_evaluation_ids = set()
+    for source in sources:
+        # Get metadata using CORRECT API field names
+        meta = source.get("metadata", {})
+        
+        # Use consistent API field names
+        if meta.get("agentName"):           # ✅ CORRECT API field
+            metadata["agents"].append(meta["agentName"])
+            
+        if meta.get("subDisposition"):     # ✅ CORRECT API field
+            metadata["subDispositions"].append(meta["subDisposition"])
+            
+        if meta.get("disposition"):
+            metadata["dispositions"].append(meta["disposition"])
+            
+        # ... etc for other fields
+    
+    return metadata
+
+def track_search_enhancements(sources: List[dict]) -> Dict[str, Any]:
+    """Track what search enhancement methods were used"""
+    search_info = {
+        "vector_search_used": False,
+        "hybrid_search_used": False,
+        "search_types": set(),
+        "vector_enhanced_count": 0
+    }
     
     for source in sources:
-        try:
-            metadata_summary["total_chunks_found"] += 1
+        search_type = source.get("search_type", "unknown")
+        search_info["search_types"].add(search_type)
+        
+        if search_type == "vector":
+            search_info["vector_search_used"] = True
+        elif search_type == "hybrid":
+            search_info["hybrid_search_used"] = True
             
-            # ✅ Track search types used
-            search_type = source.get("search_type", "unknown")
-            metadata_summary["search_types"].add(search_type)
-            
-            if search_type == "vector":
-                metadata_summary["vector_search_used"] = True
-            elif search_type in ["hybrid", "text_with_vector_fallback_v4_7_0"]:
-                metadata_summary["hybrid_search_used"] = True
-            
-            # Extract evaluation ID with better logic
-            evaluation_id = None
-            source_data = source.get("_source", source)
-            
-            # Try multiple ID field names
-            for id_field in ["evaluationId", "evaluation_id", "internalId", "internal_id"]:
-                if source_data.get(id_field):
-                    evaluation_id = source_data[id_field]
-                    break
-                if source_data.get("metadata", {}).get(id_field):
-                    evaluation_id = source_data["metadata"][id_field]
-                    break
-            
-            # Fallback for direct field access
-            if not evaluation_id and source.get("evaluationId"):
-                evaluation_id = source.get("evaluationId")
-            
-            # Count unique evaluations properly
-            if evaluation_id and evaluation_id not in seen_evaluation_ids:
-                seen_evaluation_ids.add(evaluation_id)
-                metadata_summary["total_evaluations"] += 1
-                metadata_summary["evaluation_ids"].add(evaluation_id)
-                metadata_summary["essential_fields"]["evaluationId"].add(str(evaluation_id))
-            
-            # Extract metadata with better handling
-            metadata = {}
-            if source_data.get("metadata"):
-                metadata = source_data["metadata"]
-            elif source.get("metadata"):
-                metadata = source["metadata"]
-            
-            # Extract all standard metadata fields
-            if metadata.get("disposition"):
-                metadata_summary["dispositions"].add(metadata["disposition"])
-            if metadata.get("sub_disposition"):
-                metadata_summary["sub_dispositions"].add(metadata["sub_disposition"])
-            if metadata.get("program"):
-                metadata_summary["programs"].add(metadata["program"])
-            if metadata.get("partner"):
-                metadata_summary["partners"].add(metadata["partner"])
-            if metadata.get("site"):
-                metadata_summary["sites"].add(metadata["site"])
-            if metadata.get("lob"):
-                metadata_summary["lobs"].add(metadata["lob"])
-            if metadata.get("agent"):
-                metadata_summary["agents"].add(metadata["agent"])
-                metadata_summary["essential_fields"]["agentName"].add(metadata["agent"])
-            if metadata.get("language"):
-                metadata_summary["languages"].add(metadata["language"])
-                
-            # Extract enhanced fields
-            if metadata.get("weighted_score") is not None:
-                metadata_summary["weighted_scores"].add(str(metadata["weighted_score"]))
-                
-            if metadata.get("url"):
-                metadata_summary["urls"].add(metadata["url"])
-                
-            if metadata.get("call_duration") is not None:
-                metadata_summary["call_durations"].add(str(metadata["call_duration"]))
-                
-            if metadata.get("phone_number"):
-                metadata_summary["phone_numbers"].add(metadata["phone_number"])
-                
-            if metadata.get("contact_id"):
-                metadata_summary["contact_ids"].add(metadata["contact_id"])
-                
-            if metadata.get("ucid"):
-                metadata_summary["ucids"].add(metadata["ucid"])
-                
-            if metadata.get("call_type"):
-                metadata_summary["call_types"].add(metadata["call_type"])
-            
-            # Extract template name
-            template_name = source_data.get("template_name", "Unknown Template")
-            if template_name and template_name != "Unknown Template":
-                metadata_summary["essential_fields"]["template_name"].add(template_name)
-            
-            # Extract created_on date
-            created_on = source_data.get("created_on") or metadata.get("created_on")
-            if created_on:
-                metadata_summary["essential_fields"]["created_on"].add(str(created_on))
-            
-            # Extract call dates
-            if metadata.get("call_date"):
-                metadata_summary["call_dates"].append(metadata["call_date"])
-                
-            # Mark as having real data if essential fields are present
-            if evaluation_id and template_name != "Unknown Template":
-                metadata_summary["has_real_data"] = True
-                
-        except Exception as e:
-            logger.error(f"Error processing source metadata: {e}")
-            continue
+        if source.get("vector_enhanced"):
+            search_info["vector_enhanced_count"] += 1
     
-    # Convert sets to sorted lists for consistent output
-    fields_to_convert = [
-        "dispositions", "sub_dispositions", "programs", "partners", "sites", 
-        "lobs", "agents", "languages", "weighted_scores", "urls", 
-        "call_durations", "phone_numbers", "contact_ids", "ucids", "call_types",
-        "search_types"
-    ]
+    return search_info
+
+def validate_search_results(sources: List[dict]) -> Dict[str, Any]:
+    """Validate that search results contain real, usable data"""
+    validation = {
+        "has_real_data": False,
+        "unique_evaluations": set(),
+        "data_quality_issues": []
+    }
     
-    for key in fields_to_convert:
-        metadata_summary[key] = sorted(list(metadata_summary[key]))
+    for source in sources:
+        eval_id = source.get("evaluationId")
+        template = source.get("template_name", "")
+        
+        if eval_id and template != "Unknown Template":
+            validation["has_real_data"] = True
+            validation["unique_evaluations"].add(eval_id)
     
-    metadata_summary["evaluation_ids"] = list(metadata_summary["evaluation_ids"])
+    if not validation["has_real_data"]:
+        validation["data_quality_issues"].append("No valid evaluation data found")
     
-    # Convert essential fields to lists
-    for field in metadata_summary["essential_fields"]:
-        metadata_summary["essential_fields"][field] = sorted(list(metadata_summary["essential_fields"][field]))
-    
-    # Enhanced logging for debugging (including vector search info)
-    logger.info(f"📊 COMPLETE METADATA VERIFICATION WITH VECTOR SEARCH:")
-    logger.info(f"   Total evaluations: {metadata_summary['total_evaluations']}")
-    logger.info(f"   Total chunks: {metadata_summary['total_chunks_found']}")
-    logger.info(f"   Has real data: {metadata_summary['has_real_data']}")
-    logger.info(f"    Vector search used: {metadata_summary['vector_search_used']}")
-    logger.info(f"    Hybrid search used: {metadata_summary['hybrid_search_used']}")
-    logger.info(f"   🔍 Search types: {metadata_summary['search_types']}")
-    logger.info(f"   Dispositions: {len(metadata_summary['dispositions'])}")
-    logger.info(f"   Programs: {len(metadata_summary['programs'])}")
-    
-    return metadata_summary
+    return validation
 
 def build_simplified_context(metadata_summary: Dict[str, Any], query: str) -> str:
     """
@@ -327,14 +221,14 @@ def extract_source_info(hit: dict, search_type: str) -> dict:
         score = hit.get("_score", 0)
         
         # Get evaluation ID with better extraction
-        evaluation_id = None
-        for id_field in ["evaluationId", "evaluation_id", "internalId", "internal_id"]:
+        evaluationId = None
+        for id_field in ["evaluationId", "evaluationId", "internalId",]:
             if doc.get(id_field):
-                evaluation_id = doc.get(id_field)
+                evaluationId = doc.get(id_field)
                 break
         
-        if not evaluation_id:
-            evaluation_id = f"eval_{hash(str(doc))}"
+        if not evaluationId:
+            evaluationId = f"eval_{hash(str(doc))}"
 
         # Extract text content (existing logic)
         content_text = ""
@@ -362,7 +256,7 @@ def extract_source_info(hit: dict, search_type: str) -> dict:
         metadata = doc.get("metadata", {})
         
         source_info = {
-            "evaluationId": evaluation_id,
+            "evaluationId": evaluationId,
             "text": content_text,
             "score": round(score, 3),
             "search_type": search_type,
@@ -380,14 +274,14 @@ def extract_source_info(hit: dict, search_type: str) -> dict:
                 "partner": metadata.get("partner"),
                 "site": metadata.get("site"),
                 "lob": metadata.get("lob"),
-                "agent": metadata.get("agent"),
+                "agentName": metadata.get("agentName"),
                 "disposition": metadata.get("disposition"),
-                "sub_disposition": metadata.get("sub_disposition"),
+                "subDisposition": metadata.get("subDisposition"),
                 "language": metadata.get("language"),
                 "call_date": metadata.get("call_date"),
                 "call_duration": metadata.get("call_duration"),
                 "call_type": metadata.get("call_type"),
-                "agentId": metadata.get("agentId") or metadata.get("agent_id"),
+                "agentId": metadata.get("agentId") or metadata.get("agentId"),
                 "weighted_score": metadata.get("weighted_score"),
                 "url": metadata.get("url"),
             }
@@ -576,10 +470,10 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 existing_ids = {s.get("evaluationId") for s in all_sources}
                 
                 for hit in validated_vector:
-                    evaluation_id = hit.get("evaluationId")
-                    if evaluation_id not in existing_ids:
+                    evaluationId = hit.get("evaluationId")
+                    if evaluationId not in existing_ids:
                         source_info = {
-                            "evaluationId": evaluation_id,
+                            "evaluationId": evaluationId,
                             "search_type": "vector",
                             "score": hit.get("_score", 0),
                             "template_name": hit.get("template_name", "Unknown"),
@@ -594,7 +488,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                             "best_matching_chunks": hit.get("best_matching_chunks", [])
                         }
                         all_sources.append(source_info)
-                        existing_ids.add(evaluation_id)
+                        existing_ids.add(evaluationId)
                 
                 search_methods_used.append("pure_vector")
                 
@@ -620,10 +514,10 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 existing_ids = {s.get("evaluationId") for s in all_sources}
                 
                 for hit in validated_text:
-                    evaluation_id = hit.get("evaluationId")
-                    if evaluation_id not in existing_ids:
+                    evaluationId = hit.get("evaluationId")
+                    if evaluationId not in existing_ids:
                         source_info = {
-                            "evaluationId": evaluation_id,
+                            "evaluationId": evaluationId,
                             "search_type": hit.get("search_type", "text"),
                             "score": hit.get("_score", 0),
                             "template_name": hit.get("template_name", "Unknown"),
@@ -637,7 +531,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                             "vector_enhanced": False
                         }
                         all_sources.append(source_info)
-                        existing_ids.add(evaluation_id)
+                        existing_ids.add(evaluationId)
                 
                 search_methods_used.append("enhanced_text")
                 
@@ -662,9 +556,9 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
         all_sources.sort(key=lambda x: x.get("score", 0), reverse=True)
         
         for source in all_sources[:max_results]:
-            evaluation_id = source.get("evaluationId")
-            if evaluation_id and evaluation_id not in unique_evaluations:
-                unique_evaluations.add(evaluation_id)
+            evaluationId = source.get("evaluationId")
+            if evaluationId not in unique_evaluations:
+                unique_evaluations.add(evaluationId)
                 processed_sources.append(source)
         
         # STEP 5: Build enhanced context with vector search information
@@ -733,7 +627,9 @@ EVALUATION DETAILS:
 - Template: {source.get('template_name', 'Unknown')}
 - Program: {metadata.get('program', 'Unknown')}
 - Disposition: {metadata.get('disposition', 'Unknown')}
-- Agent: {metadata.get('agent', 'Unknown')}
+- subDisposition: {metadata.get('subDisposition', 'Unknown')}
+- Partner: {metadata.get('partner', 'Unknown')}
+- Agent: {metadata.get('agentName', 'Unknown')}
 - Content: {source.get('text', '')[:200]}...
 """
             
@@ -792,7 +688,7 @@ def extract_actual_metadata_values(sources: List[dict]) -> Dict[str, List[str]]:
         
         # Only add non-empty, non-unknown values
         for field, constraint_key in [
-            ("agent", "agents"),
+            ("agentName", "agents"),
             ("disposition", "dispositions"),
             ("program", "programs"), 
             ("partner", "partners"),
@@ -918,7 +814,7 @@ def build_sources_summary_with_details(sources, filters=None):
     dates = []
     
     # Process each source
-    seen_evaluation_ids = set()
+    seen_evaluationIds = set()
 
     for source in sources:
         # ✅ Track search enhancement info
@@ -934,40 +830,37 @@ def build_sources_summary_with_details(sources, filters=None):
             hybrid_search_used = True
         
         # Get evaluation ID
-        evaluation_id = None
+        evaluationId = None
         source_data = source.get("_source", source)
         
-        for id_field in ["evaluationId", "evaluation_id", "internalId", "internal_id"]:
+        for id_field in ["evaluationId", "evaluationId", "internalId"]:
                 if source_data.get(id_field):
-                    evaluation_id = source_data[id_field]
+                    evaluationId = source_data[id_field]
                     break
                 if source_data.get("metadata", {}).get(id_field):
-                    evaluation_id = source_data["metadata"][id_field]
+                    evaluationId = source_data["metadata"][id_field]
                     break
             
-        if not evaluation_id and source.get("evaluationId"):
-            evaluation_id = source.get("evaluationId")
+        if not evaluationId and source.get("evaluationId"):
+            evaluationId = source.get("evaluationId")
         
-        if not evaluation_id:
+        if not evaluationId:
             continue
             
-        if evaluation_id in seen_evaluation_ids:
+        if evaluationId in seen_evaluationIds:
             continue
-        seen_evaluation_ids.add(evaluation_id)
-        unique_evaluations.add(evaluation_id)
+        seen_evaluationIds.add(evaluationId)
+        unique_evaluations.add(evaluationId)
         
         # Get metadata
         metadata = source.get("metadata", {})
         
         # Extract basic fields with enhanced search info
-        agent = (metadata.get("agent") or 
-                metadata.get("agentName") or 
-                source.get("agentName") or "Unknown").strip()
-        
+        agent = (metadata.get("agentName") or "Unknown").strip()        
         program = (metadata.get("program") or "Unknown").strip()
         template = (source.get("template_name") or "Unknown").strip()
-        disposition = (metadata.get("disposition") or 
-                      metadata.get("call_disposition") or "Unknown").strip()
+        disposition = (metadata.get("disposition") or "Unknown").strip()
+        subDisposition = (metadata.get("subDisposition")or "Unknown").strip()
         partner = (metadata.get("partner") or "Unknown").strip()
         site = (metadata.get("site") or "Unknown").strip()
         
@@ -995,8 +888,8 @@ def build_sources_summary_with_details(sources, filters=None):
         
         # Build evaluation detail record with search enhancement info
         evaluation_detail = {
-            "evaluation_id": evaluation_id,
-            "agent_name": agent,
+            "evaluationId": evaluationId,
+            "agentName": agent,
             "program": program,
             "template": template,
             "disposition": disposition,
@@ -1019,7 +912,7 @@ def build_sources_summary_with_details(sources, filters=None):
             unique_agents.add(agent)
             if agent not in agents_details:
                 agents_details[agent] = {
-                    "agent_name": agent,
+                    "agentName": agent,
                     "evaluation_count": 0,
                     "programs": set(),
                     "latest_date": None,
@@ -1028,7 +921,7 @@ def build_sources_summary_with_details(sources, filters=None):
                 }
             agents_details[agent]["evaluation_count"] += 1
             agents_details[agent]["programs"].add(program)
-            agents_details[agent]["evaluations"].append(evaluation_id)
+            agents_details[agent]["evaluations"].append(evaluationId)
             if metadata.get("weighted_score"):
                 try:
                     agents_details[agent]["average_score"].append(float(metadata.get("weighted_score")))
@@ -1077,8 +970,8 @@ def build_sources_summary_with_details(sources, filters=None):
                 }
             dispositions_details[disposition]["count"] += 1
             dispositions_details[disposition]["examples"].append({
-                "evaluation_id": evaluation_id,
-                "agent": agent,
+                "evaluationId": evaluationId,
+                "agentName": agent,
                 "date": formatted_date
             })
             
@@ -1086,8 +979,8 @@ def build_sources_summary_with_details(sources, filters=None):
             disposition_lower = disposition.lower()
             if any(keyword in disposition_lower for keyword in ["opportunity", "sale", "interested", "lead", "positive"]):
                 opportunities_details.append({
-                    "evaluation_id": evaluation_id,
-                    "agent": agent,
+                    "evaluationId": evaluationId,
+                    "agentName": agent,
                     "disposition": disposition,
                     "program": program,
                     "date": formatted_date,
@@ -1095,8 +988,8 @@ def build_sources_summary_with_details(sources, filters=None):
                 })
             elif any(keyword in disposition_lower for keyword in ["churn", "cancel", "disconnect", "terminate", "unsatisfied", "complaint"]):
                 churn_triggers_details.append({
-                    "evaluation_id": evaluation_id,
-                    "agent": agent,
+                    "evaluationId": evaluationId,
+                    "agentName": agent,
                     "disposition": disposition,
                     "program": program,
                     "date": formatted_date,
@@ -1143,9 +1036,9 @@ def build_sources_summary_with_details(sources, filters=None):
     
     # Convert sets to lists and calculate averages
     agents_list = []
-    for agent_name, details in agents_details.items():
+    for agentName, details in agents_details.items():
         agent_record = {
-            "agent_name": agent_name,
+            "agentName": agentName,
             "evaluation_count": details["evaluation_count"],
             "programs": list(details["programs"]),
             "average_score": round(sum(details["average_score"]) / len(details["average_score"]), 2) if details["average_score"] else "N/A",
@@ -1442,17 +1335,17 @@ Respond in a clear, professional format with specific examples from the data."""
         unique_sources = []
         seen_ids = set()
         for source in sources:
-            evaluation_id = source.get("evaluationId") or source.get("evaluation_id")
-            if evaluation_id and evaluation_id not in seen_ids:
+            evaluationId = source.get("evaluationId") or source.get("evaluationId")
+            if evaluationId not in seen_ids:
                 unique_sources.append({
-                    "evaluationId": evaluation_id,
+                    "evaluationId": evaluationId,
                     "template_name": source.get("template_name", "Unknown"),
                     "search_type": source.get("search_type", "text"),
                     "score": source.get("score", 0),
                     "vector_enhanced": source.get("vector_enhanced", False),  # ✅ NEW
                     "metadata": source.get("metadata", {})
                 })
-                seen_ids.add(evaluation_id)
+                seen_ids.add(evaluationId)
 
         # STEP 6: Build sources summary with vector search enhancement details
         sources_data = build_sources_summary_with_details(unique_sources, req.filters)
