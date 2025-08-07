@@ -1069,7 +1069,7 @@ def safe_int(value, default=0):
 
 def generate_agent_id(agentName):
     """PRODUCTION: Generate consistent agent ID from agent name"""
-    if not agentName .strip().lower() in ["unknown", "null", ""]:
+    if not agentName.strip().lower() in ["unknown", "null", ""]:
         return "00000000"
     
     try:
@@ -2804,7 +2804,7 @@ async def get_opensearch_statistics():
                     statistics["subDispositions"].add(sub_disp)
                     
                 # Handle both agent and agentName
-                agent = metadata.get("agentName") or metadata.get("agentName")
+                agent = metadata.get("agentName")
                 if agent:
                     statistics["agents"].add(agent)
                     
