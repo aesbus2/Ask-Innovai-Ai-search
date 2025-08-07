@@ -1,89 +1,47 @@
 # Python version requirement: 3.11+
-# Enhanced requirements.txt for Ask InnovAI with Vector Search & Memory Management
-# Version: 5.0.0 - Production-ready with all dependencies fixed
-# Last Updated: January 2025
+# Enhanced requirements.txt for Ask InnovAI with Memory Management and Digital Ocean AI
+# Version: 4.8.0 - Fixed missing transformers dependency for embedder
 
-# ==============================================================================
-# CORE WEB FRAMEWORK (Required)
-# ==============================================================================
-fastapi>=0.110.0,<0.112.0  # Pinned to minor version for stability
-uvicorn[standard]>=0.27.1,<0.30.0
+# Core web framework (required)
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.1
 python-dotenv>=1.0.1
 python-multipart>=0.0.9
-aiofiles>=23.2.1  # MISSING - Required for async file operations in app.py
 
-# ==============================================================================
-# HTTP CLIENTS (Required)
-# ==============================================================================
-requests>=2.31.0,<3.0.0
-aiohttp>=3.9.0,<4.0.0  # Updated from 3.8.0
-httpx>=0.24.1,<1.0.0  # MISSING - Recommended for OpenAI SDK
+# HTTP client for API requests (required)
+requests>=2.31.0
 
-# ==============================================================================
-# AI/ML STACK (Required for Vector Search)
-# ==============================================================================
-# OpenAI for Digital Ocean AI Agent
-openai>=1.30.0,<2.0.0
+# AI and embeddings (required for your use case)
+sentence-transformers>=3.0.0
+transformers>=4.30.0  # ADDED - Required by sentence-transformers
+torch>=2.0.0
+numpy>=1.22.0
 
-# Embeddings stack with compatible versions
-sentence-transformers>=3.0.0,<3.1.0
-transformers>=4.36.0,<5.0.0  # Updated from 4.30.0
-torch>=2.1.0,<2.3.0  # Updated from 2.0.0 for better stability
-numpy>=1.24.0,<1.27.0  # Updated from 1.22.0 - compatible with torch
-scipy>=1.11.0,<2.0.0  # MISSING - Required by sentence-transformers
+# OpenAI client for Digital Ocean AI Agent (REQUIRED)
+openai>=1.30.0
 
-# Model management
-tokenizers>=0.15.0,<0.16.0  # Updated from 0.13.0
-safetensors>=0.4.0,<0.5.0  # Updated from 0.3.0
-huggingface-hub>=0.20.0,<1.0.0  # Updated from 0.16.0
+# OpenSearch for vector database (required)
+opensearch-py>=2.4.0
 
-# ==============================================================================
-# DATABASE (Required)
-# ==============================================================================
-opensearch-py>=2.4.0,<3.0.0
+# HTML parsing and text processing (required)
+beautifulsoup4>=4.12.0
 
-# ==============================================================================
-# DATA PROCESSING (Required)
-# ==============================================================================
-pydantic>=2.5.0,<3.0.0  # Updated from 2.0.0
-beautifulsoup4>=4.12.0,<5.0.0
-lxml>=4.9.3,<5.0.0  # MISSING - Speeds up BeautifulSoup4
+# System monitoring and memory management (REQUIRED for enhanced features)
+psutil>=5.9.0
 
-# ==============================================================================
-# SYSTEM MONITORING (Required)
-# ==============================================================================
-psutil>=5.9.6,<6.0.0  # Updated from 5.9.0
+# Data processing utilities
+pydantic>=2.0.0
 
-# ==============================================================================
-# ASYNC & RATE LIMITING (Required for Production)
-# ==============================================================================
-asyncio-throttle>=1.0.0,<2.0.0
-anyio>=4.2.0,<5.0.0  # MISSING - Better async compatibility
+# Additional dependencies for production stability
+asyncio-throttle>=1.0.0  # For rate limiting (optional)
+aiohttp>=3.8.0
 
-# ==============================================================================
-# OPTIONAL BUT RECOMMENDED
-# ==============================================================================
-# Uncomment these for better performance:
-# orjson>=3.9.10  # 10x faster JSON serialization
-# python-json-logger>=2.0.7  # Structured logging
-# prometheus-client>=0.19.0  # Metrics collection
+# Additional dependencies that may be needed for embedder
+tokenizers>=0.13.0  # ADDED - Required by transformers
+safetensors>=0.3.0  # ADDED - For safe model loading
+huggingface-hub>=0.16.0  # ADDED - For model downloads
 
-# ==============================================================================
-# NOTES
-# ==============================================================================
-# Installation:
-#   pip install --no-cache-dir -r requirements.txt
-#
-# For GPU support (faster embeddings):
-#   pip uninstall torch
-#   pip install torch --index-url https://download.pytorch.org/whl/cu118
-#
-# Memory requirements:
-#   - Minimum: 4GB RAM
-#   - Recommended: 8GB+ RAM for vector operations
-#   - Disk: ~3-5GB for all dependencies
-#
-# Known issues:
-#   - If sentence-transformers fails, install without deps first:
-#     pip install sentence-transformers --no-deps
-#     pip install -r requirements.txt
+# Note: Install with: pip install -r requirements.txt
+# psutil is required for memory monitoring in app.py
+# openai is required for Digital Ocean AI Agent authentication
+# transformers is REQUIRED for sentence-transformers embedder functionality
