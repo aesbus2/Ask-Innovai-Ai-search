@@ -7,7 +7,6 @@ import os
 import logging
 import requests
 import asyncio
-import json
 import sys
 import re
 import time
@@ -642,7 +641,7 @@ async def get_vector_status_simple():
 async def serve_chat_ui():
     try:
         return FileResponse("static/chat.html")
-    except:
+    except Exception:
         return HTMLResponse(content="<h1>Chat interface not found</h1><p>Please ensure static/chat.html exists.</p>")
 
 @app.get("/search")
@@ -675,6 +674,8 @@ async def search_endpoint(q: str = Query(..., description="Search query")):
             "query": q,
             "results": []
         }
+    
+    
 # Standard transcript search (quick, limited results)
 @app.post("/search_transcripts")
 async def search_transcripts_endpoint(request: Request):
@@ -1069,7 +1070,7 @@ def safe_int(value, default=0):
 
 def generate_agent_id(agentName):
     """PRODUCTION: Generate consistent agent ID from agent name"""
-    if not agentName.strip().lower() in ["unknown", "null", ""]:
+    if agentName.strip().lower() not in ["unknown", "null", ""]:
         return "00000000"
     
     try:
@@ -2117,7 +2118,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
         comprehensive_metadata = extract_comprehensive_metadata(evaluation)
         
         # Validation
-        evaluationId =evaluation.get("evaluationId")
+        evaluationId = evaluation.get("evaluationId")
         if not evaluationId:
             return {"status": "skipped", "reason": "missing_eval_id"}
         
@@ -2778,7 +2779,7 @@ async def get_opensearch_statistics():
                 metadata = source.get("metadata", {})
                 
                 # Track unique evaluations
-                evaluationId =source.get("evaluationId") or source.get("internalId")
+                evaluationId = source.get("evaluationId") or source.get("internalId")
                 if evaluationId:
                     evaluations_sampled.add(evaluationId)
                 
@@ -4258,7 +4259,7 @@ async def debug_verify_metadata_alignment():
         for hit in hits:
             source = hit.get("_source", {})
             metadata = source.get("metadata", {})
-            evaluationId =source.get("evaluationId")
+            evaluationId = source.get("evaluationId")
             
             # Track unique evaluations vs total hits
             if evaluationId:
@@ -4480,7 +4481,7 @@ async def debug_test_disposition_search(query: str = "call dispositions"):
         
         # Analyze sources with correct counting
         for i, source in enumerate(sources[:5]):
-            evaluationId =source.get("evaluationId")
+            evaluationId = source.get("evaluationId")
             if evaluationId:
                 analysis["unique_evaluations_found"].add(evaluationId)
                 

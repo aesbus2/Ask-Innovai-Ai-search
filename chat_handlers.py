@@ -1,6 +1,6 @@
 # chat_handlers.py - VERSION 5.1.1 - VECTOR SEARCH ENABLED
 # updated ensure_vector_mapping_exists to not try and update KNN if it already exists 7-23-25
-#updated  build_search_context to use a new function to remove filoations in search filters
+#updated  build_search_context to use a new function to remove viloations in search filters
 # added strict metadata verification to ensure all results comply with filters
 #added helper function extract_actual_metadata_values
 
@@ -47,7 +47,7 @@ HYBRID_SEARCH_LIMIT = int(os.getenv("HYBRID_SEARCH_LIMIT", "150"))  # No artific
 VECTOR_SEARCH_LIMIT = int(os.getenv("VECTOR_SEARCH_LIMIT", "100"))  # No artificial 20 limit  
 TEXT_SEARCH_LIMIT = int(os.getenv("TEXT_SEARCH_LIMIT", "100"))    # No artificial 30 limit
 
-logger.info(f"📊 CHAT SEARCH CONFIGURATION:")
+
 logger.info(f"   Max total results: {CHAT_MAX_RESULTS}")
 logger.info(f"   Hybrid search limit: {HYBRID_SEARCH_LIMIT}")
 logger.info(f"   Vector search limit: {VECTOR_SEARCH_LIMIT}")
@@ -59,30 +59,127 @@ def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
         "evaluations": set(),
         "dispositions": [],
         "programs": [],
-        "agents": [],  # Will use agentName from API
-        "subDispositions": [],  # Will use subDisposition from API
+        "agents": [],
+        "subDispositions": [],
         "partners": [],
         "sites": [],
         "lobs": [],
         "weighted_scores": [],
-        "urls": []
+        "urls": [],
+        "call_durations": [],
+        "call_dates": [],
+        "languages": [],
+        "call_types": [],
+        "template_names": set(),
+        "agent_ids": set()
     }
     
     for source in sources:
         # Get metadata using CORRECT API field names
         meta = source.get("metadata", {})
         
-        # Use consistent API field names
-        if meta.get("agentName"):           # ✅ CORRECT API field
+        # Get evaluation ID (primary identifier)
+        eval_id = source.get("evaluationId") or source.get("internalId")
+        if eval_id:
+            metadata["evaluations"].add(eval_id)
+        
+        # Agent information
+        if meta.get("agentName"):
             metadata["agents"].append(meta["agentName"])
-            
-        if meta.get("subDisposition"):     # ✅ CORRECT API field
-            metadata["subDispositions"].append(meta["subDisposition"])
-            
+        
+        if meta.get("agentId"):
+            metadata["agent_ids"].add(meta["agentId"])
+        
+        # Disposition information
         if meta.get("disposition"):
             metadata["dispositions"].append(meta["disposition"])
-            
-        # ... etc for other fields
+        
+        if meta.get("subDisposition"):
+            metadata["subDispositions"].append(meta["subDisposition"])
+        
+        # Program information
+        if meta.get("program"):
+            metadata["programs"].append(meta["program"])
+        
+        # Partner and site information
+        if meta.get("partner"):
+            metadata["partners"].append(meta["partner"])
+        
+        if meta.get("site"):
+            metadata["sites"].append(meta["site"])
+        
+        # LOB (Line of Business) information
+        if meta.get("lob"):
+            metadata["lobs"].append(meta["lob"])
+        
+        # Score information
+        if meta.get("weighted_score"):
+            try:
+                score = float(meta["weighted_score"])
+                metadata["weighted_scores"].append(score)
+            except (ValueError, TypeError):
+                # Skip invalid scores
+                pass
+        
+        # URL information
+        if meta.get("url"):
+            metadata["urls"].append(meta["url"])
+        
+        # Call information
+        if meta.get("call_duration"):
+            metadata["call_durations"].append(meta["call_duration"])
+        
+        if meta.get("call_date"):
+            metadata["call_dates"].append(meta["call_date"])
+        
+        if meta.get("language"):
+            metadata["languages"].append(meta["language"])
+        
+        if meta.get("call_type"):
+            metadata["call_types"].append(meta["call_type"])
+        
+        # Template information from source level (not just metadata)
+        if source.get("template_name"):
+            metadata["template_names"].add(source["template_name"])
+    
+    # Convert sets to lists for JSON serialization
+    metadata["evaluations"] = list(metadata["evaluations"])
+    metadata["template_names"] = list(metadata["template_names"])
+    metadata["agent_ids"] = list(metadata["agent_ids"])
+    
+    # Remove duplicates from lists while preserving order
+    for key in ["dispositions", "programs", "agents", "subDispositions", 
+                "partners", "sites", "lobs", "languages", "call_types"]:
+        if metadata[key]:
+            # Preserve order while removing duplicates
+            seen = set()
+            unique_list = []
+            for item in metadata[key]:
+                if item not in seen and item not in ["Unknown", "unknown", "", None]:
+                    seen.add(item)
+                    unique_list.append(item)
+            metadata[key] = unique_list
+    
+    # Calculate statistics for numeric fields
+    if metadata["weighted_scores"]:
+        metadata["score_stats"] = {
+            "min": min(metadata["weighted_scores"]),
+            "max": max(metadata["weighted_scores"]),
+            "avg": sum(metadata["weighted_scores"]) / len(metadata["weighted_scores"]),
+            "count": len(metadata["weighted_scores"])
+        }
+    
+    # Add summary counts
+    metadata["summary"] = {
+        "total_evaluations": len(metadata["evaluations"]),
+        "unique_agents": len(metadata["agents"]),
+        "unique_programs": len(metadata["programs"]),
+        "unique_dispositions": len(metadata["dispositions"]),
+        "unique_partners": len(metadata["partners"]),
+        "unique_sites": len(metadata["sites"]),
+        "has_scores": len(metadata["weighted_scores"]) > 0,
+        "has_urls": len(metadata["urls"]) > 0
+    }
     
     return metadata
 
@@ -222,7 +319,7 @@ def extract_source_info(hit: dict, search_type: str) -> dict:
         
         # Get evaluation ID with better extraction
         evaluationId = None
-        for id_field in ["evaluationId", "evaluationId", "internalId",]:
+        for id_field in ["evaluationId", "internalId",]:
             if doc.get(id_field):
                 evaluationId = doc.get(id_field)
                 break
@@ -314,8 +411,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
     """
     if max_results is None:
         max_results = CHAT_MAX_RESULTS
-
-    logger.info(f"🔍 BUILDING ENHANCED SEARCH CONTEXT WITH VECTOR SEARCH + FILTER VALIDATION")
+    
     logger.info(f"📋 Query: '{query}'")
     logger.info(f"🏷️ Filters: {filters}")
     logger.info(f"📊 Max results: {max_results}")
@@ -670,6 +766,195 @@ If information is not available in these {len(processed_sources)} evaluations, s
         logger.error(f"❌ ENHANCED SEARCH CONTEXT BUILD FAILED: {e}")
         return create_empty_search_context("system_error", str(e)), []
 
+def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
+    """
+    Verify that metadata across sources is properly aligned and consistent.
+    This function ensures data integrity and identifies any misalignment issues.
+    
+    Args:
+        sources: List of search result dictionaries
+        
+    Returns:
+        Dictionary containing verification results and essential fields
+    """
+    # Extract comprehensive metadata first
+    metadata = extract_search_metadata(sources)
+    
+    # Initialize verification results
+    verification = {
+        "has_real_data": False,
+        "total_evaluations": 0,
+        "total_chunks_found": len(sources),
+        "unique_evaluations": set(),
+        "data_consistency": {},
+        "essential_fields": {
+            "evaluationId": [],
+            "template_name": [],
+            "agentName": [],
+            "created_on": []
+        },
+        "metadata_coverage": {},
+        "alignment_issues": [],
+        "data_verification": "NO_DATA"
+    }
+    
+    # Track unique evaluations and their metadata consistency
+    evaluation_metadata_map = {}
+    
+    for source in sources:
+        # Get evaluation ID
+        eval_id = (source.get("evaluationId") or 
+                  source.get("internalId") or
+                  source.get("metadata", {}).get("evaluationId"))
+        
+        if not eval_id:
+            verification["alignment_issues"].append("Source without evaluation ID found")
+            continue
+        
+        verification["unique_evaluations"].add(eval_id)
+        
+        # Track essential fields
+        if eval_id not in verification["essential_fields"]["evaluationId"]:
+            verification["essential_fields"]["evaluationId"].append(eval_id)
+        
+        # Get metadata
+        meta = source.get("metadata", {})
+        
+        # Track template names
+        template = source.get("template_name", "")
+        if template and template != "Unknown Template":
+            if template not in verification["essential_fields"]["template_name"]:
+                verification["essential_fields"]["template_name"].append(template)
+        
+        # Track agent names
+        agent = meta.get("agentName", "")
+        if agent and agent != "Unknown":
+            if agent not in verification["essential_fields"]["agentName"]:
+                verification["essential_fields"]["agentName"].append(agent)
+        
+        # Track dates
+        date_field = (source.get("created_on") or 
+                     meta.get("created_on") or 
+                     meta.get("call_date"))
+        if date_field:
+            if date_field not in verification["essential_fields"]["created_on"]:
+                verification["essential_fields"]["created_on"].append(date_field)
+        
+        # Check metadata consistency for same evaluation ID
+        if eval_id not in evaluation_metadata_map:
+            evaluation_metadata_map[eval_id] = {
+                "program": meta.get("program"),
+                "partner": meta.get("partner"),
+                "agent": meta.get("agentName"),
+                "disposition": meta.get("disposition"),
+                "template": template,
+                "sources_count": 1
+            }
+        else:
+            # Check if metadata is consistent across chunks of same evaluation
+            existing = evaluation_metadata_map[eval_id]
+            existing["sources_count"] += 1
+            
+            # Check for inconsistencies
+            if meta.get("program") != existing["program"]:
+                verification["alignment_issues"].append(
+                    f"Inconsistent program for {eval_id}: '{meta.get('program')}' vs '{existing['program']}'"
+                )
+            if meta.get("agentName") != existing["agent"]:
+                verification["alignment_issues"].append(
+                    f"Inconsistent agent for {eval_id}: '{meta.get('agentName')}' vs '{existing['agent']}'"
+                )
+            if template != existing["template"]:
+                verification["alignment_issues"].append(
+                    f"Inconsistent template for {eval_id}: '{template}' vs '{existing['template']}'"
+                )
+    
+    # Calculate metadata coverage (what percentage of sources have each field)
+    total_sources = len(sources)
+    if total_sources > 0:
+        fields_to_check = ["program", "partner", "agentName", "disposition", 
+                          "subDisposition", "weighted_score", "call_duration"]
+        
+        for field in fields_to_check:
+            count = sum(1 for s in sources if s.get("metadata", {}).get(field))
+            verification["metadata_coverage"][field] = {
+                "count": count,
+                "percentage": round((count / total_sources) * 100, 1)
+            }
+    
+    # Determine data verification status
+    verification["total_evaluations"] = len(verification["unique_evaluations"])
+    
+    # Check if we have real, usable data
+    has_evaluations = verification["total_evaluations"] > 0
+    has_agents = len(verification["essential_fields"]["agentName"]) > 0
+    has_templates = len(verification["essential_fields"]["template_name"]) > 0
+    has_minimal_metadata = any(
+        cov["percentage"] > 50 
+        for cov in verification["metadata_coverage"].values()
+    )
+    
+    verification["has_real_data"] = (
+        has_evaluations and 
+        has_agents and 
+        has_templates and 
+        has_minimal_metadata
+    )
+    
+    if verification["has_real_data"]:
+        verification["data_verification"] = "VERIFIED_REAL_DATA"
+    elif has_evaluations:
+        verification["data_verification"] = "PARTIAL_DATA"
+    else:
+        verification["data_verification"] = "NO_DATA"
+    
+    # Add consistency scores
+    if evaluation_metadata_map:
+        multi_source_evals = [
+            eval_id for eval_id, data in evaluation_metadata_map.items() 
+            if data["sources_count"] > 1
+        ]
+        
+        verification["data_consistency"] = {
+            "evaluations_with_multiple_sources": len(multi_source_evals),
+            "alignment_issues_count": len(verification["alignment_issues"]),
+            "consistency_score": round(
+                (1 - len(verification["alignment_issues"]) / max(len(sources), 1)) * 100, 1
+            )
+        }
+    
+    # Include metadata summary from extract_search_metadata
+    verification.update({
+        "dispositions": metadata.get("dispositions", []),
+        "programs": metadata.get("programs", []),
+        "partners": metadata.get("partners", []),
+        "sites": metadata.get("sites", []),
+        "weighted_scores": metadata.get("weighted_scores", []),
+        "urls": metadata.get("urls", []),
+        "call_durations": metadata.get("call_durations", []),
+        "vector_search_used": metadata.get("vector_enhanced_count", 0) > 0,
+        "hybrid_search_used": "hybrid" in metadata.get("search_types", []),
+        "search_types": list(set(metadata.get("search_types", [])))
+    })
+    
+    # Log verification results
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info("📊 Metadata Verification Complete:")
+    logger.info(f"   - Total evaluations: {verification['total_evaluations']}")
+    logger.info(f"   - Data verification: {verification['data_verification']}")
+    logger.info(f"   - Consistency score: {verification['data_consistency'].get('consistency_score', 0)}%")
+    logger.info(f"   - Alignment issues: {len(verification['alignment_issues'])}")
+    
+    if verification["alignment_issues"]:
+        logger.warning(f"⚠️ Found {len(verification['alignment_issues'])} alignment issues")
+        for issue in verification["alignment_issues"][:3]:  # Log first 3 issues
+            logger.warning(f"   - {issue}")
+    
+    return verification
+
+
 def extract_actual_metadata_values(sources: List[dict]) -> Dict[str, List[str]]:
     """
     Extract the actual metadata values that AI is allowed to use
@@ -860,7 +1145,6 @@ def build_sources_summary_with_details(sources, filters=None):
         program = (metadata.get("program") or "Unknown").strip()
         template = (source.get("template_name") or "Unknown").strip()
         disposition = (metadata.get("disposition") or "Unknown").strip()
-        subDisposition = (metadata.get("subDisposition")or "Unknown").strip()
         partner = (metadata.get("partner") or "Unknown").strip()
         site = (metadata.get("site") or "Unknown").strip()
         
@@ -1266,7 +1550,7 @@ Respond in a clear, professional format with specific examples from the data."""
                 continue
         
         if not genai_response or not genai_response.ok:
-            error_text = genai_response.text() if genai_response else "No response"
+            error_text = genai_response.text if genai_response else "No response"
             logger.error(f"❌ All Llama API URLs failed. Last error: {error_text[:500]}")
             
             return JSONResponse(
