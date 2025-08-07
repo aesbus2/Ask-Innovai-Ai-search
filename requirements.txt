@@ -14,7 +14,8 @@ requests>=2.31.0
 # AI and embeddings (required for your use case)
 sentence-transformers>=3.0.0
 transformers>=4.30.0  # ADDED - Required by sentence-transformers
-torch>=2.0.0
+torch==2.8.0+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
 numpy>=1.22.0
 
 # OpenAI client for Digital Ocean AI Agent (REQUIRED)
