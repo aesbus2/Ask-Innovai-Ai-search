@@ -1451,10 +1451,51 @@ async def relay_chat_rag(request: Request):
 
         # STEP 1: Build context with VECTOR SEARCH integration
         context, sources = build_search_context(req.message, req.filters, max_results=CHAT_MAX_RESULTS)
-        
+
         logger.info(f"📋 ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
-        if not context:
-            logger.warning("⚠️ NO CONTEXT FOUND - Chat will use general knowledge only")
+
+        # ❌ BLOCK hallucinated responses if no real data
+        if not context or not sources:
+            logger.warning("⛔ No context found — skipping LLM and returning no-data message.")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "reply": "⚠️ No relevant evaluation data was found for your query. Please adjust your filters or try a different question.",
+                    "sources_summary": {
+                        "evaluations": 0,
+                        "agents": 0,
+                        "date_range": "No data",
+                        "opportunities": 0,
+                        "churn_triggers": 0,
+                        "programs": 0,
+                        "templates": 0,
+                        "dispositions": 0,
+                        "partners": 0,
+                        "sites": 0,
+                        "vector_enhanced": 0,
+                        "search_methods": []
+                    },
+                    "sources_details": {},
+                    "sources_totals": {},
+                    "sources": [],
+                    "search_enhancement": {
+                        "vector_search_used": True,
+                        "hybrid_search_used": False,
+                        "search_quality": "none"
+                    },
+                    "timestamp": datetime.now().isoformat(),
+                    "filter_context": req.filters,
+                    "search_metadata": {
+                        "vector_search_enabled": True,
+                        "context_found": False,
+                        "context_length": 0,
+                        "model": "llama-3.1-8b-instruct",
+                        "version": "4.8.0_vector_enabled",
+                        "note": "Blocked LLM due to missing OpenSearch context"
+                    }
+                }
+            )
+
         
         # STEP 2: Enhanced system message with vector search awareness
         system_message = f"""You are an AI assistant for call center evaluation data analysis. Analyze the provided evaluation data carefully and provide actionable insights.

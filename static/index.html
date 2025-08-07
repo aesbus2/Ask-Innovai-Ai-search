@@ -7,6 +7,27 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
     <link rel="stylesheet" href="/static/styles.css" />
 </head>
+<script>
+  async function fetchEvaluationStats() {
+    try {
+      const res = await fetch("/analytics/stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filters: {} })
+      });
+
+      const data = await res.json();
+      const count = data?.totalRecords ?? 0;
+      document.getElementById("eval-count").textContent = count.toLocaleString();
+    } catch (err) {
+      document.getElementById("eval-count").textContent = "Error";
+      console.error("Error fetching stats:", err);
+    }
+  }
+
+  // Load on page load
+  window.addEventListener("DOMContentLoaded", fetchEvaluationStats);
+</script>
 <body>
     <div class="container">
         <div class="header">
@@ -24,6 +45,14 @@
                     <div class="loading-stats">
                         <div class="spinner"></div>
                         Loading database statistics...
+                    </div>
+                    <div id="evalCountBox">
+                    <strong>📊 Total Evaluations in OpenSearch:</strong>
+                    <span id="eval-count">Loading...</span>
+                </div>
+                    <div id="evalStatsBox" class="hidden">
+                        <strong>📈 Evaluation Statistics:</strong>
+                        <ul id="evalStatsList"></ul>
                     </div>
                 </div>
             </div>

@@ -602,9 +602,9 @@ async function sendMessageWithTranscriptSearch() {
         const requestBody = {
             query: message,
             filters: currentFilters || {},
-            display_size: useComprehensive ? 100 : 75,  // INCREASED from 20 to 75/100
-            size: useComprehensive ? 100 : 75,          // Also set size parameter
-            max_scan: useComprehensive ? 25000 : 10000, // Increased scan limit
+            display_size: useComprehensive ? 1000 : 1000,  
+            size: useComprehensive ? 1000 : 1000,          
+            max_scan: useComprehensive ? 25000 : 10000, 
             highlight: true
         };
         
