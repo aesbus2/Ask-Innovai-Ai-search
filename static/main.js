@@ -721,13 +721,13 @@ This will fetch evaluation data from your API and index it for search and chat.`
 
     
     try {
-        const response = await fetch("/import", {
+        const response = await fetch("/api/import", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(config)
         });
 
-        console.log("📡 POST request sent to: /import");
+        console.log("📡 POST request sent to: /api/import");
 
         const text = await response.text();
         console.log("📥 Raw response:", text);
@@ -922,7 +922,7 @@ function stopPolling() {
 
 async function checkImportStatus() {
     try {
-        const response = await fetch('/import_status');
+        const response = await fetch('/api/import_status');
         
         if (!response.ok) {
             console.warn(`⚠️ Status check returned ${response.status}`);
@@ -1338,7 +1338,7 @@ async function checkLastImportInfo() {
     `;
     
     try {
-        const response = await fetch('/import_info');
+        const response = await fetch('/api/import_info');
         const data = await response.json();
         
         console.log("📊 Import info response:", data);

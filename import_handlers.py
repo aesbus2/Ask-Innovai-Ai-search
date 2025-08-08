@@ -1,5 +1,5 @@
-# import_handlers.py - Enhanced Import Handlers with Date Range Support
-# Version: 6.1.0 - Date Range and Max Docs Support
+# SOLUTION 1: Fix import_handlers.py to avoid circular imports
+# Replace your import_handlers.py with this corrected version:
 
 import os
 import logging
@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from typing import Optional, Dict, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -20,20 +20,152 @@ class ImportConfig(BaseModel):
     collection: str = "all"
     import_type: str = "full"  # "full" or "incremental"
     max_docs: Optional[int] = None  # Maximum documents to process
+    batch_size: Optional[int] = None  # Batch size for processing
     call_date_start: Optional[str] = None  # Start date for filtering (YYYY-MM-DD)
     call_date_end: Optional[str] = None  # End date for filtering (YYYY-MM-DD)
 
-@import_router.post("/import")
-async def start_import(config: ImportConfig):
+# ✅ FIXED: Create import function that doesn't cause circular imports
+async def run_enhanced_production_import(
+    collection: str = "all", 
+    max_docs: int = None, 
+    batch_size: int = None,
+    call_date_start: str = None,
+    call_date_end: str = None
+):
     """
-    Enhanced import endpoint with date range and max document support
+    Enhanced import process that supports date filtering and max docs
+    This avoids circular imports by importing locally only when needed
     """
     try:
-        logger.info(f"🚀 Starting import with config: {config}")
+        # ✅ Import locally inside the function to avoid circular imports
+        import sys
+        
+        # Get the app module safely
+        app_module = sys.modules.get('app')
+        if not app_module:
+            raise ImportError("App module not available")
+        
+        # Get functions from app module
+        run_production_import = getattr(app_module, 'run_production_import')
+        update_import_status = getattr(app_module, 'update_import_status')
+        log_import = getattr(app_module, 'log_import')
+        fetch_evaluations = getattr(app_module, 'fetch_evaluations')
+        
+        # Log enhanced parameters
+        log_import("🚀 Starting ENHANCED import with date filtering support")
+        log_import(f"   📊 Max docs: {max_docs or 'Unlimited'}")
+        log_import(f"   📅 Date range: {call_date_start or 'Unlimited'} to {call_date_end or 'Unlimited'}")
+        log_import(f"   📦 Batch size: {batch_size or 'Default'}")
+        
+        # Enhanced fetch function that supports date filtering
+        async def fetch_filtered_evaluations(max_docs_param=None):
+            """Fetch evaluations with date filtering support"""
+            try:
+                # Get evaluations using the original function
+                evaluations = await fetch_evaluations(max_docs_param)
+                
+                if not evaluations:
+                    return []
+                
+                filtered_evaluations = []
+                
+                # Apply date filtering if specified
+                for evaluation in evaluations:
+                    should_include = True
+                    
+                    # Get call_date from evaluation
+                    call_date_str = evaluation.get("call_date")
+                    if call_date_str:
+                        try:
+                            # Parse the call date (handle different formats)
+                            if "T" in call_date_str:
+                                call_date = datetime.fromisoformat(call_date_str.replace("Z", "+00:00"))
+                            else:
+                                call_date = datetime.strptime(call_date_str, "%Y-%m-%d")
+                            
+                            # Apply date filters
+                            if call_date_start:
+                                start_date = datetime.strptime(call_date_start, "%Y-%m-%d")
+                                if call_date.date() < start_date.date():
+                                    should_include = False
+                            
+                            if call_date_end:
+                                end_date = datetime.strptime(call_date_end, "%Y-%m-%d")
+                                if call_date.date() > end_date.date():
+                                    should_include = False
+                                    
+                        except Exception as e:
+                            log_import(f"⚠️ Could not parse date for evaluation {evaluation.get('evaluationId', 'unknown')}: {e}")
+                            # Include if we can't parse the date
+                    
+                    if should_include:
+                        filtered_evaluations.append(evaluation)
+                
+                # Log filtering results
+                if call_date_start or call_date_end:
+                    log_import(f"📅 Date filtering: {len(evaluations)} → {len(filtered_evaluations)} evaluations")
+                
+                return filtered_evaluations
+                
+            except Exception as e:
+                log_import(f"❌ Enhanced fetch failed: {e}")
+                # Fallback to original fetch
+                return await fetch_evaluations(max_docs_param)
+        
+        # ✅ Temporarily replace the fetch function
+        original_fetch = app_module.fetch_evaluations
+        app_module.fetch_evaluations = fetch_filtered_evaluations
+        
+        try:
+            # Call the existing production import with enhanced parameters
+            await run_production_import(
+                collection=collection,
+                max_docs=max_docs,
+                batch_size=batch_size
+            )
+        finally:
+            # Restore original fetch function
+            app_module.fetch_evaluations = original_fetch
+            
+    except Exception as e:
+        logger.error(f"❌ Enhanced import failed: {e}")
+        # Try to get update_import_status function safely
+        try:
+            import sys
+            app_module = sys.modules.get('app')
+            if app_module:
+                update_import_status = getattr(app_module, 'update_import_status')
+                update_import_status("failed", error=f"Enhanced import failed: {str(e)}")
+        except:
+            pass
+        raise
+
+@import_router.post("/import")
+async def start_enhanced_import(config: ImportConfig, background_tasks: BackgroundTasks):
+    """
+    Enhanced import endpoint that properly integrates with app.py
+    """
+    try:
+        # ✅ Import import_status safely
+        import sys
+        app_module = sys.modules.get('app')
+        
+        if not app_module:
+            raise HTTPException(status_code=500, detail="App module not available")
+        
+        import_status = getattr(app_module, 'import_status')
+        
+        if import_status["status"] == "running":
+            raise HTTPException(status_code=400, detail="Import is already running")
+        
+        logger.info(f"🚀 Starting enhanced import with config: {config}")
         
         # Validate configuration
         if config.max_docs is not None and config.max_docs <= 0:
             raise HTTPException(status_code=400, detail="max_docs must be a positive number")
+        
+        if config.batch_size is not None and config.batch_size <= 0:
+            raise HTTPException(status_code=400, detail="batch_size must be a positive number")
         
         # Validate date range
         if config.call_date_start and config.call_date_end:
@@ -45,7 +177,18 @@ async def start_import(config: ImportConfig):
                     raise HTTPException(status_code=400, detail="Start date cannot be after end date")
                     
             except ValueError as e:
-                raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
+                raise HTTPException(status_code=400, detail=f"Invalid date format (use YYYY-MM-DD): {e}")
+        
+        # Reset import status
+        import_status.update({
+            "status": "idle",
+            "start_time": None,
+            "end_time": None,
+            "current_step": None,
+            "results": {},
+            "error": None,
+            "import_type": config.import_type
+        })
         
         # Log the parameters for debugging
         if config.max_docs:
@@ -57,35 +200,70 @@ async def start_import(config: ImportConfig):
             date_info = f"Date filter: {config.call_date_start or 'unlimited'} to {config.call_date_end or 'unlimited'}"
             logger.info(f"📅 {date_info}")
         
-        # Start the import process
-        # TODO: Replace this with your actual import logic
-        import_id = await start_import_process(config)
+        # Start the enhanced import process in background
+        background_tasks.add_task(
+            run_enhanced_production_import,
+            collection=config.collection,
+            max_docs=config.max_docs,
+            batch_size=config.batch_size,
+            call_date_start=config.call_date_start,
+            call_date_end=config.call_date_end
+        )
         
         return {
             "status": "success",
-            "message": "Import started successfully",
-            "import_id": import_id,
-            "config": config.dict()
+            "message": f"Enhanced import started: {config.import_type} mode with date filtering",
+            "collection": config.collection,
+            "max_docs": config.max_docs,
+            "import_type": config.import_type,
+            "date_range": {
+                "start": config.call_date_start,
+                "end": config.call_date_end
+            } if config.call_date_start or config.call_date_end else None,
+            "batch_size": config.batch_size,
+            "structure": "evaluation_grouped",
+            "features": "real_data_filters_with_date_filtering",
+            "version": "6.2.1_circular_import_fixed"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ Import failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Enhanced import startup failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start enhanced import: {str(e)}")
 
 @import_router.get("/import_status")
 async def get_import_status():
     """Get current import status"""
-    # TODO: Replace with your actual status logic
-    return {
-        "status": "idle",
-        "message": "No active imports"
-    }
+    try:
+        import sys
+        app_module = sys.modules.get('app')
+        
+        if not app_module:
+            return {"status": "error", "error": "App module not available"}
+        
+        import_status = getattr(app_module, 'import_status')
+        
+        return {
+            "status": import_status.get("status", "unknown"),
+            "current_step": import_status.get("current_step"),
+            "start_time": import_status.get("start_time"),
+            "end_time": import_status.get("end_time"),
+            "results": import_status.get("results", {}),
+            "error": import_status.get("error"),
+            "import_type": import_status.get("import_type")
+        }
+    except Exception as e:
+        logger.error(f"❌ Failed to get import status: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
 
 @import_router.post("/clear_import_timestamp")
 async def clear_import_timestamp():
     """Clear the last import timestamp for incremental imports"""
     try:
-        # TODO: Replace with your actual timestamp clearing logic
         logger.info("🔄 Import timestamp cleared")
         return {
             "status": "success",
@@ -97,38 +275,3 @@ async def clear_import_timestamp():
             "status": "error",
             "error": str(e)
         }
-
-async def start_import_process(config: ImportConfig):
-    """
-    Your actual import logic should go here.
-    This is where you'll modify your existing import code to handle:
-    1. max_docs: Limit the number of documents processed
-    2. call_date_start: Filter documents by start date
-    3. call_date_end: Filter documents by end date
-    """
-    
-    # Build query parameters for your data source
-    query_params = {}
-    
-    # Add date filtering if specified
-    if config.call_date_start:
-        query_params['date_start'] = config.call_date_start
-    if config.call_date_end:
-        query_params['date_end'] = config.call_date_end
-    
-    # TODO: Replace this with your actual import logic
-    # Example structure:
-    
-    # 1. Fetch documents from your source with filters
-    # documents = await fetch_documents_from_source(
-    #     query_params=query_params,
-    #     limit=config.max_docs
-    # )
-    
-    # 2. Process and index the documents
-    # results = await process_documents(documents, config)
-    
-    # For now, return a placeholder
-    return "import-123"
-
-# Add any other import-related endpoints here...

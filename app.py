@@ -24,7 +24,7 @@ from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, Query, API
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse as StarletteJSONResponse
 from opensearch_client import search_transcripts_comprehensive, search_transcripts_only, search_transcript_with_context
@@ -272,17 +272,6 @@ def validate_evaluation_content(evaluation: dict) -> tuple[bool, str, dict]:
     
     return True, None, {}
 
-# logging setup (Above)
-# ============================================================================
-# PYDANTIC MODELS
-# ============================================================================
-class ImportRequest(BaseModel):
-    collection: str = "all"
-    max_docs: Optional[int] = None
-    import_type: str = "full"
-    batch_size: Optional[int] = None
-
-#Pydantic Models (Above)
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================
@@ -509,17 +498,33 @@ except Exception as e:
 try:
     from chat_handlers import chat_router, health_router
     from import_handlers import import_router
-    app.include_router(chat_router, prefix="/api")
-    app.include_router(health_router)
-    app.include_router(import_router)
     
-    logger.info("✅ Chat and health routers imported and mounted")
+    # Mount routers with proper organization
+    app.include_router(chat_router, prefix="/api")
+    app.include_router(health_router)  # No prefix for backward compatibility
+    app.include_router(import_router, prefix="/api")  # Enhanced import endpoints
+    
+    logger.info("✅ All routers imported and mounted successfully")
+    logger.info("   - Chat endpoints: /api/chat")
+    logger.info("   - Import endpoints: /api/import, /api/import_status")
+    logger.info("   - Health endpoints: /health, /ping")
 
 except ImportError as e:
-    logger.warning(f"⚠️ Could not import chat/health routers: {e}")
+    logger.warning(f"⚠️ Could not import routers: {e}")
     
-    # Create minimal health router if import fails
-    health_router = APIRouter()
+    # Capture the error message to avoid scoping issues
+    error_message = str(e)
+    
+    # Create minimal fallback
+    from fastapi import APIRouter
+    fallback_router = APIRouter()
+    
+    @fallback_router.get("/import_status")
+    async def fallback_import_status():
+        return {"status": "router_import_failed", "error": error_message}
+    
+    app.include_router(fallback_router, prefix="/api")
+    logger.info("✅ Fallback import router created")
 
 @app.get("/logs")
 async def get_logs():
@@ -3212,67 +3217,6 @@ def create_empty_statistics_response():
     }
 
 
-
-
-
-
-
-
-@app.post("/import")
-async def start_import(request: ImportRequest, background_tasks: BackgroundTasks):
-    """PRODUCTION: Start the enhanced import process with real data integration"""
-    global import_status
-    
-    if import_status["status"] == "running":
-        raise HTTPException(status_code=400, detail="Import is already running")
-    
-    try:
-        # Reset import status
-        import_status = {
-            "status": "idle",
-            "start_time": None,
-            "end_time": None,
-            "current_step": None,
-            "results": {},
-            "error": None,
-            "import_type": request.import_type
-        }
-        
-        # Validate request
-        if request.max_docs is not None and request.max_docs <= 0:
-            raise HTTPException(status_code=400, detail="max_docs must be a positive integer")
-        
-        # Log import start
-        log_import("🚀 PRODUCTION import request received:")
-        log_import(f"   Collection: {request.collection}")
-        log_import(f"   Import Type: {request.import_type}")
-        log_import(f"   Max Docs: {request.max_docs or 'All'}")
-        log_import(f"   Batch Size: {request.batch_size or 'Default'}")        
-        
-        # Start background import
-        background_tasks.add_task(
-            run_production_import,
-            collection=request.collection,
-            max_docs=request.max_docs,
-            batch_size=request.batch_size
-        )
-        
-        return {
-            "status": "success",
-            "message": f"PRODUCTION import started: {request.import_type} mode",
-            "collection": request.collection,
-            "max_docs": request.max_docs,
-            "import_type": request.import_type,
-            "structure": "evaluation_grouped",
-            "features": "real_data_filters_efficient",
-            "version": "4.2.0_production"
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"PRODUCTION: Failed to start import: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start import: {str(e)}")
 
 @app.get("/health")
 async def health():
