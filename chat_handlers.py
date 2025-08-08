@@ -42,16 +42,73 @@ GENAI_MODEL = os.getenv("GENAI_MODEL", "n/a")
 GENAI_TEMPERATURE = float(os.getenv("GENAI_TEMPERATURE", "0.7"))
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 
-CHAT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "10000"))  # Increased from 100
-HYBRID_SEARCH_LIMIT = int(os.getenv("HYBRID_SEARCH_LIMIT", "150"))  # No artificial 30 limit
-VECTOR_SEARCH_LIMIT = int(os.getenv("VECTOR_SEARCH_LIMIT", "100"))  # No artificial 20 limit  
-TEXT_SEARCH_LIMIT = int(os.getenv("TEXT_SEARCH_LIMIT", "100"))    # No artificial 30 limit
+CHAT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "10000"))  
+HYBRID_SEARCH_LIMIT = int(os.getenv("HYBRID_SEARCH_LIMIT", "15000"))  
+VECTOR_SEARCH_LIMIT = int(os.getenv("VECTOR_SEARCH_LIMIT", "1000"))  
+TEXT_SEARCH_LIMIT = int(os.getenv("TEXT_SEARCH_LIMIT", "1000"))   
+
 
 
 logger.info(f"   Max total results: {CHAT_MAX_RESULTS}")
 logger.info(f"   Hybrid search limit: {HYBRID_SEARCH_LIMIT}")
 logger.info(f"   Vector search limit: {VECTOR_SEARCH_LIMIT}")
 logger.info(f"   Text search limit: {TEXT_SEARCH_LIMIT}")
+
+def clean_source_metadata(source: dict) -> dict:
+    """
+    Clean a single source to only include allowed API fields
+    Add this function BEFORE build_search_context
+    """
+    # Define allowed fields
+    ALLOWED_API_FIELDS = {
+        "evaluationId", "weighted_score", "url", "partner", "site", "lob",
+        "agentName", "agentId", "disposition", "subDisposition",
+        "created_on", "call_date", "call_duration", "language", "evaluation"
+    }
+    
+    # Fields to never display
+    FORBIDDEN_FIELDS = {
+        "_score", "_id", "_index", "score", "search_type", "match_count",
+        "chunk_id", "vector_score", "text_score", "hybrid_score",
+        "template_name", "template_id", "program", "internalId"
+    }
+    
+    cleaned = {}
+    
+    # Keep evaluationId and text for processing
+    if source.get("evaluationId"):
+        cleaned["evaluationId"] = source["evaluationId"]
+    if source.get("text"):
+        cleaned["text"] = source["text"]  # Keep for context but not display
+    
+    # Extract metadata
+    metadata = source.get("metadata", {})
+    
+    # Only include allowed fields from metadata
+    for field in ALLOWED_API_FIELDS:
+        # Check metadata first
+        if metadata.get(field) is not None:
+            value = metadata.get(field)
+            if value and str(value).strip() and str(value).lower() not in ["unknown", "null", "n/a"]:
+                cleaned[field] = value
+        # Check source root
+        elif source.get(field) is not None:
+            value = source.get(field)
+            if value and str(value).strip() and str(value).lower() not in ["unknown", "null", "n/a"]:
+                cleaned[field] = value
+    
+    # Remove any forbidden fields
+    for forbidden in FORBIDDEN_FIELDS:
+        cleaned.pop(forbidden, None)
+    
+    return cleaned
+
+def clean_all_sources(sources: List[dict]) -> List[dict]:
+    """
+    Clean all sources in a list
+    Add this function BEFORE build_search_context
+    """
+    return [clean_source_metadata(source) for source in sources if source.get("evaluationId")]
 
 def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
     """Extract and organize metadata from search results using correct API field names"""
@@ -309,92 +366,7 @@ SEARCH ENHANCEMENT: {'VECTOR-ENHANCED' if vector_search_used or hybrid_search_us
     
     return context
 
-def extract_source_info(hit: dict, search_type: str) -> dict:
-    """
-    UPDATED: Extract source information including vector search metadata
-    """
-    try:
-        doc = hit.get("_source", {})
-        score = hit.get("_score", 0)
-        
-        # Get evaluation ID with better extraction
-        evaluationId = None
-        for id_field in ["evaluationId", "internalId",]:
-            if doc.get(id_field):
-                evaluationId = doc.get(id_field)
-                break
-        
-        if not evaluationId:
-            evaluationId = f"eval_{hash(str(doc))}"
 
-        # Extract text content (existing logic)
-        content_text = ""
-        if doc.get("full_text"):
-            content_text = doc.get("full_text")
-        elif doc.get("evaluation_text"):
-            content_text = doc.get("evaluation_text")
-        elif doc.get("evaluation"):  # ✅ NEW: Support for evaluation field
-            content_text = doc.get("evaluation")
-        elif doc.get("transcript_text"):
-            content_text = doc.get("transcript_text")
-        elif doc.get("transcript"):  # ✅ NEW: Support for transcript field
-            content_text = doc.get("transcript")
-        else:
-            chunks = doc.get("chunks", [])
-            if chunks and isinstance(chunks, list):
-                chunk_texts = [chunk.get("text", "") for chunk in chunks[:3] if isinstance(chunk, dict)]
-                if chunk_texts:
-                    content_text = "\n".join(chunk_texts)
-
-        if len(content_text) > 1500:
-            content_text = content_text[:1500] + "..."
-        
-        # Extract metadata with ALL fields including new ones
-        metadata = doc.get("metadata", {})
-        
-        source_info = {
-            "evaluationId": evaluationId,
-            "text": content_text,
-            "score": round(score, 3),
-            "search_type": search_type,
-            "template_id": doc.get("template_id"),
-            "template_name": doc.get("template_name"),
-            
-            # ✅ NEW: Vector search specific fields
-            "vector_dimension": hit.get("vector_dimension"),
-            "hybrid_score": hit.get("hybrid_score"),
-            "best_matching_chunks": hit.get("best_matching_chunks", []),
-            
-            "metadata": {
-                # Standard fields
-                "program": metadata.get("program"),
-                "partner": metadata.get("partner"),
-                "site": metadata.get("site"),
-                "lob": metadata.get("lob"),
-                "agentName": metadata.get("agentName"),
-                "disposition": metadata.get("disposition"),
-                "subDisposition": metadata.get("subDisposition"),
-                "language": metadata.get("language"),
-                "call_date": metadata.get("call_date"),
-                "call_duration": metadata.get("call_duration"),
-                "call_type": metadata.get("call_type"),
-                "agentId": metadata.get("agentId") or metadata.get("agentId"),
-                "weighted_score": metadata.get("weighted_score"),
-                "url": metadata.get("url"),
-            }
-        }
-        
-        return source_info
-        
-    except Exception as e:
-        logger.error(f"Error extracting source info: {e}")
-        return {
-            "evaluationId": "error",
-            "text": "",
-            "score": 0,
-            "search_type": search_type,
-            "metadata": {}
-        }
 
 def detect_report_query(message: str) -> bool:
     """Detect if the message is asking for a report or analysis"""
@@ -407,7 +379,7 @@ def detect_report_query(message: str) -> bool:
 def build_search_context(query: str, filters: dict, max_results: int = 100) -> Tuple[str, List[dict]]:
     """
     ✅ ENHANCED: Build search context with VECTOR SEARCH integration + FILTER VALIDATION
-    Now supports hybrid text+vector search for better relevance WITH strict filter enforcement
+    UPDATED VERSION with strict metadata filtering
     """
     if max_results is None:
         max_results = CHAT_MAX_RESULTS
@@ -430,55 +402,45 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
             is_valid = True
             violation_reasons = []
             
-            # Check template_name filter (most critical)
-            if filters.get("template_name"):
-                expected_template = filters["template_name"]
-                actual_template = result.get("template_name")
-                if actual_template != expected_template:
-                    is_valid = False
-                    violation_reasons.append(f"template_name: expected '{expected_template}', got '{actual_template}'")
-            
-            # Check program filter
-            if filters.get("program"):
-                expected_program = filters["program"]
-                actual_program = result.get("metadata", {}).get("program")
-                if actual_program != expected_program:
-                    is_valid = False
-                    violation_reasons.append(f"program: expected '{expected_program}', got '{actual_program}'")
+            # Check filters against metadata
+            metadata = result.get("metadata", {})
             
             # Check partner filter
             if filters.get("partner"):
-                expected_partner = filters["partner"]
-                actual_partner = result.get("metadata", {}).get("partner")
-                if actual_partner != expected_partner:
+                expected = filters["partner"]
+                actual = metadata.get("partner") or result.get("partner")
+                if actual != expected:
                     is_valid = False
-                    violation_reasons.append(f"partner: expected '{expected_partner}', got '{actual_partner}'")
+                    violation_reasons.append("partner mismatch")
             
             # Check site filter
             if filters.get("site"):
-                expected_site = filters["site"]
-                actual_site = result.get("metadata", {}).get("site")
-                if actual_site != expected_site:
+                expected = filters["site"]
+                actual = metadata.get("site") or result.get("site")
+                if actual != expected:
                     is_valid = False
-                    violation_reasons.append(f"site: expected '{expected_site}', got '{actual_site}'")
+                    violation_reasons.append("site mismatch")
+            
+            # Check disposition filters
+            if filters.get("disposition"):
+                expected = filters["disposition"]
+                actual = metadata.get("disposition") or result.get("disposition")
+                if actual != expected:
+                    is_valid = False
+                    violation_reasons.append("disposition mismatch")
             
             if is_valid:
                 valid_results.append(result)
             else:
                 violations.append({
                     "evaluationId": result.get("evaluationId"),
-                    "strategy": strategy_name,
                     "violations": violation_reasons
                 })
         
         if violations:
-            logger.error(f"🚨 FILTER VIOLATIONS in {strategy_name}: {len(violations)} results removed")
-            for violation in violations[:3]:  # Log first 3 violations
-                logger.error(f"   - ID {violation['evaluationId']}: {', '.join(violation['violations'])}")
-            if len(violations) > 3:
-                logger.error(f"   - ... and {len(violations) - 3} more violations")
+            logger.debug(f"Filter violations in {strategy_name}: {len(violations)} results removed")
         
-        logger.info(f"✅ {strategy_name} filter validation: {len(valid_results)}/{len(results)} results valid")
+        logger.info(f"✅ {strategy_name} validation: {len(valid_results)}/{len(results)} valid")
         return valid_results
     
     try:
@@ -493,7 +455,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
             logger.warning("OpenSearch not available for search context")
             return create_empty_search_context("opensearch_unavailable"), []
         
-        logger.info("✅ OpenSearch connection verified for enhanced search")
+        logger.info("✅ OpenSearch connection verified")
         
         # ✅ STEP 1: Try to generate query vector for enhanced search
         query_vector = None
@@ -501,7 +463,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
             query_vector = embed_text(query)
             logger.info(f"✅ Query vector generated: {len(query_vector)} dimensions")
         except Exception as e:
-            logger.warning(f"⚠️ Vector generation failed, falling back to text search: {e}")
+            logger.warning(f"⚠️ Vector generation failed: {e}")
         
         # ✅ STEP 2: Use enhanced search strategies WITH FILTER VALIDATION
         all_sources = []
@@ -523,248 +485,347 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 
                 # ✅ VALIDATE FILTERS BEFORE PROCESSING
                 validated_hybrid = validate_filter_compliance(hybrid_results, "hybrid_search")
+
+                validated_hybrid = clean_all_sources(validated_hybrid)
                 
                 for hit in validated_hybrid:
-                    source_info = {
-                        "evaluationId": hit.get("evaluationId"),
-                        "search_type": hit.get("search_type", "hybrid"),
-                        "score": hit.get("_score", 0),
-                        "hybrid_score": hit.get("hybrid_score", 0),
-                        "template_name": hit.get("template_name", "Unknown"),
-                        "template_id": hit.get("template_id"),
-                        "text": hit.get("text", "")[:2000],
-                        "evaluation": hit.get("evaluation", ""),
-                        "transcript": hit.get("transcript", ""),
-                        "metadata": hit.get("metadata", {}),
-                        "content_type": "evaluation",
-                        "_index": hit.get("_index"),
-                        "vector_enhanced": True
-                    }
-                    all_sources.append(source_info)
+                    hit["search_method"] = "hybrid"  # For internal tracking only
+                    all_sources.append(hit)
                 
-                search_methods_used.append("hybrid_text_vector")
+                search_methods_used.append("hybrid")               
+                
                 
             except Exception as e:
                 logger.error(f"❌ Hybrid search failed: {e}")
         
         # Strategy 2: Pure vector search as fallback/supplement
-        if query_vector and len(all_sources) < max_results:  # ✅ FIXED: Proper indentation and condition
-            try:  # ✅ FIXED: Added missing try block
-                logger.info("🔮 Trying pure vector search...")
+        if query_vector and len(all_sources) < max_results:  
+            try:  
+                logger.info("🔮 Trying vector search...")
                 vector_results = search_vector(
                     query_vector=query_vector,
                     filters=filters,
-                    size=max_results - len(all_sources)  # ✅ FIXED: Direct calculation, no remaining_slots
+                    size=max_results - len(all_sources)  
                 )
                 
-                logger.info(f"📊 Vector search returned {len(vector_results)} hits")
+                logger.info(f" Vector search returned {len(vector_results)} hits")
                 
-                # ✅ VALIDATE FILTERS BEFORE PROCESSING
-                validated_vector = validate_filter_compliance(vector_results, "vector_search")
+                #  VALIDATE FILTERS BEFORE PROCESSING
+                validated_vector = validate_filter_compliance(vector_results, "vector")
+                #  CLEAN RESULTS IMMEDIATELY
+                validated_vector = clean_all_sources(validated_vector)
                 
                 # Add vector results that aren't already in all_sources
                 existing_ids = {s.get("evaluationId") for s in all_sources}
                 
                 for hit in validated_vector:
-                    evaluationId = hit.get("evaluationId")
-                    if evaluationId not in existing_ids:
-                        source_info = {
-                            "evaluationId": evaluationId,
-                            "search_type": "vector",
-                            "score": hit.get("_score", 0),
-                            "template_name": hit.get("template_name", "Unknown"),
-                            "template_id": hit.get("template_id"),
-                            "text": hit.get("text", "")[:2000],
-                            "evaluation": hit.get("evaluation", ""),
-                            "transcript": hit.get("transcript", ""),
-                            "metadata": hit.get("metadata", {}),
-                            "content_type": "evaluation",
-                            "_index": hit.get("_index"),
-                            "vector_enhanced": True,
-                            "best_matching_chunks": hit.get("best_matching_chunks", [])
-                        }
-                        all_sources.append(source_info)
-                        existing_ids.add(evaluationId)
+                    if hit.get("evaluationId") not in existing_ids:
+                        hit["search_method"] = "vector"  # For internal tracking only
+                        all_sources.append(hit)
+                        existing_ids.add(hit.get("evaluationId"))
                 
-                search_methods_used.append("pure_vector")
+                search_methods_used.append("vector")
                 
             except Exception as e:
                 logger.error(f"❌ Vector search failed: {e}")
         
-        # Strategy 3: Enhanced text search as fallback - WITH STRICT VALIDATION
-        if len(all_sources) < max_results:  # ✅ FIXED: Proper indentation and condition
-            try:  # ✅ FIXED: Added missing try block
-                logger.info("📝 Supplementing with enhanced text search...")
+        # Strategy 3: Text search as fallback - WITH STRICT VALIDATION
+        if len(all_sources) < max_results:
+            try: 
+                logger.info(" Supplementing with enhanced text search...")
                 text_results = search_opensearch(
                     query=query,
                     filters=filters,
-                    size=max_results - len(all_sources)  # ✅ FIXED: Direct calculation, no remaining_slots
+                    size=max_results - len(all_sources)  # Direct calculation, no remaining_slots
                 )
                 
-                logger.info(f"📊 Text search returned {len(text_results)} hits")
+                logger.info(f" Text search returned {len(text_results)} hits")
                 
-                # ✅ CRITICAL: VALIDATE FILTERS - This is where violations were coming from!
-                validated_text = validate_filter_compliance(text_results, "text_search")
+                # CRITICAL: VALIDATE FILTERS - This is where violations were coming from!
+                validated_text = validate_filter_compliance(text_results, "text")
                 
-                # Add text results that aren't already included
+                # CLEAN RESULTS IMMEDIATELY
+                validated_text = clean_all_sources(validated_text)
+                # Add unique results only
                 existing_ids = {s.get("evaluationId") for s in all_sources}
                 
                 for hit in validated_text:
-                    evaluationId = hit.get("evaluationId")
-                    if evaluationId not in existing_ids:
-                        source_info = {
-                            "evaluationId": evaluationId,
-                            "search_type": hit.get("search_type", "text"),
-                            "score": hit.get("_score", 0),
-                            "template_name": hit.get("template_name", "Unknown"),
-                            "template_id": hit.get("template_id"),
-                            "text": hit.get("text", "")[:2000],
-                            "evaluation": hit.get("evaluation", ""),
-                            "transcript": hit.get("transcript", ""),
-                            "metadata": hit.get("metadata", {}),
-                            "content_type": "evaluation",
-                            "_index": hit.get("_index"),
-                            "vector_enhanced": False
-                        }
-                        all_sources.append(source_info)
-                        existing_ids.add(evaluationId)
+                    if hit.get("evaluationId") not in existing_ids:
+                        hit["search_method"] = "text"  # For internal tracking only
+                        all_sources.append(hit)
+                        existing_ids.add(hit.get("evaluationId"))
                 
-                search_methods_used.append("enhanced_text")
+                search_methods_used.append("text")
                 
             except Exception as e:
-                logger.error(f"❌ Enhanced text search failed: {e}")
+                logger.error(f"❌ Text search failed: {e}")                
+               
+        # Final filter validation on combined results
+        logger.info(f"🔗 Total sources before final cleaning: {len(all_sources)}")
         
-        # STEP 3: Final filter validation on combined results
-        logger.info(f"🔗 TOTAL SOURCES BEFORE FINAL VALIDATION: {len(all_sources)} using methods: {search_methods_used}")
-        
-        # ✅ FINAL SAFETY CHECK: Validate all combined results
-        all_sources = validate_filter_compliance(all_sources, "final_combined")
-        
+        all_sources = clean_all_sources(all_sources)
+        all_sources = validate_filter_compliance(all_sources, "final")
+                
         if not all_sources:
-            logger.warning("⚠️ NO SOURCES FOUND after filter validation")
+            logger.warning(" NO SOURCES FOUND after filter validation")
             return create_empty_search_context("no_data_after_filtering"), []
         
-        # STEP 4: Limit and deduplicate results
+        # Limit and deduplicate results
         processed_sources = []
         unique_evaluations = set()
         
-        # Sort by score (hybrid/vector scores are generally better)
-        all_sources.sort(key=lambda x: x.get("score", 0), reverse=True)
-        
         for source in all_sources[:max_results]:
             evaluationId = source.get("evaluationId")
-            if evaluationId not in unique_evaluations:
+            if evaluationId and evaluationId not in unique_evaluations:
                 unique_evaluations.add(evaluationId)
                 processed_sources.append(source)
-        
-        # STEP 5: Build enhanced context with vector search information
-        if processed_sources:
-            vector_enhanced_count = sum(1 for s in processed_sources if s.get("vector_enhanced", False))
-            
-            # ✅ REPORT FILTER COMPLIANCE
-            template_names = set(s.get("template_name") for s in processed_sources)
-            filter_compliance_status = "✅ ALL FILTERS RESPECTED" if len(template_names) == 1 and filters.get("template_name") in template_names else "🚨 FILTER VIOLATIONS DETECTED"
-        
-        logger.info("🔍 Performing metadata verification...")
-        metadata_summary = verify_metadata_alignment(processed_sources)
 
-        # STEP 6: Build enhanced context with metadata verification AND STRICT ENFORCEMENT
-        if processed_sources:
-            vector_enhanced_count = sum(1 for s in processed_sources if s.get("vector_enhanced", False))
+        processed_sources = clean_all_sources(processed_sources)
+
+# ✅ MAINTAIN FILTER COMPLIANCE CHECKING (Important for validation)
+        # Check if filters are being respected (for internal logging only)
+        filter_compliance_passed = True
+        if filters:
+            # Check template filter compliance
+            if filters.get("template_name"):
+                template_names = set()
+                for s in processed_sources:
+                    # Check in cleaned data
+                    if s.get("template_name"):
+                        template_names.add(s.get("template_name"))
+                
+                if template_names and filters["template_name"] not in template_names:
+                    filter_compliance_passed = False
+                    logger.warning("⚠️ Template filter violation detected")
             
-            # ✅ STEP 6A: Extract strict metadata constraints (ADD THIS)
+            # Check other filter compliance
+            for filter_key in ["partner", "site", "disposition", "lob"]:
+                if filters.get(filter_key):
+                    expected_value = filters[filter_key]
+                    found_values = set()
+                    for s in processed_sources:
+                        actual_value = s.get(filter_key)
+                        if actual_value:
+                            found_values.add(actual_value)
+                    
+                    if found_values and expected_value not in found_values:
+                        filter_compliance_passed = False
+                        logger.warning(f"⚠️ {filter_key} filter violation detected")
+        
+        # Log filter compliance status (internal use only)
+        if filter_compliance_passed:
+            logger.info("✅ All filters respected in final results")
+        else:
+            logger.warning("🚨 Filter violations detected in final results")
+        
+        # Verify metadata alignment
+        logger.info("🔍 Performing metadata verification...")
+        
+        # Build context with STRICT display rules
+        if processed_sources:
+            # Extract actual metadata values for constraints
             strict_metadata = extract_actual_metadata_values(processed_sources)
             
-            # Include metadata verification status
-            metadata_verified = metadata_summary.get("has_real_data", False)
-            verification_status = "VERIFIED_REAL_DATA" if metadata_verified else "NO_DATA_VERIFICATION"
-
+            # 🔴 BUILD CONTEXT WITHOUT SCORES OR INTERNAL FIELDS
             context = f"""
-VERIFIED EVALUATION DATA FOUND: {len(processed_sources)} unique evaluations
 
-✅ ENHANCED SEARCH RESULTS WITH FILTER VALIDATION:
-- Total evaluations: {len(unique_evaluations)}
-- Content sources: {len(all_sources)}
-- Search methods: {', '.join(search_methods_used)}
-- Vector-enhanced results: {vector_enhanced_count}/{len(processed_sources)}
-- Search quality: {'ENHANCED with semantic similarity' if vector_enhanced_count > 0 else 'Text-based matching'}
-- Filter compliance: {filter_compliance_status}
-- Templates found: {list(template_names)}
-- Filters applied: {filters}
+EVALUATION DATA FOUND: {len(processed_sources)} evaluations matching "{query}"
 
-🔒 CRITICAL: You can ONLY use these exact metadata values from the search results:
+FILTER STATUS: {"✅ All requested filters applied" if filter_compliance_passed else "⚠️ Some filter constraints may not have matches"}
+APPLIED FILTERS: {', '.join([f"{k}={v}" for k, v in filters.items()]) if filters else "None"}
 
-ALLOWED DISPOSITIONS (ONLY THESE):
-{', '.join(strict_metadata['dispositions'])}
+🔒 STRICT DISPLAY RULES - YOU MUST FOLLOW:
+1. NEVER display these fields: _score, score, search_type, template_name, template_id, program
+2. NEVER show relevance scores, or search quality indicators
+3. ONLY display these exact fields when showing data:
+   - evaluationId, weighted_score, url
+   - partner, site, lob
+   - agentName, agentId
+   - disposition, subDisposition
+   - created_on, call_date, call_duration
+   - language, evaluation
 
-ALLOWED PROGRAMS (ONLY THESE):  
-{', '.join(strict_metadata['programs'])}
-
-ALLOWED PARTNERS (ONLY THESE):
-{', '.join(strict_metadata['partners'])}
-
-ALLOWED SITES (ONLY THESE):
-{', '.join(strict_metadata['sites'])}
-
-SAMPLE CONTENT FROM TOP RESULT:
-{processed_sources[0].get('text', '')[:500]}...
+ALLOWED VALUES FROM DATA (USE ONLY THESE):
+- Partners: {', '.join(sorted(strict_metadata.get('partners', [])))}
+- Sites: {', '.join(sorted(strict_metadata.get('sites', [])))}
+- LOBs: {', '.join(sorted(strict_metadata.get('lobs', [])))}
+- Dispositions: {', '.join(sorted(strict_metadata.get('dispositions', [])))}
+- SubDispositions: {', '.join(sorted(strict_metadata.get('subDispositions', [])))}
+- Agents: {', '.join(sorted(strict_metadata.get('agents', [])[:20]))}
 
 EVALUATION DETAILS:
 """
             
-            # Add details from first few evaluations
-            for i, source in enumerate(processed_sources[:10]):
-                metadata = source.get("metadata", {})
-                search_type = source.get("search_type", "unknown")
-                score = source.get("score", 0)
+            # Add evaluation details WITHOUT scores or types
+            for i, source in enumerate(processed_sources[:10], 1):
+                eval_str = f"\n[Evaluation {i}] ID: {source.get('evaluationId', 'Unknown')}\n"
                 
-                context += f"""
-[Evaluation {i+1}] ID: {source['evaluationId']} (Score: {score:.3f}, Type: {search_type})
-- Template: {source.get('template_name', 'Unknown')}
-- Program: {metadata.get('program', 'Unknown')}
-- Disposition: {metadata.get('disposition', 'Unknown')}
-- subDisposition: {metadata.get('subDisposition', 'Unknown')}
-- Partner: {metadata.get('partner', 'Unknown')}
-- Agent: {metadata.get('agentName', 'Unknown')}
-- Content: {source.get('text', '')[:200]}...
-"""
+                # Only display allowed fields
+                display_fields = [
+                    ('partner', 'Partner'),
+                    ('site', 'Site'),
+                    ('lob', 'LOB'),
+                    ('agentName', 'Agent'),
+                    ('disposition', 'Disposition'),
+                    ('subDisposition', 'SubDisposition'),
+                    ('weighted_score', 'Weighted Score'),
+                    ('call_date', 'Call Date'),
+                    ('call_duration', 'Duration'),
+                    ('language', 'Language'),
+                    ('url', 'eval_link')
+                ]
+                
+                for field_key, field_label in display_fields:
+                    value = source.get(field_key)
+                    if value and str(value).strip():
+                        # Format specific fields
+                        if field_key == 'call_duration':
+                            eval_str += f"- {field_label}: {value} seconds\n"
+                        elif field_key == 'weighted_score':
+                            try:
+                                eval_str += f"- {field_label}: {float(value):.2f}\n"
+                            except Exception:
+                                eval_str += f"- {field_label}: {value}\n"
+                        else:
+                            eval_str += f"- {field_label}: {value}\n"
+                
+                # Add snippet of content if available (but no internal fields)
+                if source.get("text"):
+                    content_preview = source["text"][:200].replace('\n', ' ')
+                    eval_str += f"- Content Preview: {content_preview}...\n"
+                
+                context += eval_str
             
-            if len(processed_sources) > 5:
-                context += f"\n... and {len(processed_sources) - 5} more evaluations"
+            if len(processed_sources) > 10:
+                context += f"\n... and {len(processed_sources) - 10} more evaluations\n"
             
             context += f"""
 
-ABSOLUTE PROHIBITIONS:
+CRITICAL INSTRUCTIONS:
+- ONLY use the exact data provided above
+- NEVER mention scores, search types, or templates
+- NEVER generate statistics not directly countable from these {len(processed_sources)} evaluations
+- NEVER estimate or extrapolate beyond the provided data
+- NEVER generate percentages or averages not directly calculable
+- NEVER generate fake references, text, or statistics
+- When displaying results, use ONLY the allowed field names listed above
+- If asked about data not in these evaluations, say it's not available
 
-1. NEVER use dispositions not in the allowed list above
-2. NEVER use program/partner/site names not in the allowed lists above
-3. NEVER generate statistics not directly countable from these {len(processed_sources)} evaluations
-4. NEVER estimate or extrapolate beyond the provided data
+Example evaluation display format:
+Evaluation ID: 3476
+- Partner: iQor
+- Site: Manila
+- Disposition: Account
+- SubDisposition: Device Activation
 
-REQUIRED BEHAVIOR:
-- Always specify "from these {len(processed_sources)} evaluations"  
-- Count exact occurrences when calculating percentages
-- Reference specific evaluation IDs when discussing individual cases
-- Quote directly from evaluation content when possible
-- Use ONLY the metadata values listed in the allowed lists above
-
-If information is not available in these {len(processed_sources)} evaluations, say so explicitly rather than guessing.
+Remember: You are showing actual evaluation records, not search results.
 """
             
-        logger.info(f"✅ METADATA-ENFORCED CONTEXT BUILT: {len(context)} chars with {len(processed_sources)} sources")
-        logger.info(f"🔒 Strict metadata constraints: {len(strict_metadata['agents'])} agents, {len(strict_metadata['dispositions'])} dispositions")
-
-        for source in processed_sources:
-            source["metadata_verified"] = metadata_verified
+            logger.info(f"✅ Context built: {len(context)} chars, {len(processed_sources)} cleaned sources")
+            logger.info("🔒 Strict filtering applied - internal fields removed from display")
+            logger.info(f"📋 Filter compliance: {'PASSED' if filter_compliance_passed else 'VIOLATIONS DETECTED'}")
+            # Mark sources as verified
+            for source in processed_sources:
+                source["metadata_verified"] = True
+                # Final removal of template_name before returning (was kept for filter checking)
+                source.pop("template_name", None)
             
             return context, processed_sources
+            
         else:
-            logger.warning("⚠️ NO VALID SOURCES AFTER PROCESSING")
+            logger.warning("⚠️ No valid sources after processing")
             return create_empty_search_context("no_valid_sources"), []
 
     except Exception as e:
-        logger.error(f"❌ ENHANCED SEARCH CONTEXT BUILD FAILED: {e}")
+        logger.error(f"❌ Search context build failed: {e}")
         return create_empty_search_context("system_error", str(e)), []
+
+            
+def build_filtered_context_with_rules(sources: List[dict], query: str, filters: Dict = None) -> str:
+    """
+    Build context with STRICT display rules for the LLM
+    """
+    if not sources:
+        return create_empty_search_context("no_data")
+    
+    # Extract actual values for strict enforcement
+    actual_values = {
+        "evaluationIds": set(),
+        "partners": set(),
+        "sites": set(),
+        "lobs": set(),
+        "agents": set(),
+        "dispositions": set(),
+        "subDispositions": set(),
+    }
+    
+    for source in sources:
+        if source.get("evaluationId"):
+            actual_values["evaluationIds"].add(str(source["evaluationId"]))
+        if source.get("partner"):
+            actual_values["partners"].add(source["partner"])
+        if source.get("site"):
+            actual_values["sites"].add(source["site"])
+        if source.get("lob"):
+            actual_values["lobs"].add(source["lob"])
+        if source.get("agentName"):
+            actual_values["agents"].add(source["agentName"])
+        if source.get("disposition"):
+            actual_values["dispositions"].add(source["disposition"])
+        if source.get("subDisposition"):
+            actual_values["subDispositions"].add(source["subDisposition"])
+    
+    # Build context with strict rules
+    context = f"""
+
+EVALUATION DATA FOUND: {len(sources)} evaluations for query: "{query}"
+
+🔒 STRICT DISPLAY RULES - YOU MUST FOLLOW THESE:
+1. NEVER display these internal fields: _score, score, search_type, Type, Template, Program (unless in allowed list)
+2. NEVER display match counts, relevance scores, or search quality indicators
+3. NEVER display internal IDs like _id, _index, chunk_id, internalId
+4. ONLY display these exact fields when showing evaluation data:
+   - evaluationId, weighted_score, url, partner, site, lob
+   - agentName, agentId, disposition, subDisposition
+   - created_on, call_date, call_duration, language, evaluation
+
+ALLOWED VALUES (ONLY USE THESE):
+- Evaluation IDs: {', '.join(sorted(actual_values['evaluationIds'])[:10])}
+- Partners: {', '.join(sorted(actual_values['partners']))}
+- Sites: {', '.join(sorted(actual_values['sites']))}
+- LOBs: {', '.join(sorted(actual_values['lobs']))}
+- Agents: {', '.join(sorted(actual_values['agents'])[:20])}
+- Dispositions: {', '.join(sorted(actual_values['dispositions']))}
+- SubDispositions: {', '.join(sorted(actual_values['subDispositions']))}
+
+EVALUATION DETAILS:
+"""    
+    # Add cleaned evaluation details
+    for i, source in enumerate(sources[:10], 1):
+        eval_detail = f"\n[Evaluation {i}] ID: {source.get('evaluationId', 'Unknown')}\n"
+        
+        # Only add allowed fields
+        for field in ["partner", "site", "lob", "agentName", "disposition", "subDisposition", "weighted_score", "url"]:
+            if source.get(field):
+                eval_detail += f"- {field}: {source[field]}\n"
+        
+        context += eval_detail
+    
+    if len(sources) > 10:
+        context += f"\n... and {len(sources) - 10} more evaluations\n"
+    
+    context += """
+
+CRITICAL INSTRUCTIONS:
+- ONLY use the exact data provided above
+- NEVER mention scores, search types, or internal metadata
+- NEVER generate data not in the provided evaluations
+- When displaying results, use ONLY the allowed field names
+- If a field is not in the allowed list above, DO NOT display it
+"""
+    
+    return context 
+         
 
 def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     """
@@ -1656,59 +1717,87 @@ Respond in a clear, professional format with specific examples from the data."""
         
         logger.info(f"📝 Final Llama reply length: {len(reply_text)} characters")
                
-        # STEP 5: Process sources for response with vector search info
+        #  STEP 5: Process sources for response - REMOVE internal fields
         unique_sources = []
         seen_ids = set()
+        
+        # Define allowed fields for display
+        ALLOWED_DISPLAY_FIELDS = {
+            "evaluationId", "weighted_score", "url", "partner", "site", "lob",
+            "agentName", "agentId", "disposition", "subDisposition",
+            "created_on", "call_date", "call_duration", "language", "evaluation"
+        }
+        
         for source in sources:
-            evaluationId = source.get("evaluationId") or source.get("evaluationId")
-            if evaluationId not in seen_ids:
-                unique_sources.append({
-                    "evaluationId": evaluationId,
-                    "template_name": source.get("template_name", "Unknown"),
-                    "search_type": source.get("search_type", "text"),
-                    "score": source.get("score", 0),
-                    "vector_enhanced": source.get("vector_enhanced", False),  # ✅ NEW
-                    "metadata": source.get("metadata", {})
-                })
+            evaluationId = source.get("evaluationId")
+            if evaluationId and evaluationId not in seen_ids:
+                # Build clean source with ONLY allowed fields
+                clean_source = {"evaluationId": evaluationId}
+                
+                # Add only allowed fields
+                for field in ALLOWED_DISPLAY_FIELDS:
+                    if source.get(field) is not None:
+                        value = source.get(field)
+                        if value and str(value).strip() and str(value).lower() not in ["unknown", "null", "n/a"]:
+                            clean_source[field] = value
+                
+                # Never include forbidden fields
+                forbidden_fields = ["template_name", "search_type", "score", "vector_enhanced", 
+                                  "_score", "_id", "_index", "program", "internalId"]
+                for forbidden in forbidden_fields:
+                    clean_source.pop(forbidden, None)
+                
+                unique_sources.append(clean_source)
                 seen_ids.add(evaluationId)
+        
+        logger.info(f"📝 Cleaned {len(unique_sources)} sources for display")
 
-        # STEP 6: Build sources summary with vector search enhancement details
-        sources_data = build_sources_summary_with_details(unique_sources, req.filters)
+        # STEP 6: Build sources summary without internal metadata
+        sources_data = {
+            "summary": {
+                "evaluations": len(unique_sources),
+                "partners": len(set(s.get("partner", "") for s in unique_sources if s.get("partner"))),
+                "sites": len(set(s.get("site", "") for s in unique_sources if s.get("site"))),
+                "dispositions": len(set(s.get("disposition", "") for s in unique_sources if s.get("disposition"))),
+                "agents": len(set(s.get("agentName", "") for s in unique_sources if s.get("agentName"))),
+                "date_range": "See evaluation details"
+            },
+            "details": {
+                "total_evaluations": len(unique_sources),
+                "filters_applied": req.filters
+            },
+            "totals": {
+                "evaluations_processed": len(unique_sources)
+            },
+            "display_limit": 20
+        }
 
-        # STEP 7: Build enhanced response with vector search information
+        # STEP 7: Build response WITHOUT internal search metadata
         response_data = {
             "reply": reply_text,
             "response": reply_text,
             "sources_summary": sources_data["summary"],
-            "sources_details": sources_data["details"], 
+            "sources_details": sources_data["details"],
             "sources_totals": sources_data["totals"],
-            "search_enhancement": sources_data["search_enhancement"],  # ✅ NEW
             "display_limit": sources_data["display_limit"],
-            "sources": unique_sources[:20],
+            "sources": unique_sources[:20],  # Already cleaned
             "timestamp": datetime.now().isoformat(),
             "filter_context": req.filters,
-            "search_metadata": {
-                "vector_sources": len([s for s in sources if s.get("search_type") == "vector"]),
-                "hybrid_sources": len([s for s in sources if s.get("search_type") in ["hybrid", "text_with_vector_fallback_v4_7_0"]]),
-                "text_sources": len([s for s in sources if s.get("search_type") == "text"]),
-                "vector_enhanced_count": len([s for s in sources if s.get("vector_enhanced", False)]),
-                "context_length": len(context),
-                "processing_time": round(time.time() - start_time, 2),
-                "total_sources": len(sources),
-                "unique_sources": len(unique_sources),
+            "metadata_info": {
+                "total_evaluations": len(unique_sources),
                 "context_found": bool(context and "NO DATA FOUND" not in context),
-                "metadata_verified": "verified_real_data" in context.lower(),
-                "vector_search_enabled": True,  # ✅ NEW
-                "llama_response_structure": list(result.keys()) if 'result' in locals() else [],
-                "successful_url": successful_url,
+                "processing_time": round(time.time() - start_time, 2),
+                "filters_applied": bool(req.filters),
                 "model": "llama-3.1-8b-instruct",
-                "version": "4.8.0_vector_enabled"
+                "version": "5.0.0_clean_metadata"
             }
         }
         
-        logger.info(f"✅ ENHANCED CHAT RESPONSE WITH VECTOR SEARCH COMPLETE")
-        logger.info(f"📊 Reply: {len(reply_text)} chars, Sources: {len(unique_sources)} verified")
-        logger.info(f"🔮 Vector enhancement: {sources_data['search_enhancement']}")
+        # Remove any references to search types, scores, or internal mechanics
+        # No vector_sources, hybrid_sources, search_type counts, etc.
+        
+        logger.info(f"✅ CHAT RESPONSE COMPLETE")
+        logger.info(f"📊 Reply: {len(reply_text)} chars, Sources: {len(unique_sources)} evaluations")
         
         return JSONResponse(content=response_data)
 
@@ -1718,44 +1807,62 @@ Respond in a clear, professional format with specific examples from the data."""
         logger.error(f"🔍 Traceback: {traceback.format_exc()}")
         
         return JSONResponse(
-            status_code=500,
+            status_code=200,
             content={
-                "reply": f"I apologize, but I encountered an error while processing your request: {str(e)[:200]}. Please try again or contact support if the issue persists.",
+                "reply": "⚠️ No relevant evaluation data was found for your query. Please adjust your filters or try a different question.",
                 "sources_summary": {
                     "evaluations": 0,
                     "agents": 0,
-                    "date_range": "Error",
-                    "opportunities": 0,
-                    "churn_triggers": 0,
-                    "programs": 0,
-                    "templates": 0,
-                    "dispositions": 0,
+                    "date_range": "No data",
                     "partners": 0,
                     "sites": 0,
-                    "vector_enhanced": 0,
-                    "search_methods": []
-                },
-                "search_enhancement": {
-                    "vector_search_used": False,
-                    "hybrid_search_used": False,
-                    "search_quality": "error"
+                    "dispositions": 0
                 },
                 "sources_details": {},
                 "sources_totals": {},
-                "sources_full_data": {},
-                "display_limit": 25,
                 "sources": [],
                 "timestamp": datetime.now().isoformat(),
-                "filter_context": req.filters if 'req' in locals() else {},
-                "search_metadata": {
-                    "error": str(e),
-                    "vector_search_enabled": True,
+                "filter_context": req.filters,
+                "metadata_info": {
+                    "context_found": False,
                     "model": "llama-3.1-8b-instruct",
-                    "version": "4.8.0_vector_enabled"
+                    "version": "5.0.0_clean_metadata"
                 }
             }
         )
-
+    
+def clean_source_for_response(source: dict) -> dict:
+    """
+    Clean a source dictionary to only include allowed API fields.
+    This should be used before sending any source data in responses.
+    """
+    ALLOWED_FIELDS = {
+        "evaluationId", "weighted_score", "url", "partner", "site", "lob",
+        "agentName", "agentId", "disposition", "subDisposition",
+        "created_on", "call_date", "call_duration", "language", "evaluation"
+    }
+    
+    FORBIDDEN_FIELDS = {
+        "_score", "_id", "_index", "score", "search_type", "match_count",
+        "chunk_id", "vector_score", "text_score", "hybrid_score",
+        "template_name", "template_id", "program", "internalId",
+        "vector_enhanced", "vector_dimension", "best_matching_chunks"
+    }
+    
+    cleaned = {}
+    
+    # Only include allowed fields
+    for field in ALLOWED_FIELDS:
+        if source.get(field) is not None:
+            value = source.get(field)
+            if value and str(value).strip() and str(value).lower() not in ["unknown", "null", "n/a"]:
+                cleaned[field] = value
+    
+    # Ensure no forbidden fields
+    for forbidden in FORBIDDEN_FIELDS:
+        cleaned.pop(forbidden, None)
+    
+    return cleaned
 # =============================================================================
 # HEALTH ENDPOINTS
 # =============================================================================

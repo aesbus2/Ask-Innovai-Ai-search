@@ -57,6 +57,34 @@ const performanceMetrics = {
     hybridSearchUsage: 0
 };
 
+// STRICT METADATA CONFIGURATION - Only display these fields
+const ALLOWED_API_FIELDS = new Set([
+    'evaluationId',      // Primary evaluation identifier
+    'weighted_score',    // Your scoring metric
+    'url',              // Evaluation URL
+    'partner',          // Partner name
+    'site',             // Site location
+    'lob',              // Line of business
+    'agentName',        // Agent full name
+    'agentId',          // Agent identifier
+    'disposition',      // Primary disposition
+    'subDisposition',   // Secondary disposition
+    'created_on',       // Creation timestamp
+    'call_date',        // Call date
+    'call_duration',    // Duration in seconds
+    'language',         // Call language
+    'evaluation'        // Evaluation content
+]);
+
+// Fields that should NEVER be displayed in UI
+const FORBIDDEN_INTERNAL_FIELDS = new Set([
+    '_score', '_id', '_index', 'score', 'search_type', 'match_count',
+    'chunk_id', 'vector_score', 'text_score', 'hybrid_score',
+    'highlighted_snippets', 'search_words', 'template_name', 'template_id',
+    'program', 'internalId', 'vector_dimension', 'best_matching_chunks',
+    'vector_enhanced', 'Type', 'Template', 'Program'
+]);
+
 // =============================================================================
 // CORE UTILITY FUNCTIONS
 // =============================================================================
@@ -233,6 +261,8 @@ function setupIdFieldValidation() {
     });
 }
 
+
+
 // Initialize transcript search functionality
 function initializeTranscriptSearch() {
     console.log("🎯 Initializing transcript search functionality...");
@@ -338,7 +368,7 @@ function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
     }
 }
 
-// ADD this new function to your chat.js
+
 function addTranscriptSearchGuidance() {
     // Check if guidance already exists
     if (document.getElementById('transcriptSearchGuidance')) {
@@ -456,6 +486,41 @@ function updateSendFunction(isTranscriptMode) {
         console.log("✅ FIXED: Regular chat functions attached");
     }
 }
+
+function cleanMetadataForDisplay(data) {
+    /**
+     * Cleans any data object to only include allowed fields
+     * @param {Object} data - Raw data object
+     * @returns {Object} - Cleaned data with only allowed fields
+     */
+    if (!data || typeof data !== 'object') {
+        return {};
+    }
+    
+    const cleaned = {};
+    
+    // Only include allowed fields
+    for (const field of ALLOWED_API_FIELDS) {
+        if (data[field] !== undefined && data[field] !== null && 
+            data[field] !== '' && data[field] !== 'Unknown') {
+            cleaned[field] = data[field];
+        }
+        
+        // Check in metadata subdictionary if it exists
+        if (data.metadata && data.metadata[field] !== undefined && 
+            data.metadata[field] !== null && data.metadata[field] !== '') {
+            cleaned[field] = data.metadata[field];
+        }
+    }
+    
+    // Remove any forbidden fields that might have slipped through
+    for (const forbidden of FORBIDDEN_INTERNAL_FIELDS) {
+        delete cleaned[forbidden];
+    }
+    
+    return cleaned;
+}
+
 
 // =============================================================================
 // Initialize the enhanced system
@@ -1403,11 +1468,42 @@ async function sendMessage() {
         hideTypingIndicator();
         
         if (data.reply) {
-            addMessageToChat('assistant', data.reply, data);
+
+            // Clean the response data to remove internal fields
+            const cleanedData = {
+                reply: data.reply,
+                sources: data.sources ? data.sources.map(cleanMetadataForDisplay) : [],
+                sources_summary: data.sources_summary ? {
+                    evaluations: data.sources_summary.evaluations || 0,
+                    agents: data.sources_summary.agents || 0,
+                    partners: data.sources_summary.partners || 0,
+                    sites: data.sources_summary.sites || 0,
+                    dispositions: data.sources_summary.dispositions || 0
+                } : null
+            };
+
+            if (cleanedData.sources) {
+                cleanedData.sources = cleanedData.sources.map(source => {
+                    // Remove internal fields
+                    delete source._score;
+                    delete source.score;
+                    delete source.search_type;
+                    delete source.template_name;
+                    delete source.template_id;
+                    delete source.program;
+                    delete source.vector_enhanced;
+                    return source;
+                });
+            }
+            addMessageToChat('assistant', cleanedData.reply, cleanedData);
             chatHistory.push(
                 { role: 'user', content: message },
-                { role: 'assistant', content: data.reply }
+                { role: 'assistant', content: cleanedData.reply }
             );
+
+            if (cleanedData.sources && cleanedData.sources.length > 0) {
+                displayEvaluationSources(cleanedData.sources);
+            }
             
             console.log(`✅ Message sent successfully in ${responseTime.toFixed(2)}ms`);
             
@@ -1424,6 +1520,69 @@ async function sendMessage() {
         isLoading = false;
         updateSendButtonState(false);
     }
+}
+
+function displayEvaluationSources(sources) {
+    /**
+     * Display clean evaluation sources below chat response
+     * Only shows allowed API fields
+     */
+    if (!sources || sources.length === 0) return;
+    
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    
+    // Create a clean display of sources
+    const sourcesDiv = document.createElement('div');
+    sourcesDiv.className = 'evaluation-sources';
+    sourcesDiv.style.cssText = `
+        margin: 12px 0;
+        padding: 12px;
+        background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
+        border-radius: 8px;
+        border-left: 3px solid #1976d2;
+        font-size: 0.85rem;
+    `;
+    
+    const displaySources = sources.slice(0, 3); // Show first 3
+    
+    sourcesDiv.innerHTML = `
+        <div style="font-weight: 600; margin-bottom: 8px; color: #333;">
+            📊 Related Evaluations
+        </div>
+        ${displaySources.map(source => {
+            // Build display with ONLY allowed fields
+            let sourceHTML = `<div style="background: white; padding: 8px; margin: 4px 0; border-radius: 4px;">`;
+            
+            // Display allowed fields only
+            if (source.evaluationId) {
+                sourceHTML += `<div><strong>ID:</strong> ${source.evaluationId}</div>`;
+            }
+            if (source.partner) {
+                sourceHTML += `<div><strong>Partner:</strong> ${source.partner}</div>`;
+            }
+            if (source.disposition) {
+                sourceHTML += `<div><strong>Disposition:</strong> ${source.disposition}</div>`;
+            }
+            if (source.agentName) {
+                sourceHTML += `<div><strong>Agent:</strong> ${source.agentName}</div>`;
+            }
+            if (source.weighted_score !== undefined && source.weighted_score !== null) {
+                sourceHTML += `<div><strong>Score:</strong> ${source.weighted_score}</div>`;
+            }
+            
+            sourceHTML += `</div>`;
+            return sourceHTML;
+        }).join('')}
+        ${sources.length > 3 ? `
+            <div style="margin-top: 8px; color: #666;">
+                ... and ${sources.length - 3} more evaluations
+            </div>
+        ` : ''}
+    `;
+    
+    chatMessages.appendChild(sourcesDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function addMessageToChat(role, content, metadata = null) {
