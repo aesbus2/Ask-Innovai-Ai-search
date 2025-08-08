@@ -211,6 +211,50 @@ def test_document_indexing():
         print(f"   ❌ Document indexing test failed: {e}")
         return False
 
+def audit_missing_content(client):
+    """Audit OpenSearch documents missing usable content"""
+    print("\n8. Content Completeness Audit:")
+    print("=" * 50)
+
+    try:
+        query = {
+            "query": {
+                "bool": {
+                    "must_not": [
+                        {"exists": {"field": "transcript_text"}},
+                        {"exists": {"field": "chunks.embedding"}}
+                    ]
+                }
+            },
+            "_source": [
+                "evaluationId",
+                "template_name",
+                "metadata.agentName",
+                "metadata.disposition",
+                "full_text"
+            ]
+        }
+
+        response = client.search(index="eval-template-*", body=query, size=25)
+        hits = response["hits"]["hits"]
+        total = response["hits"]["total"]["value"]
+
+        print(f"   ❗ Found {total} documents missing both `transcript_text` and `chunks.embedding`")
+        if hits:
+            for hit in hits:
+                source = hit["_source"]
+                eval_id = source.get("evaluationId", "N/A")
+                agent = source.get("metadata", {}).get("agentName", "N/A")
+                disposition = source.get("metadata", {}).get("disposition", "N/A")
+                print(f"   - Eval ID: {eval_id}, Agent: {agent}, Disposition: {disposition}")
+
+        return total
+
+    except Exception as e:
+        print(f"   ❌ Failed to audit content completeness: {e}")
+        return 0
+
+
 def provide_recommendations():
     """Provide troubleshooting recommendations"""
     print("\n6. Troubleshooting Recommendations:")
@@ -262,6 +306,27 @@ def main():
     
     if connection_ok:
         print("\n✅ Basic connection successful!")
+
+        # Create OpenSearch client again to reuse
+        opensearch_host = os.getenv("OPENSEARCH_HOST", "NOT_SET")
+        opensearch_port = int(os.getenv("OPENSEARCH_PORT", "25060"))
+        opensearch_user = os.getenv("OPENSEARCH_USER", "admin")
+        opensearch_pass = os.getenv("OPENSEARCH_PASS", "admin")
+        clean_host = opensearch_host.replace("http://", "").replace("https://", "")
+        protocol = "https" if "cloud" in clean_host.lower() or "digitalocean" in clean_host.lower() else "http"
+        opensearch_url = f"{protocol}://{clean_host}:{opensearch_port}"
+
+        client = OpenSearch(
+            hosts=[opensearch_url],
+            http_auth=(opensearch_user, opensearch_pass),
+            use_ssl=opensearch_url.startswith("https"),
+            verify_certs=False,
+            timeout=15,
+            max_retries=2,
+            retry_on_timeout=True
+        )
+
+        audit_missing_content(client)
         indexing_ok = test_document_indexing()
         
         if indexing_ok:

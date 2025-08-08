@@ -1031,10 +1031,19 @@ def extract_program_from_template(template_name: str, template_id: str = None, e
         # Partner-based program detection
         if any(keyword in partner for keyword in ["metro", "metro by t-mobile"]):
             return "Metro"
-        elif any(keyword in partner for keyword in ["TMO prepaid", "t-mobile prepaid"]):
+    
+        elif any(keyword in partner for keyword in ["tmo prepaid", "t-mobile prepaid"]):
             return "T-Mobile Prepaid"
         elif any(keyword in partner for keyword in ["asw", "assurance wireless", "assurance"]):
-            return "ASW"       
+            return "ASW"
+
+        # Optional: fallback detection from site or lob
+        if "metro" in site or "metro" in lob:
+            return "Metro"
+        if "assurance" in site or "asw" in lob:
+            return "ASW"
+
+        return "Unknown"
     
     # Final fallback for PRODUCTION
     log_import(f"⚠️ Could not extract program from template '{template_name}' - using fallback")
@@ -1077,7 +1086,7 @@ def generate_agent_id(agentName):
         # Create a consistent hash for PRODUCTION
         hash_object = hashlib.md5(agentName.encode())
         return hash_object.hexdigest()[:8]
-    except:
+    except Exception:
         # Fallback method
         return str(hash(agentName) % 100000000).zfill(8)
 
@@ -2064,22 +2073,23 @@ async def cleanup_memory_after_batch():
 # ============================================================================
 # PRODUCTION EVALUATION PROCESSING 
 # ============================================================================
-
 async def process_evaluation(evaluation: Dict) -> Dict:
     """
-    PRODUCTION: Process evaluation with comprehensive metadata and real data integration
+    PRODUCTION: Process evaluation with full metadata, chunking, embeddings, and OpenSearch indexing.
     """
     try:
+        from embedder import embed_text, embed_texts
+        import numpy as np
+
         evaluation_text = evaluation.get("evaluation", "")
         transcript_text = evaluation.get("transcript", "")
-        
+
         if not evaluation_text and not transcript_text:
             return {"status": "skipped", "reason": "no_content"}
-        
-        # Extract all chunks
+
         all_chunks = []
-        
-        # Process evaluation Q&A
+
+        # Extract QA chunks
         if evaluation_text:
             qa_chunks = extract_qa_pairs(evaluation_text)
             for i, qa_data in enumerate(qa_chunks):
@@ -2094,8 +2104,8 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                         "qa_pair_index": i
                     }
                     all_chunks.append(chunk_data)
-        
-        # Process transcript
+
+        # Extract transcript chunks
         if transcript_text:
             transcript_chunks = split_transcript_by_speakers(transcript_text)
             for i, transcript_data in enumerate(transcript_chunks):
@@ -2110,198 +2120,123 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                         "transcript_chunk_index": i
                     }
                     all_chunks.append(chunk_data)
-        
+
         if not all_chunks:
             return {"status": "skipped", "reason": "no_meaningful_content"}
-        
-        # PRODUCTION: Use comprehensive metadata extraction
+
         comprehensive_metadata = extract_comprehensive_metadata(evaluation)
-        
-        # Validation
         evaluationId = evaluation.get("evaluationId")
-        if not evaluationId:
-            return {"status": "skipped", "reason": "missing_eval_id"}
-        
         template_id = evaluation.get("template_id")
-        if not template_id:
-            return {"status": "skipped", "reason": "missing_template_id"}
-        
-        # Document ID and collection
+
+        if not evaluationId or not template_id:
+            return {"status": "skipped", "reason": "missing_required_fields"}
+
         doc_id = str(evaluationId)
         collection = clean_template_id_for_index(template_id)
-        
-       # ✅ PRODUCTION LOGGING with API-consistent field names
-        log_import(f"✅ API-CONSISTENT METADATA for {evaluationId}:")
-        log_import(f"   agentId: {comprehensive_metadata.get('agentId')} (from API field 'agentId')")
-        log_import(f"   agentName: {comprehensive_metadata.get('agentName')} (from API field 'agentName')")
-        log_import(f"   subDisposition: {comprehensive_metadata.get('subDisposition')} (from API field 'subDisposition')")
-        log_import(f"   template_name: {comprehensive_metadata.get('template_name')}")
-        log_import(f"   program: {comprehensive_metadata.get('program')} (extracted)")
 
-        # ✅ CREATE DOCUMENT WITH API-CONSISTENT STRUCTURE
-        document_body = {
-            # Use comprehensive metadata (now API-consistent)
-            **comprehensive_metadata,
-            
-            # Content fields (keep same as before)
-            "evaluation_text": evaluation_text,
-            "transcript_text": transcript_text,
-            "text": f"{evaluation_text}\n\n{transcript_text}".strip(),
-            "full_text": f"{evaluation_text}\n\n{transcript_text}".strip(),
-            
-            # Chunks structure (keep same as before)
-            "chunks": [],
-            "total_chunks": len(all_chunks),
-            "content_types": list(set(chunk["content_type"] for chunk in all_chunks)),
-            
-            # System fields (keep same as before)
-            "document_type": "evaluation_grouped",
-            "collection_name": collection,
-            "collection_source": f"template_id_{template_id}",
-            "version": "5.0.0_api_consistent"
-        }
-        
-        # Generate embeddings
+        # Embed chunks
         chunk_embeddings = []
         if EMBEDDER_AVAILABLE:
             try:
                 chunk_texts = [chunk["text"] for chunk in all_chunks]
-                
                 batch_size = 10
                 for i in range(0, len(chunk_texts), batch_size):
-                    batch_texts = chunk_texts[i:i + batch_size]
+                    batch = chunk_texts[i:i + batch_size]
                     try:
-                        from embedder import embed_texts
-                        batch_embeddings = embed_texts(batch_texts)
-                        chunk_embeddings.extend(batch_embeddings)
-                    except ImportError:
-                        for text in batch_texts:
-                            embedding = embed_text(text)
-                            chunk_embeddings.append(embedding)
-                    
+                        chunk_embeddings.extend(embed_texts(batch))
+                    except Exception:
+                        for text in batch:
+                            chunk_embeddings.append(embed_text(text))
                     if i + batch_size < len(chunk_texts):
                         await asyncio.sleep(0.1)
-                        
             except Exception as e:
-                log_import(f"⚠️ Embedding failed for evaluation {evaluationId}: {str(e)[:50]}")
-                chunk_embeddings = []
-        
-        # CREATE SINGLE DOCUMENT WITH COMPREHENSIVE METADATA
+                log_import(f"⚠️ Embedding failed: {e}")
+
+        full_text = "\n\n".join([chunk["text"] for chunk in all_chunks])
+
+        # Document embedding (mean of chunks)
+        document_embedding = []
+        if chunk_embeddings:
+            try:
+                document_embedding = np.mean(chunk_embeddings, axis=0).tolist()
+            except Exception as e:
+                log_import(f"⚠️ Failed document embedding: {e}")
+
+        def normalize_datetime(val):
+            try:
+                if isinstance(val, datetime):
+                    return val.isoformat()                    # Handle ISO format or datetime strings
+                return datetime.fromisoformat(val).isoformat()     
+            except Exception:
+                return val
+
+        created_on = normalize_datetime(evaluation.get("created_on", ""))
+        call_date = normalize_datetime(evaluation.get("call_date", ""))
+
         document_body = {
-            # Primary identification
             "evaluationId": evaluationId,
-            "internalId": comprehensive_metadata["internalId"],
+            "internalId": evaluation.get("internalId"),
             "template_id": template_id,
-            "template_name": comprehensive_metadata["template_name"],
-            
-            # Document structure
-            "document_type": "evaluation",
+            "template_name": evaluation.get("template_name"),
+            "weighted_score": evaluation.get("weighted_score"),
+            "url": evaluation.get("url"),
+            "partner": evaluation.get("partner"),
+            "site": evaluation.get("site"),
+            "lob": evaluation.get("lob"),
+            "agentName": evaluation.get("agentName"),
+            "agentId": evaluation.get("agentId"),
+            "disposition": evaluation.get("disposition"),
+            "subDisposition": evaluation.get("subDisposition"),
+            "call_date": call_date,
+            "created_on": created_on,
+            "call_duration": evaluation.get("call_duration"),
+            "language": evaluation.get("language"),
+            "evaluation": evaluation_text,
+            "transcript": transcript_text,
+            "evaluation_text": evaluation_text,
+            "transcript_text": transcript_text,
+            "full_text": full_text,
+            "document_embedding": document_embedding,
             "total_chunks": len(all_chunks),
             "evaluation_chunks_count": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
             "transcript_chunks_count": len([c for c in all_chunks if c["content_type"] == "transcript"]),
-            
-            # All chunks
-            "chunks": [],
-            
-            # Combined text for search
-            "full_text": "",
-            "evaluation_text": evaluation_text,
-            "transcript_text": transcript_text,
-            
-            # PRODUCTION: Enhanced metadata for real data filters
+            "chunks": [
+                {**chunk, "embedding": chunk_embeddings[i]} if i < len(chunk_embeddings) else chunk
+                for i, chunk in enumerate(all_chunks)
+            ],
             "metadata": comprehensive_metadata,
-            
-            # Indexing info
             "source": "evaluation_api",
             "indexed_at": datetime.now().isoformat(),
             "collection_name": collection,
             "collection_source": f"template_id_{template_id}",
-            "version": "4.2.0_production"
+            "version": "5.0.0_api_consistent"
         }
-        
-        # Add chunks with embeddings
-        full_text_parts = []
-        
-        for i, chunk in enumerate(all_chunks):
-            chunk_data = {
-                "chunk_index": i,
-                "text": chunk["text"],
-                "content_type": chunk["content_type"],
-                "length": len(chunk["text"]),
-                **{k: v for k, v in chunk.items() if k not in ["text", "content_type", "chunk_index"]}
-            }
-            
-            if i < len(chunk_embeddings):
-                chunk_data["embedding"] = chunk_embeddings[i]
-            
-            document_body["chunks"].append(chunk_data)
-            full_text_parts.append(chunk["text"])
-        
-        # Create combined full text
-        document_body["full_text"] = "\n\n".join(full_text_parts)
-        
-        # Add document-level embedding
-        if chunk_embeddings:
-            try:
-                import numpy as np
-                doc_embedding = np.mean(chunk_embeddings, axis=0).tolist()
-                document_body["document_embedding"] = doc_embedding
-            except Exception as e:
-                log_import(f"⚠️ Could not create document embedding: {str(e)[:50]}")
-        
-        # INDEX DOCUMENT WITH RETRY LOGIC
+
         try:
-            max_retries = 3
-            for retry in range(max_retries):
-                try:
-                    index_document(doc_id, document_body, index_override=collection)
-                    log_import(f"✅ PRODUCTION INDEXED: Eval {evaluationId}")
-                    log_import(f"   Template: '{comprehensive_metadata['template_name']}'")
-                    log_import(f"   Program: '{comprehensive_metadata['program']}'")
-                    log_import(f"   Agent: '{comprehensive_metadata['agentName']}'")  # API field name
-                    log_import(f"   {len(all_chunks)} chunks")
-                    break
-                    
-                except Exception as index_error:
-                    if retry < max_retries - 1:
-                        delay = (retry + 1) * 2
-                        log_import(f"⚠️ Retry {retry + 1}/{max_retries} for eval {evaluationId} in {delay}s: {str(index_error)[:50]}")
-                        time.sleep(delay)
-                    else:
-                        raise index_error
-            
+            index_document(doc_id, document_body, index_override=collection)
+            log_import(f"✅ Indexed: Eval {evaluationId}, Agent: {evaluation.get('agentName')}, Chunks: {len(all_chunks)}")
         except Exception as e:
-            error_msg = f"Failed to index evaluation {evaluationId}: {str(e)}"
-            log_import(f"❌ {error_msg}")
-            
-            if any(keyword in str(e).lower() for keyword in ["timeout", "connection", "unreachable", "opensearch"]):
-                raise Exception(f"OpenSearch connection error: {str(e)}")
-            
+            log_import(f"❌ Failed to index eval {evaluationId}: {str(e)}")
             return {"status": "error", "error": str(e)}
-        
-        # ✅ RETURN WITH EXACT API FIELD NAMES - No mixing of conventions!
+
         return {
             "status": "success",
             "document_id": doc_id,
-            
-            # ✅ USE EXACT API FIELD NAMES throughout
-            "evaluationId": evaluationId,                        # API: evaluationId (camelCase)
-            "template_id": template_id,                           # API: template_id (snake_case)
-            "template_name": comprehensive_metadata["template_name"], # API: template_name (snake_case)
-            "agentName": comprehensive_metadata.get("agentName"), # API: agentName (camelCase)
-            "agentId": comprehensive_metadata.get("agentId"),     # API: agentId (camelCase)
-            "subDisposition": comprehensive_metadata.get("subDisposition"), # API: subDisposition (camelCase)
-            "weighted_score": comprehensive_metadata.get("weighted_score"), # API: weighted_score (snake_case)
-            "partner": comprehensive_metadata.get("partner"),     # API: partner
-            "site": comprehensive_metadata.get("site"),           # API: site
-            "lob": comprehensive_metadata.get("lob"),             # API: lob
-            "call_date": comprehensive_metadata.get("call_date"), # API: call_date (snake_case)
-            "call_duration": comprehensive_metadata.get("call_duration"), # API: call_duration (snake_case)
-            "url": comprehensive_metadata.get("url"),             # API: url
-            "language": comprehensive_metadata.get("language"),   # API: language
-            
-            # Processing metadata
-            "program": comprehensive_metadata.get("program"),     # Extracted field
+            "evaluationId": evaluationId,
+            "template_id": template_id,
+            "template_name": evaluation.get("template_name"),
+            "agentName": evaluation.get("agentName"),
+            "agentId": evaluation.get("agentId"),
+            "subDisposition": evaluation.get("subDisposition"),
+            "weighted_score": evaluation.get("weighted_score"),
+            "partner": evaluation.get("partner"),
+            "site": evaluation.get("site"),
+            "lob": evaluation.get("lob"),
+            "call_date": call_date,
+            "call_duration": evaluation.get("call_duration"),
+            "url": evaluation.get("url"),
+            "language": evaluation.get("language"),
+            "program": comprehensive_metadata.get("program"),
             "collection": collection,
             "total_chunks": len(all_chunks),
             "evaluation_chunks": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
@@ -2310,16 +2245,11 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             "has_embeddings": bool(chunk_embeddings),
             "api_consistent": True
         }
-        
+
     except Exception as e:
         logger.error(f"PRODUCTION: Failed to process evaluation: {e}")
-        # Enhanced error logging for debugging
-        if isinstance(evaluation, dict):
-            log_import(f"   Available API fields: {list(evaluation.keys())}")
-            if 'agentId' in evaluation:
-                log_import(f"   agentId found: {evaluation['agentId']}")
-            if 'agentName' in evaluation:
-                log_import(f"   agentName found: {evaluation['agentName']}")
+        return {"status": "error", "error": str(e)}
+
 
 # ============================================================================
 # PRODUCTION API FETCHING (Keeping existing)
@@ -2399,9 +2329,9 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
         DELAY_BETWEEN_DOCS = float(os.getenv("DELAY_BETWEEN_DOCS", "0.5"))
         MEMORY_CLEANUP_INTERVAL = int(os.getenv("MEMORY_CLEANUP_INTERVAL", "1"))
         
-        log_import(f"📊 PRODUCTION import configuration:")
-        log_import(f"   🔗 Collections based on: template_ID")
-        log_import(f"   📋 Document grouping: evaluationID")
+        log_import("📊 PRODUCTION import configuration:")
+        log_import("   🔗 Collections based on: template_ID")
+        log_import("   📋 Document grouping: evaluationID")
         log_import(f"   📦 Batch size: {BATCH_SIZE}")
         log_import(f"   ⏱️ Delay between batches: {DELAY_BETWEEN_BATCHES}s")
         log_import(f"   🧹 Memory cleanup interval: {MEMORY_CLEANUP_INTERVAL} batches")
@@ -2631,7 +2561,7 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
             "version": "4.2.0_production"
         }
         
-        log_import(f"🎉 PRODUCTION import completed:")
+        log_import("🎉 PRODUCTION import completed:")
         log_import(f"   📄 Evaluations processed: {total_processed}/{len(evaluations)}")
         log_import(f"   📋 Documents indexed: {total_evaluations_indexed} (1 per evaluation)")
         log_import(f"   🧩 Total chunks processed: {total_chunks} (grouped within documents)")
@@ -2641,9 +2571,9 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
         log_import(f"   🔌 OpenSearch errors: {opensearch_errors}")
         log_import(f"   📊 Success rate: {results['success_rate']}")
         log_import(f"   💾 Memory change: {memory_change:+.1f} MB")
-        log_import(f"   🏗️ Document structure: Evaluation-grouped (chunks within documents)")
-        log_import(f"   🏷️ Collection strategy: Template_ID-based")
-        log_import(f"   🎯 Real data filters: Ready for production use")
+        log_import("   🏗️ Document structure: Evaluation-grouped (chunks within documents)")
+        log_import("   🏷️ Collection strategy: Template_ID-based")
+        log_import("   🎯 Real data filters: Ready for production use")
         
         update_import_status("completed", results=results)
         
@@ -3064,12 +2994,11 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
             raise HTTPException(status_code=400, detail="max_docs must be a positive integer")
         
         # Log import start
-        log_import(f"🚀 PRODUCTION import request received:")
+        log_import("🚀 PRODUCTION import request received:")
         log_import(f"   Collection: {request.collection}")
         log_import(f"   Import Type: {request.import_type}")
         log_import(f"   Max Docs: {request.max_docs or 'All'}")
-        log_import(f"   Batch Size: {request.batch_size or 'Default'}")
-        log_import(f"   Version: 4.2.0_production")
+        log_import(f"   Batch Size: {request.batch_size or 'Default'}")        
         
         # Start background import
         background_tasks.add_task(
@@ -3109,7 +3038,7 @@ async def health():
         
         # Enhanced OpenSearch status with vector search
         try:
-            from opensearch_client import get_connection_status, test_connection, get_opensearch_config, detect_vector_support, get_available_fields, get_opensearch_client
+            from opensearch_client import get_connection_status, get_opensearch_config, detect_vector_support, get_available_fields, get_opensearch_client
             
             config = get_opensearch_config()
             conn_status = get_connection_status()
@@ -3582,7 +3511,6 @@ async def debug_test_metadata_extraction():
                 "source_keys": list(source.keys()) if source else [],
                 "evaluationId_sources": {
                     "evaluationId": source.get("evaluationId"),
-                    "evaluationId": source.get("evaluationId"), 
                     "internalId": source.get("internalId"),
                     "metadata.evaluationId": source.get("metadata", {}).get("evaluationId") if source.get("metadata") else None
                 },
@@ -3697,10 +3625,7 @@ async def get_opensearch_health_detailed():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
-from fastapi.responses import FileResponse
-
-
-
+ 
     
 # Add these debugging endpoints to your existing app.py file
 # These will help diagnose chat and filter issues
@@ -3825,8 +3750,8 @@ async def debug_test_search(q: str = "customer service", filters: str = "{}"):
         # Parse filters
         try:
             parsed_filters = json.loads(filters) if filters != "{}" else {}
-        except:
-            parsed_filters = {}
+        except Exception:
+           parsed_filters = {}
         
         logger.info(f"🔍 DEBUG SEARCH: query='{q}', filters={parsed_filters}")
         
@@ -3894,8 +3819,8 @@ async def debug_test_chat_simple():
             "access_key_preview": f"{access_key[:10]}..." if access_key else "Not set"
         }
         
-        # Test 3: Try a simple request structure
-        test_request = ChatRequest(
+         # Test 3: Try a simple request structure
+        ChatRequest(
             message="Hello test",
             history=[],
             filters={},
@@ -3903,7 +3828,7 @@ async def debug_test_chat_simple():
         )
         
         logger.info("✅ ChatRequest creation works")
-        
+       
         # Test 4: Check imports that might be missing
         missing_imports = []
         
