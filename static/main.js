@@ -257,41 +257,105 @@ function ultraSafeFormat(value) {
 // ============================================================================
 
 async function loadOpenSearchStats() {
+    console.log("📊 Loading OpenSearch statistics...");
+    
     const container = document.getElementById('statisticsContainer');
     if (!container) {
-        console.warn('Statistics container not found');
+        console.warn('❌ Statistics container not found - add id="statisticsContainer" to your HTML');
         return;
     }
     
     // Show loading state
     container.innerHTML = `
-        <div class="loading-stats">
-            <div class="spinner"></div>
-            Loading database statistics...
+        <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+            <div class="stats-card">
+                <h3><span class="emoji">🔄</span> Loading...</h3>
+                <div class="stats-number">Please wait</div>
+                <div class="stats-label">Fetching statistics</div>
+            </div>
         </div>
     `;
     
     try {
-        const response = await fetch('/opensearch_statistics', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+        const response = await fetch('/opensearch_statistics');
+        const data = await response.json();
+        
+        console.log("📊 OpenSearch statistics response:", data);
         
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            throw new Error(data.error || `HTTP ${response.status}`);
         }
         
-        const data = await response.json();
-        const timestamp = new Date().toISOString();
+        // ✅ FIXED: Handle the actual API response structure
+        const stats = data.statistics || data;
+        const safeStats = {
+            total_documents: ultraSafeNumber(stats.total_documents || stats.documents || 0),
+            total_evaluations: ultraSafeNumber(stats.total_evaluations || stats.evaluations || 0),
+            programs: ultraSafeNumber(stats.programs || stats.unique_programs || 0),
+            templates: ultraSafeNumber(stats.templates || stats.template_count || 0),
+            weighted_scores_available: ultraSafeNumber(stats.weighted_scores_available || 0)
+        };
         
-        console.log('✅ OpenSearch statistics loaded:', data);
-        displayStatistics(data, timestamp);
+        const html = `
+            <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+                <div class="stats-card priority-metric">
+                    <h3><span class="emoji">📄</span> Total Documents</h3>
+                    <div class="stats-number">${ultraSafeFormat(safeStats.total_documents)}</div>
+                    <div class="stats-label">Documents in OpenSearch</div>
+                </div>
+                
+                <div class="stats-card">
+                    <h3><span class="emoji">🎯</span> Evaluations</h3>
+                    <div class="stats-number">${ultraSafeFormat(safeStats.total_evaluations)}</div>
+                    <div class="stats-label">Unique Evaluations</div>
+                </div>
+                
+                ${safeStats.programs > 0 ? `
+                <div class="stats-card">
+                    <h3><span class="emoji">🏢</span> Programs</h3>
+                    <div class="stats-number">${ultraSafeFormat(safeStats.programs)}</div>
+                    <div class="stats-label">Different Programs</div>
+                </div>` : ''}
+                
+                ${safeStats.templates > 0 ? `
+                <div class="stats-card">
+                    <h3><span class="emoji">📋</span> Templates</h3>
+                    <div class="stats-number">${ultraSafeFormat(safeStats.templates)}</div>
+                    <div class="stats-label">Evaluation Templates</div>
+                </div>` : ''}
+                
+                ${safeStats.weighted_scores_available > 0 ? `
+                <div class="stats-card">
+                    <h3><span class="emoji">📊</span> Scored Evaluations</h3>
+                    <div class="stats-number">${ultraSafeFormat(safeStats.weighted_scores_available)}</div>
+                    <div class="stats-label">With Weighted Scores</div>
+                </div>` : ''}
+            </div>
+            
+            <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #6e32a0;">
+                <div style="font-size: 0.9em; color: #666;">
+                    📅 Last updated: ${ultraSafeTimestamp(data.timestamp || new Date())} | 
+                    🔄 Processing: ${data.processing_time || 'Unknown'}s | 
+                    🏷️ Version: ${data.version || 'Unknown'}
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        console.log("✅ OpenSearch statistics loaded successfully");
         
     } catch (error) {
         console.error('❌ Failed to load OpenSearch statistics:', error);
-        displayStatisticsError(error, container);
+        container.innerHTML = `
+            <div class="stats-card" style="grid-column: 1 / -1; text-align: center; color: #dc3545;">
+                <h3><span class="emoji">❌</span> Error Loading Statistics</h3>
+                <div class="stats-number">${error.message}</div>
+                <div class="stats-label">Please check your OpenSearch connection</div>
+                <button class="btn secondary" onclick="loadOpenSearchStats()" style="margin-top: 10px;">
+                    🔄 Retry
+                </button>
+            </div>
+        `;
     }
 }
 
@@ -963,20 +1027,21 @@ function showResults(results) {
 }
 
 async function refreshStatus() {
+    console.log("🔄 Refreshing all status information...");
+    
     try {
-        console.log("🔄 Refreshing import status...");
-        await checkImportStatus();
-    } catch (error) {
-        console.error('❌ Failed to refresh status:', error);
+        // Run all checks in parallel for better performance
+        const promises = [
+            checkSystemHealth(),
+            checkLastImportInfo(), 
+            loadOpenSearchStats()
+        ];
         
-        const container = document.getElementById('statusContainer');
-        if (container) {
-            container.innerHTML = `
-                <div class="status error">
-                    <strong>❌ Status Error:</strong> ${error.message}
-                </div>
-            `;
-        }
+        await Promise.allSettled(promises);
+        console.log("✅ Status refresh completed");
+        
+    } catch (error) {
+        console.error("❌ Error during status refresh:", error);
     }
 }
 
@@ -1149,16 +1214,18 @@ function showResults(results) {
 // ============================================================================
 
 async function checkSystemHealth() {
+    console.log("🏥 Checking system health...");
+    
     const container = document.getElementById('healthContainer');
     if (!container) {
-        console.warn('Health container not found');
+        console.warn('❌ Health container not found - add id="healthContainer" to your HTML');
         return;
     }
     
     container.innerHTML = `
         <div class="health-item">
             <span class="health-label">System Status</span>
-            <span class="health-value">Checking...</span>
+            <span class="health-value">🔄 Checking...</span>
         </div>
     `;
     
@@ -1166,7 +1233,43 @@ async function checkSystemHealth() {
         const response = await fetch('/health');
         const data = await response.json();
         
-        const isHealthy = response.ok && data.status === 'healthy';
+        console.log("🩺 Health check response:", data);
+        
+        // ✅ FIXED: Match the actual API response structure
+        const isHealthy = response.ok && (data.status === 'ok' || data.status === 'healthy');
+        
+        // ✅ FIXED: Handle the correct OpenSearch status structure
+        let openSearchStatus = '❌ Unknown';
+        if (data.components && data.components.opensearch) {
+            const osStatus = data.components.opensearch.status;
+            if (osStatus === 'connected') {
+                openSearchStatus = '✅ Connected';
+            } else if (osStatus === 'not configured') {
+                openSearchStatus = '⚠️ Not Configured';
+            } else {
+                openSearchStatus = '❌ Disconnected';
+            }
+        }
+        
+        // ✅ FIXED: Handle memory usage if available
+        let memoryDisplay = 'Unknown';
+        if (data.memory_usage) {
+            memoryDisplay = Math.round(data.memory_usage) + '%';
+        } else if (data.components && data.components.system && data.components.system.memory_usage) {
+            memoryDisplay = Math.round(data.components.system.memory_usage) + '%';
+        }
+        
+        // ✅ FIXED: Add vector search status if available
+        let vectorSearchStatus = '';
+        if (data.components && data.components.opensearch && data.components.opensearch.vector_search_support !== undefined) {
+            const vectorEnabled = data.components.opensearch.vector_search_support;
+            vectorSearchStatus = `
+                <div class="health-item">
+                    <span class="health-label">Vector Search</span>
+                    <span class="health-value">${vectorEnabled ? '✅ Enabled' : '❌ Disabled'}</span>
+                </div>
+            `;
+        }
         
         container.innerHTML = `
             <div class="health-item ${isHealthy ? '' : 'unhealthy'}">
@@ -1175,16 +1278,19 @@ async function checkSystemHealth() {
             </div>
             <div class="health-item">
                 <span class="health-label">OpenSearch</span>
-                <span class="health-value">${data.opensearch ? '✅ Connected' : '❌ Disconnected'}</span>
+                <span class="health-value">${openSearchStatus}</span>
             </div>
             <div class="health-item">
                 <span class="health-label">Memory Usage</span>
-                <span class="health-value">${data.memory_usage ? Math.round(data.memory_usage) + '%' : 'Unknown'}</span>
+                <span class="health-value">${memoryDisplay}</span>
             </div>
+            ${vectorSearchStatus}
         `;
         
+        console.log("✅ Health check completed successfully");
+        
     } catch (error) {
-        console.error('Health check failed:', error);
+        console.error('❌ Health check failed:', error);
         container.innerHTML = `
             <div class="health-item unhealthy">
                 <span class="health-label">System Status</span>
@@ -1195,32 +1301,80 @@ async function checkSystemHealth() {
 }
 
 async function checkLastImportInfo() {
-    const container = document.getElementById('lastImportInfo');
-    if (!container) return;
+    console.log("📅 Checking last import info...");
+    
+    let container = document.getElementById('lastImportInfo');
+    
+    // ✅ FIXED: Create the container if it doesn't exist
+    if (!container) {
+        console.log("⚠️ lastImportInfo container not found, creating it...");
+        
+        // Find a good place to add it (after the health container)
+        const healthSection = document.getElementById('healthContainer')?.parentElement;
+        if (healthSection) {
+            const newContainer = document.createElement('div');
+            newContainer.id = 'lastImportInfo';
+            newContainer.className = 'health-status';
+            newContainer.style.marginTop = '20px';
+            
+            // Add a header
+            const header = document.createElement('h3');
+            header.innerHTML = '<span class="emoji">📅</span> Last Import Information';
+            healthSection.appendChild(header);
+            healthSection.appendChild(newContainer);
+            
+            container = newContainer;
+        } else {
+            console.warn('❌ Could not create lastImportInfo container - no health section found');
+            return;
+        }
+    }
+    
+    container.innerHTML = `
+        <div class="health-item">
+            <span class="health-label">Last Import</span>
+            <span class="health-value">🔄 Checking...</span>
+        </div>
+    `;
     
     try {
         const response = await fetch('/import_info');
         const data = await response.json();
         
+        console.log("📊 Import info response:", data);
+        
         if (data.last_import) {
             container.innerHTML = `
-                <div class="status completed">
-                    <strong>Last Import:</strong> ${ultraSafeTimestamp(data.last_import.timestamp)}
-                    <br><strong>Type:</strong> ${ultraSafeString(data.last_import.type)}
-                    <br><strong>Status:</strong> ${ultraSafeString(data.last_import.status)}
+                <div class="health-item">
+                    <span class="health-label">Last Import</span>
+                    <span class="health-value">✅ ${ultraSafeTimestamp(data.last_import.timestamp)}</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">Import Type</span>
+                    <span class="health-value">${ultraSafeString(data.last_import.type)}</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">Status</span>
+                    <span class="health-value">${ultraSafeString(data.last_import.status)}</span>
                 </div>
             `;
         } else {
             container.innerHTML = `
-                <div class="status idle">
-                    <strong>Last Import:</strong> No import history found
+                <div class="health-item">
+                    <span class="health-label">Last Import</span>
+                    <span class="health-value">⚠️ No import history found</span>
                 </div>
             `;
         }
+        
+        console.log("✅ Last import info loaded successfully");
+        
     } catch (error) {
+        console.error('❌ Failed to load import info:', error);
         container.innerHTML = `
-            <div class="status failed">
-                <strong>Error:</strong> ${error.message}
+            <div class="health-item unhealthy">
+                <span class="health-label">Last Import</span>
+                <span class="health-value">❌ Error: ${error.message}</span>
             </div>
         `;
     }
