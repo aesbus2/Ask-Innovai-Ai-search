@@ -5,13 +5,14 @@ import os
 import re
 import logging
 import json
-import time
 from datetime import datetime
-from typing import List, Dict, Optional, Any, Union
+from embedder import embed_text
+from typing import List, Dict, Any
+from opensearch_client import get_opensearch_client, ensure_evaluation_index_exists
 
 try:
     from opensearchpy import OpenSearch
-    from opensearchpy.exceptions import ConnectionError, RequestError
+    from opensearchpy.exceptions import RequestError
     OPENSEARCH_AVAILABLE = True
 except ImportError:
     OPENSEARCH_AVAILABLE = False
@@ -67,6 +68,8 @@ def get_client():
     except Exception as e:
         logger.error(f"Failed to create OpenSearch client: {e}")
         return None
+    
+
 
 def get_opensearch_client():
     """Get or create global client instance"""
@@ -1665,34 +1668,43 @@ def ensure_evaluation_index_exists(client, index_name: str):
         raise
 
 def index_document(doc_id: str, document: Dict[str, Any], index_override: str = None) -> bool:
-    """Enhanced document indexing with vector support"""
     client = get_opensearch_client()
     if not client:
         logger.error("❌ OpenSearch client not available")
         return False
-    
+
     index_name = index_override or "evaluations-grouped"
-    
+
     try:
-        # Ensure index exists (with vector support if available)
         ensure_evaluation_index_exists(client, index_name)
-        
-        # Add system fields
+
+        # ✅ Add system fields
         document["_indexed_at"] = datetime.now().isoformat()
         document["_structure_version"] = VERSION
-        
-        # Index with proper timeout
-        response = client.index(
+
+         # Add system fields
+        document["_indexed_at"] = datetime.now().isoformat()
+        document["_structure_version"] = VERSION
+
+        # Safe embedding logic
+        text_for_embedding = document.get("transcript") or document.get("evaluation") or ""
+        if text_for_embedding.strip():
+            document["document_embedding"] = embed_text(text_for_embedding)
+        else:
+            logger.warning(f"⚠️ No text to embed for document {doc_id}")
+            document["document_embedding"] = None
+
+        client.index(
             index=index_name,
             id=doc_id,
             body=document,
             refresh=True,
             request_timeout=60
         )
-        
+
         logger.info(f"✅ Indexed document {doc_id} in {index_name}")
         return True
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to index document {doc_id}: {e}")
         return False
