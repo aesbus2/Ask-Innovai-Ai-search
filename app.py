@@ -27,7 +27,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse as StarletteJSONResponse
 from opensearch_client import search_transcripts_comprehensive, search_transcripts_only, search_transcript_with_context
 
 # Other imports
@@ -400,7 +399,7 @@ async def lifespan(app: FastAPI):
     # Startup
     try:
         logger.info("🚀 Ask InnovAI PRODUCTION starting...")
-        logger.info(f"   Version: 4.8.1_lifespan_fixed")
+        logger.info("   Version: 4.8.1_lifespan_fixed")
         logger.info(f"   🔮 VECTOR SEARCH: {'✅ ENABLED' if VECTOR_SEARCH_READY else '❌ DISABLED'}")
         logger.info(f"   🔥 HYBRID SEARCH: {'✅ AVAILABLE' if VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
         logger.info(f"   📚 EMBEDDER: {'✅ LOADED' if EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
@@ -415,10 +414,10 @@ async def lifespan(app: FastAPI):
         logger.info(f"   OpenSearch: {'✅ Configured' if opensearch_configured else '❌ Missing'}")
 
         
-        logger.info(f"   Features: Vector Search + Real Data Filters + Hybrid Search + Semantic Similarity")
-        logger.info(f"   Features: Real Data Filters + Efficient Metadata Loading + Evaluation Grouping")
-        logger.info(f"   Program Extraction: Enhanced pattern matching")
-        logger.info(f"   Metadata Loading: Index-based efficient sampling")
+        logger.info("   Features: Vector Search + Real Data Filters + Hybrid Search + Semantic Similarity")
+        logger.info("   Features: Real Data Filters + Efficient Metadata Loading + Evaluation Grouping")
+        logger.info("   Program Extraction: Enhanced pattern matching")
+        logger.info("   Metadata Loading: Index-based efficient sampling")
         logger.info(f"   Filter Caching: {_filter_metadata_cache['ttl_seconds']}s TTL")
         logger.info(f"   Port: {os.getenv('PORT', '8080')}")
         logger.info(f"   Memory Monitoring: {'✅ Available' if PSUTIL_AVAILABLE else '❌ Disabled'}")           
@@ -1880,27 +1879,6 @@ async def last_import_info():
         "vector_search_enabled": VECTOR_SEARCH_READY
     }
 
-@app.get("/import_info")
-async def get_import_info():
-    """Get information about the last import"""
-    try:
-        # You can expand this with actual import tracking if needed
-        return {
-            "status": "success",
-            "last_import": {
-                "timestamp": import_status.get("end_time") or import_status.get("start_time"),
-                "type": import_status.get("import_type", "unknown"),
-                "status": import_status.get("status", "unknown")
-            } if import_status.get("start_time") else None,
-            "current_status": import_status.get("status", "idle"),
-            "message": "Import info endpoint working"
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "message": "Failed to get import info"
-        }
 
 # ============================================================================
 # DEBUG AND ADMIN ENDPOINTS
@@ -3253,11 +3231,6 @@ def create_empty_statistics_response():
 
 
 
-
-
-
-
-
 @app.post("/import")
 async def start_import(request: ImportRequest, background_tasks: BackgroundTasks):
     """PRODUCTION: Start the enhanced import process with real data integration"""
@@ -3335,6 +3308,71 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
     except Exception as e:
         logger.error(f"PRODUCTION: Failed to start import: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to start import: {str(e)}")
+    
+@app.get("/import_status")
+async def get_import_status():
+    """Get current import status - REQUIRED by your frontend"""
+    try:
+        return {
+            "status": import_status.get("status", "idle"),
+            "current_step": import_status.get("current_step"),
+            "start_time": import_status.get("start_time"),
+            "end_time": import_status.get("end_time"),
+            "results": import_status.get("results", {}),
+            "error": import_status.get("error"),
+            "import_type": import_status.get("import_type", "unknown"),
+            "message": import_status.get("current_step")
+        }
+    except Exception as e:
+        logger.error(f"Failed to get import status: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "current_step": None,
+            "results": {}
+        }
+
+@app.get("/import_info")
+async def get_import_info():
+    """Get import information - REQUIRED by your frontend"""
+    try:
+        # Check if there's been an import
+        last_import = None
+        if import_status.get("end_time") or import_status.get("start_time"):
+            last_import = {
+                "timestamp": import_status.get("end_time") or import_status.get("start_time"),
+                "type": import_status.get("import_type", "unknown"),
+                "status": import_status.get("status", "unknown")
+            }
+        
+        return {
+            "status": "success",
+            "last_import": last_import,
+            "current_status": import_status.get("status", "idle"),
+            "message": "Import info endpoint working"
+        }
+    except Exception as e:
+        logger.error(f"Failed to get import info: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "last_import": None
+        }
+
+@app.post("/stop_polling")
+async def stop_polling():
+    """Stop polling if needed - Optional endpoint"""
+    try:
+        return {
+            "status": "success",
+            "message": "Polling stopped",
+            "current_import_status": import_status.get("status", "idle")
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
 
 @app.get("/health")
 async def health():
