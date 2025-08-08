@@ -3281,7 +3281,6 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
         # Start background import
         background_tasks.add_task(
             run_production_import,
-            collection=request.collection,
             max_docs=request.max_docs,
             batch_size=request.batch_size,
             call_date_start=request.call_date_start,    # ✅ NEW
@@ -3291,7 +3290,6 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
         return {
             "status": "success",
             "message": f"ENHANCED import started: {request.import_type} mode",
-            "collection": request.collection,
             "max_docs": request.max_docs,
             "import_type": request.import_type,
             "date_range": {
