@@ -1,10 +1,10 @@
 // Enhanced main.js for Ask InnovAI Admin Interface v2.2.3
 // BULLETPROOF FIX: Complete error handling for toLocaleString() undefined errors
-// Version: 5.0.0 - Working Base
+// Version: 5.1.0 - Updated for new admin interface
 
 let pollInterval = null;
 
-console.log("✅ Ask InnovAI Admin v2.2.3 - BULLETPROOF fix for toLocaleString() errors loaded");
+console.log("Ask InnovAI Admin v2.2.4 - Updated for new admin interface");
 
 // Auto-refresh status every 30 seconds if not actively importing
 setInterval(() => {
@@ -18,7 +18,7 @@ setInterval(loadOpenSearchStats, 30000);
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("🚀 DOM loaded, initializing enhanced admin interface v2.2.3...");
+    console.log("🚀 DOM loaded, initializing enhanced admin interface v2.2.4...");
     refreshStatus();
     checkSystemHealth();
     checkLastImportInfo();
@@ -53,10 +53,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================================================
-// BULLETPROOF UTILITY FUNCTIONS - COMPLETE PROTECTION
+// UTILITY FUNCTIONS - COMPLETE PROTECTION
 // ============================================================================
 
-// BULLETPROOF: Ultimate safe number conversion with complete validation
 function ultraSafeNumber(value) {
     try {
         // Handle null, undefined, empty string, etc.
@@ -72,50 +71,50 @@ function ultraSafeNumber(value) {
         // Handle string values
         if (typeof value === 'string') {
             const trimmed = value.trim();
-            if (trimmed === '' || trimmed.toLowerCase() === 'null' || trimmed.toLowerCase() === 'undefined') {
+            if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') {
                 return 0;
             }
+            const parsed = parseFloat(trimmed);
+            return isNaN(parsed) ? 0 : parsed;
         }
         
-        // Convert to number
-        const num = Number(value);
-        
-        // Check if conversion was successful
-        if (isNaN(num) || !isFinite(num)) {
-            console.warn('Invalid number conversion for value:', value, 'returning 0');
-            return 0;
+        // Handle objects with numeric properties
+        if (typeof value === 'object' && value !== null) {
+            if (value.count !== undefined) return ultraSafeNumber(value.count);
+            if (value.value !== undefined) return ultraSafeNumber(value.value);
+            if (value.total !== undefined) return ultraSafeNumber(value.total);
         }
         
-        return num;
+        // Fallback: try direct conversion
+        const converted = Number(value);
+        return isNaN(converted) || !isFinite(converted) ? 0 : converted;
         
     } catch (error) {
-        console.warn('Error in ultraSafeNumber for value:', value, 'error:', error, 'returning 0');
+        console.warn('ultraSafeNumber conversion failed:', value, 'Error:', error.message);
         return 0;
     }
-}
+}        
+        
 
-// BULLETPROOF: Ultimate safe formatting with complete error handling
-function ultraSafeFormat(value) {
+// Safe formatting with complete error handling
+function ultraSafeString(value) {
     try {
-        const num = ultraSafeNumber(value);
-        
-        // Additional check before calling toLocaleString
-        if (typeof num !== 'number' || isNaN(num) || !isFinite(num)) {
-            return '0';
+        if (value === null || value === undefined) {
+            return '';
         }
-        
-        // Try toLocaleString with fallback
-        try {
-            return num.toLocaleString();
-        } catch (localeError) {
-            console.warn('toLocaleString failed for value:', num, 'error:', localeError);
-            // Fallback to basic string conversion
-            return num.toString();
+        if (typeof value === 'string') {
+            return value;
         }
-        
+        if (typeof value === 'number' && !isNaN(value) && isFinite(value)) {
+            return value.toString();
+        }
+        if (typeof value === 'boolean') {
+            return value.toString();
+        }
+        return String(value);
     } catch (error) {
-        console.warn('Error in ultraSafeFormat for value:', value, 'error:', error, 'returning "0"');
-        return '0';
+        console.warn('ultraSafeString conversion failed:', value, 'Error:', error.message);
+        return '';
     }
 }
 
@@ -164,60 +163,50 @@ function ultraSafeTimestamp(ts) {
     }
 }
 
-// BULLETPROOF: Ultimate safe object validation
-function ultraSafeObject(obj) {
+// Object validation
+function ultraSafeObject(value) {
     try {
-        if (obj === null || obj === undefined) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            return value;
+        }
+        if (value === null || value === undefined) {
             return {};
         }
-        
-        if (typeof obj === 'object' && !Array.isArray(obj)) {
-            // Validate that it's a real object
+        if (typeof value === 'string') {
             try {
-                // Test if we can iterate over it
-                Object.keys(obj);
-                return obj;
-            } catch (iterError) {
-                console.warn('Object iteration failed:', iterError);
+                const parsed = JSON.parse(value);
+                return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+            } catch {
                 return {};
             }
         }
-        
-        console.warn('Value is not a valid object:', typeof obj, obj);
         return {};
-        
     } catch (error) {
-        console.warn('Error in ultraSafeObject:', error, 'returning empty object');
+        console.warn('ultraSafeObject conversion failed:', value, 'Error:', error.message);
         return {};
     }
 }
 
-// BULLETPROOF: Ultimate safe array validation
-function ultraSafeArray(arr) {
+// Array validation
+function ultraSafeArray(value) {
     try {
-        if (arr === null || arr === undefined) {
+        if (Array.isArray(value)) {
+            return value;
+        }
+        if (value === null || value === undefined) {
             return [];
         }
-        
-        if (Array.isArray(arr)) {
-            return arr;
-        }
-        
-        // Try to convert to array if it's array-like
-        if (typeof arr === 'object' && typeof arr.length === 'number') {
+        if (typeof value === 'string') {
             try {
-                return Array.from(arr);
-            } catch (conversionError) {
-                console.warn('Array conversion failed:', conversionError);
-                return [];
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed : [value];
+            } catch {
+                return [value];
             }
         }
-        
-        console.warn('Value is not a valid array:', typeof arr, arr);
-        return [];
-        
+        return Array.from(value);
     } catch (error) {
-        console.warn('Error in ultraSafeArray:', error, 'returning empty array');
+        console.warn('ultraSafeArray conversion failed:', value, 'Error:', error.message);
         return [];
     }
 }
@@ -247,93 +236,60 @@ function ultraSafeString(str) {
     }
 }
 
+// BULLETPROOF: Format numbers with complete protection
+function ultraSafeFormat(value) {
+    try {
+        const num = ultraSafeNumber(value);
+        if (num === 0) return '0';
+        
+        // Use toLocaleString with error handling
+        return num.toLocaleString();
+    } catch (error) {
+        console.warn('ultraSafeFormat failed:', value, 'Error:', error.message);
+        return ultraSafeNumber(value).toString();
+    }
+}
+
 // ============================================================================
 // OPENSEARCH STATISTICS FUNCTIONS - BULLETPROOF PROTECTION
 // ============================================================================
 
 async function loadOpenSearchStats() {
-    console.log("📊 Loading OpenSearch statistics...");
-    
     const container = document.getElementById('statisticsContainer');
     if (!container) {
-        console.error("❌ Statistics container not found");
+        console.warn('Statistics container not found');
         return;
     }
     
-    // Show enhanced loading state
+    // Show loading state
     container.innerHTML = `
-        <div class="stats-loading">
-            <div class="loading-spinner"></div>
-            <h3>Loading Statistics...</h3>
-            <p>Fetching data from OpenSearch cluster</p>
-            <small>This may take a few seconds</small>
+        <div class="loading-stats">
+            <div class="spinner"></div>
+            Loading database statistics...
         </div>
     `;
     
     try {
-        // Use parallel loading for better performance
-        const startTime = performance.now();
+        const response = await fetch('/opensearch_statistics', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
         
-        const [statsResponse, vectorResponse] = await Promise.allSettled([
-            fetch('/opensearch_statistics'),
-            fetch('/opensearch_statistics').then(r => r.json()).then(data => data?.data?.vector_search)
-        ]);
-        
-        const loadTime = Math.round(performance.now() - startTime);
-        
-        // Handle stats response
-        if (statsResponse.status === 'rejected') {
-            throw new Error(`Failed to fetch statistics: ${statsResponse.reason}`);
-        }
-        
-        const response = statsResponse.value;
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        const result = await response.json();
+        const data = await response.json();
+        const timestamp = new Date().toISOString();
         
-        if (result && result.status === 'success') {
-            console.log(`✅ Statistics loaded successfully in ${loadTime}ms`, result.data);
-            
-            // Add performance metrics to the data
-            const enhancedData = {
-                ...result.data,
-                performance: {
-                    load_time_ms: loadTime,
-                    parallel_loading: true,
-                    vector_status_checked: vectorResponse.status === 'fulfilled'
-                }
-            };
-            
-            await displayStatistics(enhancedData, result.timestamp || new Date().toISOString());
-            
-        } else {
-            const errorMsg = ultraSafeString(result?.error || 'Unknown error from server');
-            console.error("❌ Statistics error:", errorMsg);
-            displayStatisticsError(errorMsg, 'server_error');
-        }
+        console.log('✅ OpenSearch statistics loaded:', data);
+        displayStatistics(data, timestamp);
         
     } catch (error) {
-        console.error('Failed to load statistics:', error);
-        
-        // More specific error handling
-        let errorMessage = ultraSafeString(error?.message || 'Unknown error occurred');
-        let errorType = 'unknown_error';
-        
-        // Classify error types for better user guidance
-        if (errorMessage.includes('fetch')) {
-            errorType = 'network_error';
-            errorMessage = 'Unable to connect to server';
-        } else if (errorMessage.includes('JSON')) {
-            errorType = 'parse_error';
-            errorMessage = 'Server returned invalid response';
-        } else if (errorMessage.includes('timeout')) {
-            errorType = 'timeout_error';
-            errorMessage = 'Request timed out';
-        }
-        
-        displayStatisticsError(errorMessage, errorType);
+        console.error('❌ Failed to load OpenSearch statistics:', error);
+        displayStatisticsError(error, container);
     }
 }
 
@@ -419,12 +375,12 @@ function displayStatisticsError(errorMessage, errorType = 'unknown') {
         </div>
     `;
 }
+
 function displayStatistics(data, timestamp) {
-    // BULLETPROOF: Display comprehensive statistics with ultimate error handling
     const container = document.getElementById('statisticsContainer');
     if (!container) return;
     
-    // BULLETPROOF: Safely handle potentially missing data with comprehensive defaults
+    // BULLETPROOF: Safely handle potentially missing data
     const safeData = {
         total_evaluations: ultraSafeNumber(data?.total_evaluations),
         total_chunks: ultraSafeNumber(data?.total_chunks),
@@ -441,15 +397,7 @@ function displayStatistics(data, timestamp) {
         structure_info: ultraSafeObject(data?.structure_info)
     };
     
-    // Add default values for structure_info with bulletproof handling
-    if (!ultraSafeString(safeData.structure_info.document_type)) {
-        safeData.structure_info.document_type = 'unknown';
-    }
-    if (!ultraSafeString(safeData.structure_info.collection_strategy)) {
-        safeData.structure_info.collection_strategy = 'unknown';
-    }
-    
-    // Calculate additional metrics safely with bulletproof math
+    // Calculate additional metrics safely
     let avgChunksPerEval = '0.0';
     let transcriptPercentage = '0.0';
     
@@ -461,311 +409,136 @@ function displayStatistics(data, timestamp) {
         
         if (safeData.total_evaluations > 0 && safeData.evaluations_with_transcript >= 0) {
             const percentage = (safeData.evaluations_with_transcript / safeData.total_evaluations) * 100;
-            transcriptPercentage = isFinite(percentage) ? percentage.toFixed(1) : '0.0';
+            transcriptPercentage = isFinite(percentage) ? percentage.toFixed(1) + '%' : '0.0%';
         }
-    } catch (mathError) {
-        console.warn('Error calculating derived metrics:', mathError);
-        avgChunksPerEval = '0.0';
-        transcriptPercentage = '0.0';
+    } catch (error) {
+        console.warn('Error calculating metrics:', error);
     }
     
-    // Check if we have any meaningful data
-    const hasData = safeData.total_evaluations > 0 || 
-                   safeData.total_chunks > 0 || 
-                   Object.keys(safeData.template_counts).length > 0;
-    
-    if (!hasData) {
-        container.innerHTML = `
-            <div class="stats-dashboard">
-                <div class="stats-card priority-metric">
-                    <h3>🆔 No Data Found</h3>
-                    <div class="stats-number">0</div>
-                    <div class="stats-label">Evaluations in Database</div>
-                    <div class="stats-breakdown">
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">📊 Status</span>
-                            <span class="breakdown-value">No evaluations imported yet</span>
-                        </div>
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">🚀 Next Step</span>
-                            <span class="breakdown-value">Run an import to populate data</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="stats-card">
-                    <h3>📥 Import Needed</h3>
-                    <div class="stats-number">0</div>
-                    <div class="stats-label">Documents Available</div>
-                    <div class="stats-breakdown">
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">💡 Suggestion</span>
-                            <span class="breakdown-value">Start with a small test import (5-10 docs)</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="stats-last-updated">
-                📅 Last updated: ${ultraSafeTimestamp(timestamp)} | 
-                📊 Structure: Ready for enhanced import
-            </div>
-        `;
-        return;
-    }
-    
-    // BULLETPROOF: Helper function to safely process count entries with ultimate protection
-    const processCountEntries = (counts, limit = 10) => {
+    // Generate breakdown HTML helper
+    const generateBreakdown = (counts, maxItems = 5) => {
         try {
-            const safeCountsObject = ultraSafeObject(counts);
-            
-            // Safely get entries with complete validation
-            let entries;
-            try {
-                entries = Object.entries(safeCountsObject);
-            } catch (entriesError) {
-                console.warn('Failed to get object entries:', entriesError);
-                return `
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">Error processing data</span>
-                        <span class="breakdown-value">-</span>
-                    </div>
-                `;
-            }
-            
-            // Process and sort entries with bulletproof handling
-            const processedEntries = entries
-                .map(([key, count]) => {
-                    const safeKey = ultraSafeString(key);
-                    const safeCount = ultraSafeNumber(count);
-                    return [safeKey || 'Unknown', safeCount];
-                })
-                .filter(([key, count]) => key !== '' && count >= 0) // Filter out invalid entries
-                .sort(([,a], [,b]) => ultraSafeNumber(b) - ultraSafeNumber(a))
-                .slice(0, Math.max(1, ultraSafeNumber(limit))); // Ensure at least 1, max limit
-            
-            if (processedEntries.length === 0) {
-                return `
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">No data available</span>
-                        <span class="breakdown-value">-</span>
-                    </div>
-                `;
-            }
-            
-            return processedEntries.map(([key, count]) => {
+            const entries = Object.entries(counts).slice(0, maxItems);
+            return entries.map(([key, count]) => {
                 const displayKey = key.length > 20 ? key.substring(0, 20) + '...' : key;
                 const displayCount = ultraSafeFormat(count);
                 
                 return `
-                    <div class="breakdown-item">
-                        <span class="breakdown-label" title="${ultraSafeString(key)}">${ultraSafeString(displayKey)}</span>
-                        <span class="breakdown-value">${displayCount}</span>
+                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee;">
+                        <span class="breakdown-label" title="${ultraSafeString(key)}" style="color: #666; font-size: 0.85em;">${ultraSafeString(displayKey)}</span>
+                        <span class="breakdown-value" style="font-weight: 600; color: #333;">${displayCount}</span>
                     </div>
                 `;
             }).join('');
-            
         } catch (error) {
             console.warn('Failed to process count entries:', counts, 'error:', error);
-            return `
-                <div class="breakdown-item">
-                    <span class="breakdown-label">Error processing data</span>
-                    <span class="breakdown-value">-</span>
-                </div>
-            `;
+            return '<div style="color: #999; font-style: italic;">Error processing data</div>';
         }
     };
     
-    // BULLETPROOF: Generate HTML with complete error protection
-    let html = '';
-    
-    try {
-        html = `
-            <div class="stats-dashboard">
-                <!-- PRIMARY METRIC: Evaluations Processed -->
-                <div class="stats-card priority-metric">
-                    <h3>🆔 Evaluations Processed</h3>
-                    <div class="stats-number">${ultraSafeFormat(safeData.total_evaluations)}</div>
-                    <div class="stats-label">Unique EvaluationIDs</div>
-                    <div class="stats-breakdown">
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">📊 Source Data Match</span>
-                            <span class="breakdown-value">Compare with your source system</span>
-                        </div>
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">📝 With Transcript</span>
-                            <span class="breakdown-value">${ultraSafeFormat(safeData.evaluations_with_transcript)} (${transcriptPercentage}%)</span>
-                        </div>
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">📋 Evaluation Only</span>
-                            <span class="breakdown-value">${ultraSafeFormat(safeData.evaluations_without_transcript)}</span>
-                        </div>
-                    </div>
+    // Generate comprehensive HTML
+    const html = `
+        <div class="stats-dashboard">
+            <!-- PRIMARY METRIC: Evaluations -->
+            <div class="stats-card priority-metric">
+                <h3><span class="emoji">🆔</span> Evaluations Processed</h3>
+                <div class="stats-number">${ultraSafeFormat(safeData.total_evaluations)}</div>
+                <div class="stats-label">Unique EvaluationIDs</div>
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
+                    <div style="font-size: 0.8em; color: #666;">Compare with your source system</div>
                 </div>
-                
-                <!-- Evaluation Details -->
-                <div class="stats-card">
-                    <h3>📄 Evaluation Details</h3>
-                    <div class="stats-number">${avgChunksPerEval}</div>
-                    <div class="stats-label">Avg Chunks per Evaluation</div>
-                    <div class="stats-breakdown">
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">📊 Data Processing</span>
-                            <span class="breakdown-value">Enhanced structure v4.0+</span>
-                        </div>
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">🏗️ Document Model</span>
-                            <span class="breakdown-value">1 doc per evaluationID</span>
-                        </div>
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">🧩 Content Grouping</span>
-                            <span class="breakdown-value">Chunks within evaluations</span>
-                        </div>
+            </div>
+            
+            <!-- CHUNKS BREAKDOWN -->
+            <div class="stats-card">
+                <h3><span class="emoji">📄</span> Document Chunks</h3>
+                <div class="stats-number">${ultraSafeFormat(safeData.total_chunks)}</div>
+                <div class="stats-label">Total Processed Chunks</div>
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
+                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 2px 0;">
+                        <span style="color: #666; font-size: 0.85em;">📊 Evaluation chunks</span>
+                        <span style="font-weight: 600;">${ultraSafeFormat(safeData.evaluation_chunks)}</span>
                     </div>
-                </div>
-                
-                <div class="stats-card">
-                    <h3>🧩 Total Chunks</h3>
-                    <div class="stats-number">${ultraSafeFormat(safeData.total_chunks)}</div>
-                    <div class="stats-label">All Content Pieces</div>
-                    <div class="stats-breakdown">
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">📝 Evaluation Chunks</span>
-                            <span class="breakdown-value">${ultraSafeFormat(safeData.evaluation_chunks)}</span>
-                        </div>
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">🎙️ Transcript Chunks</span>
-                            <span class="breakdown-value">${ultraSafeFormat(safeData.transcript_chunks)}</span>
-                        </div>
+                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 2px 0;">
+                        <span style="color: #666; font-size: 0.85em;">🎯 Transcript chunks</span>
+                        <span style="font-weight: 600;">${ultraSafeFormat(safeData.transcript_chunks)}</span>
                     </div>
-                </div>
-                
-                <!-- Template Distribution -->
-                <div class="stats-card">
-                    <h3>📋 Templates</h3>
-                    <div class="stats-number">${ultraSafeFormat(Object.keys(safeData.template_counts).length)}</div>
-                    <div class="stats-label">Unique Templates</div>
-                    <div class="stats-breakdown">
-                        ${processCountEntries(safeData.template_counts, 5)}
-                        ${Object.keys(safeData.template_counts).length > 5 ? 
-                            `<div class="breakdown-item">
-                                <span class="breakdown-label">...and ${ultraSafeFormat(Object.keys(safeData.template_counts).length - 5)} more</span>
-                                <span class="breakdown-value"></span>
-                            </div>` : ''}
-                    </div>
-                </div>
-                
-                <!-- LOB Distribution -->
-                <div class="stats-card">
-                    <h3>🏢 Line of Business</h3>
-                    <div class="stats-number">${ultraSafeFormat(Object.keys(safeData.lob_counts).length)}</div>
-                    <div class="stats-label">Unique LOBs</div>
-                    <div class="stats-breakdown">
-                        ${processCountEntries(safeData.lob_counts)}
-                    </div>
-                </div>
-                
-                <!-- Partner Distribution -->
-                <div class="stats-card">
-                    <h3>🤝 Partners</h3>
-                    <div class="stats-number">${ultraSafeFormat(Object.keys(safeData.partner_counts).length)}</div>
-                    <div class="stats-label">Unique Partners</div>
-                    <div class="stats-breakdown">
-                        ${processCountEntries(safeData.partner_counts)}
-                    </div>
-                </div>
-                
-                <!-- Site Distribution -->
-                <div class="stats-card">
-                    <h3>🏢 Sites</h3>
-                    <div class="stats-number">${ultraSafeFormat(Object.keys(safeData.site_counts).length)}</div>
-                    <div class="stats-label">Unique Sites</div>
-                    <div class="stats-breakdown">
-                        ${processCountEntries(safeData.site_counts, 6)}
-                        ${Object.keys(safeData.site_counts).length > 6 ? 
-                            `<div class="breakdown-item">
-                                <span class="breakdown-label">...and ${ultraSafeFormat(Object.keys(safeData.site_counts).length - 6)} more</span>
-                                <span class="breakdown-value"></span>
-                            </div>` : ''}
-                    </div>
-                </div>
-                
-                <!-- Language Distribution -->
-                <div class="stats-card">
-                    <h3>🌐 Languages</h3>
-                    <div class="stats-number">${ultraSafeFormat(Object.keys(safeData.language_counts).length)}</div>
-                    <div class="stats-label">Languages Used</div>
-                    <div class="stats-breakdown">
-                        ${processCountEntries(safeData.language_counts)}
-                    </div>
-                </div>
-                
-                <!-- Index Information -->
-                <div class="stats-card">
-                    <h3>💾 Storage</h3>
-                    <div class="stats-number">${ultraSafeFormat(safeData.indices.length)}</div>
-                    <div class="stats-label">Active Indices</div>
-                    <div class="stats-breakdown">
-                        ${safeData.indices.slice(0, 4).map(index => {
-                            try {
-                                const safeIndex = ultraSafeObject(index);
-                                const name = ultraSafeString(safeIndex.name || 'Unknown');
-                                const sizeMb = ultraSafeNumber(safeIndex.size_mb);
-                                const displayName = name.length > 15 ? name.substring(0, 15) + '...' : name;
-                                
-                                return `
-                                    <div class="breakdown-item">
-                                        <span class="breakdown-label" title="${name}">${displayName}</span>
-                                        <span class="breakdown-value">${sizeMb.toFixed(1)}MB</span>
-                                    </div>
-                                `;
-                            } catch (e) {
-                                console.warn('Failed to process index:', index, 'error:', e);
-                                return `
-                                    <div class="breakdown-item">
-                                        <span class="breakdown-label">Invalid index</span>
-                                        <span class="breakdown-value">-</span>
-                                    </div>
-                                `;
-                            }
-                        }).join('') || 
-                        `<div class="breakdown-item">
-                            <span class="breakdown-label">No indices found</span>
-                            <span class="breakdown-value"></span>
-                        </div>`}
-                        ${safeData.indices.length > 4 ? 
-                            `<div class="breakdown-item">
-                                <span class="breakdown-label">...and ${ultraSafeFormat(safeData.indices.length - 4)} more</span>
-                                <span class="breakdown-value"></span>
-                            </div>` : ''}
+                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 2px 0; margin-top: 8px; border-top: 1px solid #eee;">
+                        <span style="color: #666; font-size: 0.85em;">📈 Avg per evaluation</span>
+                        <span style="font-weight: 600; color: #6e32a0;">${avgChunksPerEval}</span>
                     </div>
                 </div>
             </div>
             
-            <div class="stats-last-updated">
-                📅 Last updated: ${ultraSafeTimestamp(timestamp)} | 
-                📊 Structure: ${ultraSafeString(safeData.structure_info.document_type)} | 
-                🏷️ Collections: ${ultraSafeString(safeData.structure_info.collection_strategy)}
-                <br>
-                <div style="margin-top: 8px; padding: 8px; background: #e3f2fd; border-radius: 4px; font-size: 0.9em; border-left: 4px solid #6e32a0;">
-                    <strong>📋 Source Data Verification:</strong> The "Evaluations Processed" count represents unique evaluationIDs successfully imported. 
-                    Compare this number with your source system to verify data completeness and identify any missing evaluations.
+            <!-- TRANSCRIPT COVERAGE -->
+            <div class="stats-card">
+                <h3><span class="emoji">🎯</span> Transcript Coverage</h3>
+                <div class="stats-number" style="color: ${parseFloat(transcriptPercentage) > 80 ? '#28a745' : parseFloat(transcriptPercentage) > 50 ? '#ffc107' : '#dc3545'};">
+                    ${transcriptPercentage}
+                </div>
+                <div class="stats-label">Evaluations with Transcripts</div>
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
+                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 2px 0;">
+                        <span style="color: #28a745; font-size: 0.85em;">✅ With transcripts</span>
+                        <span style="font-weight: 600;">${ultraSafeFormat(safeData.evaluations_with_transcript)}</span>
+                    </div>
+                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 2px 0;">
+                        <span style="color: #dc3545; font-size: 0.85em;">❌ Without transcripts</span>
+                        <span style="font-weight: 600;">${ultraSafeFormat(safeData.evaluations_without_transcript)}</span>
+                    </div>
                 </div>
             </div>
-        `;
-        
-    } catch (htmlError) {
-        console.error('Error generating statistics HTML:', htmlError);
-        html = `
-            <div class="stats-error">
-                <strong>❌ Error generating statistics display:</strong> ${ultraSafeString(htmlError.message)}
-                <br><small>Data processing failed. Check console for details.</small>
-                <br><button onclick="loadOpenSearchStats()" style="margin-top: 8px; padding: 4px 8px; background: #6e32a0; color: white; border: none; border-radius: 4px; cursor: pointer;">🔄 Retry</button>
+            
+            <!-- TEMPLATES -->
+            ${Object.keys(safeData.template_counts).length > 0 ? `
+            <div class="stats-card">
+                <h3><span class="emoji">📋</span> Templates</h3>
+                <div class="stats-number">${Object.keys(safeData.template_counts).length}</div>
+                <div class="stats-label">Unique Templates</div>
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; max-height: 150px; overflow-y: auto;">
+                    ${generateBreakdown(safeData.template_counts)}
+                </div>
             </div>
-        `;
-    }
+            ` : ''}
+            
+            <!-- LOB BREAKDOWN -->
+            ${Object.keys(safeData.lob_counts).length > 0 ? `
+            <div class="stats-card">
+                <h3><span class="emoji">🏢</span> Lines of Business</h3>
+                <div class="stats-number">${Object.keys(safeData.lob_counts).length}</div>
+                <div class="stats-label">Unique LOBs</div>
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; max-height: 150px; overflow-y: auto;">
+                    ${generateBreakdown(safeData.lob_counts)}
+                </div>
+            </div>
+            ` : ''}
+            
+            <!-- PARTNERS -->
+            ${Object.keys(safeData.partner_counts).length > 0 ? `
+            <div class="stats-card">
+                <h3><span class="emoji">🤝</span> Partners</h3>
+                <div class="stats-number">${Object.keys(safeData.partner_counts).length}</div>
+                <div class="stats-label">Unique Partners</div>
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; max-height: 150px; overflow-y: auto;">
+                    ${generateBreakdown(safeData.partner_counts)}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+        
+        <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #6e32a0;">
+            <div style="font-size: 0.9em; color: #666; margin-bottom: 8px;">
+                📅 Last updated: ${ultraSafeTimestamp(timestamp)}
+            </div>
+            <div style="font-size: 0.85em; color: #666;">
+                📊 Structure: ${ultraSafeString(safeData.structure_info.document_type || 'unknown')} | 
+                🏷️ Collections: ${ultraSafeString(safeData.structure_info.collection_strategy || 'unknown')}
+            </div>
+        </div>
+    `;
     
     container.innerHTML = html;
-    console.log("📊 Statistics dashboard updated with BULLETPROOF error handling");
+    console.log("📊 Statistics dashboard updated successfully");
 }
 
 // ============================================================================
@@ -777,73 +550,45 @@ async function startImport() {
     const importTypeSelect = document.getElementById("importTypeSelect");
     const maxDocsInput = document.getElementById("maxDocsInput");
     
-    const selectedCollection = collectionSelect ? collectionSelect.value : "all";
-    const importType = importTypeSelect ? importTypeSelect.value : "full";
+    const selectedCollection = collectionSelect ? collectionSelect.value : "evaluations";
+    const importType = importTypeSelect ? importTypeSelect.value : "evaluation_json";
+    const maxDocsValue = maxDocsInput ? maxDocsInput.value.trim() : "";
     
-    // FIXED: Properly handle max documents input
+    // Validate max documents input
     let maxDocs = null;
-    if (maxDocsInput && maxDocsInput.value.trim() !== "") {
-        const parsedValue = parseInt(maxDocsInput.value.trim());
-        if (!isNaN(parsedValue) && parsedValue > 0) {
-            maxDocs = parsedValue;
-        } else {
+    if (maxDocsValue !== "") {
+        const parsed = parseInt(maxDocsValue);
+        if (isNaN(parsed) || parsed <= 0) {
             alert("❌ Max Documents must be a positive number or left empty for all documents");
+            maxDocsInput?.focus();
             return;
         }
+        maxDocs = parsed;
     }
-
-    const config = { 
-        collection: selectedCollection, 
+    
+    const payload = {
+        collection: selectedCollection,
         import_type: importType
     };
     
-    // FIXED: Only add max_docs if it's explicitly set
     if (maxDocs !== null) {
-        config.max_docs = maxDocs;
+        payload.max_docs = maxDocs;
     }
     
-    // Enhanced confirmation message
-    let modeText;
-    if (maxDocs !== null) {
-        modeText = `Limiting to ${maxDocs} documents`;
-    } else {
-        modeText = "Processing ALL available documents";
-    }
-    
-    const importTypeText = importType === "incremental" ? "Incremental (only updated documents)" : "Full (all documents)";
-
-    const confirmMsg = `Start ${importType} import?
-    
-Collection: ${selectedCollection}
-Type: ${importTypeText}
-Scope: ${modeText}
-
-This will fetch evaluation data from your API and index it for search and chat.`;
-
-    if (!confirm(confirmMsg)) return;
-
-    // Debug logging
-    console.log("🚀 Starting import with config:", config);
-    if (maxDocs !== null) {
-        console.log(`📊 Max documents limit: ${maxDocs}`);
-    } else {
-        console.log("📊 No document limit - importing all available");
-    }
-
     try {
-        const response = await fetch("/import", {
+        const response = await fetch("/start_import", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(config)
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
         });
-
-        const text = await response.text();
-        let data;
-        try {
-            data = JSON.parse(text);
-        } catch (e) {
-            console.error("Non-JSON response:", text);
-            alert("❌ Unexpected response from server. Check console for details.");
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            console.error("Import failed:", data);
+            alert(`❌ Import failed: ${data.detail || data.message || "Unknown error"}. Check console for details.`);
             return;
         }
 
@@ -856,12 +601,27 @@ This will fetch evaluation data from your API and index it for search and chat.`
             }
             alert(successMsg);
             startPolling();
-        } else {
-            alert(`❌ Import failed: ${data.detail || data.message || "Unknown error"}`);
         }
     } catch (error) {
         console.error("Import request failed:", error);
         alert(`❌ Import request failed: ${error.message}`);
+    }
+}
+
+function startPolling() {
+    if (pollInterval) {
+        clearInterval(pollInterval);
+    }
+    
+    pollInterval = setInterval(refreshStatus, 2000);
+    console.log("🔄 Started polling for import status");
+}
+
+function stopPolling() {
+    if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+        console.log("⏹️ Stopped polling");
     }
 }
 
@@ -896,62 +656,33 @@ function setupMaxDocsValidation() {
 function updateMaxDocsDisplay() {
     const maxDocsInput = document.getElementById("maxDocsInput");
     const maxDocsDisplay = document.getElementById("maxDocsDisplay");
-    const maxDocsInfo = document.getElementById("maxDocsInfo");
-    const maxDocsInfoText = document.getElementById("maxDocsInfoText");
-    const importPreview = document.getElementById("importPreview");
-    const importPreviewText = document.getElementById("importPreviewText");
     
     if (!maxDocsInput) return;
     
     const value = maxDocsInput.value.trim();
     const numValue = parseInt(value);
     
-    // Update display text
+    // Update display text - UPDATED to match new HTML structure
     if (value === "" || isNaN(numValue)) {
         if (maxDocsDisplay) {
             maxDocsDisplay.textContent = "All documents";
             maxDocsDisplay.style.color = "#666";
         }
-        if (maxDocsInfoText) {
-            maxDocsInfoText.textContent = "All available documents will be processed";
-        }
+        // Update info in maxDocsInfo div if it exists
+        const maxDocsInfo = document.getElementById("maxDocsDisplay");
         if (maxDocsInfo) {
-            maxDocsInfo.className = "max-docs-info";
+            maxDocsInfo.innerHTML = "Will process all available documents";
         }
     } else {
         if (maxDocsDisplay) {
             maxDocsDisplay.textContent = `Max: ${ultraSafeFormat(numValue)}`;
             maxDocsDisplay.style.color = "#6e32a0";
         }
-        if (maxDocsInfoText) {
-            maxDocsInfoText.textContent = `Import will be limited to ${ultraSafeFormat(numValue)} documents`;
-        }
+        // Update info in maxDocsInfo div if it exists
+        const maxDocsInfo = document.getElementById("maxDocsDisplay");
         if (maxDocsInfo) {
-            maxDocsInfo.className = "max-docs-warning";
+            maxDocsInfo.innerHTML = `Will process up to ${ultraSafeFormat(numValue)} documents for testing`;
         }
-    }
-    
-    // Show/hide info box
-    if (maxDocsInfo) {
-        maxDocsInfo.style.display = "block";
-    }
-    
-    // Update import preview
-    const importType = document.getElementById("importTypeSelect")?.value || "full";
-    const collection = document.getElementById("collectionSelect")?.value || "all";
-    
-    let previewText = `${importType.charAt(0).toUpperCase() + importType.slice(1)} import from ${collection} collection`;
-    if (value !== "" && !isNaN(numValue)) {
-        previewText += ` (limited to ${ultraSafeFormat(numValue)} documents)`;
-    } else {
-        previewText += ` (all available documents)`;
-    }
-    
-    if (importPreviewText) {
-        importPreviewText.textContent = previewText;
-    }
-    if (importPreview) {
-        importPreview.style.display = "block";
     }
 }
 
@@ -988,14 +719,40 @@ function startPolling() {
 async function refreshStatus() {
     try {
         const response = await fetch('/status');
-        if (!response.ok) {
-            console.error('Status error:', response.status, await response.text());
-            return;
+        const data = await response.json();
+        
+        const statusContainer = document.getElementById('statusContainer');
+        if (statusContainer) {
+            const status = data.status || 'unknown';
+            const statusClass = status === 'completed' ? 'completed' : 
+                               status === 'processing' ? 'processing' : 
+                               status === 'failed' ? 'failed' : 'idle';
+            
+            statusContainer.innerHTML = `
+                <div class="status ${statusClass}">
+                    <strong>Status:</strong> ${status.charAt(0).toUpperCase() + status.slice(1)}
+                </div>
+            `;
+            
+            // Update current step if available
+            const stepContainer = document.getElementById('currentStep');
+            const stepText = document.getElementById('stepText');
+            if (data.current_step && stepContainer && stepText) {
+                stepContainer.classList.remove('hidden');
+                stepText.textContent = data.current_step;
+            } else if (stepContainer) {
+                stepContainer.classList.add('hidden');
+            }
+            
+            // Stop polling if completed or failed
+            if (status === 'completed' || status === 'failed') {
+                stopPolling();
+                if (status === 'completed') {
+                    loadOpenSearchStats(); // Refresh statistics
+                }
+            }
         }
-
-        const status = await response.json();
-        console.log("📊 Status update:", status);
-        updateStatusDisplay(status);
+        
     } catch (error) {
         console.error('Failed to refresh status:', error);
     }
@@ -1170,161 +927,96 @@ function showResults(results) {
 // ============================================================================
 
 async function checkSystemHealth() {
-    const container = document.getElementById('healthStatus');
-    if (!container) return;
+    const container = document.getElementById('healthContainer');
+    if (!container) {
+        console.warn('Health container not found');
+        return;
+    }
     
-    container.innerHTML = '<div class="loading"><div class="spinner"></div>Checking system health...</div>';
+    container.innerHTML = `
+        <div class="health-item">
+            <span class="health-label">System Status</span>
+            <span class="health-value">Checking...</span>
+        </div>
+    `;
     
     try {
         const response = await fetch('/health');
+        const data = await response.json();
         
-        // Check if response is ok
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
+        const isHealthy = response.ok && data.status === 'healthy';
         
-        const health = await response.json();
-        
-        // Check if health data is valid
-        if (!health) {
-            throw new Error('Health endpoint returned null/empty response');
-        }
-        
-        let html = '';
-        
-        // Safely check for components with bulletproof handling
-        const components = ultraSafeObject(health.components);
-        if (Object.keys(components).length > 0) {
-            Object.entries(components).forEach(([component, info]) => {
-                const safeInfo = ultraSafeObject(info);
-                const status = ultraSafeString(safeInfo.status || 'unknown');
-                const isHealthy = status === 'connected' || status === 'healthy' || status === 'configured';
-                const isWarning = status === 'not configured';
-                const cssClass = isHealthy ? '' : (isWarning ? 'warning' : 'unhealthy');
-                
-                // Add emoji indicators
-                let emoji = '✅';
-                if (!isHealthy) {
-                    emoji = isWarning ? '⚠️' : '❌';
-                }
-                
-                html += `
-                    <div class="health-item ${cssClass}">
-                        <div class="health-label">${emoji} ${ultraSafeString(component).toUpperCase()}</div>
-                        <div class="health-value">${status}</div>
-                    </div>
-                `;
-            });
-        } else {
-            // No components found - show basic info
-            html += `
-                <div class="health-item warning">
-                    <div class="health-label">⚠️ SYSTEM</div>
-                    <div class="health-value">Components data missing</div>
-                </div>
-            `;
-        }
-        
-        // Add overall status if available
-        if (health.status) {
-            const statusEmoji = health.status === 'ok' ? '✅' : '❌';
-            html += `
-                <div class="health-item">
-                    <div class="health-label">${statusEmoji} OVERALL</div>
-                    <div class="health-value">${ultraSafeString(health.status)}</div>
-                </div>
-            `;
-        }
-        
-        // Add enhanced structure info with bulletproof handling
-        const enhancements = ultraSafeObject(health.enhancements);
-        if (enhancements.document_structure) {
-            html += `
-                <div class="health-item">
-                    <div class="health-label">🔄 STRUCTURE</div>
-                    <div class="health-value">${ultraSafeString(enhancements.document_structure)}</div>
-                </div>
-            `;
-        }
-        
-        // Add version info
-        html += `
+        container.innerHTML = `
+            <div class="health-item ${isHealthy ? '' : 'unhealthy'}">
+                <span class="health-label">System Status</span>
+                <span class="health-value">${isHealthy ? '✅ Healthy' : '❌ Unhealthy'}</span>
+            </div>
             <div class="health-item">
-                <div class="health-label">🚀 VERSION</div>
-                <div class="health-value">v2.2.3 BULLETPROOF</div>
+                <span class="health-label">OpenSearch</span>
+                <span class="health-value">${data.opensearch ? '✅ Connected' : '❌ Disconnected'}</span>
+            </div>
+            <div class="health-item">
+                <span class="health-label">Memory Usage</span>
+                <span class="health-value">${data.memory_usage ? Math.round(data.memory_usage) + '%' : 'Unknown'}</span>
             </div>
         `;
         
-        container.innerHTML = html;
-        console.log("🏥 System health checked with BULLETPROOF handling:", health);
-        
     } catch (error) {
-        console.error("Health check failed:", error);
+        console.error('Health check failed:', error);
         container.innerHTML = `
             <div class="health-item unhealthy">
-                <div class="health-label">❌ SYSTEM</div>
-                <div class="health-value">Error: ${ultraSafeString(error.message)}</div>
+                <span class="health-label">System Status</span>
+                <span class="health-value">❌ Error: ${error.message}</span>
             </div>
         `;
     }
 }
 
 async function checkLastImportInfo() {
+    const container = document.getElementById('lastImportInfo');
+    if (!container) return;
+    
     try {
-        const response = await fetch('/last_import_info');
-        
-        // Handle 404 - endpoint doesn't exist yet
-        if (response.status === 404) {
-            console.log("📅 Last import info endpoint not available");
-            return;
-        }
-        
-        if (!response.ok) {
-            console.error(`Last import info error: ${response.status}`);
-            return;
-        }
-        
+        const response = await fetch('/import_info');
         const data = await response.json();
         
-        if (data.status === 'success' && data.last_import_timestamp) {
-            const timestamp = ultraSafeTimestamp(data.last_import_timestamp);
-            console.log(`📅 Last import: ${timestamp}`);
-            
-            // You could display this in the UI if there's a container for it
-            const infoContainer = document.getElementById("lastImportInfo");
-            if (infoContainer) {
-                infoContainer.innerHTML = `
-                    <div style="background: #e3f2fd; padding: 8px; border-radius: 4px; margin: 8px 0; font-size: 0.9em;">
-                        <strong>📅 Last Import:</strong> ${timestamp}
-                    </div>
-                `;
-            }
+        if (data.last_import) {
+            container.innerHTML = `
+                <div class="status completed">
+                    <strong>Last Import:</strong> ${ultraSafeTimestamp(data.last_import.timestamp)}
+                    <br><strong>Type:</strong> ${ultraSafeString(data.last_import.type)}
+                    <br><strong>Status:</strong> ${ultraSafeString(data.last_import.status)}
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="status idle">
+                    <strong>Last Import:</strong> No import history found
+                </div>
+            `;
         }
     } catch (error) {
-        console.error("Failed to check last import info:", error);
+        container.innerHTML = `
+            <div class="status failed">
+                <strong>Error:</strong> ${error.message}
+            </div>
+        `;
     }
 }
 
 async function clearImportTimestamp() {
-    if (!confirm("Reset import timestamp? The next incremental import will process all documents. Continue?")) {
+    if (!confirm('Are you sure you want to clear the import timestamp?')) {
         return;
     }
     
     try {
-        const response = await fetch("/clear_import_timestamp", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" }
-        });
-        
+        const response = await fetch('/clear_import_timestamp', { method: 'POST' });
         const data = await response.json();
-        if (data.status === 'success') {
-            alert("✅ Import timestamp reset successfully!");
-            checkLastImportInfo(); // Refresh the display
-        } else {
-            alert(`❌ Error: ${ultraSafeString(data.error)}`);
-        }
+        
+        alert(data.message || 'Import timestamp cleared');
+        checkLastImportInfo(); // Refresh the display
     } catch (error) {
-        alert(`❌ Failed to reset timestamp: ${ultraSafeString(error.message)}`);
+        alert(`Failed to clear timestamp: ${error.message}`);
     }
 }
 
@@ -1333,197 +1025,398 @@ async function clearImportTimestamp() {
 // ============================================================================
 
 async function toggleLogs() {
-    const container = document.getElementById('logsContainer');
-    const content = document.getElementById('logsContent');
+    const logsContainer = document.getElementById('logsContainer');
+    const logsContent = document.getElementById('logsContent');
     
-    if (!container || !content) {
-        console.error('Logs container elements not found in DOM');
-        return;
-    }
-
-    if (container.classList.contains('hidden')) {
+    if (!logsContainer) return;
+    
+    if (logsContainer.classList.contains('hidden')) {
+        logsContainer.classList.remove('hidden');
+        
+        if (logsContent) {
+            logsContent.innerHTML = 'Loading logs...';
+        }
+        
         try {
-            // Show loading state
-            content.innerHTML = `
-                <div class="logs-loading">
-                    <div class="spinner"></div>
-                    <span>Loading application logs...</span>
-                </div>
-            `;
-            container.classList.remove('hidden');
-            
-            // Fetch logs from our new endpoint
             const response = await fetch('/logs');
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
             const data = await response.json();
             
-            if (data.status === 'success' || data.status === 'partial_success') {
-                const logs = ultraSafeArray(data.logs || []);
-                
-                if (logs.length === 0) {
-                    content.innerHTML = `
-                        <div class="logs-empty">
-                            <h4>📝 No Logs Available</h4>
-                            <p>No log entries found or logs may not be configured.</p>
-                            <small>Log source: ${ultraSafeString(data.log_source || 'unknown')}</small>
-                        </div>
-                    `;
+            if (logsContent) {
+                if (data.logs && data.logs.length > 0) {
+                    logsContent.innerHTML = data.logs.map(log => 
+                        `<div style="padding: 4px 16px; border-bottom: 1px solid #f0f0f0; font-family: monospace; font-size: 0.8em;">${ultraSafeString(log)}</div>`
+                    ).join('');
                 } else {
-                    // Enhanced log display with syntax highlighting
-                    const logsHtml = logs.map(log => {
-                        const safeLog = ultraSafeString(log);
-                        
-                        // Determine log level and apply appropriate styling
-                        let logClass = 'log-info';
-                        let logIcon = 'ℹ️';
-                        
-                        if (safeLog.includes('ERROR') || safeLog.includes('❌')) {
-                            logClass = 'log-error';
-                            logIcon = '❌';
-                        } else if (safeLog.includes('WARNING') || safeLog.includes('⚠️')) {
-                            logClass = 'log-warning';
-                            logIcon = '⚠️';
-                        } else if (safeLog.includes('SUCCESS') || safeLog.includes('✅')) {
-                            logClass = 'log-success';
-                            logIcon = '✅';
-                        } else if (safeLog.includes('INFO')) {
-                            logIcon = 'ℹ️';
-                        }
-                        
-                        return `
-                            <div class="log-entry ${logClass}">
-                                <span class="log-icon">${logIcon}</span>
-                                <span class="log-text">${safeLog}</span>
-                            </div>
-                        `;
-                    }).join('');
-                    
-                    content.innerHTML = `
-                        <div class="logs-header">
-                            <h4>📜 Application Logs</h4>
-                            <div class="logs-meta">
-                                <span>📊 ${logs.length} entries</span>
-                                <span>🔄 Updated: ${new Date().toLocaleString()}</span>
-                                <span>📁 Source: ${ultraSafeString(data.log_source || 'system')}</span>
-                            </div>
-                        </div>
-                        <div class="logs-content">
-                            ${logsHtml}
-                        </div>
-                        <div class="logs-footer">
-                            <small>✅ Logs endpoint working properly - 404 error resolved</small>
-                        </div>
-                    `;
+                    logsContent.innerHTML = '<div style="padding: 16px; text-align: center; color: #666;">No logs available</div>';
                 }
                 
-                // Add error info if partial success
-                if (data.status === 'partial_success' && data.error) {
-                    content.innerHTML += `
-                        <div class="logs-error-info">
-                            <h5>⚠️ Limited Functionality</h5>
-                            <p>Error: ${ultraSafeString(data.error)}</p>
-                            <small>The logs endpoint is working but encountered issues accessing log files.</small>
-                        </div>
-                    `;
-                }
-                
-            } else {
-                throw new Error(data.error || 'Failed to retrieve logs');
+                // Update logs metadata
+                const logsTimestamp = document.getElementById('logsTimestamp');
+                const logsCount = document.getElementById('logsCount');
+                if (logsTimestamp) logsTimestamp.textContent = new Date().toLocaleString();
+                if (logsCount) logsCount.textContent = data.logs ? data.logs.length : 0;
             }
             
         } catch (error) {
-            console.error('Failed to load logs:', error);
-            content.innerHTML = `
-                <div class="logs-error">
-                    <h4>❌ Logs Loading Error</h4>
-                    <p><strong>Error:</strong> ${ultraSafeString(error.message)}</p>
-                    <div class="error-details">
-                        <p>This could be caused by:</p>
-                        <ul>
-                            <li>Network connectivity issues</li>
-                            <li>Server configuration problems</li>
-                            <li>Log file access permissions</li>
-                        </ul>
-                    </div>
-                    <button class="btn secondary" onclick="toggleLogs(); setTimeout(toggleLogs, 100);">
-                        🔄 Retry
-                    </button>
-                </div>
-            `;
+            if (logsContent) {
+                logsContent.innerHTML = `<div style="padding: 16px; color: #dc3545;">❌ Failed to load logs: ${error.message}</div>`;
+            }
         }
     } else {
-        // Hide logs
-        container.classList.add('hidden');
+        logsContainer.classList.add('hidden');
     }
 }
 
 async function testSearch() {
-    const query = prompt('🔍 Enter search query to test:', 'customer service');
-    if (!query) return;
-    
-    const container = document.getElementById("actionResults");
+    const container = document.getElementById('actionResults');
     if (!container) return;
     
-    container.innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
+    container.innerHTML = `
+        <div class="status processing">
+            🔍 Testing search functionality...
+        </div>
+    `;
     
     try {
-        const response = await fetch(`/search?q=${encodeURIComponent(query)}`);
+        const response = await fetch('/test_search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: 'test search query' })
+        });
+        
         const data = await response.json();
         
-        if (data.status === 'success') {
-            const results = ultraSafeArray(data.results);
-            const resultCount = results.length;
-            let html = `
-                <div class="result-card">
-                    <h4>🔍 Search Results for "${ultraSafeString(query)}"</h4>
-                    <p><strong>Found:</strong> ${ultraSafeFormat(resultCount)} results</p>
+        if (data.success) {
+            const resultCount = ultraSafeNumber(data.results?.length || 0);
+            container.innerHTML = `
+                <div class="status completed">
+                    ✅ Search test successful! Found ${ultraSafeFormat(resultCount)} results.
+                </div>
             `;
-            
-            if (resultCount > 0) {
-                html += '<div style="max-height: 200px; overflow-y: auto; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">';
-                results.slice(0, 3).forEach((result, index) => {
-                    const safeResult = ultraSafeObject(result);
-                    const title = ultraSafeString(safeResult.title || 'Untitled');
-                    const text = ultraSafeString(safeResult.text || '');
-                    const score = ultraSafeNumber(safeResult.score);
-                    
-                    html += `
-                        <div style="margin: 10px 0; padding: 10px; background: #f9f9f9; border-radius: 4px; border-left: 3px solid #6e32a0;">
-                            <div style="font-weight: bold; color: #6e32a0; margin-bottom: 5px;">
-                                ${index + 1}. ${title}
-                            </div>
-                            <div style="font-size: 0.9em; color: #666;">
-                                ${text.substring(0, 150)}${text.length > 150 ? '...' : ''}
-                            </div>
-                            ${score > 0 ? `<div style="font-size: 0.8em; color: #999; margin-top: 5px;">Score: ${Math.round(score * 100) / 100}</div>` : ''}
-                        </div>
-                    `;
-                });
-                html += '</div>';
-                
-                if (resultCount > 3) {
-                    html += `<div style="margin-top: 10px; font-size: 0.9em; color: #666; text-align: center;">
-                        ... and ${ultraSafeFormat(resultCount - 3)} more results
-                    </div>`;
-                }
-            }
-            
-            html += '</div>';
-            container.innerHTML = html;
         } else {
-            container.innerHTML = `<div class="status failed">❌ Search failed: ${ultraSafeString(data.error || 'Unknown error')}</div>`;
+            container.innerHTML = `
+                <div class="status failed">
+                    ❌ Search test failed: ${ultraSafeString(data.error || 'Unknown error')}
+                </div>
+            `;
         }
     } catch (error) {
-        container.innerHTML = `<div class="status failed">❌ Search failed: ${ultraSafeString(error.message)}</div>`;
+        container.innerHTML = `
+            <div class="status failed">
+                ❌ Search test failed: ${ultraSafeString(error.message)}
+            </div>
+        `;
     }
 }
 
 function openChatInterface() {
     window.open('/chat', '_blank');
+}
+
+// ============================================================================
+// EVALUATION LOOKUP FUNCTIONS
+// ============================================================================
+
+async function lookupEvaluation() {
+    const input = document.getElementById('evaluationIdInput');
+    const resultsContainer = document.getElementById('evaluationResults');
+    
+    if (!input || !resultsContainer) {
+        console.error('Evaluation lookup elements not found');
+        return;
+    }
+    
+    const evaluationId = input.value.trim();
+    
+    if (!evaluationId) {
+        alert('Please enter an evaluation ID');
+        input.focus();
+        return;
+    }
+    
+    // Show loading state
+    resultsContainer.classList.remove('hidden');
+    resultsContainer.innerHTML = `
+        <div class="evaluation-loading">
+            <div class="spinner"></div>
+            <div>Looking up evaluation: <strong>${ultraSafeString(evaluationId)}</strong></div>
+        </div>
+    `;
+    
+    try {
+        // Make API call to get evaluation data
+        const response = await fetch(`/evaluation/${encodeURIComponent(evaluationId)}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            if (response.status === 404) {
+                displayEvaluationError(`Evaluation ID "${evaluationId}" not found in the database.`);
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                displayEvaluationError(`Failed to fetch evaluation: ${errorData.detail || response.statusText}`);
+            }
+            return;
+        }
+        
+        const data = await response.json();
+        console.log('✅ Evaluation data retrieved:', data);
+        
+        displayEvaluationResults(data, evaluationId);
+        
+    } catch (error) {
+        console.error('❌ Evaluation lookup failed:', error);
+        
+        let errorMessage = 'Network error - unable to connect to server';
+        if (error.message.includes('fetch')) {
+            errorMessage = 'Server is unreachable. Please check if the backend is running.';
+        } else {
+            errorMessage = `Lookup failed: ${error.message}`;
+        }
+        
+        displayEvaluationError(errorMessage);
+    }
+}
+
+function displayEvaluationResults(data, searchedId) {
+    const resultsContainer = document.getElementById('evaluationResults');
+    if (!resultsContainer) return;
+    
+    // Safely extract data with defaults
+    const evalData = {
+        internalId: ultraSafeString(data.internalId || data.internal_id || ''),
+        evaluationId: ultraSafeString(data.evaluationId || data.evaluation_id || searchedId),
+        weighted_score: ultraSafeNumber(data.weighted_score || data.score || 0),
+        url: ultraSafeString(data.url || ''),
+        template_id: ultraSafeString(data.template_id || ''),
+        template_name: ultraSafeString(data.template_name || ''),
+        partner: ultraSafeString(data.partner || ''),
+        site: ultraSafeString(data.site || ''),
+        lob: ultraSafeString(data.lob || ''),
+        agentName: ultraSafeString(data.agentName || data.agent_name || ''),
+        agentId: ultraSafeString(data.agentId || data.agent_id || ''),
+        disposition: ultraSafeString(data.disposition || ''),
+        subDisposition: ultraSafeString(data.subDisposition || data.sub_disposition || ''),
+        created_on: data.created_on || data.createdOn || '',
+        call_date: data.call_date || data.callDate || '',
+        call_duration: ultraSafeNumber(data.call_duration || data.callDuration || 0),
+        language: ultraSafeString(data.language || ''),
+        evaluation: ultraSafeString(data.evaluation || '')
+    };
+    
+    // Format score for display
+    const scoreColor = evalData.weighted_score >= 80 ? '#28a745' : 
+                      evalData.weighted_score >= 60 ? '#ffc107' : '#dc3545';
+    
+    const html = `
+        <div class="evaluation-header">
+            <h3>
+                <span class="emoji">📋</span>
+                Evaluation: ${evalData.evaluationId}
+            </h3>
+            <div class="evaluation-score" style="background-color: ${scoreColor};">
+                Score: ${evalData.weighted_score}%
+            </div>
+        </div>
+        
+        <div class="evaluation-content">
+            <!-- Basic Information -->
+            <div class="evaluation-grid">
+                <div class="eval-field">
+                    <div class="eval-label">Internal ID</div>
+                    <div class="eval-value ${evalData.internalId ? '' : 'empty'}">
+                        ${evalData.internalId || 'Not available'}
+                    </div>
+                </div>
+                
+                <div class="eval-field">
+                    <div class="eval-label">Evaluation ID</div>
+                    <div class="eval-value">
+                        ${evalData.evaluationId}
+                    </div>
+                </div>
+                
+                <div class="eval-field">
+                    <div class="eval-label">Weighted Score</div>
+                    <div class="eval-value score">
+                        ${evalData.weighted_score}%
+                    </div>
+                </div>
+                
+                <div class="eval-field">
+                    <div class="eval-label">Evaluation URL</div>
+                    <div class="eval-value url ${evalData.url ? '' : 'empty'}">
+                        ${evalData.url ? `<a href="${evalData.url}" target="_blank">${evalData.url}</a>` : 'Not available'}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Template Information -->
+            <div class="evaluation-grid">
+                <div class="eval-field">
+                    <div class="eval-label">Template ID</div>
+                    <div class="eval-value ${evalData.template_id ? '' : 'empty'}">
+                        ${evalData.template_id || 'Not available'}
+                    </div>
+                </div>
+                
+                <div class="eval-field">
+                    <div class="eval-label">Template Name</div>
+                    <div class="eval-value ${evalData.template_name ? '' : 'empty'}">
+                        ${evalData.template_name || 'Not available'}
+                    </div>
+                </div>
+                
+                <div class="eval-field">
+                    <div class="eval-label">Language</div>
+                    <div class="eval-value ${evalData.language ? '' : 'empty'}">
+                        ${evalData.language || 'Not specified'}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Organization Information -->
+            <div class="evaluation-grid">
+                <div class="eval-field">
+                    <div class="eval-label">Partner</div>
+                    <div class="eval-value ${evalData.partner ? '' : 'empty'}">
+                        ${evalData.partner || 'Not specified'}
+                    </div>
+                </div>
+                
+                <div class="eval-field">
+                    <div class="eval-label">Site</div>
+                    <div class="eval-value ${evalData.site ? '' : 'empty'}">
+                        ${evalData.site || 'Not specified'}
+                    </div>
+                </div>
+                
+                <div class="eval-field">
+                    <div class="eval-label">Line of Business</div>
+                    <div class="eval-value ${evalData.lob ? '' : 'empty'}">
+                        ${evalData.lob || 'Not specified'}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Agent Information -->
+            <div class="evaluation-grid">
+                <div class="eval-field">
+                    <div class="eval-label">Agent Name</div>
+                    <div class="eval-value ${evalData.agentName ? '' : 'empty'}">
+                        ${evalData.agentName || 'Not available'}
+                    </div>
+                </div>
+                
+                <div class="eval-field">
+                    <div class="eval-label">Agent ID</div>
+                    <div class="eval-value ${evalData.agentId ? '' : 'empty'}">
+                        ${evalData.agentId || 'Not available'}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Call Information -->
+            <div class="evaluation-grid">
+                <div class="eval-field">
+                    <div class="eval-label">Disposition</div>
+                    <div class="eval-value ${evalData.disposition ? '' : 'empty'}">
+                        ${evalData.disposition || 'Not available'}
+                    </div>
+                </div>
+                
+                <div class="eval-field">
+                    <div class="eval-label">Sub-Disposition</div>
+                    <div class="eval-value ${evalData.subDisposition ? '' : 'empty'}">
+                        ${evalData.subDisposition || 'Not available'}
+                    </div>
+                </div>
+                
+                <div class="eval-field">
+                    <div class="eval-label">Call Duration</div>
+                    <div class="eval-value ${evalData.call_duration > 0 ? '' : 'empty'}">
+                        ${evalData.call_duration > 0 ? `${evalData.call_duration} seconds` : 'Not available'}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Date Information -->
+            <div class="evaluation-grid">
+                <div class="eval-field">
+                    <div class="eval-label">Created On</div>
+                    <div class="eval-value date ${evalData.created_on ? '' : 'empty'}">
+                        ${evalData.created_on ? ultraSafeTimestamp(evalData.created_on) : 'Not available'}
+                    </div>
+                </div>
+                
+                <div class="eval-field">
+                    <div class="eval-label">Call Date</div>
+                    <div class="eval-value date ${evalData.call_date ? '' : 'empty'}">
+                        ${evalData.call_date ? ultraSafeTimestamp(evalData.call_date) : 'Not available'}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Evaluation Content -->
+            ${evalData.evaluation ? `
+            <div class="evaluation-section">
+                <h4>
+                    <span class="emoji">📄</span>
+                    Evaluation Content
+                </h4>
+                <div class="evaluation-text">
+                    ${evalData.evaluation.replace(/\n/g, '<br>')}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+    `;
+    
+    resultsContainer.innerHTML = html;
+}
+
+function displayEvaluationError(message) {
+    const resultsContainer = document.getElementById('evaluationResults');
+    if (!resultsContainer) return;
+    
+    resultsContainer.innerHTML = `
+        <div class="evaluation-error">
+            <h3>❌ Evaluation Lookup Failed</h3>
+            <p>${ultraSafeString(message)}</p>
+            <div style="margin-top: 16px;">
+                <button onclick="clearEvaluationLookup()" class="btn secondary">
+                    <span class="emoji">🗑️</span> Clear Results
+                </button>
+                <button onclick="lookupEvaluation()" class="btn primary">
+                    <span class="emoji">🔄</span> Try Again
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function clearEvaluationLookup() {
+    const input = document.getElementById('evaluationIdInput');
+    const resultsContainer = document.getElementById('evaluationResults');
+    
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+    
+    if (resultsContainer) {
+        resultsContainer.classList.add('hidden');
+        resultsContainer.innerHTML = '';
+    }
+}
+
+function handleEvaluationLookupKeyPress(event) {
+    if (event.key === 'Enter') {
+        lookupEvaluation();
+    }
 }
 
 // ============================================================================
@@ -1540,6 +1433,10 @@ window.toggleLogs = toggleLogs;
 window.testSearch = testSearch;
 window.openChatInterface = openChatInterface;
 window.loadOpenSearchStats = loadOpenSearchStats; // Enhanced statistics function
+// NEW: Evaluation lookup functions
+window.lookupEvaluation = lookupEvaluation;
+window.clearEvaluationLookup = clearEvaluationLookup;
+window.handleEvaluationLookupKeyPress = handleEvaluationLookupKeyPress;
 
 console.log("✅ Ask InnovAI Admin BULLETPROOF main.js v2.2.3 loaded successfully");
 console.log("🛡️ BULLETPROOF: ALL toLocaleString() errors COMPLETELY ELIMINATED");

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ask InnovAI Admin - Production v2.2.0</title>
+    <title>Ask InnovAI Admin - Production v6.0.0</title>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
     <link rel="stylesheet" href="/static/styles.css" />
 </head>
@@ -31,7 +31,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1><span class="emoji">🤖</span> Ask InnovAI Admin v2.2.0</h1>
+            <h1><span class="emoji">🤖</span> Ask InnovAI Admin v6.0.0</h1>
             <p>Production Knowledge Base Management System with Enhanced Evaluation Tracking</p>
         </div>
         
@@ -61,46 +61,82 @@
             <div class="section">
                 <h2><span class="emoji">🏥</span> System Health</h2>
                 <button class="btn secondary" onclick="checkSystemHealth()">Check Health Status</button>
-                <div id="healthStatus" class="health-status"></div>
+                
+                <div id="healthContainer" class="health-status">
+                    <div class="health-item">
+                        <span class="health-label">System Status</span>
+                        <span class="health-value">Checking...</span>
+                    </div>
+                </div>
             </div>
             
-            <!-- Import Configuration Section -->
-        <div class="section">
-            <h2><span class="emoji">📥</span> Enhanced Data Import Configuration</h2>
-            
-            <div class="control-group">
-                <label for="collectionSelect">Collection:</label>
-                <select id="collectionSelect">
-                    <option value="all">All Collections</option>                       
-                </select>
+            <!-- Import Management Section -->
+            <div class="section">
+                <h2><span class="emoji">📥</span> Data Import Management</h2>
+                
+                <div class="control-group">
+                    <label for="importTypeSelect" class="control-label">Import Type:</label>
+                    <select id="importTypeSelect" class="control-input">
+                        <option value="evaluation_json">Evaluation JSON Files</option>
+                        <option value="transcript_json">Transcript JSON Files</option>
+                        <option value="combined_import">Combined Import</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="collectionSelect" class="control-label">Collection:</label>
+                    <select id="collectionSelect" class="control-input">
+                        <option value="evaluations">Evaluations</option>
+                        <option value="transcripts">Transcripts</option>
+                        <option value="combined">Combined Data</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="maxDocsInput" class="control-label">Max Documents to Process:</label>
+                    <input type="number" id="maxDocsInput" class="control-input" 
+                           min="1" max="10000" value="100" 
+                           placeholder="Enter number (1-10000)">
+                    <div id="maxDocsDisplay" class="max-docs-info">
+                        Will process up to 100 documents for testing
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <button class="btn primary" onclick="startImport()">
+                        <span class="emoji">🚀</span> Start Import
+                    </button>
+                    <button class="btn secondary" onclick="refreshStatus()">
+                        <span class="emoji">🔄</span> Refresh Status
+                    </button>
+                    <button class="btn secondary" onclick="toggleLogs()">
+                        <span class="emoji">📜</span> View Logs
+                    </button>
+                </div>
+                
+                <div id="statusContainer" class="status-container">
+                    <div class="status idle">
+                        <strong>Status:</strong> System Ready
+                    </div>
+                </div>
+                
+                <div id="currentStep" class="current-step hidden">
+                    <strong>Current Step:</strong> <span id="stepText">Waiting...</span>
+                </div>
+                
+                <div id="logsContainer" class="logs-container hidden">
+                    <div class="logs-header">
+                        <h4>📜 Import Logs</h4>
+                        <div class="logs-meta">
+                            <span>📅 <span id="logsTimestamp">Loading...</span></span>
+                            <span>📊 <span id="logsCount">0</span> entries</span>
+                        </div>
+                    </div>
+                    <div id="logsContent" class="logs-content">Loading logs...</div>
+                </div>
             </div>
         
-        <div class="control-group">
-            <label for="importTypeSelect">Import Type:</label>
-            <select id="importTypeSelect">
-                <option value="full">Full Import (All Documents)</option>
-                <option value="incremental">Incremental (Updated Only)</option>
-            </select>
-        </div>
         
-        <!-- Enhanced Max Documents Input -->
-        <div class="control-group">
-            <label for="maxDocsInput">Max Documents:</label>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <input 
-                    type="number" 
-                    id="maxDocsInput" 
-                    class="filter-input"
-                    placeholder="Leave empty for all" 
-                    min="1" 
-                    max="10000"
-                    title="Maximum number of documents to import"
-                    style="flex: 1;"
-                >
-                <span id="maxDocsDisplay" style="font-size: 0.85em; color: #666; min-width: 100px; font-weight: 500;">
-                    All documents
-                </span>
-            </div>
             
             <!-- Dynamic info box -->
             <div id="maxDocsInfo" class="max-docs-info" style="display: none;">
@@ -129,13 +165,15 @@
                 <span class="emoji">🔄</span> Reset Timestamp
             </button>
         </div>
+
+            
         
-        <!-- Import preview -->
-        <div id="importPreview" style="margin-top: 15px; padding: 12px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #6e32a0; display: none;">
-            <strong>📋 Import Preview:</strong>
-            <div id="importPreviewText" style="margin-top: 6px; font-size: 0.9em; color: #333;"></div>
+            <!-- Import preview -->
+            <div id="importPreview" style="margin-top: 15px; padding: 12px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #6e32a0; display: none;">
+                <strong>📋 Import Preview:</strong>
+                <div id="importPreviewText" style="margin-top: 6px; font-size: 0.9em; color: #333;"></div>
+            </div>
         </div>
-    </div>
             
             <!-- Import Status Section -->
             <div class="section">
@@ -163,10 +201,36 @@
             </div>
             
             <!-- Import Results Section -->
-            <div id="resultsSection" class="section hidden">
-                <h2><span class="emoji">📈</span> Import Results</h2>
-                <div id="resultsGrid" class="results-grid"></div>
+                <div id="resultsSection" class="section hidden">
+                    <h2><span class="emoji">📈</span> Import Results</h2>
+                    <div id="resultsGrid" class="results-grid"></div>
+                </div>
+
+            <!-- Evaluation Lookup Section -->
+            <div class="section">
+                <h2><span class="emoji">🔍</span> Evaluation Lookup</h2>
+                
+                <div class="control-group">
+                    <label for="evaluationIdInput" class="control-label">Evaluation ID:</label>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <input type="text" 
+                            id="evaluationIdInput" 
+                            class="control-input" 
+                            placeholder="Enter evaluation ID (e.g., EVAL_12345)" 
+                            style="flex: 1;"
+                            onkeypress="handleEvaluationLookupKeyPress(event)">
+                        <button class="btn primary" onclick="lookupEvaluation()">
+                            <span class="emoji">🔍</span> Lookup
+                        </button>
+                        <button class="btn secondary" onclick="clearEvaluationLookup()">
+                            <span class="emoji">🗑️</span> Clear
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="evaluationResults" class="evaluation-results hidden"></div>
             </div>
+
             
             <!-- Quick Actions Section -->
             <div class="section">
@@ -177,7 +241,10 @@
                         <span class="emoji">🔍</span> Test Search
                     </button>
                     <button class="btn secondary" onclick="openChatInterface()">
-                        <span class="emoji">💬</span> Open Chat
+                        <span class="emoji">💬</span> Open Chat Interface
+                    </button>
+                    <button class="btn info" onclick="window.open('/debug_innovai.html', '_blank')">
+                        <span class="emoji">🔧</span> Debug Tools
                     </button>
                 </div>
                 
