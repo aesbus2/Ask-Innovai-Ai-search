@@ -2,7 +2,7 @@
 // BULLETPROOF FIX: Complete error handling for toLocaleString() undefined errors
 // Version: 6.1.0 - Updated for new admin interface
 
-let pollingInterval = null
+let pollInterval = null
 let isPolling = false;
 
 
