@@ -282,6 +282,8 @@ class ImportRequest(BaseModel):
     max_docs: Optional[int] = None
     import_type: str = "full"
     batch_size: Optional[int] = None
+    call_date_start: Optional[str] = None  # ✅ ADD this line
+    call_date_end: Optional[str] = None    # ✅ ADD this line
 
 #Pydantic Models (Above)
 # ============================================================================
@@ -520,7 +522,7 @@ try:
     
     logger.info("✅ All routers imported and mounted successfully")
     logger.info("   - Chat endpoints: /api/chat")
-    logger.info("   - Import endpoints: /api/import, /api/import_status")
+    logger.info("   - Import endpoints: /import, /import_status")
     logger.info("   - Health endpoints: /health, /ping")
 
 except ImportError as e:
@@ -2583,7 +2585,6 @@ async def fetch_evaluations(
         raise
 
 async def run_production_import(
-    collection: str = "all", 
     max_docs: int = None, 
     batch_size: int = None,
     call_date_start: str = None,  # NEW  
