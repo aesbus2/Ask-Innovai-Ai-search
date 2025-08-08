@@ -12,6 +12,7 @@ import re
 import time
 import gc
 import hashlib
+
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from contextlib import asynccontextmanager
@@ -24,7 +25,7 @@ from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, Query, API
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-
+from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse as StarletteJSONResponse
 from opensearch_client import search_transcripts_comprehensive, search_transcripts_only, search_transcript_with_context
@@ -272,6 +273,17 @@ def validate_evaluation_content(evaluation: dict) -> tuple[bool, str, dict]:
     
     return True, None, {}
 
+# logging setup (Above)
+# ============================================================================
+# PYDANTIC MODELS
+# ============================================================================
+class ImportRequest(BaseModel):
+    collection: str = "all"
+    max_docs: Optional[int] = None
+    import_type: str = "full"
+    batch_size: Optional[int] = None
+
+#Pydantic Models (Above)
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================
@@ -482,6 +494,8 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     return response
 
+
+
 # ============================================================================
 # MOUNT STATIC FILES
 # ============================================================================
@@ -497,12 +511,12 @@ except Exception as e:
 
 try:
     from chat_handlers import chat_router, health_router
-    from import_handlers import import_router
+    
     
     # Mount routers with proper organization
     app.include_router(chat_router, prefix="/api")
     app.include_router(health_router)  # No prefix for backward compatibility
-    app.include_router(import_router, prefix="/api")  # Enhanced import endpoints
+    
     
     logger.info("✅ All routers imported and mounted successfully")
     logger.info("   - Chat endpoints: /api/chat")
@@ -2509,7 +2523,11 @@ def log_import_summary():
 # PRODUCTION API FETCHING (Keeping existing)
 # ============================================================================
 
-async def fetch_evaluations(max_docs: int = None):
+async def fetch_evaluations(
+    max_docs: int = None, 
+    call_date_start: str = None,  # NEW
+    call_date_end: str = None     # NEW
+):
     """PRODUCTION: Fetch evaluations from API with enhanced error handling"""
     try:
         if not API_BASE_URL or not API_AUTH_VALUE:
@@ -2564,7 +2582,19 @@ async def fetch_evaluations(max_docs: int = None):
         logger.error(f"PRODUCTION: Failed to fetch evaluations: {e}")
         raise
 
-async def run_production_import(collection: str = "all", max_docs: int = None, batch_size: int = None):
+async def run_production_import(
+    collection: str = "all", 
+    max_docs: int = None, 
+    batch_size: int = None,
+    call_date_start: str = None,  # NEW  
+    call_date_end: str = None     # NEW
+):
+    # Update the fetch_evaluations call to pass the date parameters
+    evaluations = await fetch_evaluations(
+        max_docs=max_docs,
+        call_date_start=call_date_start,
+        call_date_end=call_date_end
+    )
     """
     PRODUCTION: Import process with enhanced real data integration
     """
@@ -2621,7 +2651,11 @@ async def run_production_import(collection: str = "all", max_docs: int = None, b
         
         # Fetch evaluations
         update_import_status("running", "Fetching evaluation data")
-        evaluations = await fetch_evaluations(max_docs)
+        evaluations = await fetch_evaluations(
+            max_docs=max_docs, 
+                call_date_start=call_date_start,    # ✅ NEW
+                call_date_end=call_date_end         # ✅ NEW
+            )
         
         if not evaluations:
             results = {
@@ -3217,6 +3251,89 @@ def create_empty_statistics_response():
     }
 
 
+
+
+
+
+
+
+@app.post("/import")
+async def start_import(request: ImportRequest, background_tasks: BackgroundTasks):
+    """PRODUCTION: Start the enhanced import process with real data integration"""
+    global import_status
+    
+    if import_status["status"] == "running":
+        raise HTTPException(status_code=400, detail="Import is already running")
+    
+    try:
+        # Reset import status
+        import_status = {
+            "status": "idle",
+            "start_time": None,
+            "end_time": None,
+            "current_step": None,
+            "results": {},
+            "error": None,
+            "import_type": request.import_type
+        }
+        
+        # Validate request
+        if request.max_docs is not None and request.max_docs <= 0:
+            raise HTTPException(status_code=400, detail="max_docs must be a positive integer")
+        
+        # ✅ NEW: Validate date range
+        if request.call_date_start and request.call_date_end:
+            try:
+                start_date = datetime.strptime(request.call_date_start, "%Y-%m-%d")
+                end_date = datetime.strptime(request.call_date_end, "%Y-%m-%d")
+                
+                if start_date > end_date:
+                    raise HTTPException(status_code=400, detail="Start date cannot be after end date")
+                    
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Invalid date format (use YYYY-MM-DD): {e}")
+            
+        # Log import start
+        log_import("🚀 PRODUCTION import request received:")
+        log_import(f"   Collection: {request.collection}")
+        log_import(f"   Import Type: {request.import_type}")
+        log_import(f"   Max Docs: {request.max_docs or 'All'}")
+        log_import(f"   Batch Size: {request.batch_size or 'Default'}")
+
+        # ✅ NEW: Log date filtering
+        if request.call_date_start or request.call_date_end:
+            log_import(f"   📅 Date Range: {request.call_date_start or 'unlimited'} to {request.call_date_end or 'unlimited'}")        
+        
+        # Start background import
+        background_tasks.add_task(
+            run_production_import,
+            collection=request.collection,
+            max_docs=request.max_docs,
+            batch_size=request.batch_size,
+            call_date_start=request.call_date_start,    # ✅ NEW
+            call_date_end=request.call_date_end          # ✅ NEW
+        )
+        
+        return {
+            "status": "success",
+            "message": f"ENHANCED import started: {request.import_type} mode",
+            "collection": request.collection,
+            "max_docs": request.max_docs,
+            "import_type": request.import_type,
+            "date_range": {
+                "start": request.call_date_start,
+                "end": request.call_date_end
+            } if request.call_date_start or request.call_date_end else None,
+            "structure": "evaluation_grouped",
+            "features": "enhanced_with_date_filtering",
+            "version": "6.3.0_simple_enhancement"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PRODUCTION: Failed to start import: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start import: {str(e)}")
 
 @app.get("/health")
 async def health():
