@@ -13,8 +13,7 @@ setInterval(() => {
     }
 }, 30000);
 
-// Auto-refresh statistics every 30 seconds
-setInterval(loadOpenSearchStats, 30000);
+
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
@@ -376,170 +375,84 @@ function displayStatisticsError(errorMessage, errorType = 'unknown') {
     `;
 }
 
-function displayStatistics(data, timestamp) {
+function displayStatistics(response, timestamp) {
     const container = document.getElementById('statisticsContainer');
     if (!container) return;
     
-    // BULLETPROOF: Safely handle potentially missing data
+    // Handle the actual API response structure
+    const apiData = response.data || response;
+    
+    // Map your API fields to display
     const safeData = {
-        total_evaluations: ultraSafeNumber(data?.total_evaluations),
-        total_chunks: ultraSafeNumber(data?.total_chunks),
-        evaluation_chunks: ultraSafeNumber(data?.evaluation_chunks),
-        transcript_chunks: ultraSafeNumber(data?.transcript_chunks),
-        evaluations_with_transcript: ultraSafeNumber(data?.evaluations_with_transcript),
-        evaluations_without_transcript: ultraSafeNumber(data?.evaluations_without_transcript),
-        template_counts: ultraSafeObject(data?.template_counts),
-        lob_counts: ultraSafeObject(data?.lob_counts),
-        partner_counts: ultraSafeObject(data?.partner_counts),
-        site_counts: ultraSafeObject(data?.site_counts),
-        language_counts: ultraSafeObject(data?.language_counts),
-        indices: ultraSafeArray(data?.indices),
-        structure_info: ultraSafeObject(data?.structure_info)
+        total_evaluations: ultraSafeNumber(apiData?.total_documents || apiData?.total_evaluations),
+        active_indices: ultraSafeNumber(apiData?.active_indices),
+        agents: ultraSafeNumber(apiData?.agents),
+        dispositions: ultraSafeNumber(apiData?.dispositions),
+        programs: ultraSafeNumber(apiData?.programs),
+        templates: ultraSafeNumber(apiData?.templates),
+        weighted_scores_available: ultraSafeNumber(apiData?.weighted_scores_available)
     };
     
-    // Calculate additional metrics safely
-    let avgChunksPerEval = '0.0';
-    let transcriptPercentage = '0.0';
+    const responseStatus = response.status || 'success';
+    const responseTimestamp = response.timestamp || timestamp;
     
-    try {
-        if (safeData.total_evaluations > 0 && safeData.total_chunks >= 0) {
-            const avg = safeData.total_chunks / safeData.total_evaluations;
-            avgChunksPerEval = isFinite(avg) ? avg.toFixed(1) : '0.0';
-        }
-        
-        if (safeData.total_evaluations > 0 && safeData.evaluations_with_transcript >= 0) {
-            const percentage = (safeData.evaluations_with_transcript / safeData.total_evaluations) * 100;
-            transcriptPercentage = isFinite(percentage) ? percentage.toFixed(1) + '%' : '0.0%';
-        }
-    } catch (error) {
-        console.warn('Error calculating metrics:', error);
-    }
-    
-    // Generate breakdown HTML helper
-    const generateBreakdown = (counts, maxItems = 5) => {
-        try {
-            const entries = Object.entries(counts).slice(0, maxItems);
-            return entries.map(([key, count]) => {
-                const displayKey = key.length > 20 ? key.substring(0, 20) + '...' : key;
-                const displayCount = ultraSafeFormat(count);
-                
-                return `
-                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee;">
-                        <span class="breakdown-label" title="${ultraSafeString(key)}" style="color: #666; font-size: 0.85em;">${ultraSafeString(displayKey)}</span>
-                        <span class="breakdown-value" style="font-weight: 600; color: #333;">${displayCount}</span>
-                    </div>
-                `;
-            }).join('');
-        } catch (error) {
-            console.warn('Failed to process count entries:', counts, 'error:', error);
-            return '<div style="color: #999; font-style: italic;">Error processing data</div>';
-        }
-    };
-    
-    // Generate comprehensive HTML
+    // Generate HTML with actual data
     const html = `
         <div class="stats-dashboard">
-            <!-- PRIMARY METRIC: Evaluations -->
             <div class="stats-card priority-metric">
                 <h3><span class="emoji">🆔</span> Evaluations Processed</h3>
                 <div class="stats-number">${ultraSafeFormat(safeData.total_evaluations)}</div>
-                <div class="stats-label">Unique EvaluationIDs</div>
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
-                    <div style="font-size: 0.8em; color: #666;">Compare with your source system</div>
-                </div>
+                <div class="stats-label">Total Documents in OpenSearch</div>
             </div>
             
-            <!-- CHUNKS BREAKDOWN -->
             <div class="stats-card">
-                <h3><span class="emoji">📄</span> Document Chunks</h3>
-                <div class="stats-number">${ultraSafeFormat(safeData.total_chunks)}</div>
-                <div class="stats-label">Total Processed Chunks</div>
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
-                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 2px 0;">
-                        <span style="color: #666; font-size: 0.85em;">📊 Evaluation chunks</span>
-                        <span style="font-weight: 600;">${ultraSafeFormat(safeData.evaluation_chunks)}</span>
-                    </div>
-                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 2px 0;">
-                        <span style="color: #666; font-size: 0.85em;">🎯 Transcript chunks</span>
-                        <span style="font-weight: 600;">${ultraSafeFormat(safeData.transcript_chunks)}</span>
-                    </div>
-                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 2px 0; margin-top: 8px; border-top: 1px solid #eee;">
-                        <span style="color: #666; font-size: 0.85em;">📈 Avg per evaluation</span>
-                        <span style="font-weight: 600; color: #6e32a0;">${avgChunksPerEval}</span>
-                    </div>
-                </div>
+                <h3><span class="emoji">💾</span> Active Indices</h3>
+                <div class="stats-number">${ultraSafeFormat(safeData.active_indices)}</div>
+                <div class="stats-label">OpenSearch Indices</div>
             </div>
             
-            <!-- TRANSCRIPT COVERAGE -->
+            ${safeData.agents > 0 ? `
             <div class="stats-card">
-                <h3><span class="emoji">🎯</span> Transcript Coverage</h3>
-                <div class="stats-number" style="color: ${parseFloat(transcriptPercentage) > 80 ? '#28a745' : parseFloat(transcriptPercentage) > 50 ? '#ffc107' : '#dc3545'};">
-                    ${transcriptPercentage}
-                </div>
-                <div class="stats-label">Evaluations with Transcripts</div>
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
-                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 2px 0;">
-                        <span style="color: #28a745; font-size: 0.85em;">✅ With transcripts</span>
-                        <span style="font-weight: 600;">${ultraSafeFormat(safeData.evaluations_with_transcript)}</span>
-                    </div>
-                    <div class="breakdown-item" style="display: flex; justify-content: space-between; padding: 2px 0;">
-                        <span style="color: #dc3545; font-size: 0.85em;">❌ Without transcripts</span>
-                        <span style="font-weight: 600;">${ultraSafeFormat(safeData.evaluations_without_transcript)}</span>
-                    </div>
-                </div>
-            </div>
+                <h3><span class="emoji">👥</span> Agents</h3>
+                <div class="stats-number">${ultraSafeFormat(safeData.agents)}</div>
+                <div class="stats-label">Unique Agents</div>
+            </div>` : ''}
             
-            <!-- TEMPLATES -->
-            ${Object.keys(safeData.template_counts).length > 0 ? `
+            ${safeData.dispositions > 0 ? `
             <div class="stats-card">
-                <h3><span class="emoji">📋</span> Templates</h3>
-                <div class="stats-number">${Object.keys(safeData.template_counts).length}</div>
-                <div class="stats-label">Unique Templates</div>
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; max-height: 150px; overflow-y: auto;">
-                    ${generateBreakdown(safeData.template_counts)}
-                </div>
-            </div>
-            ` : ''}
+                <h3><span class="emoji">📋</span> Dispositions</h3>
+                <div class="stats-number">${ultraSafeFormat(safeData.dispositions)}</div>
+                <div class="stats-label">Call Dispositions</div>
+            </div>` : ''}
             
-            <!-- LOB BREAKDOWN -->
-            ${Object.keys(safeData.lob_counts).length > 0 ? `
+            ${safeData.templates > 0 ? `
             <div class="stats-card">
-                <h3><span class="emoji">🏢</span> Lines of Business</h3>
-                <div class="stats-number">${Object.keys(safeData.lob_counts).length}</div>
-                <div class="stats-label">Unique LOBs</div>
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; max-height: 150px; overflow-y: auto;">
-                    ${generateBreakdown(safeData.lob_counts)}
-                </div>
-            </div>
-            ` : ''}
+                <h3><span class="emoji">📄</span> Templates</h3>
+                <div class="stats-number">${ultraSafeFormat(safeData.templates)}</div>
+                <div class="stats-label">Evaluation Templates</div>
+            </div>` : ''}
             
-            <!-- PARTNERS -->
-            ${Object.keys(safeData.partner_counts).length > 0 ? `
+            ${safeData.weighted_scores_available > 0 ? `
             <div class="stats-card">
-                <h3><span class="emoji">🤝</span> Partners</h3>
-                <div class="stats-number">${Object.keys(safeData.partner_counts).length}</div>
-                <div class="stats-label">Unique Partners</div>
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; max-height: 150px; overflow-y: auto;">
-                    ${generateBreakdown(safeData.partner_counts)}
-                </div>
-            </div>
-            ` : ''}
+                <h3><span class="emoji">📊</span> Scored Evaluations</h3>
+                <div class="stats-number">${ultraSafeFormat(safeData.weighted_scores_available)}</div>
+                <div class="stats-label">With Weighted Scores</div>
+            </div>` : ''}
         </div>
         
         <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #6e32a0;">
-            <div style="font-size: 0.9em; color: #666; margin-bottom: 8px;">
-                📅 Last updated: ${ultraSafeTimestamp(timestamp)}
-            </div>
-            <div style="font-size: 0.85em; color: #666;">
-                📊 Structure: ${ultraSafeString(safeData.structure_info.document_type || 'unknown')} | 
-                🏷️ Collections: ${ultraSafeString(safeData.structure_info.collection_strategy || 'unknown')}
+            <div style="font-size: 0.9em; color: #666;">
+                📅 Last updated: ${ultraSafeTimestamp(responseTimestamp)} | 
+                🔄 Processing: ${response.processing_time || 'Unknown'}s | 
+                🏷️ Version: ${response.version || 'Unknown'}
             </div>
         </div>
     `;
     
     container.innerHTML = html;
-    console.log("📊 Statistics dashboard updated successfully");
+    console.log("📊 Statistics dashboard updated with actual API data");
 }
+
 
 // ============================================================================
 // IMPORT MANAGEMENT FUNCTIONS - ENHANCED (keeping existing working functions)
