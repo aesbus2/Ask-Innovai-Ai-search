@@ -6,28 +6,42 @@
     <title>Ask InnovAI Admin - Production v6.0.0</title>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
     <link rel="stylesheet" href="/static/styles.css" />
+    <!-- Add favicon to prevent 404 error -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
 </head>
 <script>
-  async function fetchEvaluationStats() {
-    try {
-      const res = await fetch("/analytics/stats", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filters: {} })
-      });
+        async function fetchEvaluationStats() {
+            try {
+                const res = await fetch("/analytics/stats", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ filters: {} })
+                });
 
-      const data = await res.json();
-      const count = data?.totalRecords ?? 0;
-      document.getElementById("eval-count").textContent = count.toLocaleString();
-    } catch (err) {
-      document.getElementById("eval-count").textContent = "Error";
-      console.error("Error fetching stats:", err);
-    }
-  }
+                const data = await res.json();
+                const count = data?.totalRecords ?? 0;
+                
+                // Safely update the element only if it exists
+                const evalCountElement = document.getElementById("eval-count");
+                if (evalCountElement) {
+                    evalCountElement.textContent = count.toLocaleString();
+                } else {
+                    console.warn("eval-count element not found, skipping update");
+                }
+            } catch (err) {
+                // Safely handle error only if element exists
+                const evalCountElement = document.getElementById("eval-count");
+                if (evalCountElement) {
+                    evalCountElement.textContent = "Error";
+                }
+                console.error("Error fetching stats:", err);
+            }
+        }
 
-  // Load on page load
-  window.addEventListener("DOMContentLoaded", fetchEvaluationStats);
-</script>
+        // Load on page load
+        window.addEventListener("DOMContentLoaded", fetchEvaluationStats);
+    </script>
+
 <body>
     <div class="container">
         <div class="header">
@@ -72,23 +86,12 @@
             
             <!-- Import Management Section -->
             <div class="section">
-                <h2><span class="emoji">📥</span> Data Import Management</h2>
-                
+                <h2><span class="emoji">📥</span> Data Import Management</h2>                
                 <div class="control-group">
-                    <label for="importTypeSelect" class="control-label">Import Type:</label>
-                    <select id="importTypeSelect" class="control-input">
-                        <option value="evaluation_json">Evaluation JSON Files</option>
-                        <option value="transcript_json">Transcript JSON Files</option>
-                        <option value="combined_import">Combined Import</option>
-                    </select>
-                </div>
-                
-                <div class="control-group">
-                    <label for="collectionSelect" class="control-label">Collection:</label>
-                    <select id="collectionSelect" class="control-input">
-                        <option value="evaluations">Evaluations</option>
-                        <option value="transcripts">Transcripts</option>
-                        <option value="combined">Combined Data</option>
+                    <label for="importTypeSelect">Import Type:</label>
+                    <select id="importTypeSelect">
+                        <option value="full">Full Import (All Documents)</option>
+                        <option value="incremental">Incremental (Updated Only)</option>
                     </select>
                 </div>
                 <!-- NEW: Date Range Import Controls -->
@@ -176,23 +179,7 @@
                 </div>
             </div>
         
-        
-            
-            <!-- Dynamic info box -->
-            <div id="maxDocsInfo" class="max-docs-info" style="display: none;">
-                <strong>📊 Import Scope:</strong>
-                <div id="maxDocsInfoText">All available documents will be processed</div>
-            </div>
-            
-            <div style="font-size: 0.8em; color: #666; margin-top: 6px;">
-                💡 <strong>Guidelines:</strong>
-                <ul style="margin: 4px 0 0 16px; padding: 0;">
-                    <li><strong>Testing:</strong> Use 10-50 documents for quick tests</li>
-                    <li><strong>Development:</strong> Use 100-500 documents for dev work</li>
-                    <li><strong>Production:</strong> Leave empty for complete import</li>
-                </ul>
-            </div>
-        </div>
+                      
         
         <div class="control-group">
             <button class="btn" onclick="startImport()">

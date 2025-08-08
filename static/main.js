@@ -2,9 +2,9 @@
 // BULLETPROOF FIX: Complete error handling for toLocaleString() undefined errors
 // Version: 6.1.0 - Updated for new admin interface
 
+let pollingInterval = null
 let isPolling = false;
-let pollingInterval;
-let currentImportId = null;
+
 
 console.log("Ask InnovAI Admin v2.2.4 - Updated for new admin interface");
 
@@ -527,8 +527,7 @@ function clearDateRange() {
 }
 
 function updateImportPreview() {
-    const importType = document.getElementById("importTypeSelect")?.value || "full";
-    const collection = document.getElementById("collectionSelect")?.value || "all";
+    const importType = document.getElementById("importTypeSelect")?.value || "full";   
     const maxDocsInput = document.getElementById("maxDocsInput");
     const startDate = document.getElementById('importStartDate')?.value;
     const endDate = document.getElementById('importEndDate')?.value;
@@ -539,7 +538,7 @@ function updateImportPreview() {
     
     const maxDocs = maxDocsInput && maxDocsInput.value.trim() !== "" ? parseInt(maxDocsInput.value.trim()) : null;
     
-    let previewText = `${importType.charAt(0).toUpperCase() + importType.slice(1)} import from ${collection} collection`;
+    let previewText = `${importType.charAt(0).toUpperCase() + importType.slice(1)} import`;
     
     // Add date range info
     if (startDate || endDate) {
@@ -564,16 +563,13 @@ function updateImportPreview() {
 }
 
 async function startImport() {
-    const collectionSelect = document.getElementById("collectionSelect");
     const importTypeSelect = document.getElementById("importTypeSelect");
     const maxDocsInput = document.getElementById("maxDocsInput");
     const startDateInput = document.getElementById('importStartDate');
-    const endDateInput = document.getElementById('importEndDate');
-    
-    const selectedCollection = collectionSelect ? collectionSelect.value : "all";
+    const endDateInput = document.getElementById('importEndDate');    
     const importType = importTypeSelect ? importTypeSelect.value : "full";
     
-    // FIXED: Properly handle max documents input
+    // Handle max documents input
     let maxDocs = null;
     if (maxDocsInput && maxDocsInput.value.trim() !== "") {
         const parsedValue = parseInt(maxDocsInput.value.trim());
@@ -585,7 +581,7 @@ async function startImport() {
         }
     }
 
-    // NEW: Handle date range inputs
+    // Handle date range inputs
     let startDate = null;
     let endDate = null;
     if (startDateInput && startDateInput.value.trim() !== "") {
@@ -602,16 +598,14 @@ async function startImport() {
     }
 
     const config = { 
-        collection: selectedCollection, 
         import_type: importType
     };
     
-    // FIXED: Only add parameters if they're explicitly set
+    // Only add parameters if they're explicitly set
     if (maxDocs !== null) {
         config.max_docs = maxDocs;
     }
     
-    // NEW: Add date range parameters if set
     if (startDate) {
         config.call_date_start = startDate;
     }
@@ -642,7 +636,6 @@ async function startImport() {
 
     const confirmMsg = `Start ${importType} import?
     
-Collection: ${selectedCollection}
 Type: ${importTypeText}
 Scope: ${modeText}${dateText}
 
@@ -657,11 +650,12 @@ This will fetch evaluation data from your API and index it for search and chat.`
     } else {
         console.log("📊 No document limit - importing all available");
     }
-    
+
     if (startDate || endDate) {
         console.log(`📅 Date range: ${startDate || 'unlimited'} to ${endDate || 'unlimited'}`);
     }
 
+    
     try {
         const response = await fetch("/import", {
             method: "POST",
@@ -669,24 +663,25 @@ This will fetch evaluation data from your API and index it for search and chat.`
             body: JSON.stringify(config)
         });
 
+        console.log("📡 POST request sent to: /import");
+
         const text = await response.text();
+        console.log("📥 Raw response:", text);
+
         let data;
         try {
             data = JSON.parse(text);
         } catch (e) {
-            console.error("Non-JSON response:", text);
-            alert("❌ Unexpected response from server. Check console for details.");
+            console.error("❌ Non-JSON response:", text);
+            alert(`❌ Server returned non-JSON response: ${text.substring(0, 200)}...`);
             return;
         }
 
         if (response.ok) {
-            let successMsg = `✅ ${importType.charAt(0).toUpperCase() + importType.slice(1)} import started successfully!`;
+            let successMsg = ` ${importType.charAt(0).toUpperCase() + importType.slice(1)} import started successfully!`;
             if (maxDocs !== null) {
-                successMsg += `\n📊 Limited to ${maxDocs} documents`;
-            } else {
-                successMsg += `\n📊 Processing all available documents`;
+                successMsg += `\n Limited to ${maxDocs} documents`;
             }
-            
             if (startDate || endDate) {
                 if (startDate && endDate) {
                     successMsg += `\n📅 Date range: ${startDate} to ${endDate}`;
@@ -698,12 +693,17 @@ This will fetch evaluation data from your API and index it for search and chat.`
             }
             
             alert(successMsg);
+            
+            // Start polling for status updates
             startPolling();
+            
         } else {
-            alert(`❌ Import failed: ${data.detail || data.message || "Unknown error"}`);
+            console.error("❌ Import failed with status:", response.status);
+            console.error("❌ Error response:", data);
+            alert(`❌ Import failed: ${data.detail || data.message || data.error || "Unknown error"}`);
         }
     } catch (error) {
-        console.error("Import request failed:", error);
+        console.error("❌ Import request failed:", error);
         alert(`❌ Import request failed: ${error.message}`);
     }
 }
@@ -723,6 +723,46 @@ function stopPolling() {
         clearInterval(pollInterval);
         pollInterval = null;
         console.log("⏹️ Stopped polling");
+    }
+}
+
+function safeUpdateElement(elementId, content, fallbackMessage = null) {
+    try {
+        const element = document.getElementById(elementId);
+        if (element) {
+            if (typeof content === 'object' && content !== null) {
+                element.innerHTML = content.innerHTML || content.textContent || String(content);
+            } else {
+                element.textContent = String(content || '');
+            }
+            return true;
+        } else {
+            if (fallbackMessage) {
+                console.warn(`⚠️ Element '${elementId}' not found: ${fallbackMessage}`);
+            }
+            return false;
+        }
+    } catch (error) {
+        console.error(`❌ Error updating element '${elementId}':`, error);
+        return false;
+    }
+}
+
+function safeUpdateHTML(elementId, htmlContent, fallbackMessage = null) {
+    try {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.innerHTML = htmlContent || '';
+            return true;
+        } else {
+            if (fallbackMessage) {
+                console.warn(`⚠️ Element '${elementId}' not found: ${fallbackMessage}`);
+            }
+            return false;
+        }
+    } catch (error) {
+        console.error(`❌ Error updating HTML for element '${elementId}':`, error);
+        return false;
     }
 }
 
@@ -788,74 +828,155 @@ function updateMaxDocsDisplay() {
 }
 
 function startPolling() {
-    if (pollInterval) clearInterval(pollInterval);
-
     console.log("🔄 Starting status polling...");
+    
+    // Stop any existing polling first
+    stopPolling();
+    
+    isPolling = true;
+    
     pollInterval = setInterval(async () => {
-        await refreshStatus();
-        
         try {
-            const response = await fetch('/status');
-            const status = await response.json();
-
-            if (status.status !== 'running') {
-                console.log(`🏁 Import completed with status: ${status.status}`);
-                clearInterval(pollInterval);
-                pollInterval = null;
-                
-                // Refresh import info and statistics after completion
-                if (status.status === 'completed') {
-                    setTimeout(() => {
-                        checkLastImportInfo();
-                        loadOpenSearchStats(); // Refresh statistics after import
-                    }, 1000);
-                }
-            }
+            await checkImportStatus();
         } catch (error) {
-            console.error("Status polling error:", error);
+            console.error("❌ Polling error:", error);
+            // Don't stop polling on single errors, but log them
         }
-    }, 2000);
+    }, 2000); // Poll every 2 seconds
+    
+    console.log("✅ Polling started");
 }
 
-async function refreshStatus() {
+function stopPolling() {
+    if (pollInterval) {
+        console.log("🛑 Stopping status polling...");
+        clearInterval(pollInterval);
+        pollInterval = null;
+    }
+    isPolling = false;
+}
+
+async function checkImportStatus() {
     try {
-        const response = await fetch('/status');
-        const data = await response.json();
+        const response = await fetch('/import_status');
         
-        const statusContainer = document.getElementById('statusContainer');
-        if (statusContainer) {
-            const status = data.status || 'unknown';
-            const statusClass = status === 'completed' ? 'completed' : 
-                               status === 'processing' ? 'processing' : 
-                               status === 'failed' ? 'failed' : 'idle';
+        if (!response.ok) {
+            console.warn(`⚠️ Status check returned ${response.status}`);
+            return;
+        }
+        
+        const data = await response.json();
+        console.log("📊 Import status:", data.status);
+        
+        // Update the UI with status
+        updateStatus(data);
+        
+        // Stop polling if import is finished
+        if (data.status && !['running', 'starting', 'pending'].includes(data.status.toLowerCase())) {
+            console.log(`🏁 Import finished with status: ${data.status}`);
+            stopPolling();
             
-            statusContainer.innerHTML = `
-                <div class="status ${statusClass}">
-                    <strong>Status:</strong> ${status.charAt(0).toUpperCase() + status.slice(1)}
-                </div>
-            `;
-            
-            // Update current step if available
-            const stepContainer = document.getElementById('currentStep');
-            const stepText = document.getElementById('stepText');
-            if (data.current_step && stepContainer && stepText) {
-                stepContainer.classList.remove('hidden');
-                stepText.textContent = data.current_step;
-            } else if (stepContainer) {
-                stepContainer.classList.add('hidden');
-            }
-            
-            // Stop polling if completed or failed
-            if (status === 'completed' || status === 'failed') {
-                stopPolling();
-                if (status === 'completed') {
-                    loadOpenSearchStats(); // Refresh statistics
-                }
+            // Refresh stats after completion
+            if (data.status.toLowerCase() === 'completed') {
+                setTimeout(() => {
+                    if (typeof loadOpenSearchStats === 'function') {
+                        loadOpenSearchStats();
+                    }
+                    if (typeof checkLastImportInfo === 'function') {
+                        checkLastImportInfo();
+                    }
+                }, 2000);
             }
         }
         
     } catch (error) {
-        console.error('Failed to refresh status:', error);
+        console.error("❌ Failed to check import status:", error);
+    }
+}
+
+function updateStatus(data) {
+    const container = document.getElementById('statusContainer');
+    if (!container) return;
+
+    const status = data.status || 'unknown';
+    const statusClass = status.toLowerCase();
+    
+    let html = `<div class="status ${statusClass}">`;
+    html += `<strong>Status:</strong> ${status.toUpperCase()}`;
+    
+    if (data.import_type) {
+        html += ` (${data.import_type.charAt(0).toUpperCase() + data.import_type.slice(1)} Import)`;
+    }
+    
+    if (data.message) {
+        html += `<div style="margin-top: 5px; font-size: 0.9em; color: #666;">${data.message}</div>`;
+    }
+    
+    html += `</div>`;
+    
+    container.innerHTML = html;
+
+    // Handle current step display
+    const currentStepDiv = document.getElementById('currentStep');
+    const stepTextDiv = document.getElementById('stepText');
+    
+    if (data.current_step && status === 'running') {
+        if (currentStepDiv) currentStepDiv.style.display = 'block';
+        if (stepTextDiv) {
+            stepTextDiv.textContent = data.current_step;
+        }
+    } else {
+        if (currentStepDiv) currentStepDiv.style.display = 'none';
+    }
+
+    // Show results if completed
+    if (status === 'completed' && data.results) {
+        showResults(data.results);
+    }
+}
+
+function showResults(results) {
+    const section = document.getElementById('resultsSection');
+    const grid = document.getElementById('resultsGrid');
+    
+    if (!section || !grid) return;
+    
+    section.classList.remove('hidden');
+    
+    let html = '<div class="results-summary">';
+    html += `<h3>✅ Import Completed Successfully</h3>`;
+    
+    if (results.total_documents_processed) {
+        html += `<p>📄 Documents processed: ${results.total_documents_processed.toLocaleString()}</p>`;
+    }
+    
+    if (results.total_evaluations_indexed) {
+        html += `<p>🎯 Evaluations indexed: ${results.total_evaluations_indexed.toLocaleString()}</p>`;
+    }
+    
+    if (results.errors && results.errors > 0) {
+        html += `<p>⚠️ Errors: ${results.errors}</p>`;
+    }
+    
+    html += '</div>';
+    grid.innerHTML = html;
+}
+
+async function refreshStatus() {
+    try {
+        console.log("🔄 Refreshing import status...");
+        await checkImportStatus();
+    } catch (error) {
+        console.error('❌ Failed to refresh status:', error);
+        
+        const container = document.getElementById('statusContainer');
+        if (container) {
+            container.innerHTML = `
+                <div class="status error">
+                    <strong>❌ Status Error:</strong> ${error.message}
+                </div>
+            `;
+        }
     }
 }
 

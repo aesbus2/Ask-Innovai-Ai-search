@@ -43,6 +43,7 @@ body {
 }
 
 .section {
+    max-width: 1400px;
     margin-bottom: 40px;
     padding: 25px;
     border: 1px solid #e0e0e0;
