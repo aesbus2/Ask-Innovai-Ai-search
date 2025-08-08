@@ -370,9 +370,13 @@ except Exception as e:
 
 try:
     from chat_handlers import chat_router, health_router
+    from import_handlers import import_router
     app.include_router(chat_router, prefix="/api")
     app.include_router(health_router)
+    app.include_router(import_router)
+    
     logger.info("✅ Chat and health routers imported and mounted")
+
 except ImportError as e:
     logger.warning(f"⚠️ Could not import chat/health routers: {e}")
     

@@ -1,8 +1,10 @@
 // Enhanced main.js for Ask InnovAI Admin Interface v2.2.3
 // BULLETPROOF FIX: Complete error handling for toLocaleString() undefined errors
-// Version: 5.1.0 - Updated for new admin interface
+// Version: 6.1.0 - Updated for new admin interface
 
-let pollInterval = null;
+let isPolling = false;
+let pollingInterval;
+let currentImportId = null;
 
 console.log("Ask InnovAI Admin v2.2.4 - Updated for new admin interface");
 
@@ -17,11 +19,12 @@ setInterval(() => {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("🚀 DOM loaded, initializing enhanced admin interface v2.2.4...");
+    console.log("🚀 DOM loaded, initializing enhanced admin interface v6.1.0...");
     refreshStatus();
     checkSystemHealth();
     checkLastImportInfo();
     loadOpenSearchStats(); // Load statistics on startup
+    setupDateRangeHandlers(); // Setup date range handlers for statistics
     
     // Basic server ping to verify connectivity
     fetch("/ping")
@@ -458,50 +461,221 @@ function displayStatistics(response, timestamp) {
 // IMPORT MANAGEMENT FUNCTIONS - ENHANCED (keeping existing working functions)
 // ============================================================================
 
+function setupDateRangeHandlers() {
+    const startDateInput = document.getElementById('importStartDate');
+    const endDateInput = document.getElementById('importEndDate');
+    
+    if (startDateInput) {
+        startDateInput.addEventListener('change', updateDateRangeDisplay);
+    }
+    
+    if (endDateInput) {
+        endDateInput.addEventListener('change', updateDateRangeDisplay);
+    }
+    
+    // Also trigger on max docs changes to update preview
+    const maxDocsInput = document.getElementById('maxDocsInput');
+    if (maxDocsInput) {
+        maxDocsInput.addEventListener('input', function() {
+            updateMaxDocsDisplay();
+            updateImportPreview(); // Add this to your existing handler
+        });
+    }
+}
+
+function updateDateRangeDisplay() {
+    const startDate = document.getElementById('importStartDate');
+    const endDate = document.getElementById('importEndDate');
+    const dateRangeInfo = document.getElementById('dateRangeInfo');
+    const dateRangeDisplay = document.getElementById('dateRangeDisplay');
+    
+    if (!startDate || !endDate || !dateRangeInfo || !dateRangeDisplay) return;
+    
+    const start = startDate.value;
+    const end = endDate.value;
+    
+    if (start || end) {
+        let displayText = '';
+        if (start && end) {
+            displayText = `${start} to ${end}`;
+        } else if (start) {
+            displayText = `From ${start} onwards`;
+        } else if (end) {
+            displayText = `Up to ${end}`;
+        }
+        
+        dateRangeDisplay.textContent = displayText;
+        dateRangeInfo.style.display = 'block';
+    } else {
+        dateRangeDisplay.textContent = 'No date filter';
+        dateRangeInfo.style.display = 'none';
+    }
+    
+    // Update import preview when dates change
+    updateImportPreview();
+}
+
+function clearDateRange() {
+    const startDate = document.getElementById('importStartDate');
+    const endDate = document.getElementById('importEndDate');
+    
+    if (startDate) startDate.value = '';
+    if (endDate) endDate.value = '';
+    
+    updateDateRangeDisplay();
+    console.log("📅 Date range cleared");
+}
+
+function updateImportPreview() {
+    const importType = document.getElementById("importTypeSelect")?.value || "full";
+    const collection = document.getElementById("collectionSelect")?.value || "all";
+    const maxDocsInput = document.getElementById("maxDocsInput");
+    const startDate = document.getElementById('importStartDate')?.value;
+    const endDate = document.getElementById('importEndDate')?.value;
+    const importPreview = document.getElementById("importPreview");
+    const importPreviewText = document.getElementById("importPreviewText");
+    
+    if (!importPreview || !importPreviewText) return;
+    
+    const maxDocs = maxDocsInput && maxDocsInput.value.trim() !== "" ? parseInt(maxDocsInput.value.trim()) : null;
+    
+    let previewText = `${importType.charAt(0).toUpperCase() + importType.slice(1)} import from ${collection} collection`;
+    
+    // Add date range info
+    if (startDate || endDate) {
+        if (startDate && endDate) {
+            previewText += `\n📅 Date range: ${startDate} to ${endDate}`;
+        } else if (startDate) {
+            previewText += `\n📅 From: ${startDate} onwards`;
+        } else if (endDate) {
+            previewText += `\n📅 Up to: ${endDate}`;
+        }
+    }
+    
+    // Add max docs info
+    if (maxDocs !== null && !isNaN(maxDocs)) {
+        previewText += `\n📊 Limited to: ${maxDocs} documents`;
+    } else {
+        previewText += `\n📊 Processing: All matching documents`;
+    }
+    
+    importPreviewText.textContent = previewText;
+    importPreview.style.display = "block";
+}
+
 async function startImport() {
     const collectionSelect = document.getElementById("collectionSelect");
     const importTypeSelect = document.getElementById("importTypeSelect");
     const maxDocsInput = document.getElementById("maxDocsInput");
+    const startDateInput = document.getElementById('importStartDate');
+    const endDateInput = document.getElementById('importEndDate');
     
-    const selectedCollection = collectionSelect ? collectionSelect.value : "evaluations";
-    const importType = importTypeSelect ? importTypeSelect.value : "evaluation_json";
-    const maxDocsValue = maxDocsInput ? maxDocsInput.value.trim() : "";
+    const selectedCollection = collectionSelect ? collectionSelect.value : "all";
+    const importType = importTypeSelect ? importTypeSelect.value : "full";
     
-    // Validate max documents input
+    // FIXED: Properly handle max documents input
     let maxDocs = null;
-    if (maxDocsValue !== "") {
-        const parsed = parseInt(maxDocsValue);
-        if (isNaN(parsed) || parsed <= 0) {
+    if (maxDocsInput && maxDocsInput.value.trim() !== "") {
+        const parsedValue = parseInt(maxDocsInput.value.trim());
+        if (!isNaN(parsedValue) && parsedValue > 0) {
+            maxDocs = parsedValue;
+        } else {
             alert("❌ Max Documents must be a positive number or left empty for all documents");
-            maxDocsInput?.focus();
             return;
         }
-        maxDocs = parsed;
     }
-    
-    const payload = {
-        collection: selectedCollection,
+
+    // NEW: Handle date range inputs
+    let startDate = null;
+    let endDate = null;
+    if (startDateInput && startDateInput.value.trim() !== "") {
+        startDate = startDateInput.value.trim();
+    }
+    if (endDateInput && endDateInput.value.trim() !== "") {
+        endDate = endDateInput.value.trim();
+    }
+
+    // Validate date range
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+        alert("❌ Start date cannot be after end date");
+        return;
+    }
+
+    const config = { 
+        collection: selectedCollection, 
         import_type: importType
     };
     
+    // FIXED: Only add parameters if they're explicitly set
     if (maxDocs !== null) {
-        payload.max_docs = maxDocs;
+        config.max_docs = maxDocs;
     }
     
+    // NEW: Add date range parameters if set
+    if (startDate) {
+        config.call_date_start = startDate;
+    }
+    if (endDate) {
+        config.call_date_end = endDate;
+    }
+    
+    // Enhanced confirmation message
+    let modeText;
+    if (maxDocs !== null) {
+        modeText = `Limiting to ${maxDocs} documents`;
+    } else {
+        modeText = "Processing ALL available documents";
+    }
+    
+    let dateText = "";
+    if (startDate || endDate) {
+        if (startDate && endDate) {
+            dateText = `\nDate Range: ${startDate} to ${endDate}`;
+        } else if (startDate) {
+            dateText = `\nFrom: ${startDate} onwards`;
+        } else if (endDate) {
+            dateText = `\nUp to: ${endDate}`;
+        }
+    }
+    
+    const importTypeText = importType === "incremental" ? "Incremental (only updated documents)" : "Full (all documents)";
+
+    const confirmMsg = `Start ${importType} import?
+    
+Collection: ${selectedCollection}
+Type: ${importTypeText}
+Scope: ${modeText}${dateText}
+
+This will fetch evaluation data from your API and index it for search and chat.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    // Debug logging
+    console.log("🚀 Starting import with config:", config);
+    if (maxDocs !== null) {
+        console.log(`📊 Max documents limit: ${maxDocs}`);
+    } else {
+        console.log("📊 No document limit - importing all available");
+    }
+    
+    if (startDate || endDate) {
+        console.log(`📅 Date range: ${startDate || 'unlimited'} to ${endDate || 'unlimited'}`);
+    }
+
     try {
-        const response = await fetch("/start_import", {
+        const response = await fetch("/import", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(payload)
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(config)
         });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            console.error("Import failed:", data);
-            alert(`❌ Import failed: ${data.detail || data.message || "Unknown error"}. Check console for details.`);
+
+        const text = await response.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            console.error("Non-JSON response:", text);
+            alert("❌ Unexpected response from server. Check console for details.");
             return;
         }
 
@@ -512,14 +686,28 @@ async function startImport() {
             } else {
                 successMsg += `\n📊 Processing all available documents`;
             }
+            
+            if (startDate || endDate) {
+                if (startDate && endDate) {
+                    successMsg += `\n📅 Date range: ${startDate} to ${endDate}`;
+                } else if (startDate) {
+                    successMsg += `\n📅 From: ${startDate}`;
+                } else if (endDate) {
+                    successMsg += `\n📅 Up to: ${endDate}`;
+                }
+            }
+            
             alert(successMsg);
             startPolling();
+        } else {
+            alert(`❌ Import failed: ${data.detail || data.message || "Unknown error"}`);
         }
     } catch (error) {
         console.error("Import request failed:", error);
         alert(`❌ Import request failed: ${error.message}`);
     }
 }
+
 
 function startPolling() {
     if (pollInterval) {

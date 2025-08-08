@@ -91,29 +91,69 @@
                         <option value="combined">Combined Data</option>
                     </select>
                 </div>
-                
+                <!-- NEW: Date Range Import Controls -->
                 <div class="control-group">
-                    <label for="maxDocsInput" class="control-label">Max Documents to Process:</label>
-                    <input type="number" id="maxDocsInput" class="control-input" 
-                           min="1" max="10000" value="100" 
-                           placeholder="Enter number (1-10000)">
-                    <div id="maxDocsDisplay" class="max-docs-info">
-                        Will process up to 100 documents for testing
+                <label>Date Range (Optional):</label>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <label for="importStartDate" style="font-size: 0.9em; margin: 0;">From:</label>
+                        <input type="date" 
+                               id="importStartDate" 
+                               class="filter-input"
+                               title="Start date for import (leave empty for all)"
+                               style="width: 140px;">
                     </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <label for="importEndDate" style="font-size: 0.9em; margin: 0;">To:</label>
+                        <input type="date" 
+                               id="importEndDate" 
+                               class="filter-input"
+                               title="End date for import (leave empty for all)"
+                               style="width: 140px;">
+                    </div>
+                    <button type="button" 
+                            onclick="clearDateRange()" 
+                            class="btn secondary"
+                            style="padding: 4px 8px; font-size: 0.8em;">
+                        Clear Dates
+                    </button>
                 </div>
                 
-                <div class="control-group">
-                    <button class="btn primary" onclick="startImport()">
-                        <span class="emoji">🚀</span> Start Import
-                    </button>
-                    <button class="btn secondary" onclick="refreshStatus()">
-                        <span class="emoji">🔄</span> Refresh Status
-                    </button>
-                    <button class="btn secondary" onclick="toggleLogs()">
-                        <span class="emoji">📜</span> View Logs
-                    </button>
+                <!-- Date range display -->
+                <div id="dateRangeInfo" class="date-range-info" style="display: none; margin-top: 8px; padding: 8px; background: #e3f2fd; border-radius: 4px; font-size: 0.9em; color: #1976d2;">
+                    <strong>📅 Date Filter:</strong> <span id="dateRangeDisplay">No date filter</span>
                 </div>
                 
+                <div style="font-size: 0.8em; color: #666; margin-top: 6px;">
+                    💡 <strong>Date Range Tips:</strong>
+                    <ul style="margin: 4px 0 0 16px; padding: 0;">
+                        <li>Leave both empty to import all documents</li>
+                        <li>Set only start date to import from that date forward</li>
+                        <li>Set only end date to import up to that date</li>
+                        <li>Set both for a specific date range</li>
+                    </ul>
+                </div>
+            </div>
+                
+                <!-- Enhanced Max Documents Input -->
+            <div class="control-group">
+                <label for="maxDocsInput">Max Documents:</label>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <input 
+                        type="number" 
+                        id="maxDocsInput" 
+                        class="filter-input"
+                        placeholder="Leave empty for all" 
+                        min="1" 
+                        max="10000"
+                        title="Maximum number of documents to import"
+                        style="flex: 1;">
+                    <span id="maxDocsDisplay" style="font-size: 0.85em; color: #666; min-width: 100px; font-weight: 500;">
+                        All documents
+                    </span>
+                </div>
+                
+                                
                 <div id="statusContainer" class="status-container">
                     <div class="status idle">
                         <strong>Status:</strong> System Ready
@@ -156,7 +196,7 @@
         
         <div class="control-group">
             <button class="btn" onclick="startImport()">
-                <span class="emoji">🚀</span> Start Enhanced Import
+                <span class="emoji">🚀</span> Start Import
             </button>
             <button class="btn secondary" onclick="checkLastImportInfo()">
                 <span class="emoji">📅</span> Last Import Info
@@ -206,31 +246,36 @@
                     <div id="resultsGrid" class="results-grid"></div>
                 </div>
 
-            <!-- Evaluation Lookup Section -->
+                <!-- Statistics Section -->
             <div class="section">
-                <h2><span class="emoji">🔍</span> Evaluation Lookup</h2>
-                
+                <h2><span class="emoji">📊</span> OpenSearch Statistics</h2>
+                <button class="btn secondary" onclick="loadOpenSearchStats()">
+                    <span class="emoji">🔄</span> Refresh Statistics
+                </button>
+                <div id="statisticsContainer" class="statistics-container">
+                    Loading statistics...
+                </div>
+            </div>
+
+                <!-- Evaluation Lookup Section -->
+            <div class="section">
+                <h2><span class="emoji">🔍</span> Quick Evaluation Lookup</h2>
                 <div class="control-group">
-                    <label for="evaluationIdInput" class="control-label">Evaluation ID:</label>
-                    <div style="display: flex; gap: 12px; align-items: center;">
+                    <label for="evaluationIdInput">Evaluation ID:</label>
+                    <div style="display: flex; gap: 10px;">
                         <input type="text" 
                             id="evaluationIdInput" 
-                            class="control-input" 
-                            placeholder="Enter evaluation ID (e.g., EVAL_12345)" 
-                            style="flex: 1;"
-                            onkeypress="handleEvaluationLookupKeyPress(event)">
-                        <button class="btn primary" onclick="lookupEvaluation()">
+                            class="filter-input"
+                            placeholder="Enter evaluation ID (numbers only)"
+                            oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                        <button class="btn" onclick="lookupEvaluation()">
                             <span class="emoji">🔍</span> Lookup
-                        </button>
-                        <button class="btn secondary" onclick="clearEvaluationLookup()">
-                            <span class="emoji">🗑️</span> Clear
                         </button>
                     </div>
                 </div>
-                
-                <div id="evaluationResults" class="evaluation-results hidden"></div>
+                <div id="evaluationResults" class="evaluation-results"></div>
             </div>
-
+        </div>
             
             <!-- Quick Actions Section -->
             <div class="section">
@@ -243,7 +288,7 @@
                     <button class="btn secondary" onclick="openChatInterface()">
                         <span class="emoji">💬</span> Open Chat Interface
                     </button>
-                    <button class="btn info" onclick="window.open('/debug_innovai.html', '_blank')">
+                    <button class="btn info" onclick="window.open('/debug', '_blank')">
                         <span class="emoji">🔧</span> Debug Tools
                     </button>
                 </div>
