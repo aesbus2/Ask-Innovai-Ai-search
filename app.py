@@ -1859,6 +1859,28 @@ async def last_import_info():
         "vector_search_enabled": VECTOR_SEARCH_READY
     }
 
+@app.get("/import_info")
+async def get_import_info():
+    """Get information about the last import"""
+    try:
+        # You can expand this with actual import tracking if needed
+        return {
+            "status": "success",
+            "last_import": {
+                "timestamp": import_status.get("end_time") or import_status.get("start_time"),
+                "type": import_status.get("import_type", "unknown"),
+                "status": import_status.get("status", "unknown")
+            } if import_status.get("start_time") else None,
+            "current_status": import_status.get("status", "idle"),
+            "message": "Import info endpoint working"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "message": "Failed to get import info"
+        }
+
 # ============================================================================
 # DEBUG AND ADMIN ENDPOINTS
 # ============================================================================
