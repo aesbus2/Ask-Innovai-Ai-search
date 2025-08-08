@@ -133,6 +133,144 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ask-innovai-production")
 
+# Statistics tracking
+processing_stats = {
+    "total_processed": 0,
+    "total_skipped": 0,  
+    "total_errors": 0,
+    "duplicates_found": 0,
+    "empty_transcripts": 0,
+    "empty_evaluations": 0,
+    "missing_fields": 0
+}
+
+def log_evaluation_start(evaluation_id: str, template_id: str, template_name: str):
+    """Log the start of evaluation processing"""
+    logger.info(f"🚀 Processing Evaluation {evaluation_id} | Template: {template_name} (ID: {template_id})")
+
+def log_evaluation_chunks(evaluation_id: str, total_chunks: int, eval_chunks: int, transcript_chunks: int):
+    """Log chunk creation details"""
+    logger.info(f"🧩 Created {total_chunks} chunks for Evaluation {evaluation_id} ({eval_chunks} eval, {transcript_chunks} transcript)")
+
+def log_evaluation_success(evaluation_id: str, collection: str, total_chunks: int, agent_name: str = None, program: str = None):
+    """Log successful evaluation processing"""
+    extra_info = ""
+    if agent_name:
+        extra_info += f" | Agent: {agent_name}"
+    if program:
+        extra_info += f" | Program: {program}"
+    
+    logger.info(f"✅ Indexed Evaluation {evaluation_id} | Collection: {collection} | Chunks: {total_chunks}{extra_info}")
+    processing_stats["total_processed"] += 1
+
+def log_evaluation_skip(evaluation_id: str, reason: str, template_name: str = None, details: dict = None):
+    """Log skipped evaluation with detailed reason"""
+    processing_stats["total_skipped"] += 1
+    
+    if reason == "already_exists":
+        processing_stats["duplicates_found"] += 1
+        logger.warning(f"🔄 DUPLICATE: Evaluation {evaluation_id} already exists in OpenSearch")
+    elif reason == "empty_transcript":
+        processing_stats["empty_transcripts"] += 1
+        logger.warning(f"📝 EMPTY TRANSCRIPT: Evaluation {evaluation_id} has no transcript content")
+        if details:
+            logger.warning(f"   └── Evaluation content: {details.get('evaluation_length', 0)} chars")
+    elif reason == "empty_evaluation":
+        processing_stats["empty_evaluations"] += 1
+        logger.warning(f"📋 EMPTY EVALUATION: Evaluation {evaluation_id} has no evaluation content")
+        if details:
+            logger.warning(f"   └── Transcript content: {details.get('transcript_length', 0)} chars")
+    elif reason == "no_content":
+        logger.warning(f"❌ NO CONTENT: Evaluation {evaluation_id} has neither transcript nor evaluation content")
+    elif reason == "missing_required_fields":
+        processing_stats["missing_fields"] += 1
+        logger.warning(f"🔑 MISSING FIELDS: Evaluation {evaluation_id} missing required fields")
+        if details:
+            logger.warning(f"   └── Missing: {details.get('missing', 'unknown')}")
+    else:
+        logger.warning(f"⏭️ SKIPPED: Evaluation {evaluation_id} - {reason}")
+    
+    if template_name:
+        logger.warning(f"   └── Template: {template_name}")
+
+def log_evaluation_error(evaluation_id: str, error: str, template_name: str = None):
+    """Log evaluation processing error"""
+    logger.error(f"❌ FAILED: Evaluation {evaluation_id} - {error[:100]}")
+    if template_name:
+        logger.error(f"   └── Template: {template_name}")
+    processing_stats["total_errors"] += 1
+
+def check_evaluation_exists(evaluation_id: str) -> bool:
+    """Check if evaluation already exists in OpenSearch"""
+    try:
+        from opensearch_client import get_opensearch_client
+        
+        client = get_opensearch_client()
+        if not client:
+            return False
+            
+        query = {
+            "query": {
+                "term": {
+                    "evaluationId": evaluation_id
+                }
+            }
+        }
+        
+        response = client.search(index="eval-*", body=query, size=1)
+        exists = response["hits"]["total"]["value"] > 0
+        
+        if exists:
+            existing_doc = response["hits"]["hits"][0]["_source"]
+            template_name = existing_doc.get("template_name", "Unknown")
+            logger.warning(f"   └── Found in index: {response['hits']['hits'][0]['_index']}")
+        
+        return exists
+        
+    except Exception as e:
+        logger.error(f"Error checking if evaluation {evaluation_id} exists: {e}")
+        return False
+
+def validate_evaluation_content(evaluation: dict) -> tuple[bool, str, dict]:
+    """Validate evaluation content and return skip reason if invalid"""
+    evaluation_id = evaluation.get("evaluationId", "unknown")
+    
+    # Check required fields
+    if not evaluation_id or evaluation_id == "unknown":
+        return False, "missing_required_fields", {"missing": "evaluationId"}
+    
+    template_id = evaluation.get("templateId") or evaluation.get("template_id")
+    if not template_id:
+        return False, "missing_required_fields", {"missing": "templateId"}
+    
+    # Check content
+    evaluation_text = evaluation.get("evaluation", "").strip()
+    transcript_text = evaluation.get("transcript", "").strip()
+    
+    if not evaluation_text and not transcript_text:
+        return False, "no_content", {"evaluation_length": 0, "transcript_length": 0}
+    
+    if not evaluation_text:
+        return False, "empty_evaluation", {
+            "evaluation_length": 0, 
+            "transcript_length": len(transcript_text)
+        }
+    
+    if not transcript_text:
+        return False, "empty_transcript", {
+            "evaluation_length": len(evaluation_text), 
+            "transcript_length": 0
+        }
+    
+    # Check minimum content length
+    total_content = evaluation_text + " " + transcript_text
+    if len(total_content.strip()) < 20:
+        return False, "insufficient_content", {
+            "total_content_length": len(total_content.strip()),
+            "minimum_required": 20
+        }
+    
+    return True, None, {}
 
 # logging setup (Above)
 # ============================================================================
@@ -2079,181 +2217,266 @@ async def cleanup_memory_after_batch():
 # ============================================================================
 async def process_evaluation(evaluation: Dict) -> Dict:
     """
-    PRODUCTION: Process evaluation with full metadata, chunking, embeddings, and OpenSearch indexing.
+    ENHANCED: Process evaluation with comprehensive logging and skip tracking
     """
     try:
-        from embedder import embed_text, embed_texts
-        import numpy as np
-
-        evaluation_text = evaluation.get("evaluation", "")
-        transcript_text = evaluation.get("transcript", "")
-
-        if not evaluation_text and not transcript_text:
-            return {"status": "skipped", "reason": "no_content"}
-
-        all_chunks = []
-
-        # Extract QA chunks
-        if evaluation_text:
-            qa_chunks = extract_qa_pairs(evaluation_text)
-            for i, qa_data in enumerate(qa_chunks):
-                if len(qa_data["text"].strip()) >= 20:
-                    chunk_data = {
-                        "text": qa_data["text"],
-                        "content_type": "evaluation_qa",
-                        "chunk_index": len(all_chunks),
-                        "section": qa_data.get("section", "General"),
-                        "question": qa_data.get("question", ""),
-                        "answer": qa_data.get("answer", ""),
-                        "qa_pair_index": i
-                    }
-                    all_chunks.append(chunk_data)
-
-        # Extract transcript chunks
-        if transcript_text:
-            transcript_chunks = split_transcript_by_speakers(transcript_text)
-            for i, transcript_data in enumerate(transcript_chunks):
-                if len(transcript_data["text"].strip()) >= 20:
-                    chunk_data = {
-                        "text": transcript_data["text"],
-                        "content_type": "transcript",
-                        "chunk_index": len(all_chunks),
-                        "speakers": transcript_data.get("speakers", []),
-                        "timestamps": transcript_data.get("timestamps", []),
-                        "speaker_count": transcript_data.get("speaker_count", 0),
-                        "transcript_chunk_index": i
-                    }
-                    all_chunks.append(chunk_data)
-
-        if not all_chunks:
-            return {"status": "skipped", "reason": "no_meaningful_content"}
-
-        comprehensive_metadata = extract_comprehensive_metadata(evaluation)
-        evaluationId = evaluation.get("evaluationId")
-        template_id = evaluation.get("template_id")
-
-        if not evaluationId or not template_id:
-            return {"status": "skipped", "reason": "missing_required_fields"}
-
-        doc_id = str(evaluationId)
-        collection = clean_template_id_for_index(template_id)
-
-        # Embed chunks
-        chunk_embeddings = []
-        if EMBEDDER_AVAILABLE:
-            try:
-                chunk_texts = [chunk["text"] for chunk in all_chunks]
-                batch_size = 10
-                for i in range(0, len(chunk_texts), batch_size):
-                    batch = chunk_texts[i:i + batch_size]
-                    try:
-                        chunk_embeddings.extend(embed_texts(batch))
-                    except Exception:
-                        for text in batch:
-                            chunk_embeddings.append(embed_text(text))
-                    if i + batch_size < len(chunk_texts):
-                        await asyncio.sleep(0.1)
-            except Exception as e:
-                log_import(f"⚠️ Embedding failed: {e}")
-
-        full_text = "\n\n".join([chunk["text"] for chunk in all_chunks])
-
-        # Document embedding (mean of chunks)
-        document_embedding = []
-        if chunk_embeddings:
-            try:
-                document_embedding = np.mean(chunk_embeddings, axis=0).tolist()
-            except Exception as e:
-                log_import(f"⚠️ Failed document embedding: {e}")
-
-        def normalize_datetime(val):
-            try:
-                if isinstance(val, datetime):
-                    return val.isoformat()                    # Handle ISO format or datetime strings
-                return datetime.fromisoformat(val).isoformat()     
-            except Exception:
-                return val
-
-        created_on = normalize_datetime(evaluation.get("created_on", ""))
-        call_date = normalize_datetime(evaluation.get("call_date", ""))
-
-        document_body = {
-            "evaluationId": evaluationId,
-            "internalId": evaluation.get("internalId"),
-            "template_id": template_id,
-            "template_name": evaluation.get("template_name"),
-            "weighted_score": evaluation.get("weighted_score"),
-            "url": evaluation.get("url"),
-            "partner": evaluation.get("partner"),
-            "site": evaluation.get("site"),
-            "lob": evaluation.get("lob"),
-            "agentName": evaluation.get("agentName"),
-            "agentId": evaluation.get("agentId"),
-            "disposition": evaluation.get("disposition"),
-            "subDisposition": evaluation.get("subDisposition"),
-            "call_date": call_date,
-            "created_on": created_on,
-            "call_duration": evaluation.get("call_duration"),
-            "language": evaluation.get("language"),
-            "evaluation": evaluation_text,
-            "transcript": transcript_text,
-            "evaluation_text": evaluation_text,
-            "transcript_text": transcript_text,
-            "full_text": full_text,
-            "document_embedding": document_embedding,
-            "total_chunks": len(all_chunks),
-            "evaluation_chunks_count": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
-            "transcript_chunks_count": len([c for c in all_chunks if c["content_type"] == "transcript"]),
-            "chunks": [
-                {**chunk, "embedding": chunk_embeddings[i]} if i < len(chunk_embeddings) else chunk
-                for i, chunk in enumerate(all_chunks)
-            ],
-            "metadata": comprehensive_metadata,
-            "source": "evaluation_api",
-            "indexed_at": datetime.now().isoformat(),
-            "collection_name": collection,
-            "collection_source": f"template_id_{template_id}",
-            "version": "5.0.0_api_consistent"
-        }
-
+        # Extract basic info
+        evaluation_id = evaluation.get("evaluationId", "unknown")
+        template_id = evaluation.get("templateId") or evaluation.get("template_id", "unknown") 
+        template_name = evaluation.get("template_name", "Unknown Template")
+        agent_name = evaluation.get("agentName")
+        program = evaluation.get("program")
+        
+        # Log processing start
+        log_evaluation_start(evaluation_id, template_id, template_name)
+        
+        # Check if already exists (IMPORTANT: Track duplicates)
+        if check_evaluation_exists(evaluation_id):
+            log_evaluation_skip(evaluation_id, "already_exists", template_name)
+            return {"status": "skipped", "reason": "already_exists", "evaluationId": evaluation_id}
+        
+        # Validate content (IMPORTANT: Track empty transcripts/evaluations)
+        is_valid, skip_reason, details = validate_evaluation_content(evaluation)
+        if not is_valid:
+            log_evaluation_skip(evaluation_id, skip_reason, template_name, details)
+            return {"status": "skipped", "reason": skip_reason, "evaluationId": evaluation_id}
+        
+        # Continue with processing
         try:
-            index_document(doc_id, document_body, index_override=collection)
-            log_import(f"✅ Indexed: Eval {evaluationId}, Agent: {evaluation.get('agentName')}, Chunks: {len(all_chunks)}")
+            from embedder import embed_text, embed_texts
+            import numpy as np
+
+            evaluation_text = evaluation.get("evaluation", "")
+            transcript_text = evaluation.get("transcript", "")
+
+            if not evaluation_text and not transcript_text:
+                log_evaluation_skip(evaluation_id, "no_content", template_name)
+                return {"status": "skipped", "reason": "no_content"}
+
+            all_chunks = []
+
+            # Extract QA chunks
+            if evaluation_text:
+                qa_chunks = extract_qa_pairs(evaluation_text)
+                for i, qa_data in enumerate(qa_chunks):
+                    if len(qa_data["text"].strip()) >= 20:
+                        chunk_data = {
+                            "text": qa_data["text"],
+                            "content_type": "evaluation_qa",
+                            "chunk_index": len(all_chunks),
+                            "section": qa_data.get("section", "General"),
+                            "question": qa_data.get("question", ""),
+                            "answer": qa_data.get("answer", ""),
+                            "qa_pair_index": i
+                        }
+                        all_chunks.append(chunk_data)
+
+            # Extract transcript chunks
+            if transcript_text:
+                transcript_chunks = split_transcript_by_speakers(transcript_text)
+                for i, transcript_data in enumerate(transcript_chunks):
+                    if len(transcript_data["text"].strip()) >= 20:
+                        chunk_data = {
+                            "text": transcript_data["text"],
+                            "content_type": "transcript",
+                            "chunk_index": len(all_chunks),
+                            "speakers": transcript_data.get("speakers", []),
+                            "timestamps": transcript_data.get("timestamps", []),
+                            "speaker_count": transcript_data.get("speaker_count", 0),
+                            "transcript_chunk_index": i
+                        }
+                        all_chunks.append(chunk_data)
+
+            if not all_chunks:
+                log_evaluation_skip(evaluation_id, "no_meaningful_content", template_name, 
+                                  {"total_content_length": len(evaluation_text + transcript_text)})
+                return {"status": "skipped", "reason": "no_meaningful_content"}
+
+            comprehensive_metadata = extract_comprehensive_metadata(evaluation)
+            
+            # Use consistent variable names
+            evaluationId = evaluation_id  # Keep both for compatibility
+            
+            if not evaluationId or not template_id:
+                log_evaluation_skip(evaluation_id, "missing_required_fields", template_name, 
+                                  {"missing": "evaluationId or template_id"})
+                return {"status": "skipped", "reason": "missing_required_fields"}
+
+            # Log chunk creation
+            eval_chunks_count = len([c for c in all_chunks if c["content_type"] == "evaluation_qa"])
+            transcript_chunks_count = len([c for c in all_chunks if c["content_type"] == "transcript"])
+            log_evaluation_chunks(evaluation_id, len(all_chunks), eval_chunks_count, transcript_chunks_count)
+
+            doc_id = str(evaluationId)
+            collection = clean_template_id_for_index(template_id)
+
+            # Embed chunks
+            chunk_embeddings = []
+            if EMBEDDER_AVAILABLE:
+                try:
+                    chunk_texts = [chunk["text"] for chunk in all_chunks]
+                    batch_size = 10
+                    for i in range(0, len(chunk_texts), batch_size):
+                        batch = chunk_texts[i:i + batch_size]
+                        try:
+                            chunk_embeddings.extend(embed_texts(batch))
+                        except Exception:
+                            for text in batch:
+                                chunk_embeddings.append(embed_text(text))
+                        if i + batch_size < len(chunk_texts):
+                            await asyncio.sleep(0.1)
+                except Exception as e:
+                    logger.warning(f"⚠️ Embedding failed for eval {evaluation_id}: {e}")
+
+            full_text = "\n\n".join([chunk["text"] for chunk in all_chunks])
+
+            # Document embedding (mean of chunks)
+            document_embedding = []
+            if chunk_embeddings:
+                try:
+                    document_embedding = np.mean(chunk_embeddings, axis=0).tolist()
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed document embedding for eval {evaluation_id}: {e}")
+
+            def normalize_datetime(val):
+                try:
+                    if isinstance(val, datetime):
+                        return val.isoformat()
+                    # Handle ISO format or datetime strings
+                    return datetime.fromisoformat(val).isoformat()
+                except Exception:
+                    return val
+
+            created_on = normalize_datetime(evaluation.get("created_on", ""))
+            call_date = normalize_datetime(evaluation.get("call_date", ""))
+
+            document_body = {
+                "evaluationId": evaluationId,
+                "internalId": evaluation.get("internalId"),
+                "template_id": template_id,
+                "template_name": evaluation.get("template_name"),
+                "weighted_score": evaluation.get("weighted_score"),
+                "url": evaluation.get("url"),
+                "partner": evaluation.get("partner"),
+                "site": evaluation.get("site"),
+                "lob": evaluation.get("lob"),
+                "agentName": evaluation.get("agentName"),
+                "agentId": evaluation.get("agentId"),
+                "disposition": evaluation.get("disposition"),
+                "subDisposition": evaluation.get("subDisposition"),
+                "call_date": call_date,
+                "created_on": created_on,
+                "call_duration": evaluation.get("call_duration"),
+                "language": evaluation.get("language"),
+                "evaluation": evaluation_text,
+                "transcript": transcript_text,
+                "evaluation_text": evaluation_text,
+                "transcript_text": transcript_text,
+                "full_text": full_text,
+                "document_embedding": document_embedding,
+                "total_chunks": len(all_chunks),
+                "evaluation_chunks_count": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
+                "transcript_chunks_count": len([c for c in all_chunks if c["content_type"] == "transcript"]),
+                "chunks": [
+                    {**chunk, "embedding": chunk_embeddings[i]} if i < len(chunk_embeddings) else chunk
+                    for i, chunk in enumerate(all_chunks)
+                ],
+                "metadata": comprehensive_metadata,
+                "source": "evaluation_api",
+                "indexed_at": datetime.now().isoformat(),
+                "collection_name": collection,
+                "collection_source": f"template_id_{template_id}",
+                "version": "5.0.0_enhanced_logging"
+            }
+
+            try:
+                index_document(doc_id, document_body, index_override=collection)
+                
+                # Log successful indexing with enhanced details
+                log_evaluation_success(evaluation_id, collection, len(all_chunks), agent_name, program)
+                
+            except Exception as e:
+                log_evaluation_error(evaluation_id, str(e), template_name)
+                return {"status": "error", "error": str(e)}
+
+            return {
+                "status": "success",
+                "document_id": doc_id,
+                "evaluationId": evaluationId,
+                "template_id": template_id,
+                "template_name": evaluation.get("template_name"),
+                "agentName": evaluation.get("agentName"),
+                "agentId": evaluation.get("agentId"),
+                "subDisposition": evaluation.get("subDisposition"),
+                "weighted_score": evaluation.get("weighted_score"),
+                "partner": evaluation.get("partner"),
+                "site": evaluation.get("site"),
+                "lob": evaluation.get("lob"),
+                "call_date": call_date,
+                "call_duration": evaluation.get("call_duration"),
+                "url": evaluation.get("url"),
+                "language": evaluation.get("language"),
+                "program": comprehensive_metadata.get("program"),
+                "collection": collection,
+                "total_chunks": len(all_chunks),
+                "evaluation_chunks": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
+                "transcript_chunks": len([c for c in all_chunks if c["content_type"] == "transcript"]),
+                "total_content_length": sum(len(chunk["text"]) for chunk in all_chunks),
+                "has_embeddings": bool(chunk_embeddings),
+                "api_consistent": True
+            }
+
+        except ImportError as e:
+            log_evaluation_error(evaluation_id, f"embedder module not available: {e}", template_name)
+            return {"status": "error", "error": f"embedder module not available: {e}"}
+            
         except Exception as e:
-            log_import(f"❌ Failed to index eval {evaluationId}: {str(e)}")
+            log_evaluation_error(evaluation_id, str(e), template_name)
             return {"status": "error", "error": str(e)}
-
-        return {
-            "status": "success",
-            "document_id": doc_id,
-            "evaluationId": evaluationId,
-            "template_id": template_id,
-            "template_name": evaluation.get("template_name"),
-            "agentName": evaluation.get("agentName"),
-            "agentId": evaluation.get("agentId"),
-            "subDisposition": evaluation.get("subDisposition"),
-            "weighted_score": evaluation.get("weighted_score"),
-            "partner": evaluation.get("partner"),
-            "site": evaluation.get("site"),
-            "lob": evaluation.get("lob"),
-            "call_date": call_date,
-            "call_duration": evaluation.get("call_duration"),
-            "url": evaluation.get("url"),
-            "language": evaluation.get("language"),
-            "program": comprehensive_metadata.get("program"),
-            "collection": collection,
-            "total_chunks": len(all_chunks),
-            "evaluation_chunks": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
-            "transcript_chunks": len([c for c in all_chunks if c["content_type"] == "transcript"]),
-            "total_content_length": sum(len(chunk["text"]) for chunk in all_chunks),
-            "has_embeddings": bool(chunk_embeddings),
-            "api_consistent": True
-        }
-
+            
     except Exception as e:
-        logger.error(f"PRODUCTION: Failed to process evaluation: {e}")
-        return {"status": "error", "error": str(e)}
+        # Handle unexpected errors at the top level
+        evaluation_id = evaluation.get("evaluationId", "unknown")
+        template_name = evaluation.get("template_name", "Unknown Template")
+        log_evaluation_error(evaluation_id, str(e), template_name)
+        return {"status": "error", "error": str(e), "evaluationId": evaluation_id}
 
+def log_import_summary():
+    """Log comprehensive import statistics"""
+    total_attempted = processing_stats["total_processed"] + processing_stats["total_skipped"] + processing_stats["total_errors"]
+    
+    if total_attempted == 0:
+        return
+    
+    logger.info("=" * 60)
+    logger.info("📊 IMPORT SUMMARY")
+    logger.info("=" * 60)
+    
+    success_pct = (processing_stats["total_processed"] / total_attempted) * 100
+    skip_pct = (processing_stats["total_skipped"] / total_attempted) * 100
+    error_pct = (processing_stats["total_errors"] / total_attempted) * 100
+    
+    logger.info(f"✅ PROCESSED: {processing_stats['total_processed']} ({success_pct:.1f}%)")
+    logger.info(f"⏭️ SKIPPED: {processing_stats['total_skipped']} ({skip_pct:.1f}%)")
+    logger.info(f"❌ ERRORS: {processing_stats['total_errors']} ({error_pct:.1f}%)")
+    logger.info(f"📊 TOTAL: {total_attempted}")
+    
+    if processing_stats["total_skipped"] > 0:
+        logger.info("")
+        logger.info("🔍 SKIP BREAKDOWN:")
+        if processing_stats["duplicates_found"] > 0:
+            logger.info(f"   🔄 Duplicates: {processing_stats['duplicates_found']}")
+        if processing_stats["empty_transcripts"] > 0:
+            logger.info(f"   📝 Empty Transcripts: {processing_stats['empty_transcripts']}")
+        if processing_stats["empty_evaluations"] > 0:
+            logger.info(f"   📋 Empty Evaluations: {processing_stats['empty_evaluations']}")
+        if processing_stats["missing_fields"] > 0:
+            logger.info(f"   🔑 Missing Fields: {processing_stats['missing_fields']}")
+    
+    logger.info("=" * 60)
+
+# Add this call at the very end of your import_evaluations function:
+# log_import_summary()
 
 # ============================================================================
 # PRODUCTION API FETCHING (Keeping existing)
