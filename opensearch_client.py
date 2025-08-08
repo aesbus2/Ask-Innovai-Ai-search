@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 from embedder import embed_text
 from typing import List, Dict, Any
-from opensearch_client import get_opensearch_client, ensure_evaluation_index_exists
+#from opensearch_client import get_opensearch_client, ensure_evaluation_index_exists
 
 try:
     from opensearchpy import OpenSearch
