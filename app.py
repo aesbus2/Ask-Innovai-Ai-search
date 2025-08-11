@@ -1843,7 +1843,111 @@ def create_empty_filter_response(status="no_data", error_msg=""):
         "hybrid_search_available": False
     }
 
-
+@app.get("/evaluation/{evaluation_id}")
+async def get_evaluation_by_id(evaluation_id: str):
+    """
+    Get a single evaluation by its ID for Quick Evaluation Lookup feature
+    Optimized for 2954 document database with confirmed evaluationId field
+    """
+    try:
+        from opensearch_client import get_opensearch_client
+        
+        client = get_opensearch_client()
+        if not client:
+            logger.error("OpenSearch client not available")
+            raise HTTPException(status_code=500, detail="Search service unavailable")
+        
+        # Search for the evaluation - try both exact term approaches
+        query = {
+            "query": {
+                "bool": {
+                    "should": [
+                        {"term": {"evaluationId.keyword": evaluation_id}},  # Exact keyword match
+                        {"term": {"evaluationId": evaluation_id}},          # Standard term match
+                        {"match": {"evaluationId": evaluation_id}}          # Match query fallback
+                    ],
+                    "minimum_should_match": 1
+                }
+            },
+            "size": 1
+        }
+        
+        logger.info(f"🔍 Looking up evaluation ID: {evaluation_id}")
+        
+        response = client.search(index="eval-*", body=query)
+        hits = response.get("hits", {}).get("hits", [])
+        
+        if not hits:
+            # Try without .keyword suffix in case the field isn't mapped as keyword
+            query_alt = {
+                "query": {
+                    "term": {
+                        "evaluationId": evaluation_id
+                    }
+                },
+                "size": 1
+            }
+            
+            response = client.search(index="eval-*", body=query_alt)
+            hits = response.get("hits", {}).get("hits", [])
+            
+            if not hits:
+                logger.warning(f"❌ Evaluation {evaluation_id} not found in database")
+                raise HTTPException(status_code=404, detail=f"Evaluation ID '{evaluation_id}' not found in the database")
+        
+        # Extract the evaluation data
+        source = hits[0]["_source"]
+        metadata = source.get("metadata", {})
+        
+        logger.info(f"✅ Found evaluation {evaluation_id} in index: {hits[0]['_index']}")
+        
+        # Return the evaluation data in the format expected by the frontend
+        evaluation_data = {
+            "evaluationId": source.get("evaluationId"),
+            "internalId": source.get("internalId"),
+            "template_id": source.get("template_id"),
+            "template_name": source.get("template_name"),
+            "weighted_score": source.get("weighted_score", 0),
+            "url": source.get("url", ""),
+            
+            # Agent information
+            "agentName": metadata.get("agentName") or source.get("agentName"),
+            "agentId": metadata.get("agentId") or source.get("agentId"),
+            
+            # Organizational hierarchy
+            "program": metadata.get("program") or source.get("program"),
+            "partner": metadata.get("partner") or source.get("partner"),
+            "site": metadata.get("site") or source.get("site"),
+            "lob": metadata.get("lob") or source.get("lob"),
+            
+            # Call disposition
+            "disposition": metadata.get("disposition") or source.get("disposition"),
+            "subDisposition": metadata.get("subDisposition") or source.get("subDisposition"),
+            
+            # Temporal fields
+            "call_date": metadata.get("call_date") or source.get("call_date"),
+            "created_on": metadata.get("created_on") or source.get("created_on"),
+            "call_duration": metadata.get("call_duration") or source.get("call_duration"),
+            
+            # Content
+            "language": metadata.get("language") or source.get("language", "english"),
+            "evaluation": source.get("evaluation_text") or source.get("evaluation"),
+            "transcript": source.get("transcript_text") or source.get("transcript"),
+            
+            # System info
+            "indexed_at": source.get("indexed_at"),
+            "source_index": hits[0]["_index"],
+            "search_score": hits[0].get("_score", 0)
+        }
+        
+        return evaluation_data
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404)
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error retrieving evaluation {evaluation_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving evaluation: {str(e)}")
 
 @app.post("/clear_filter_cache")
 async def clear_filter_cache():
@@ -2522,11 +2626,22 @@ async def fetch_evaluations(
         params = {}
         if max_docs:
             params["limit"] = max_docs
+            logger.info(f"📊 ENFORCING document limit: {max_docs}")
+
+        else:
+            logger.info("📊 NO document limit - fetching all available")
+
+        # ENHANCED: Log the full request details
+        logger.info(f"🌐 API Request to: {API_BASE_URL}")
+        logger.info(f"📋 Parameters: {params}")
         
         # Make request with retry logic
         max_retries = 3
+        response = None
+
         for attempt in range(max_retries):
             try:
+                logger.info(f"🔄 API request attempt {attempt + 1}/{max_retries}")
                 response = requests.get(
                     API_BASE_URL, 
                     headers=headers, 
@@ -2535,15 +2650,18 @@ async def fetch_evaluations(
                 )
                 
                 if response.status_code == 200:
+                    logger.info("API responded with HTTP 200")
                     break
                 elif response.status_code in [502, 503, 504] and attempt < max_retries - 1:
+                    logger.warning(f"⚠️ API returned {response.status_code}, retrying...")
                     await asyncio.sleep(2 ** attempt)
                     continue
                 else:
-                    raise Exception(f"API returned HTTP {response.status_code}")
+                    raise Exception(f"API returned HTTP {response.status_code}: {response.text[:200]}")
                     
             except requests.exceptions.RequestException as e:
                 if attempt < max_retries - 1:
+                    logger.warning(f"⚠️ Request failed (attempt {attempt + 1}): {e}")
                     await asyncio.sleep(2 ** attempt)
                     continue
                 else:
@@ -2556,11 +2674,78 @@ async def fetch_evaluations(
         if not evaluations and isinstance(data, list):
             evaluations = data
         
+        # ENHANCED: Log what we actually received from the API
+        api_returned_count = len(evaluations)
+        logger.info(f"📥 API returned {api_returned_count} evaluations")
+
+        if max_docs and len(evaluations) > max_docs:
+            logger.warning(f"⚠️ API returned {len(evaluations)} evaluations but limit was {max_docs}")
+            logger.warning(f"🔧 ENFORCING limit by truncating to first {max_docs} evaluations")
+            evaluations = evaluations[:max_docs]
+            logger.info(f"✅ Truncated to {len(evaluations)} evaluations")
+        elif max_docs:
+            logger.info(f"✅ API respected limit: requested {max_docs}, got {len(evaluations)}")
+        
+        # ENHANCED: Apply date filtering if specified (and log results)
+        if call_date_start or call_date_end:
+            original_count = len(evaluations)
+            filtered_evaluations = []
+            
+            logger.info("📅 Applying date filters:")
+            if call_date_start:
+                logger.info(f"   📅 Start date: {call_date_start}")
+            if call_date_end:
+                logger.info(f"   📅 End date: {call_date_end}")
+            
+            for evaluation in evaluations:
+                should_include = True
+                call_date_str = evaluation.get("call_date")
+                
+                if call_date_str:
+                    try:
+                        # Parse the call date (handle different formats)
+                        if "T" in call_date_str:
+                            call_date = datetime.fromisoformat(call_date_str.replace("Z", "+00:00"))
+                        else:
+                            call_date = datetime.strptime(call_date_str, "%Y-%m-%d")
+                        
+                        # Apply date filters
+                        if call_date_start:
+                            start_date = datetime.strptime(call_date_start, "%Y-%m-%d")
+                            if call_date.date() < start_date.date():
+                                should_include = False
+                        
+                        if call_date_end:
+                            end_date = datetime.strptime(call_date_end, "%Y-%m-%d")
+                            if call_date.date() > end_date.date():
+                                should_include = False
+                                
+                    except Exception as e:
+                        logger.warning(f"⚠️ Could not parse date for evaluation {evaluation.get('evaluationId', 'unknown')}: {e}")
+                        # Include if we can't parse the date
+                
+                if should_include:
+                    filtered_evaluations.append(evaluation)
+            
+            logger.info(f"📅 Date filtering: {original_count} → {len(filtered_evaluations)} evaluations")
+            evaluations = filtered_evaluations
+        
+        # FINAL LOG: What we're actually returning
+        final_count = len(evaluations)
+        logger.info(f"🎯 FINAL: Returning {final_count} evaluations for processing")
+        
+        if max_docs and final_count > max_docs:
+            logger.error(f"❌ CRITICAL: Still have {final_count} evaluations but limit was {max_docs}!")
+            # Emergency fallback - hard truncate
+            evaluations = evaluations[:max_docs]
+            logger.error(f"🚨 EMERGENCY TRUNCATION to {len(evaluations)} evaluations")
+        
         return evaluations
         
     except Exception as e:
-        logger.error(f"PRODUCTION: Failed to fetch evaluations: {e}")
+        logger.error(f"❌ PRODUCTION: Failed to fetch evaluations: {e}")
         raise
+    
 
 async def run_production_import(
     max_docs: int = None, 
