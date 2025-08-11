@@ -280,166 +280,157 @@ async function loadOpenSearchStats() {
         const response = await fetch('/opensearch_statistics');
         const data = await response.json();
         
-        console.log("📊 OpenSearch statistics response:", data);
+        console.log("📊 Full OpenSearch response:", result);
         
         if (!response.ok) {
             throw new Error(data.error || `HTTP ${response.status}`);
         }
+
+        // Your API returns: { status: "success", data: { total_documents: 2954, ... } }
+        const actualData = result.data || result;
+        console.log("📊 Actual statistics data:", actualData);
         
         // ✅ FIXED: Handle the actual API response structure
-        const stats = data.statistics || data;
-        const safeStats = {
-            total_documents: ultraSafeNumber(stats.total_documents || stats.documents || 0),
-            total_evaluations: ultraSafeNumber(stats.total_evaluations || stats.evaluations || 0),
-            programs: ultraSafeNumber(stats.programs || stats.unique_programs || 0),
-            templates: ultraSafeNumber(stats.templates || stats.template_count || 0),
-            weighted_scores_available: ultraSafeNumber(stats.weighted_scores_available || 0)
+        const stats = {
+            total_documents: ultraSafeNumber(actualData.total_documents || 0),
+            active_indices: ultraSafeNumber(actualData.active_indices || 0),
+            
+            // Sample-based statistics (from the statistics sampling logic)
+            total_evaluations: ultraSafeNumber(actualData.statistics?.total_evaluations || actualData.total_evaluations || 0),
+            unique_templates: ultraSafeNumber(actualData.statistics?.templates?.length || actualData.unique_templates || 0),
+            unique_programs: ultraSafeNumber(actualData.statistics?.programs?.length || actualData.unique_programs || 0),
+            unique_partners: ultraSafeNumber(actualData.statistics?.partners?.length || actualData.unique_partners || 0),
+            unique_dispositions: ultraSafeNumber(actualData.statistics?.dispositions?.length || actualData.unique_dispositions || 0),
+            unique_agents: ultraSafeNumber(actualData.statistics?.agents?.length || actualData.unique_agents || 0),
+            
+            // Vector search info
+            vector_support: actualData.vector_search?.cluster_support || false,
+            vector_ready: actualData.vector_search?.vector_search_ready || false,
+            documents_with_vectors: ultraSafeNumber(actualData.vector_search?.documents_with_vectors || 0),
+            vector_coverage: ultraSafeNumber(actualData.vector_search?.vector_coverage || 0)
         };
         
+        // Generate comprehensive HTML with all available data
         const html = `
             <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
-                <div class="stats-card priority-metric">
+                <!-- Primary Metrics -->
+                <div class="stats-card priority-metric" style="border: 2px solid #6e32a0;">
                     <h3><span class="emoji">📄</span> Total Documents</h3>
-                    <div class="stats-number">${ultraSafeFormat(safeStats.total_documents)}</div>
+                    <div class="stats-number" style="color: #6e32a0; font-size: 2em;">${ultraSafeFormat(stats.total_documents)}</div>
                     <div class="stats-label">Documents in OpenSearch</div>
                 </div>
                 
                 <div class="stats-card">
-                    <h3><span class="emoji">🎯</span> Evaluations</h3>
-                    <div class="stats-number">${ultraSafeFormat(safeStats.total_evaluations)}</div>
-                    <div class="stats-label">Unique Evaluations</div>
+                    <h3><span class="emoji">💾</span> Active Indices</h3>
+                    <div class="stats-number">${ultraSafeFormat(stats.active_indices)}</div>
+                    <div class="stats-label">OpenSearch Indices</div>
                 </div>
                 
-                ${safeStats.programs > 0 ? `
+                <!-- Evaluation Data -->
+                ${stats.total_evaluations > 0 ? `
                 <div class="stats-card">
-                    <h3><span class="emoji">🏢</span> Programs</h3>
-                    <div class="stats-number">${ultraSafeFormat(safeStats.programs)}</div>
-                    <div class="stats-label">Different Programs</div>
+                    <h3><span class="emoji">🎯</span> Unique Evaluations</h3>
+                    <div class="stats-number">${ultraSafeFormat(stats.total_evaluations)}</div>
+                    <div class="stats-label">Distinct Evaluations</div>
                 </div>` : ''}
                 
-                ${safeStats.templates > 0 ? `
+                <!-- Template Data -->
+                ${stats.unique_templates > 0 ? `
                 <div class="stats-card">
                     <h3><span class="emoji">📋</span> Templates</h3>
-                    <div class="stats-number">${ultraSafeFormat(safeStats.templates)}</div>
+                    <div class="stats-number">${ultraSafeFormat(stats.unique_templates)}</div>
                     <div class="stats-label">Evaluation Templates</div>
                 </div>` : ''}
                 
-                ${safeStats.weighted_scores_available > 0 ? `
+                <!-- Program Data -->
+                ${stats.unique_programs > 0 ? `
                 <div class="stats-card">
-                    <h3><span class="emoji">📊</span> Scored Evaluations</h3>
-                    <div class="stats-number">${ultraSafeFormat(safeStats.weighted_scores_available)}</div>
-                    <div class="stats-label">With Weighted Scores</div>
+                    <h3><span class="emoji">🏢</span> Programs</h3>
+                    <div class="stats-number">${ultraSafeFormat(stats.unique_programs)}</div>
+                    <div class="stats-label">Different Programs</div>
+                </div>` : ''}
+                
+                <!-- Agent Data -->
+                ${stats.unique_agents > 0 ? `
+                <div class="stats-card">
+                    <h3><span class="emoji">👥</span> Agents</h3>
+                    <div class="stats-number">${ultraSafeFormat(stats.unique_agents)}</div>
+                    <div class="stats-label">Unique Agents</div>
+                </div>` : ''}
+                
+                <!-- Disposition Data -->
+                ${stats.unique_dispositions > 0 ? `
+                <div class="stats-card">
+                    <h3><span class="emoji">📞</span> Dispositions</h3>
+                    <div class="stats-number">${ultraSafeFormat(stats.unique_dispositions)}</div>
+                    <div class="stats-label">Call Dispositions</div>
+                </div>` : ''}
+                
+                <!-- Partner Data -->
+                ${stats.unique_partners > 0 ? `
+                <div class="stats-card">
+                    <h3><span class="emoji">🤝</span> Partners</h3>
+                    <div class="stats-number">${ultraSafeFormat(stats.unique_partners)}</div>
+                    <div class="stats-label">Business Partners</div>
+                </div>` : ''}
+                
+                <!-- Vector Search Status -->
+                ${stats.vector_support ? `
+                <div class="stats-card ${stats.vector_ready ? 'vector-ready' : 'vector-disabled'}" style="border-color: ${stats.vector_ready ? '#28a745' : '#ffc107'};">
+                    <h3><span class="emoji">${stats.vector_ready ? '🔍' : '⚠️'}</span> Vector Search</h3>
+                    <div class="stats-number">${stats.vector_coverage}%</div>
+                    <div class="stats-label">${stats.vector_ready ? 'Ready' : 'Disabled'} (${ultraSafeFormat(stats.documents_with_vectors)} docs)</div>
                 </div>` : ''}
             </div>
             
+            <!-- Footer Info -->
             <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #6e32a0;">
                 <div style="font-size: 0.9em; color: #666;">
-                    📅 Last updated: ${ultraSafeTimestamp(data.timestamp || new Date())} | 
-                    🔄 Processing: ${data.processing_time || 'Unknown'}s | 
-                    🏷️ Version: ${data.version || 'Unknown'}
+                    📅 Last updated: ${ultraSafeTimestamp(result.timestamp || new Date())} | 
+                    🏥 Cluster: <span style="color: ${actualData.cluster_status === 'green' ? '#28a745' : '#dc3545'};">${actualData.cluster_status || 'Unknown'}</span> |
+                    📊 Processing: ${result.processing_time || 'Unknown'}s
                 </div>
+                ${actualData.available_fields ? `
+                <details style="margin-top: 10px;">
+                    <summary style="cursor: pointer; font-weight: bold;">📋 Available Fields (${actualData.available_fields.length})</summary>
+                    <div style="margin-top: 8px; font-family: monospace; font-size: 0.8em; background: #fff; padding: 8px; border-radius: 4px;">
+                        ${actualData.available_fields.join(', ')}
+                    </div>
+                </details>` : ''}
             </div>
         `;
         
         container.innerHTML = html;
-        console.log("✅ OpenSearch statistics loaded successfully");
+        console.log("✅ OpenSearch statistics loaded successfully with real data!");
         
     } catch (error) {
         console.error('❌ Failed to load OpenSearch statistics:', error);
+        
+        // Enhanced error display
+        const errorType = error.message.includes('fetch') ? 'network_error' : 
+                         error.message.includes('parse') ? 'parse_error' :
+                         error.message.includes('timeout') ? 'timeout_error' : 'server_error';
+        
         container.innerHTML = `
-            <div class="stats-card" style="grid-column: 1 / -1; text-align: center; color: #dc3545;">
-                <h3><span class="emoji">❌</span> Error Loading Statistics</h3>
-                <div class="stats-number">${error.message}</div>
-                <div class="stats-label">Please check your OpenSearch connection</div>
-                <button class="btn secondary" onclick="loadOpenSearchStats()" style="margin-top: 10px;">
-                    🔄 Retry
-                </button>
+            <div class="stats-error" style="text-align: center; padding: 40px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; color: #721c24;">
+                <div style="font-size: 3em; margin-bottom: 16px;">❌</div>
+                <h3>Statistics Loading Failed</h3>
+                <p><strong>Error:</strong> ${ultraSafeString(error.message)}</p>
+                <div style="margin-top: 20px;">
+                    <button class="btn primary" onclick="loadOpenSearchStats()">
+                        🔄 Retry Loading
+                    </button>
+                    <button class="btn secondary" onclick="window.open('/opensearch_statistics', '_blank')" style="margin-left: 10px;">
+                        🔗 View Raw Data
+                    </button>
+                </div>
+                <div style="margin-top: 16px; font-size: 0.9em; color: #856404; background: #fff3cd; padding: 12px; border-radius: 4px;">
+                    💡 <strong>Troubleshooting:</strong> Check if your OpenSearch cluster is running and accessible.
+                    Try visiting <code>/opensearch_statistics</code> directly to see the raw response.
+                </div>
             </div>
         `;
     }
-}
-
-async function getVectorSearchStatus() {
-    try {
-        const response = await fetch('/opensearch_statistics');
-        const result = await response.json();
-        
-        if (result?.data?.vector_search) {
-            const vs = result.data.vector_search;
-            return {
-                enabled: vs.cluster_support || false,
-                ready: vs.vector_search_ready || false,
-                coverage: vs.vector_coverage || 0,
-                embedder_available: vs.embedder_available || false,
-                documents_with_vectors: vs.documents_with_vectors || 0
-            };
-        }
-        
-        return { enabled: false, ready: false, coverage: 0 };
-    } catch (error) {
-        console.warn('Vector search status check failed:', error);
-        return { enabled: false, ready: false, coverage: 0, error: true };
-    }
-}
-
-// Missing error display function  
-function displayStatisticsError(errorMessage, errorType = 'unknown') {
-    const container = document.getElementById('statisticsContainer');
-    if (!container) return;
-    
-    const troubleshootingTips = {
-        network_error: [
-            'Check if the backend server is running',
-            'Verify your network connection', 
-            'Try refreshing the page'
-        ],
-        server_error: [
-            'Check OpenSearch connection in backend logs',
-            'Verify OpenSearch cluster is healthy',
-            'Check backend configuration'
-        ],
-        parse_error: [
-            'Backend may be returning HTML instead of JSON',
-            'Check backend logs for errors',
-            'Verify API endpoint is working correctly'
-        ],
-        timeout_error: [
-            'OpenSearch cluster may be slow to respond',
-            'Try again in a moment',
-            'Check cluster performance'
-        ],
-        unknown: [
-            'Check browser console for details',
-            'Try refreshing the page',
-            'Contact system administrator if problem persists'
-        ]
-    };
-    
-    const tips = troubleshootingTips[errorType] || troubleshootingTips.unknown;
-    
-    container.innerHTML = `
-        <div class="stats-error">
-            <div class="error-icon">❌</div>
-            <h3>Statistics Loading Failed</h3>
-            <p><strong>Error:</strong> ${ultraSafeString(errorMessage)}</p>
-            
-            <div class="error-details">
-                <h4>Troubleshooting Tips:</h4>
-                <ul>
-                    ${tips.map(tip => `<li>${ultraSafeString(tip)}</li>`).join('')}
-                </ul>
-            </div>
-            
-            <div class="error-actions">
-                <button onclick="loadOpenSearchStats()" class="btn primary">
-                    🔄 Retry Loading
-                </button>
-                <button onclick="window.location.reload()" class="btn secondary">
-                    ↻ Refresh Page
-                </button>
-            </div>
-        </div>
-    `;
 }
 
 function displayStatistics(response, timestamp) {
@@ -712,7 +703,7 @@ This will fetch evaluation data from your API and index it for search and chat.`
     console.log(`📋 Import Type Selected: ${importType}`);
     console.log(`🔢 Max Docs Element Value: ${maxDocsInput ? maxDocsInput.value : 'N/A'}`);
     console.log(`📊 Max Docs Parsed: ${maxDocs}`);
-    
+
     if (maxDocs !== null) {
         console.log(`📊 Max documents limit: ${maxDocs}`);
     } else {
