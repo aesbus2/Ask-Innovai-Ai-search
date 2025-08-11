@@ -2759,6 +2759,15 @@ async def run_production_import(
         call_date_start=call_date_start,
         call_date_end=call_date_end
     )
+
+    if evaluations:
+
+        logger.info(f"🔍 DEBUG: fetch_evaluations returned {len(evaluations) if evaluations else 0} evaluations")
+        logger.info(f"🔍 DEBUG: evaluations is None: {evaluations is None}")
+        logger.info(f"🔍 DEBUG: evaluations is empty list: {evaluations == []}")    
+        logger.info(f"🔍 DEBUG: First evaluation ID: {evaluations[0].get('evaluationId', 'NO_ID')}")
+
+
     """
     PRODUCTION: Import process with enhanced real data integration
     """
@@ -2821,7 +2830,16 @@ async def run_production_import(
                 call_date_end=call_date_end         # ✅ NEW
             )
         
+        # ✅ DEBUG LOGGING right after fetch
+        logger.info(f"🔍 DEBUG: fetch_evaluations returned {len(evaluations) if evaluations else 0} evaluations")
+        logger.info(f"🔍 DEBUG: evaluations is None: {evaluations is None}")
+        logger.info(f"🔍 DEBUG: evaluations is empty list: {evaluations == []}")
+        if evaluations:
+            logger.info(f"🔍 DEBUG: First evaluation ID: {evaluations[0].get('evaluationId', 'NO_ID')}")
+            logger.info(f"🔍 DEBUG: First evaluation keys: {list(evaluations[0].keys())[:10]}")  # Show first 10 keys
+        
         if not evaluations:
+            log_import("❌ No evaluations returned from API - nothing to process")
             results = {
                 "total_documents_processed": 0, 
                 "total_chunks_indexed": 0, 
@@ -2833,6 +2851,7 @@ async def run_production_import(
             return
         
         # Process evaluations with PRODUCTION structure
+        log_import(f"✅ Processing {len(evaluations)} evaluations")
         update_import_status("running", f"Processing {len(evaluations)} evaluations with PRODUCTION real data integration")
         
         total_processed = 0
@@ -2871,6 +2890,9 @@ async def run_production_import(
             # Process evaluations in current batch
             for i, evaluation in enumerate(batch):
                 actual_index = batch_start + i
+
+                eval_id = evaluation.get('evaluationId', 'NO_ID')
+                log_import(f"🔍 Processing evaluation {actual_index + 1}/{len(evaluations)}: {eval_id}")
                 
                 try:
                     result = await process_evaluation(evaluation)

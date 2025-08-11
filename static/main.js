@@ -280,14 +280,14 @@ async function loadOpenSearchStats() {
         const response = await fetch('/opensearch_statistics');
         const data = await response.json();
         
-        console.log("📊 Full OpenSearch response:", result);
+        console.log("📊 Full OpenSearch response:", data);
         
         if (!response.ok) {
             throw new Error(data.error || `HTTP ${response.status}`);
         }
 
         // Your API returns: { status: "success", data: { total_documents: 2954, ... } }
-        const actualData = result.data || result;
+        const actualData = data.data || data;
         console.log("📊 Actual statistics data:", actualData);
         
         // ✅ FIXED: Handle the actual API response structure
@@ -386,9 +386,9 @@ async function loadOpenSearchStats() {
             <!-- Footer Info -->
             <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #6e32a0;">
                 <div style="font-size: 0.9em; color: #666;">
-                    📅 Last updated: ${ultraSafeTimestamp(result.timestamp || new Date())} | 
+                    📅 Last updated: ${ultraSafeTimestamp(data.timestamp || new Date())} | 
                     🏥 Cluster: <span style="color: ${actualData.cluster_status === 'green' ? '#28a745' : '#dc3545'};">${actualData.cluster_status || 'Unknown'}</span> |
-                    📊 Processing: ${result.processing_time || 'Unknown'}s
+                    📊 Processing: ${data.processing_time || 'Unknown'}s
                 </div>
                 ${actualData.available_fields ? `
                 <details style="margin-top: 10px;">
@@ -1028,8 +1028,7 @@ async function refreshStatus() {
         // Run all checks in parallel for better performance
         const promises = [
             checkSystemHealth(),
-            checkLastImportInfo(), 
-            loadOpenSearchStats()
+            checkLastImportInfo()            
         ];
         
         await Promise.allSettled(promises);
