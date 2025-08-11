@@ -591,7 +591,7 @@ function clearDateRange() {
 }
 
 function updateImportPreview() {
-    const importType = document.getElementById("importTypeSelect")?.value || "full";   
+    const importType = importTypeSelect ? importTypeSelect.value || "full" : "full"; 
     const maxDocsInput = document.getElementById("maxDocsInput");
     const startDate = document.getElementById('importStartDate')?.value;
     const endDate = document.getElementById('importEndDate')?.value;
@@ -709,6 +709,10 @@ This will fetch evaluation data from your API and index it for search and chat.`
 
     // Debug logging
     console.log("🚀 Starting import with config:", config);
+    console.log(`📋 Import Type Selected: ${importType}`);
+    console.log(`🔢 Max Docs Element Value: ${maxDocsInput ? maxDocsInput.value : 'N/A'}`);
+    console.log(`📊 Max Docs Parsed: ${maxDocs}`);
+    
     if (maxDocs !== null) {
         console.log(`📊 Max documents limit: ${maxDocs}`);
     } else {
