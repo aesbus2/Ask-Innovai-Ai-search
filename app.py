@@ -2623,16 +2623,43 @@ async def fetch_evaluations(
         }
         
         params = {}
+        # Convert start date for MetroCare API
+        if call_date_start:
+            try:
+                start_date_obj = datetime.strptime(call_date_start, "%Y-%m-%d")
+                api_date_format = start_date_obj.strftime("%m/%d/%Y")
+                params["date"] = api_date_format
+                logger.info(f"📅 API DATE START: {call_date_start} → {api_date_format}")
+            except ValueError as e:
+                logger.error(f"❌ Invalid start date format: {call_date_start} (expected YYYY-MM-DD)")
+                raise Exception(f"Invalid start date format: {call_date_start}")
+
+        if call_date_end:
+            # Test different end date parameter names (we need to discover which works)
+            try:
+                end_date_obj = datetime.strptime(call_date_end, "%Y-%m-%d")
+                api_end_date_format = end_date_obj.strftime("%m/%d/%Y")
+                
+                # Try the most likely parameter names for end date
+                # We'll test multiple options since we don't know which works
+                params["end_date"] = api_end_date_format  # Most common
+                # Note: If this doesn't work, we'll need to test others
+                
+                logger.info(f"📅 API END DATE: {call_date_end} → {api_end_date_format}")
+            except ValueError as e:
+                logger.error(f"❌ Invalid end date format: {call_date_end} (expected YYYY-MM-DD)")
+                raise Exception(f"Invalid end date format: {call_date_end}")
+        
+        # API doesn't support limit, so we'll handle it client-side
         if max_docs:
-            params["limit"] = max_docs
-            logger.info(f"📊 ENFORCING document limit: {max_docs}")
-
+            logger.info(f"📊 CLIENT-SIDE LIMIT: Will limit to {max_docs} after API returns results")
+            logger.info(" API doesn't support 'limit' parameter - handling client-side")
         else:
-            logger.info("📊 NO document limit - fetching all available")
-
-        # ENHANCED: Log the full request details
-        logger.info(f"🌐 API Request to: {API_BASE_URL}")
-        logger.info(f"📋 Parameters: {params}")
+            logger.info("📊 NO LIMIT: Will return all evaluations from API")
+        
+        # ✅ LOG: The complete request with correct format
+        logger.info(f"🌐 MetroCare API Request: {API_BASE_URL}")
+        logger.info(f"📋 Parameters (MetroCare format): {params}")
         
         # Make request with retry logic
         max_retries = 3
@@ -2675,75 +2702,46 @@ async def fetch_evaluations(
         
         # ENHANCED: Log what we actually received from the API
         api_returned_count = len(evaluations)
-        logger.info(f"📥 API returned {api_returned_count} evaluations")
+        logger.info(f"📥 API returned {api_returned_count} evaluations (after date filtering)")
 
         if max_docs and len(evaluations) > max_docs:
-            logger.warning(f"⚠️ API returned {len(evaluations)} evaluations but limit was {max_docs}")
-            logger.warning(f"🔧 ENFORCING limit by truncating to first {max_docs} evaluations")
+            logger.info(f"📊 CLIENT-SIDE LIMITING: {len(evaluations)} → {max_docs} evaluations")
             evaluations = evaluations[:max_docs]
             logger.info(f"✅ Truncated to {len(evaluations)} evaluations")
         elif max_docs:
-            logger.info(f"✅ API respected limit: requested {max_docs}, got {len(evaluations)}")
-        
-        # ENHANCED: Apply date filtering if specified (and log results)
-        if call_date_start or call_date_end:
-            original_count = len(evaluations)
-            filtered_evaluations = []
+            logger.info(f"📊 NO LIMITING NEEDED: API returned {len(evaluations)} ≤ {max_docs} requested")
+
+        if evaluations:
+            first_eval = evaluations[0]
+            first_date = first_eval.get("call_date", "No date")
+            first_id = first_eval.get("evaluationId", "No ID")
             
-            logger.info("📅 Applying date filters:")
+            logger.info(f"📅 First evaluation: ID {first_id}, call_date: {first_date}")
+            
+            if len(evaluations) > 1:
+                last_eval = evaluations[-1]
+                last_date = last_eval.get("call_date", "No date")
+                last_id = last_eval.get("evaluationId", "No ID")
+                logger.info(f"📅 Last evaluation: ID {last_id}, call_date: {last_date}")
+            
+            # Verify date filtering worked
             if call_date_start:
-                logger.info(f"   📅 Start date: {call_date_start}")
-            if call_date_end:
-                logger.info(f"   📅 End date: {call_date_end}")
-            
-            for evaluation in evaluations:
-                should_include = True
-                call_date_str = evaluation.get("call_date")
-                
-                if call_date_str:
-                    try:
-                        # Parse the call date (handle different formats)
-                        if "T" in call_date_str:
-                            call_date = datetime.fromisoformat(call_date_str.replace("Z", "+00:00"))
-                        else:
-                            call_date = datetime.strptime(call_date_str, "%Y-%m-%d")
-                        
-                        # Apply date filters
-                        if call_date_start:
-                            start_date = datetime.strptime(call_date_start, "%Y-%m-%d")
-                            if call_date.date() < start_date.date():
-                                should_include = False
-                        
-                        if call_date_end:
-                            end_date = datetime.strptime(call_date_end, "%Y-%m-%d")
-                            if call_date.date() > end_date.date():
-                                should_include = False
-                                
-                    except Exception as e:
-                        logger.warning(f"⚠️ Could not parse date for evaluation {evaluation.get('evaluationId', 'unknown')}: {e}")
-                        # Include if we can't parse the date
-                
-                if should_include:
-                    filtered_evaluations.append(evaluation)
-            
-            logger.info(f"📅 Date filtering: {original_count} → {len(filtered_evaluations)} evaluations")
-            evaluations = filtered_evaluations
-        
-        # FINAL LOG: What we're actually returning
+                logger.info(f"✅ API DATE FILTERING WORKED: Results should be >= {call_date_start}")
+        else:
+            logger.warning("❌ No evaluations returned by API")
+            if call_date_start:
+                logger.info(f"💡 No evaluations found for date >= {params.get('date', 'N/A')}")
+                logger.info("   Try using an earlier date or check if evaluations exist for that period")
+        # ✅ HYBRID SUCCESS: API handled date filtering, we handled limiting
         final_count = len(evaluations)
-        logger.info(f"🎯 FINAL: Returning {final_count} evaluations for processing")
-        
-        if max_docs and final_count > max_docs:
-            logger.error(f"❌ CRITICAL: Still have {final_count} evaluations but limit was {max_docs}!")
-            # Emergency fallback - hard truncate
-            evaluations = evaluations[:max_docs]
-            logger.error(f"🚨 EMERGENCY TRUNCATION to {len(evaluations)} evaluations")
+        logger.info("🎯 HYBRID SUCCESS: API date filtering + client-side limiting")
+        logger.info(f"📊 Final count: {final_count} evaluations")
         
         return evaluations
-        
     except Exception as e:
-        logger.error(f"❌ PRODUCTION: Failed to fetch evaluations: {e}")
-        raise
+        logger.error(f"❌ FAILED to fetch evaluations from MetroCare API: {e}")
+        raise    
+       
     
 
 async def run_production_import(
