@@ -94,8 +94,7 @@ VECTOR_SEARCH_READY = True
 PRELOAD_MODEL_ON_STARTUP = True
 try:
     from embedder import embed_text, get_embedding_stats, preload_embedding_model
-    EMBEDDER_AVAILABLE = False # Disable for chat
-    VECTOR_SEARCH_READY = False # Disable for chat
+    
     logging.info("✅ embedder imported successfully - VECTOR SEARCH READY")
 except ImportError as e:
     logging.warning(f"⚠️ embedder import failed: {e} - vector search will be disabled")
