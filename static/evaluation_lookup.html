@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evaluation Lookup - Ask InnovAI</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1rem;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .lookup-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 30px;
+            border: 1px solid #e1e8ed;
+            margin-bottom: 30px;
+        }
+
+        .lookup-header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .lookup-header h2 {
+            color: #333;
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .lookup-header p {
+            color: #666;
+            font-size: 1rem;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 12px;
+            max-width: 500px;
+            margin: 0 auto 20px;
+        }
+
+        .lookup-input {
+            flex: 1;
+            padding: 16px 20px;
+            border: 2px solid #ddd;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .lookup-input:focus {
+            border-color: #6e32a0;
+            box-shadow: 0 0 0 4px rgba(110, 50, 160, 0.1);
+        }
+
+        .lookup-btn {
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 120px;
+            justify-content: center;
+        }
+
+        .lookup-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(110, 50, 160, 0.3);
+        }
+
+        .lookup-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .clear-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin: 0 auto;
+        }
+
+        .clear-btn:hover {
+            background: #5a6268;
+            transform: translateY(-1px);
+        }
+
+        .results-container {
+            margin-top: 30px;
+        }
+
+        .results-container.hidden {
+            display: none;
+        }
+
+        .evaluation-card {
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .card-header {
+            text-align: center;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f1f3f4;
+        }
+
+        .card-title {
+            color: #333;
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .evaluation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .eval-field {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .eval-field:hover {
+            background: #e9ecef;
+            transform: translateY(-1px);
+        }
+
+        .eval-label {
+            font-size: 0.85rem;
+            color: #666;
+            font-weight: 600;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .eval-value {
+            font-size: 1rem;
+            color: #333;
+            font-weight: 600;
+            word-break: break-word;
+        }
+
+        .eval-value.score {
+            color: #28a745;
+            font-size: 1.3rem;
+        }
+
+        .eval-value.empty {
+            color: #999;
+            font-style: italic;
+            font-weight: normal;
+        }
+
+        .eval-value.url a {
+            color: #6e32a0;
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .eval-value.url a:hover {
+            text-decoration: underline;
+        }
+
+        .error-card {
+            background: #fff5f5;
+            border: 2px solid #fed7d7;
+            color: #e53e3e;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            animation: slideIn 0.3s ease;
+        }
+
+        .error-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .error-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .error-message {
+            font-size: 0.95rem;
+            margin-bottom: 20px;
+            opacity: 0.8;
+        }
+
+        .retry-btn {
+            background: #e53e3e;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .retry-btn:hover {
+            background: #c53030;
+            transform: translateY(-1px);
+        }
+
+        .loading-card {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            animation: slideIn 0.3s ease;
+        }
+
+        .loading-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: block;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .instructions {
+            background: #e8f4f8;
+            border: 1px solid #b8e6f1;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .instructions h3 {
+            color: #0c5460;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .instructions ul {
+            color: #0c5460;
+            padding-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 5px;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .main-content {
+                padding: 20px;
+            }
+
+            .lookup-section {
+                padding: 20px;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            .evaluation-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <span class="material-icons">search</span>
+                Evaluation Lookup
+            </h1>
+            <p>Quick access to evaluation details and metrics</p>
+        </div>
+
+        <div class="main-content">
+            <div class="instructions">
+                <h3>
+                    <span class="material-icons">info</span>
+                    How to Use
+                </h3>
+                <ul>
+                    <li>Enter any evaluation ID number in the search field</li>
+                    <li>Click "Lookup" or press Enter to search</li>
+                    <li>View comprehensive evaluation details, scores, and metadata</li>
+                    <li>Use "Clear" to reset and search for another evaluation</li>
+                </ul>
+            </div>
+
+            <div class="lookup-section">
+                <div class="lookup-header">
+                    <h2>
+                        <span class="material-icons">search</span>
+                        Quick Evaluation Search
+                    </h2>
+                    <p>Enter an evaluation ID to view detailed information</p>
+                </div>
+
+                <div class="input-group">
+                    <input type="text" 
+                        id="evaluationIdInput" 
+                        class="lookup-input"
+                        placeholder="Enter evaluation ID (numbers only)"
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                        onkeydown="handleEvaluationLookupKeyPress(event)">
+                    <button class="lookup-btn" id="lookupBtn" onclick="lookupEvaluation()">
+                        <span class="material-icons">search</span>
+                        Lookup
+                    </button>
+                </div>
+
+                <button class="clear-btn" onclick="clearEvaluationLookup()">
+                    <span class="material-icons">clear</span>
+                    Clear Results
+                </button>
+            </div>
+
+            <div id="evaluationResults" class="results-container hidden"></div>
+        </div>
+    </div>
+
+    <script>
+        // Auto-focus the input when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            const input = document.getElementById('evaluationIdInput');
+            if (input) {
+                input.focus();
+            }
+            console.log("🔍 Evaluation Lookup page loaded");
+        });
+
+        async function lookupEvaluation() {
+            const input = document.getElementById('evaluationIdInput');
+            const resultsContainer = document.getElementById('evaluationResults');
+            const lookupBtn = document.getElementById('lookupBtn');
+            
+            if (!input || !resultsContainer || !lookupBtn) {
+                console.error("Required elements not found");
+                return;
+            }
+
+            const evaluationId = input.value.trim();
+            
+            if (!evaluationId) {
+                alert('Please enter an evaluation ID');
+                input.focus();
+                return;
+            }
+
+            console.log(`🔍 Looking up evaluation ID: ${evaluationId}`);
+            
+            // Show loading state
+            lookupBtn.disabled = true;
+            resultsContainer.classList.remove('hidden');
+            resultsContainer.innerHTML = `
+                <div class="loading-card">
+                    <span class="material-icons loading-icon">hourglass_empty</span>
+                    <div style="font-size: 1.1rem; margin-bottom: 8px;">Searching for evaluation ${evaluationId}</div>
+                    <div style="font-size: 0.9rem; opacity: 0.7;">Please wait while we retrieve the data...</div>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`/debug/lookup_evaluation?eval_id=${evaluationId}`);
+                const data = await response.json();
+
+                if (data.success && data.evaluation) {
+                    displayEvaluationResult(data.evaluation);
+                } else {
+                    displayEvaluationError(data.error || 'Evaluation not found', evaluationId);
+                }
+            } catch (error) {
+                console.error('Lookup error:', error);
+                displayEvaluationError(`Network error: ${error.message}`, evaluationId);
+            } finally {
+                lookupBtn.disabled = false;
+            }
+        }
+
+        function displayEvaluationResult(evalData) {
+            const resultsContainer = document.getElementById('evaluationResults');
+            
+            resultsContainer.innerHTML = `
+                <div class="evaluation-card">
+                    <div class="card-header">
+                        <div class="card-title">Evaluation ${evalData.evaluationId}</div>
+                        <div style="color: #666; font-size: 0.9rem;">Complete evaluation details and metrics</div>
+                    </div>
+
+                    <!-- Key Metrics -->
+                    <div class="evaluation-grid">
+                        <div class="eval-field">
+                            <div class="eval-label">Weighted Score</div>
+                            <div class="eval-value score">
+                                ${evalData.weighted_score}%
+                            </div>
+                        </div>
+                        
+                        <div class="eval-field">
+                            <div class="eval-label">Internal ID</div>
+                            <div class="eval-value ${evalData.internalId ? '' : 'empty'}">
+                                ${evalData.internalId || 'Not available'}
+                            </div>
+                        </div>
+                        
+                        <div class="eval-field">
+                            <div class="eval-label">Call Date</div>
+                            <div class="eval-value ${evalData.call_date ? '' : 'empty'}">
+                                ${evalData.call_date ? new Date(evalData.call_date).toLocaleDateString() : 'Not available'}
+                            </div>
+                        </div>
+
+                        <div class="eval-field">
+                            <div class="eval-label">Evaluation URL</div>
+                            <div class="eval-value url ${evalData.url ? '' : 'empty'}">
+                                ${evalData.url ? `<a href="${evalData.url}" target="_blank">Open Evaluation</a>` : 'Not available'}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Template Information -->
+                    <div class="evaluation-grid">
+                        <div class="eval-field">
+                            <div class="eval-label">Template ID</div>
+                            <div class="eval-value ${evalData.template_id ? '' : 'empty'}">
+                                ${evalData.template_id || 'Not available'}
+                            </div>
+                        </div>
+                        
+                        <div class="eval-field">
+                            <div class="eval-label">Template Name</div>
+                            <div class="eval-value ${evalData.template_name ? '' : 'empty'}">
+                                ${evalData.template_name || 'Not available'}
+                            </div>
+                        </div>
+                        
+                        <div class="eval-field">
+                            <div class="eval-label">Language</div>
+                            <div class="eval-value ${evalData.language ? '' : 'empty'}">
+                                ${evalData.language || 'Not specified'}
+                            </div>
+                        </div>
+
+                        <div class="eval-field">
+                            <div class="eval-label">Program</div>
+                            <div class="eval-value ${evalData.program ? '' : 'empty'}">
+                                ${evalData.program || 'Not specified'}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Organization & Agent Information -->
+                    <div class="evaluation-grid">
+                        <div class="eval-field">
+                            <div class="eval-label">Partner</div>
+                            <div class="eval-value ${evalData.partner ? '' : 'empty'}">
+                                ${evalData.partner || 'Not specified'}
+                            </div>
+                        </div>
+
+                        <div class="eval-field">
+                            <div class="eval-label">Site</div>
+                            <div class="eval-value ${evalData.site ? '' : 'empty'}">
+                                ${evalData.site || 'Not specified'}
+                            </div>
+                        </div>
+                        
+                        <div class="eval-field">
+                            <div class="eval-label">Agent Name</div>
+                            <div class="eval-value ${evalData.agent_name ? '' : 'empty'}">
+                                ${evalData.agent_name || 'Not available'}
+                            </div>
+                        </div>
+                        
+                        <div class="eval-field">
+                            <div class="eval-label">Call Disposition</div>
+                            <div class="eval-value ${evalData.disposition ? '' : 'empty'}">
+                                ${evalData.disposition || 'Not available'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            console.log(`✅ Successfully displayed evaluation ${evalData.evaluationId}`);
+        }
+
+        function displayEvaluationError(error, evaluationId) {
+            const resultsContainer = document.getElementById('evaluationResults');
+            
+            resultsContainer.innerHTML = `
+                <div class="error-card">
+                    <span class="material-icons error-icon">error</span>
+                    <div class="error-title">Evaluation ${evaluationId} Not Found</div>
+                    <div class="error-message">${error}</div>
+                    <button class="retry-btn" onclick="lookupEvaluation()">
+                        <span class="material-icons">refresh</span>
+                        Try Again
+                    </button>
+                </div>
+            `;
+        }
+
+        function clearEvaluationLookup() {
+            const input = document.getElementById('evaluationIdInput');
+            const resultsContainer = document.getElementById('evaluationResults');
+            
+            if (input) {
+                input.value = '';
+                input.focus();
+            }
+            
+            if (resultsContainer) {
+                resultsContainer.classList.add('hidden');
+                resultsContainer.innerHTML = '';
+            }
+
+            console.log("🧹 Evaluation lookup cleared");
+        }
+
+        function handleEvaluationLookupKeyPress(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                lookupEvaluation();
+            }
+        }
+    </script>
+</body>
+</html>

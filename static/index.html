@@ -94,6 +94,18 @@
                         <option value="incremental">Incremental (Updated Only)</option>
                     </select>
                 </div>
+
+                <div class="filter-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="filterUpdatedAfterCreated" class="filter-checkbox">
+                        <span class="checkbox-text">
+                            Only import evaluations where updated date > created date
+                            <small class="filter-help">
+                                📝 This will filter to only include evaluations that have been modified after their initial creation
+                            </small>
+                        </span>
+                    </label>
+                </div>
                 <!-- NEW: Date Range Import Controls -->
                 <div class="control-group">
                 <label>Date Range (Optional):</label>

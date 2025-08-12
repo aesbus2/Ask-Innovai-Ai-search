@@ -621,10 +621,11 @@ async function startImport() {
     const importTypeSelect = document.getElementById("importTypeSelect");
     const maxDocsInput = document.getElementById("maxDocsInput");
     const startDateInput = document.getElementById('importStartDate');
-    const endDateInput = document.getElementById('importEndDate');    
+    const endDateInput = document.getElementById('importEndDate');
+    const filterUpdatedCheckbox = document.getElementById('filterUpdatedAfterCreated'); // Get checkbox element
     const importType = importTypeSelect ? importTypeSelect.value : "full";
     
-    // Handle max documents input
+    // Handle max documents input FIRST
     let maxDocs = null;
     if (maxDocsInput && maxDocsInput.value.trim() !== "") {
         const parsedValue = parseInt(maxDocsInput.value.trim());
@@ -652,6 +653,10 @@ async function startImport() {
         return;
     }
 
+    // Get checkbox value AFTER element is retrieved
+    const filterUpdatedAfterCreated = filterUpdatedCheckbox ? filterUpdatedCheckbox.checked : false;
+
+    // NOW build the config object with all processed values
     const config = { 
         import_type: importType
     };
@@ -666,6 +671,11 @@ async function startImport() {
     }
     if (endDate) {
         config.call_date_end = endDate;
+    }
+    
+    // Add the filter parameter if checkbox is checked
+    if (filterUpdatedAfterCreated) {
+        config.filter_updated_after_created = true;
     }
     
     // Enhanced confirmation message
@@ -687,12 +697,18 @@ async function startImport() {
         }
     }
     
+    // Add filter info to confirmation
+    let filterText = "";
+    if (filterUpdatedAfterCreated) {
+        filterText = "\n🔍 Filter: Only modified evaluations (updated > created_on)";
+    }
+    
     const importTypeText = importType === "incremental" ? "Incremental (only updated documents)" : "Full (all documents)";
 
     const confirmMsg = `Start ${importType} import?
     
 Type: ${importTypeText}
-Scope: ${modeText}${dateText}
+Scope: ${modeText}${dateText}${filterText}
 
 This will fetch evaluation data from your API and index it for search and chat.`;
 
@@ -713,13 +729,16 @@ This will fetch evaluation data from your API and index it for search and chat.`
     if (startDate || endDate) {
         console.log(`📅 Date range: ${startDate || 'unlimited'} to ${endDate || 'unlimited'}`);
     }
-
     
+    if (filterUpdatedAfterCreated) {
+        console.log("🔍 Filter enabled: Only importing evaluations where updated > created_on");
+    }
+
     try {
         const response = await fetch("/import", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(config)
+            body: JSON.stringify(config) // Use config, not requestBody
         });
 
         console.log("📡 POST request sent to: /import");
@@ -751,6 +770,11 @@ This will fetch evaluation data from your API and index it for search and chat.`
                 }
             }
             
+            // Add filter status to success message
+            if (filterUpdatedAfterCreated) {
+                successMsg += `\n🔍 Filter: Only modified evaluations`;
+            }
+            
             alert(successMsg);
             
             // Start polling for status updates
@@ -764,24 +788,6 @@ This will fetch evaluation data from your API and index it for search and chat.`
     } catch (error) {
         console.error("❌ Import request failed:", error);
         alert(`❌ Import request failed: ${error.message}`);
-    }
-}
-
-
-function startPolling() {
-    if (pollInterval) {
-        clearInterval(pollInterval);
-    }
-    
-    pollInterval = setInterval(refreshStatus, 2000);
-    console.log("🔄 Started polling for import status");
-}
-
-function stopPolling() {
-    if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-        console.log("⏹️ Stopped polling");
     }
 }
 

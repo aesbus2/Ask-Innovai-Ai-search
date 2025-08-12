@@ -67,6 +67,9 @@ _filter_metadata_cache = {
 # Memory monitoring setup
 PSUTIL_AVAILABLE = False
 try:
+    pass
+except Exception as e:
+    logging.error(f"Exception in debug_test_search: {e}")
     import psutil
     PSUTIL_AVAILABLE = True
     logging.info("✅ psutil available for memory monitoring")
@@ -280,8 +283,9 @@ class ImportRequest(BaseModel):
     max_docs: Optional[int] = None
     import_type: str = "full"
     batch_size: Optional[int] = None
-    call_date_start: Optional[str] = None  # ✅ ADD this line
-    call_date_end: Optional[str] = None    # ✅ ADD this line
+    call_date_start: Optional[str] = None  
+    call_date_end: Optional[str] = None   
+    updated: bool = False  # New filter option to use with updated
 
 #Pydantic Models (Above)
 # ============================================================================
@@ -1251,10 +1255,9 @@ def generate_agent_id(agentName):
         # Fallback method
         return str(hash(agentName) % 100000000).zfill(8)
 
-def extract_comprehensive_metadata(evaluation: Dict) -> Dict[str, Any]:
+def extract_comprehensive_metadata(evaluation: Dict[str, Any], program: str = None) -> Dict[str, Any]:
     """
-    TRULY API-CONSISTENT: Use EXACT field names from your API response
-    NO field name transformations - direct mapping only
+    Extract metadata from evaluation - PRODUCTION version matching actual API data
     """
     
     template_name = evaluation.get("template_name", "Unknown Template")
@@ -1294,6 +1297,7 @@ def extract_comprehensive_metadata(evaluation: Dict) -> Dict[str, Any]:
         # TEMPORAL FIELDS (exact from your API)
         "call_date": clean_field_value(evaluation.get("call_date")),     # snake_case from API
         "created_on": clean_field_value(evaluation.get("created_on")),   # snake_case from API
+        "updated": clean_field_value(evaluation.get("updated")),  # NEW FIELD for import
         "call_duration": safe_int(evaluation.get("call_duration")),      # snake_case from API
         
         # ADDITIONAL FIELDS (exact from your API)
@@ -2609,7 +2613,8 @@ def log_import_summary():
 async def fetch_evaluations(
     max_docs: int = None, 
     call_date_start: str = None,  # NEW
-    call_date_end: str = None     # NEW
+    call_date_end: str = None,     # NEW
+    filter_updated_after_created: bool = False  # NEW PARAMETER for updates
 ):
     """PRODUCTION: Fetch evaluations from API with enhanced error handling"""
     try:
@@ -2704,6 +2709,86 @@ async def fetch_evaluations(
         api_returned_count = len(evaluations)
         logger.info(f"📥 API returned {api_returned_count} evaluations (after date filtering)")
 
+        # NEW SECTION: Filter evaluations where updated > created_on
+        
+        if filter_updated_after_created and evaluations:
+            logger.info("🔍 APPLYING FILTER: Only evaluations where updated > created_on")
+            
+            filtered_evaluations = []
+            skipped_count = 0
+            included_count = 0
+            missing_dates_count = 0
+            parse_error_count = 0
+            
+            for evaluation in evaluations:
+                eval_id = evaluation.get('evaluationId', 'NO_ID')
+                
+                # Get the dates
+                created_on = evaluation.get("created_on")
+                updated = evaluation.get("updated")  # The new field from API
+                
+                # Check if both dates exist
+                if not created_on or not updated:
+                    missing_dates_count += 1
+                    if not created_on:
+                        logger.debug(f"⚠️ No created_on date for evaluation {eval_id}")
+                    if not updated:
+                        logger.debug(f"⚠️ No updated date for evaluation {eval_id}")
+                    # Include evaluations with missing dates (safety fallback)
+                    filtered_evaluations.append(evaluation)
+                    continue
+                
+                # Parse and compare dates
+                try:
+                    # Parse created_on date
+                    if "T" in str(created_on):
+                        created_date = datetime.fromisoformat(str(created_on).replace("Z", "+00:00"))
+                    elif "/" in str(created_on):  # Handle MM/DD/YYYY format
+                        created_date = datetime.strptime(str(created_on), "%m/%d/%Y")
+                    else:
+                        created_date = datetime.strptime(str(created_on), "%Y-%m-%d")
+                    
+                    # Parse updated date
+                    if "T" in str(updated):
+                        updated_date = datetime.fromisoformat(str(updated).replace("Z", "+00:00"))
+                    elif "/" in str(updated):  # Handle MM/DD/YYYY format
+                        updated_date = datetime.strptime(str(updated), "%m/%d/%Y")
+                    else:
+                        updated_date = datetime.strptime(str(updated), "%Y-%m-%d")
+                    
+                    # Compare dates
+                    if updated_date > created_date:
+                        filtered_evaluations.append(evaluation)
+                        included_count += 1
+                        logger.debug(f"✅ Including evaluation {eval_id}: updated ({updated}) > created ({created_on})")
+                    else:
+                        skipped_count += 1
+                        logger.debug(f"⏭️ Skipping evaluation {eval_id}: updated ({updated}) <= created ({created_on})")
+                        
+                except Exception as e:
+                    parse_error_count += 1
+                    logger.warning(f"⚠️ Could not parse dates for evaluation {eval_id}: {e}")
+                    logger.warning(f"   created_on: {created_on}, updated: {updated}")
+                    # Include if we can't parse dates (safety fallback)
+                    filtered_evaluations.append(evaluation)
+            
+            # Log filtering summary
+            logger.info("📊 FILTER SUMMARY:")
+            logger.info(f"   ✅ Included (updated > created): {included_count}")
+            logger.info(f"   ⏭️ Skipped (updated <= created): {skipped_count}")
+            logger.info(f"   ⚠️ Missing dates (included): {missing_dates_count}")
+            logger.info(f"   ❌ Parse errors (included): {parse_error_count}")
+            logger.info(f"   📋 Total before filter: {len(evaluations)}")
+            logger.info(f"   📋 Total after filter: {len(filtered_evaluations)}")
+            
+            evaluations = filtered_evaluations
+            
+            # Log percentage filtered
+            if api_returned_count > 0:
+                filter_percentage = (skipped_count / api_returned_count) * 100
+                logger.info(f"   📈 Filter efficiency: {filter_percentage:.1f}% filtered out")
+
+        # Apply max_docs limit if specified (after filtering)
         if max_docs and len(evaluations) > max_docs:
             logger.info(f"📊 CLIENT-SIDE LIMITING: {len(evaluations)} → {max_docs} evaluations")
             evaluations = evaluations[:max_docs]
@@ -2715,81 +2800,102 @@ async def fetch_evaluations(
             first_eval = evaluations[0]
             first_date = first_eval.get("call_date", "No date")
             first_id = first_eval.get("evaluationId", "No ID")
+            first_updated = first_eval.get("updated", "No updated date")
+            first_created = first_eval.get("created_on", "No created date")
             
             logger.info(f"📅 First evaluation: ID {first_id}, call_date: {first_date}")
+            logger.info(f"   - call_date: {first_date}")
+            logger.info(f"   - created_on: {first_created}")
+            logger.info(f"   - updated: {first_updated}")
             
             if len(evaluations) > 1:
                 last_eval = evaluations[-1]
                 last_date = last_eval.get("call_date", "No date")
                 last_id = last_eval.get("evaluationId", "No ID")
+                last_updated = last_eval.get("updated", "No updated date")
+                last_created = last_eval.get("created_on", "No created date")
+
                 logger.info(f"📅 Last evaluation: ID {last_id}, call_date: {last_date}")
+                logger.info(f"   - call_date: {last_date}")
+                logger.info(f"   - created_on: {last_created}")
+                logger.info(f"   - updated: {last_updated}")
             
             # Verify date filtering worked
             if call_date_start:
                 logger.info(f"✅ API DATE FILTERING WORKED: Results should be >= {call_date_start}")
+
+            if filter_updated_after_created:
+                logger.info("✅ UPDATE FILTERING: Results include only modified evaluations")
         else:
             logger.warning("❌ No evaluations returned by API")
             if call_date_start:
                 logger.info(f"💡 No evaluations found for date >= {params.get('date', 'N/A')}")
                 logger.info("   Try using an earlier date or check if evaluations exist for that period")
-        # ✅ HYBRID SUCCESS: API handled date filtering, we handled limiting
+
+            if filter_updated_after_created:
+                logger.info("💡 No evaluations found where updated > created_on")
+                logger.info("   This might mean no evaluations have been modified after creation")
+
+        # Final success summary
         final_count = len(evaluations)
         logger.info("🎯 HYBRID SUCCESS: API date filtering + client-side limiting")
         logger.info(f"📊 Final count: {final_count} evaluations")
+
+        # Log applied filters summary
+        filters_applied = []
+        if call_date_start:
+            filters_applied.append(f"date >= {call_date_start}")
+        if call_date_end:
+            filters_applied.append(f"date <= {call_date_end}")
+        if filter_updated_after_created:
+            filters_applied.append("updated > created_on")
+        if max_docs:
+            filters_applied.append(f"limit = {max_docs}")
+        
+        if filters_applied:
+            logger.info(f"🔍 Filters applied: {' | '.join(filters_applied)}")
         
         return evaluations
     except Exception as e:
         logger.error(f"❌ FAILED to fetch evaluations from MetroCare API: {e}")
         raise    
-       
-    
+      
 
 async def run_production_import(
     max_docs: int = None, 
     batch_size: int = None,
-    call_date_start: str = None,  # NEW  
-    call_date_end: str = None     # NEW
+    call_date_start: str = None,
+    call_date_end: str = None,
+    filter_updated_after_created: bool = False  # NEW PARAMETER
 ):
-    # Update the fetch_evaluations call to pass the date parameters
-    evaluations = await fetch_evaluations(
-        max_docs=max_docs,
-        call_date_start=call_date_start,
-        call_date_end=call_date_end
-    )
-
-    if evaluations:
-
-        logger.info(f"🔍 DEBUG: fetch_evaluations returned {len(evaluations) if evaluations else 0} evaluations")
-        logger.info(f"🔍 DEBUG: evaluations is None: {evaluations is None}")
-        logger.info(f"🔍 DEBUG: evaluations is empty list: {evaluations == []}")    
-        logger.info(f"🔍 DEBUG: First evaluation ID: {evaluations[0].get('evaluationId', 'NO_ID')}")
-
-
-    """
-    PRODUCTION: Import process with enhanced real data integration
-    """
+    """PRODUCTION: Import process with enhanced real data integration"""
     try:
         update_import_status("running", "Starting PRODUCTION import with real data integration")
         log_import("🚀 Starting PRODUCTION import: Real data filter system + Evaluation grouping")
         
+        # Log the new filter option
+        if filter_updated_after_created:
+            log_import("🔍 Filter enabled: Only importing evaluations where updated > created_on")
+
         # Clear filter cache on import start
         _filter_metadata_cache["data"] = None
         _filter_metadata_cache["timestamp"] = None
         log_import("🧹 Cleared filter metadata cache for fresh import data")
-        
+
         # Memory management settings
         BATCH_SIZE = batch_size or int(os.getenv("IMPORT_BATCH_SIZE", "5"))
         DELAY_BETWEEN_BATCHES = float(os.getenv("DELAY_BETWEEN_BATCHES", "2.0"))
         DELAY_BETWEEN_DOCS = float(os.getenv("DELAY_BETWEEN_DOCS", "0.5"))
         MEMORY_CLEANUP_INTERVAL = int(os.getenv("MEMORY_CLEANUP_INTERVAL", "1"))
-        
+
         log_import("📊 PRODUCTION import configuration:")
         log_import("   🔗 Collections based on: template_ID")
         log_import("   📋 Document grouping: evaluationID")
         log_import(f"   📦 Batch size: {BATCH_SIZE}")
         log_import(f"   ⏱️ Delay between batches: {DELAY_BETWEEN_BATCHES}s")
         log_import(f"   🧹 Memory cleanup interval: {MEMORY_CLEANUP_INTERVAL} batches")
-        
+       
+       
         # Get initial memory usage
         initial_memory = None
         if PSUTIL_AVAILABLE:
@@ -2799,7 +2905,7 @@ async def run_production_import(
                 log_import(f"💾 Initial memory usage: {initial_memory:.1f} MB")
             except Exception as e:
                 log_import(f"⚠️ Memory monitoring failed: {e}")
-        
+
         # Check OpenSearch connectivity
         update_import_status("running", "Checking OpenSearch connectivity")
         try:
@@ -2816,25 +2922,32 @@ async def run_production_import(
         except Exception as e:
             error_msg = f"OpenSearch connection check failed: {str(e)}"
             log_import(f"❌ {error_msg}")
-            update_import_status("failed", error=error_msg)
+            update_import_status("failed", error=error_msg)        
             return
         
-        # Fetch evaluations
+        # Fetch evaluations with ALL parameters including the new filter
         update_import_status("running", "Fetching evaluation data")
         evaluations = await fetch_evaluations(
-            max_docs=max_docs, 
-                call_date_start=call_date_start,    # ✅ NEW
-                call_date_end=call_date_end         # ✅ NEW
-            )
-        
-        # ✅ DEBUG LOGGING right after fetch
+            max_docs=max_docs,
+            call_date_start=call_date_start,
+            call_date_end=call_date_end,
+            filter_updated_after_created=filter_updated_after_created  # ✅ PASS THE NEW PARAMETER
+        )
         logger.info(f"🔍 DEBUG: fetch_evaluations returned {len(evaluations) if evaluations else 0} evaluations")
         logger.info(f"🔍 DEBUG: evaluations is None: {evaluations is None}")
-        logger.info(f"🔍 DEBUG: evaluations is empty list: {evaluations == []}")
+        logger.info(f"🔍 DEBUG: evaluations is empty list: {evaluations == []}")    
+      
+
         if evaluations:
             logger.info(f"🔍 DEBUG: First evaluation ID: {evaluations[0].get('evaluationId', 'NO_ID')}")
             logger.info(f"🔍 DEBUG: First evaluation keys: {list(evaluations[0].keys())[:10]}")  # Show first 10 keys
-        
+
+            # Check for updated field
+            if evaluations[0].get('updated'):
+                logger.info(f"✅ 'updated' field found in first evaluation")
+            else:
+                logger.warning(f"⚠️ 'updated' field NOT found in first evaluation")
+
         if not evaluations:
             log_import("❌ No evaluations returned from API - nothing to process")
             results = {
@@ -2842,11 +2955,11 @@ async def run_production_import(
                 "total_chunks_indexed": 0, 
                 "import_type": "full",
                 "document_structure": "evaluation_grouped",
-                "version": "4.2.0_production"
+                "filter_updated_after_created": filter_updated_after_created,
+                "version": "5.2.0_production"
             }
             update_import_status("completed", results=results)
-            return
-        
+            return   
         # Process evaluations with PRODUCTION structure
         log_import(f"✅ Processing {len(evaluations)} evaluations")
         update_import_status("running", f"Processing {len(evaluations)} evaluations with PRODUCTION real data integration")
@@ -2887,7 +3000,6 @@ async def run_production_import(
             # Process evaluations in current batch
             for i, evaluation in enumerate(batch):
                 actual_index = batch_start + i
-
                 eval_id = evaluation.get('evaluationId', 'NO_ID')
                 log_import(f"🔍 Processing evaluation {actual_index + 1}/{len(evaluations)}: {eval_id}")
                 
@@ -3008,6 +3120,7 @@ async def run_production_import(
                 log_import(f"💾 Final memory usage: {final_memory:.1f} MB (change: {memory_change:+.1f} MB)")
             except Exception:
                 pass
+
         
         results = {
             "total_documents_processed": total_processed,
@@ -3018,7 +3131,8 @@ async def run_production_import(
             "import_type": "full",
             "document_structure": "evaluation_grouped",
             "collection_strategy": "template_id_based",
-            "program_distribution": dict(program_stats),  # NEW: Program statistics
+            "filter_updated_after_created": filter_updated_after_created,  # INCLUDE IN RESULTS
+            "program_distribution": dict(program_stats),  
             "completed_at": datetime.now().isoformat(),
             "success_rate": f"{(total_processed / len(evaluations) * 100):.1f}%" if evaluations else "0%",
             "batch_size": BATCH_SIZE,
@@ -3029,7 +3143,7 @@ async def run_production_import(
                 "final_memory_mb": final_memory,
                 "memory_change_mb": memory_change
             },
-            "version": "4.2.0_production"
+            "version": "5.2.0_production"
         }
         
         log_import("🎉 PRODUCTION import completed:")
@@ -3042,6 +3156,10 @@ async def run_production_import(
         log_import(f"   🔌 OpenSearch errors: {opensearch_errors}")
         log_import(f"   📊 Success rate: {results['success_rate']}")
         log_import(f"   💾 Memory change: {memory_change:+.1f} MB")
+
+        if filter_updated_after_created:
+            log_import("   🔍 Update filter: WAS ACTIVE (updated > created_on)")
+
         log_import("   🏗️ Document structure: Evaluation-grouped (chunks within documents)")
         log_import("   🏷️ Collection strategy: Template_ID-based")
         log_import("   🎯 Real data filters: Ready for production use")
@@ -3064,6 +3182,7 @@ async def run_production_import(
             log_import(f"❌ {error_msg}")
         
         update_import_status("failed", error=error_msg)
+        raise
 
 # ============================================================================
 # PRODUCTION STATISTICS AND HEALTH ENDPOINTS
@@ -3454,13 +3573,23 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
             "error": None,
             "import_type": request.import_type
         }
-        
+        # Log import start with new filter option
+        log_import("🚀 PRODUCTION import request received:")
+        log_import(f"   Collection: {request.collection}")
+        log_import(f"   Import Type: {request.import_type}")
+        log_import(f"   Max Docs: {request.max_docs or 'All'}")
+        log_import(f"   Batch Size: {request.batch_size or 'Default'}")
+        log_import(f"   Call Date Start: {request.call_date_start or 'None'}")
+        log_import(f"   Call Date End: {request.call_date_end or 'None'}")
+        log_import(f"   Updated After Created: {request.updated or 'None'}")
+
         # Validate request
         if request.max_docs is not None and request.max_docs <= 0:
             raise HTTPException(status_code=400, detail="max_docs must be a positive integer")
         
         # ✅ NEW: Validate date range
         if request.call_date_start and request.call_date_end:
+            log_import(f"   📅 Date Range: {request.call_date_start or 'unlimited'} to {request.call_date_end or 'unlimited'}")
             try:
                 start_date = datetime.strptime(request.call_date_start, "%Y-%m-%d")
                 end_date = datetime.strptime(request.call_date_end, "%Y-%m-%d")
@@ -3470,7 +3599,10 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
                     
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=f"Invalid date format (use YYYY-MM-DD): {e}")
-            
+        # NEW: Log the updated filter
+        if request.filter_updated_after_created:
+            log_import("   🔍 Filter: Only evaluations where updated > created_on")
+
         # Log import start
         log_import("🚀 PRODUCTION import request received:")
         log_import(f"   Collection: {request.collection}")
@@ -3487,8 +3619,9 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
             run_production_import,
             max_docs=request.max_docs,
             batch_size=request.batch_size,
-            call_date_start=request.call_date_start,    # ✅ NEW
-            call_date_end=request.call_date_end          # ✅ NEW
+            call_date_start=request.call_date_start,    
+            call_date_end=request.call_date_end,          
+            filter_updated_after_created=request.filter_updated_after_created  # NEW
         )
         
         return {
@@ -3500,6 +3633,7 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
                 "start": request.call_date_start,
                 "end": request.call_date_end
             } if request.call_date_start or request.call_date_end else None,
+            "filter_updated_after_created": request.updated,  # NEW
             "structure": "evaluation_grouped",
             "features": "enhanced_with_date_filtering",
             "version": "6.3.0_simple_enhancement"
