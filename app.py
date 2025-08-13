@@ -13,7 +13,7 @@ import time
 import gc
 import hashlib
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Dict, Optional, Any
 from contextlib import asynccontextmanager
 from threading import Thread
@@ -350,6 +350,8 @@ def load_model_background():
         MODEL_LOADING_STATUS["loading"] = False
         MODEL_LOADING_STATUS["error"] = str(e)
         logger.error(f"❌ BACKGROUND: Model loading failed: {e}")
+
+    
 
 
 # Utility Functions (above)
@@ -2610,6 +2612,37 @@ def log_import_summary():
 # PRODUCTION API FETCHING (Keeping existing)
 # ============================================================================
 
+def _parse_iso_dt(value: str):
+    """Parse ISO8601 strings like '2025-06-25T15:18:14.046Z' without dateutil."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        # fromisoformat doesn't accept 'Z' -> replace with explicit UTC offset
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+def _updated_after_created(ev: dict) -> bool:
+    """
+    True if updated > created.
+    Accepts common field variants; returns False if either is missing/invalid.
+    """
+    updated = (
+        ev.get("updated_on")
+        or ev.get("updatedAt")
+        or ev.get("last_updated")
+        or ev.get("modified_on")
+    )
+    created = (
+        ev.get("created_on")
+        or ev.get("createdAt")
+        or ev.get("create_date")
+    )
+
+    u_dt = _parse_iso_dt(updated) if updated else None
+    c_dt = _parse_iso_dt(created) if created else None
+    return bool(u_dt and c_dt and (u_dt > c_dt))
+
 async def fetch_evaluations(
     max_docs: int = None, 
     call_date_start: str = None,  # NEW
@@ -2866,9 +2899,10 @@ async def run_production_import(
     batch_size: int = None,
     call_date_start: str = None,
     call_date_end: str = None,
-    filter_updated_after_created: bool = False  # NEW PARAMETER
+    filter_updated_after_created: bool = True  # always filter for updated files
 ):
     """PRODUCTION: Import process with enhanced real data integration"""
+    log_import("🔍 Update filter: ALWAYS ON (only importing evaluations where updated_on > created_on)")
     try:
         update_import_status("running", "Starting PRODUCTION import with real data integration")
         log_import("🚀 Starting PRODUCTION import: Real data filter system + Evaluation grouping")
@@ -2944,9 +2978,9 @@ async def run_production_import(
 
             # Check for updated field
             if evaluations[0].get('updated'):
-                logger.info(f"✅ 'updated' field found in first evaluation")
+                logger.info("✅ 'updated' field found in first evaluation")
             else:
-                logger.warning(f"⚠️ 'updated' field NOT found in first evaluation")
+                logger.warning("⚠️ 'updated' field NOT found in first evaluation")
 
         if not evaluations:
             log_import("❌ No evaluations returned from API - nothing to process")
@@ -3002,6 +3036,10 @@ async def run_production_import(
                 actual_index = batch_start + i
                 eval_id = evaluation.get('evaluationId', 'NO_ID')
                 log_import(f"🔍 Processing evaluation {actual_index + 1}/{len(evaluations)}: {eval_id}")
+
+                if filter_updated_after_created and not _updated_after_created(evaluation):
+                    log_import(f"⏭️ Skipping evaluation {eval_id}: updated_on <= created_on or timestamps missing")
+                    continue
                 
                 try:
                     result = await process_evaluation(evaluation)
