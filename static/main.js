@@ -675,7 +675,7 @@ async function startImport() {
     
     // Add the filter parameter if checkbox is checked
     if (filterUpdatedAfterCreated) {
-        config.filter_updated_after_created = true;
+        config.updated = true;
     }
     
     // Enhanced confirmation message
