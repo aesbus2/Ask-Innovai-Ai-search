@@ -3621,7 +3621,7 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
             batch_size=request.batch_size,
             call_date_start=request.call_date_start,    
             call_date_end=request.call_date_end,          
-            filter_updated_after_created=request.filter_updated_after_created  # NEW
+            filter_updated_after_created=request.updated  # NEW
         )
         
         return {
@@ -3633,7 +3633,7 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
                 "start": request.call_date_start,
                 "end": request.call_date_end
             } if request.call_date_start or request.call_date_end else None,
-            "filter_updated_after_created": request.updated,  # NEW
+            "filter_updated_after_created": request.updated,
             "structure": "evaluation_grouped",
             "features": "enhanced_with_date_filtering",
             "version": "6.3.0_simple_enhancement"
