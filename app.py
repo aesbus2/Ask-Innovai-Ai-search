@@ -3599,9 +3599,11 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
                     
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=f"Invalid date format (use YYYY-MM-DD): {e}")
+            
         # NEW: Log the updated filter
-        if request.filter_updated_after_created:
+        if request.updated:
             log_import("   🔍 Filter: Only evaluations where updated > created_on")
+
 
         # Log import start
         log_import("🚀 PRODUCTION import request received:")
