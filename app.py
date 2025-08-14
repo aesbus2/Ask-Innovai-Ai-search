@@ -4352,8 +4352,80 @@ async def get_opensearch_health_detailed():
         }
  
     
-# Add these debugging endpoints to your existing app.py file
-# These will help diagnose chat and filter issues
+# ==============================================================================
+# DEBUG Endpoints
+# ==============================================================================
+
+@app.get("/debug/check_updated_field")
+async def debug_check_updated_field():
+    """
+    Check if the 'updated' field has any data in the database
+    """
+    try:
+        from opensearch_client import get_opensearch_client, test_connection
+        
+        if not test_connection():
+            return {"error": "OpenSearch not connected"}
+        
+        client = get_opensearch_client()
+        
+        # Query 1: Count documents that have the updated field
+        count_with_updated = client.count(
+            index="eval-*",
+            body={
+                "query": {
+                    "exists": {
+                        "field": "metadata.updated"
+                    }
+                }
+            }
+        )
+        
+        # Query 2: Count total documents
+        total_count = client.count(
+            index="eval-*",
+            body={"query": {"match_all": {}}}
+        )
+        
+        # Query 3: Get a sample document to see what fields it actually has
+        sample = client.search(
+            index="eval-*",
+            body={
+                "size": 1,
+                "query": {"match_all": {}},
+                "_source": ["metadata.updated", "metadata.created_on", "evaluationId"]
+            }
+        )
+        
+        sample_doc = {}
+        if sample["hits"]["hits"]:
+            hit = sample["hits"]["hits"][0]
+            sample_doc = {
+                "evaluationId": hit["_source"].get("evaluationId"),
+                "metadata": hit["_source"].get("metadata", {}),
+                "has_updated": "updated" in hit["_source"].get("metadata", {}),
+                "has_created_on": "created_on" in hit["_source"].get("metadata", {}),
+                "updated_value": hit["_source"].get("metadata", {}).get("updated"),
+                "created_on_value": hit["_source"].get("metadata", {}).get("created_on")
+            }
+        
+        return {
+            "documents_with_updated_field": count_with_updated.get("count", 0),
+            "total_documents": total_count.get("count", 0),
+            "percentage_with_updated": round((count_with_updated.get("count", 0) / total_count.get("count", 1)) * 100, 2),
+            "sample_document": sample_doc,
+            "diagnosis": {
+                "field_exists_in_mapping": True,
+                "field_populated_in_documents": count_with_updated.get("count", 0) > 0,
+                "issue": "Field exists in mapping but no documents have data" if count_with_updated.get("count", 0) == 0 else "Field is populated"
+            },
+            "solution": "The API is not providing an 'updated' field, or it uses a different field name" if count_with_updated.get("count", 0) == 0 else "Field is working"
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+
 
 @app.get("/debug/opensearch_data")
 async def debug_opensearch_data():
@@ -4787,7 +4859,7 @@ async def debug_check_indices():
     except Exception as e:
         return {"error": str(e), "version": "4.3.2_debug"}
 
-# Add this route to test the debug endpoints
+# route to test the debug endpoints above
 @app.get("/debug")
 async def debug_dashboard():
     """DEBUG: Simple HTML dashboard for testing"""
