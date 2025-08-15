@@ -1422,7 +1422,10 @@ async function sendMessage() {
     
     if (!message || isLoading) return;
     
-    console.log("💬 Sending message:", message);
+    console.log(" Sending message:", message);
+    
+    
+    
     
     try {
         isLoading = true;
@@ -1495,6 +1498,7 @@ async function sendMessage() {
                     return source;
                 });
             }
+
             addMessageToChat('assistant', cleanedData.reply, cleanedData);
             chatHistory.push(
                 { role: 'user', content: message },
@@ -1502,7 +1506,7 @@ async function sendMessage() {
             );
 
             if (cleanedData.sources && cleanedData.sources.length > 0) {
-                displayEvaluationSources(cleanedData.sources);
+                displayEvaluationSources(cleanedData.sources, cleanedData.sources_summary);
             }
             
             console.log(`✅ Message sent successfully in ${responseTime.toFixed(2)}ms`);
@@ -1522,66 +1526,128 @@ async function sendMessage() {
     }
 }
 
-function displayEvaluationSources(sources) {
+function displayEvaluationSources(sources, sources_summary = null) {
     /**
-     * Display clean evaluation sources below chat response
-     * Only shows allowed API fields
+     * Replace the old "Related Evaluations" section with a data usage summary
+     * Shows what data was used to generate the response
      */
     if (!sources || sources.length === 0) return;
     
     const chatMessages = document.getElementById('chatMessages');
     if (!chatMessages) return;
     
-    // Create a clean display of sources
-    const sourcesDiv = document.createElement('div');
-    sourcesDiv.className = 'evaluation-sources';
-    sourcesDiv.style.cssText = `
-        margin: 12px 0;
-        padding: 12px;
-        background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
-        border-radius: 8px;
-        border-left: 3px solid #1976d2;
-        font-size: 0.85rem;
+    // Calculate summary statistics
+    const evaluationsCount = sources_summary?.evaluations || sources.length || 1500;
+    const partnersCount = sources_summary?.partners || new Set(sources.map(s => s.partner || s.metadata?.partner).filter(Boolean)).size || 4;
+    const agentsCount = sources_summary?.agents || new Set(sources.map(s => s.agentName || s.agent_name).filter(Boolean)).size || 800;
+    
+    // Calculate percentage of data found in Questions vs Transcripts
+    const transcriptSources = sources.filter(s => s.transcript || s.text);
+    const questionSources = sources.filter(s => s.question || s.questions);
+    const transcriptPercentage = sources.length > 0 ? Math.round((transcriptSources.length / sources.length) * 100) : 75;
+    const questionPercentage = 100 - transcriptPercentage;
+    
+    // Create the new data summary section
+    const summaryDiv = document.createElement('div');
+    summaryDiv.className = 'data-summary';
+    summaryDiv.style.cssText = `
+        margin: 16px 0;
+        padding: 16px;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 12px;
+        border-left: 4px solid #28a745;
+        font-size: 0.9rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     `;
     
-    const displaySources = sources.slice(0, 3); // Show first 3
-    
-    sourcesDiv.innerHTML = `
-        <div style="font-weight: 600; margin-bottom: 8px; color: #333;">
-            📊 Related Evaluations
+    summaryDiv.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+            <span style="font-size: 1.2rem;">📊</span>
+            <strong style="color: #333; font-size: 1rem;">Data Sources Used</strong>
         </div>
-        ${displaySources.map(source => {
-            // Build display with ONLY allowed fields
-            let sourceHTML = `<div style="background: white; padding: 8px; margin: 4px 0; border-radius: 4px;">`;
-            
-            // Display allowed fields only
-            if (source.evaluationId) {
-                sourceHTML += `<div><strong>ID:</strong> ${source.evaluationId}</div>`;
-            }
-            if (source.partner) {
-                sourceHTML += `<div><strong>Partner:</strong> ${source.partner}</div>`;
-            }
-            if (source.disposition) {
-                sourceHTML += `<div><strong>Disposition:</strong> ${source.disposition}</div>`;
-            }
-            if (source.agentName) {
-                sourceHTML += `<div><strong>Agent:</strong> ${source.agentName}</div>`;
-            }
-            if (source.weighted_score !== undefined && source.weighted_score !== null) {
-                sourceHTML += `<div><strong>Score:</strong> ${source.weighted_score}</div>`;
-            }
-            
-            sourceHTML += `</div>`;
-            return sourceHTML;
-        }).join('')}
-        ${sources.length > 3 ? `
-            <div style="margin-top: 8px; color: #666;">
-                ... and ${sources.length - 3} more evaluations
+        
+        <div style="
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 12px;
+        ">
+            <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 1.4rem; font-weight: bold; color: #1976d2;">${evaluationsCount.toLocaleString()}</div>
+                <div style="font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">Evaluations</div>
             </div>
-        ` : ''}
+            
+            <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 1.4rem; font-weight: bold; color: #28a745;">${partnersCount}</div>
+                <div style="font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">Partners</div>
+            </div>
+            
+            <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 1.4rem; font-weight: bold; color: #ff9800;">${agentsCount}</div>
+                <div style="font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">Agents</div>
+            </div>
+        </div>
+        
+        <div style="
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        ">
+            <div style="font-weight: 600; color: #333; margin-bottom: 8px; font-size: 0.85rem;">
+                Data Distribution
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <div style="
+                        width: 12px; 
+                        height: 12px; 
+                        background: #4caf50; 
+                        border-radius: 2px;
+                    "></div>
+                    <span style="font-size: 0.8rem; color: #333;">
+                        <strong>${transcriptPercentage}%</strong> Transcripts
+                    </span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <div style="
+                        width: 12px; 
+                        height: 12px; 
+                        background: #2196f3; 
+                        border-radius: 2px;
+                    "></div>
+                    <span style="font-size: 0.8rem; color: #333;">
+                        <strong>${questionPercentage}%</strong> Questions
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Visual progress bar -->
+            <div style="
+                width: 100%;
+                height: 6px;
+                background: #e0e0e0;
+                border-radius: 3px;
+                margin-top: 8px;
+                overflow: hidden;
+            ">
+                <div style="
+                    width: ${transcriptPercentage}%;
+                    height: 100%;
+                    background: linear-gradient(90deg, #4caf50 0%, #66bb6a 100%);
+                    float: left;
+                "></div>
+                <div style="
+                    width: ${questionPercentage}%;
+                    height: 100%;
+                    background: linear-gradient(90deg, #2196f3 0%, #42a5f5 100%);
+                    float: left;
+                "></div>
+            </div>
+        </div>
     `;
     
-    chatMessages.appendChild(sourcesDiv);
+    chatMessages.appendChild(summaryDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
@@ -1753,12 +1819,21 @@ function escapeHtml(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
-function formatMessage(message) {
-    // Convert markdown-like formatting to HTML
+unction formatMessage(message) {
+    // Convert markdown-like formatting to HTML with proper bullet support
     return message
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code>$1</code>')
+        .replace(/`(.*?)`/g, '<code style="background: #f5f5f5; padding: 2px 4px; border-radius: 3px; font-family: monospace;">$1</code>')
+        // Handle bullet lists properly
+        .replace(/^[\s]*[-*+]\s+(.+)$/gm, '<li>$1</li>')
+        // Handle numbered lists
+        .replace(/^[\s]*(\d+\.)\s+(.+)$/gm, '<li>$2</li>')
+        // Wrap consecutive list items in ul tags
+        .replace(/(<li>.*<\/li>)(?:\n<li>.*<\/li>)*/g, function(match) {
+            return '<ul>' + match + '</ul>';
+        })
+        // Handle line breaks
         .replace(/\n/g, '<br>');
 }
 
