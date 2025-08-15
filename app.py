@@ -2094,6 +2094,366 @@ async def debug_test_vector_search(query: str = "customer service"):
             "query": query,
             "version": "4.8.0_vector_enabled"
         }
+
+@app.get("/debug/test_chat_context")
+async def test_chat_context(q: str = Query(default="customer", description="Test query")):
+    """
+    Test if chat can build context from your transcript data
+    """
+    from chat_handlers import build_search_context, _extract_transcript_text
+    
+    logger.info(f"Testing chat context with query: {q}")
+    
+    try:
+        # Build context
+        context, sources = build_search_context(q, filters={}, max_results=10)
+        
+        # Check for transcripts in sources
+        transcripts_found = 0
+        transcript_samples = []
+        
+        for source in sources[:5]:  # Check first 5 sources
+            if source.get("has_transcript"):
+                transcripts_found += 1
+                # Try to get a sample
+                if "transcript_preview" in source:
+                    transcript_samples.append(source["transcript_preview"][:200])
+        
+        return JSONResponse(content={
+            "query": q,
+            "context_found": bool(context),
+            "context_length": len(context),
+            "sources_count": len(sources),
+            "transcripts_found": transcripts_found,
+            "context_preview": context[:1000] if context else "No context built",
+            "transcript_samples": transcript_samples,
+            "status": "success" if context else "no_data",
+            "recommendation": (
+                "Transcripts are being extracted correctly!" if transcripts_found > 0
+                else "No transcripts found - check _extract_transcript_text function"
+            )
+        })
+    except Exception as e:
+        logger.error(f"Error testing chat context: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "status": "error"}
+        )
+
+@app.get("/debug/check_transcript_field")
+async def check_transcript_field():
+    """
+    Directly check if the 'transcript' field exists in your documents
+    """
+    from opensearch_client import get_opensearch_client
+    
+    try:
+        client = get_opensearch_client()
+        
+        # Get a few documents
+        response = client.search(
+            index="eval-template-*",
+            body={
+                "query": {"match_all": {}},
+                "size": 5,
+                "_source": True
+            }
+        )
+        
+        results = {
+            "total_documents": response["hits"]["total"]["value"],
+            "documents_checked": 0,
+            "has_transcript_field": 0,
+            "has_evaluation_field": 0,
+            "samples": []
+        }
+        
+        for hit in response["hits"]["hits"]:
+            source = hit.get("_source", {})
+            results["documents_checked"] += 1
+            
+            # Check for transcript field
+            if "transcript" in source:
+                results["has_transcript_field"] += 1
+                transcript = source["transcript"]
+                
+                # Parse speaker format
+                speaker_a_found = "Speaker A" in transcript
+                speaker_b_found = "Speaker B" in transcript
+                
+                results["samples"].append({
+                    "evaluationId": source.get("evaluationId"),
+                    "transcript_exists": True,
+                    "transcript_length": len(transcript),
+                    "has_speakers": speaker_a_found or speaker_b_found,
+                    "preview": transcript[:300] + "..." if len(transcript) > 300 else transcript
+                })
+            
+            # Check for evaluation field
+            if "evaluation" in source:
+                results["has_evaluation_field"] += 1
+        
+        results["summary"] = {
+            "transcript_field_present": results["has_transcript_field"] > 0,
+            "percentage_with_transcripts": (
+                (results["has_transcript_field"] / results["documents_checked"] * 100)
+                if results["documents_checked"] > 0 else 0
+            ),
+            "recommendation": (
+                "✅ Transcript field found! Update _extract_transcript_text to use src.get('transcript')"
+                if results["has_transcript_field"] > 0
+                else "❌ No 'transcript' field found - check your data import"
+            )
+        }
+        
+        return JSONResponse(content=results)
+        
+    except Exception as e:
+        logger.error(f"Error checking transcript field: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+@app.get("/debug/test_transcript_search")
+async def test_transcript_search():
+    """
+    Test searching for actual transcript content
+    """
+    from search_utils import perform_text_search
+    
+    try:
+        # Search for common call center phrases that should be in transcripts
+        test_phrases = [
+            "Hello there",
+            "Thank you",
+            "Speaker A",
+            "00:00",  # Timestamp format
+            "Metro"
+        ]
+        
+        results = {}
+        
+        for phrase in test_phrases:
+            search_result = perform_text_search(phrase, {}, size=3)
+            
+            found_count = 0
+            if search_result and search_result.get("results"):
+                found_count = len(search_result["results"])
+                
+                # Check if transcript field is in results
+                for hit in search_result["results"]:
+                    source = hit.get("_source", {})
+                    if "transcript" in source:
+                        results[phrase] = {
+                            "found": True,
+                            "count": found_count,
+                            "has_transcript_field": True,
+                            "sample": source["transcript"][:100] + "..."
+                        }
+                        break
+                else:
+                    results[phrase] = {
+                        "found": True,
+                        "count": found_count,
+                        "has_transcript_field": False,
+                        "warning": "Results found but no transcript field"
+                    }
+            else:
+                results[phrase] = {
+                    "found": False,
+                    "count": 0
+                }
+        
+        # Summary
+        any_found = any(r["found"] for r in results.values())
+        any_with_transcript = any(r.get("has_transcript_field", False) for r in results.values())
+        
+        return JSONResponse(content={
+            "search_results": results,
+            "summary": {
+                "transcript_search_working": any_found,
+                "transcript_field_accessible": any_with_transcript,
+                "recommendation": (
+                    "✅ Transcripts are searchable and accessible!"
+                    if any_with_transcript
+                    else "⚠️ Search works but transcript field not found - check field mapping"
+                    if any_found
+                    else "❌ Transcript content not searchable - check indexing"
+                )
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error testing transcript search: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+@app.get("/debug/test_extract_function")
+async def test_extract_function():
+    """
+    Test the _extract_transcript_text function directly
+    """
+    from search_utils import perform_text_search
+    
+    try:
+        # Get a sample document
+        results = perform_text_search("*", {}, size=1)
+        
+        if not results or not results.get("results"):
+            return JSONResponse(content={
+                "error": "No documents found to test"
+            })
+        
+        hit = results["results"][0]
+        source = hit.get("_source", {})
+        
+        # Try different extraction methods
+        extraction_tests = {
+            "direct_transcript": source.get("transcript", "")[:200] if source.get("transcript") else "",
+            "direct_transcript_text": source.get("transcript_text", "")[:200] if source.get("transcript_text") else "",
+            "direct_evaluation": source.get("evaluation", "")[:200] if source.get("evaluation") else "",
+            "available_fields": list(source.keys())
+        }
+        
+        # Now test the actual function
+        from chat_handlers import _extract_transcript_text
+        extracted = _extract_transcript_text(hit)
+        
+        return JSONResponse(content={
+            "evaluationId": source.get("evaluationId"),
+            "extraction_tests": extraction_tests,
+            "function_result": {
+                "extracted_text": extracted[:500] if extracted else None,
+                "extracted_length": len(extracted) if extracted else 0,
+                "success": bool(extracted)
+            },
+            "fix_needed": (
+                f"Update _extract_transcript_text to use: src.get('transcript')"
+                if source.get("transcript") and not extracted
+                else "Function is working correctly"
+                if extracted
+                else "No transcript field found in documents"
+            )
+        })
+        
+    except Exception as e:
+        logger.error(f"Error testing extract function: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+@app.get("/debug/full_transcript_diagnostic")
+async def full_transcript_diagnostic():
+    """
+    Run a complete diagnostic of your transcript system
+    """
+    diagnostics = {
+        "1_document_structure": {},
+        "2_field_check": {},
+        "3_search_test": {},
+        "4_extraction_test": {},
+        "5_context_build": {},
+        "final_status": "",
+        "fix_instructions": []
+    }
+    
+    try:
+        # 1. Check document structure
+        from opensearch_client import get_opensearch_client
+        client = get_opensearch_client()
+        
+        response = client.search(
+            index="eval-template-*",
+            body={"query": {"match_all": {}}, "size": 1}
+        )
+        
+        if response["hits"]["hits"]:
+            source = response["hits"]["hits"][0]["_source"]
+            diagnostics["1_document_structure"] = {
+                "fields_found": list(source.keys()),
+                "has_transcript": "transcript" in source,
+                "has_evaluation": "evaluation" in source
+            }
+            
+            if not diagnostics["1_document_structure"]["has_transcript"]:
+                diagnostics["fix_instructions"].append("❌ No 'transcript' field found in documents")
+        
+        # 2. Field content check
+        if "transcript" in source:
+            transcript = source["transcript"]
+            diagnostics["2_field_check"] = {
+                "transcript_length": len(transcript),
+                "starts_with": transcript[:100],
+                "has_timestamps": "00:00" in transcript,
+                "has_speakers": "Speaker" in transcript
+            }
+        
+        # 3. Search test
+        from search_utils import perform_text_search
+        search_result = perform_text_search("Speaker", {}, size=1)
+        diagnostics["3_search_test"] = {
+            "search_works": bool(search_result and search_result.get("results")),
+            "results_count": len(search_result.get("results", [])) if search_result else 0
+        }
+        
+        # 4. Extraction test
+        if search_result and search_result.get("results"):
+            from chat_handlers import _extract_transcript_text
+            hit = search_result["results"][0]
+            extracted = _extract_transcript_text(hit)
+            diagnostics["4_extraction_test"] = {
+                "extraction_works": bool(extracted),
+                "extracted_length": len(extracted) if extracted else 0
+            }
+            
+            if not extracted and "transcript" in hit.get("_source", {}):
+                diagnostics["fix_instructions"].append(
+                    "❌ _extract_transcript_text not working. "
+                    "Update it to: return src.get('transcript', '')"
+                )
+        
+        # 5. Context build test
+        from chat_handlers import build_search_context, MIN_CONTEXT_CHARS
+        context, sources = build_search_context("customer", {}, max_results=5)
+        diagnostics["5_context_build"] = {
+            "context_built": bool(context),
+            "context_length": len(context),
+            "sources_found": len(sources),
+            "min_context_chars": MIN_CONTEXT_CHARS,
+            "meets_minimum": len(context) >= MIN_CONTEXT_CHARS if context else False
+        }
+        
+        if not diagnostics["5_context_build"]["meets_minimum"]:
+            diagnostics["fix_instructions"].append(
+                f"⚠️ Context length ({len(context)}) below minimum ({MIN_CONTEXT_CHARS}). "
+                "Consider lowering MIN_CONTEXT_CHARS or getting more results"
+            )
+        
+        # Final assessment
+        all_working = (
+            diagnostics["1_document_structure"].get("has_transcript", False) and
+            diagnostics["3_search_test"].get("search_works", False) and
+            diagnostics["4_extraction_test"].get("extraction_works", False) and
+            diagnostics["5_context_build"].get("context_built", False)
+        )
+        
+        diagnostics["final_status"] = (
+            "✅ SYSTEM FULLY OPERATIONAL - Transcripts are working!"
+            if all_working
+            else "⚠️ ISSUES FOUND - See fix_instructions"
+        )
+        
+        return JSONResponse(content=diagnostics)
+        
+    except Exception as e:
+        diagnostics["error"] = str(e)
+        return JSONResponse(content=diagnostics)
+
+
 @app.get("/debug/test_hybrid_search")
 async def debug_test_hybrid_search(query: str = "call dispositions"):
     """
@@ -3284,6 +3644,70 @@ async def get_opensearch_statistics():
         except Exception as e:
             logger.warning(f"Mapping query failed: {e}")
             available_metadata_fields = set()
+
+        # ============= TRANSCRIPT COVERAGE CHECK =============
+        transcript_coverage = {}
+        try:
+            logger.info("Checking transcript coverage...")
+            coverage_response = client.search(
+                index="eval-*",
+                body={
+                    "size": 0,
+                    "aggs": {
+                        "with_transcript": {
+                            "filter": {
+                                "exists": {"field": "transcript"}
+                            }
+                        },
+                        "with_transcript_text": {
+                            "filter": {
+                                "exists": {"field": "transcript_text"}
+                            }
+                        },
+                        "empty_transcript": {
+                            "filter": {
+                                "term": {"transcript": ""}
+                            }
+                        },
+                        "with_evaluation": {
+                            "filter": {
+                                "exists": {"field": "evaluation"}
+                            }
+                        },
+                        "empty_evaluation": {
+                            "filter": {
+                                "term": {"evaluation": ""}
+                            }
+                        }
+                    }
+                },
+                request_timeout=10
+            )
+            
+            coverage_aggs = coverage_response.get("aggregations", {})
+            with_transcript = coverage_aggs.get("with_transcript", {}).get("doc_count", 0)
+            with_transcript_text = coverage_aggs.get("with_transcript_text", {}).get("doc_count", 0)
+            empty_transcript = coverage_aggs.get("empty_transcript", {}).get("doc_count", 0)
+            with_evaluation = coverage_aggs.get("with_evaluation", {}).get("doc_count", 0)
+            empty_evaluation = coverage_aggs.get("empty_evaluation", {}).get("doc_count", 0)
+            
+            transcript_coverage = {
+                "documents_with_transcript": with_transcript,
+                "documents_with_transcript_text": with_transcript_text,
+                "documents_with_evaluation": with_evaluation,
+                "empty_transcripts": empty_transcript,
+                "empty_evaluations": empty_evaluation,
+                "missing_transcripts": total_documents - with_transcript,
+                "missing_evaluations": total_documents - with_evaluation,
+                "transcript_coverage_pct": round((with_transcript / total_documents * 100), 1) if total_documents > 0 else 0,
+                "evaluation_coverage_pct": round((with_evaluation / total_documents * 100), 1) if total_documents > 0 else 0,
+                "status": "Complete" if with_transcript == total_documents else f"⚠️ {total_documents - with_transcript} missing"
+            }
+            logger.info(f"Transcript coverage: {transcript_coverage['transcript_coverage_pct']}%")
+            
+        except Exception as e:
+            logger.warning(f"Transcript coverage check failed: {e}")
+            transcript_coverage = {"error": "Could not check transcript coverage"}
         
         # STEP 5: Sample documents to extract real statistics (same method as filters)
         statistics = {
@@ -3429,7 +3853,7 @@ async def get_opensearch_statistics():
             logger.warning(f"Cluster health check failed: {e}")
             cluster_status = "unknown"
         
-        # Build enhanced response with vector search information
+        # Build enhanced response with vector search information and transcript info
         response_data = {
             "status": "success",
             "data": {
@@ -3438,6 +3862,7 @@ async def get_opensearch_statistics():
                 "active_indices": active_indices,
                 "available_fields": sorted(list(available_metadata_fields)),
                 "cluster_status": cluster_status,
+                "content_coverage": transcript_coverage,  # ← NEW SECTION WITH TRANSCRIPT DATA
 
                 # NEW: Vector search capabilities
                 "vector_search": {
@@ -3491,7 +3916,7 @@ async def get_opensearch_statistics():
             "processing_time": round(time.time() - start_time, 2),
             "method": "document_sampling",
             "sample_size": chunks_sampled,
-            "version": "4.4.0_sampling_fixed"
+            "version": "8.14.25"
         }
         
         logger.info("Enhanced statistics with vector search analysis completed")
@@ -3504,7 +3929,7 @@ async def get_opensearch_statistics():
             "error": str(e),
             "timestamp": datetime.now().isoformat(),
             "method": "document_sampling",
-            "version": "4.8.0 vector_enabled"
+            "version": "8.14.25"
         }
 
 # Add a simple health endpoint that never fails

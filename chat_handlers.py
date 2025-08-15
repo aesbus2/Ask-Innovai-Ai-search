@@ -366,6 +366,84 @@ SEARCH ENHANCEMENT: {'VECTOR-ENHANCED' if vector_search_used or hybrid_search_us
     
     return context
 
+def _extract_transcript_text(hit: dict) -> str:
+    """
+    Pull usable text from a search hit WITHOUT changing existing field names.
+    Tries common fields in priority order; returns '' if none found.
+    """
+    src = hit.get("_source", hit) or {}
+    transcript_text = (
+        # Primary transcript fields
+        
+        src.get("transcript", "") or
+        src.get("transcript_text") or
+        src.get("full_text") or
+        
+        # Evaluation content fields
+        src.get("evaluation") or
+        src.get("evaluation_text") or
+        src.get("content") or
+        
+        # Chunk-based fields
+        src.get("chunks_text") or
+        src.get("text") or
+        
+        # Nested metadata fields
+        src.get("metadata", {}).get("transcript") or
+        src.get("metadata", {}).get("full_text") or
+        
+        # Search highlight fields (often contain relevant text)
+        hit.get("highlight", {}).get("transcript_text", [""])[0] or
+        hit.get("highlight", {}).get("chunks.text", [""])[0] or
+        
+        ""
+    )
+
+    if not transcript_text:
+        logger.warning(f"No transcript text found for document: {src.get('evaluationId', 'unknown')}")
+        logger.debug(f"Available fields: {list(src.keys())}")
+    
+    return transcript_text
+
+def _short(s: str, max_chars: int) -> str:
+    s = (s or "").strip()
+    return s if len(s) <= max_chars else (s[:max_chars] + " …")
+
+def assemble_grounded_context(results: list, max_docs: int = 20, per_doc_chars: int = 2000) -> str:
+    """
+    Build a single context string from top-N search hits, trimmed per doc so the prompt stays small.
+    Includes doc ids/urls for traceability.
+    """
+    parts = []
+    for i, hit in enumerate(results[:max_docs], 1):
+        src = hit.get("_source", {}) if isinstance(hit, dict) else {}
+        text = _extract_transcript_text(hit)
+        if not text:
+            continue
+        doc_id = src.get("internalId") or src.get("evaluationId") or src.get("id") or src.get("_id") or "unknown-id"
+        url = src.get("url") or ""
+        header = f"[DOC {i} | id={doc_id}{' | ' + url if url else ''}]"
+        parts.append(f"{header}\n{_short(text, per_doc_chars)}")
+    return "\n\n---\n\n".join(parts)
+
+GROUNDING_POLICY = (
+    "You are an assistant that MUST answer ONLY using the transcript context provided. "
+    "If the answer is not present in the context, respond exactly with: "
+    "\"I could not find that information in the provided transcripts.\" "
+    "Do not guess or invent any detail. Prefer quoting short, exact phrases from the transcripts. "
+    "If a document header like [DOC N | id=…] appears above the quote, keep that reference."
+)
+
+def build_chat_prompt(user_query: str, context: str) -> str:
+    return (
+        f"{GROUNDING_POLICY}\n\n"
+        f"# Transcript Context\n{context}\n\n"
+        f"# Question\n{user_query}\n\n"
+        f"# Instructions\n"
+        f"- Use only the transcript context.\n"
+        f"- If multiple documents conflict, note the conflict and cite the DOC ids.\n"
+        f"- If nothing relevant is found, use the required fallback sentence above.\n"
+    )
 
 
 def detect_report_query(message: str) -> bool:
@@ -634,7 +712,7 @@ EVALUATION DATA FOUND: {len(processed_sources)} evaluations matching "{query}"
 FILTER STATUS: {"✅ All requested filters applied" if filter_compliance_passed else "⚠️ Some filter constraints may not have matches"}
 APPLIED FILTERS: {', '.join([f"{k}={v}" for k, v in filters.items()]) if filters else "None"}
 
-🔒 STRICT DISPLAY RULES - YOU MUST FOLLOW:
+STRICT DISPLAY RULES - YOU MUST FOLLOW:
 1. NEVER display these fields: _score, score, search_type, template_name, template_id, program
 2. NEVER show relevance scores, or search quality indicators
 3. ONLY display these exact fields when showing data:
@@ -1515,13 +1593,19 @@ async def relay_chat_rag(request: Request):
 
         logger.info(f"📋 ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 
-        # ❌ BLOCK hallucinated responses if no real data
-        if not context or not sources:
-            logger.warning("⛔ No context found — skipping LLM and returning no-data message.")
+        MIN_CONTEXT_CHARS = 2500
+        MIN_DISTINCT_EVALS = 5
+        CHAT_MAX_RESULTS = 1000  # Maximum results for chat queries
+
+        # BLOCK hallucinated responses if no real data
+        if (not context or not sources 
+            or len(context) < MIN_CONTEXT_CHARS 
+            or len({s.get("evaluationId") for s in sources if s.get("evaluationId")}) < MIN_DISTINCT_EVALS):
+            logger.warning(" No context found — skipping LLM and returning no-data message.")
             return JSONResponse(
                 status_code=200,
                 content={
-                    "reply": "⚠️ No relevant evaluation data was found for your query. Please adjust your filters or try a different question.",
+                    "reply": "No relevant evaluation data was found for your query. Please adjust your filters or try a different question.",
                     "sources_summary": {
                         "evaluations": 0,
                         "agents": 0,
@@ -1559,35 +1643,42 @@ async def relay_chat_rag(request: Request):
 
         
         # STEP 2: Enhanced system message with vector search awareness
-        system_message = f"""You are an AI assistant for call center evaluation data analysis. Analyze the provided evaluation data carefully and provide actionable insights.
+        system_message = f"""You are an analyst. You MUST base answers ONLY on the CONTEXT below. 
+If the answer is not explicitly present in the context, say: 
+"Not found in the provided evaluations." Do NOT guess or infer.
 
-ANALYSIS INSTRUCTIONS:
-1. Review transcripts or agent summaries to identify recurring communication issues or strengths
-2. Compare tone, language, empathy, and product knowledge across transcripts and agents  
-3. Identify opportunities for improvement in agent performance based on the provided evaluation data
-4. Highlight strengths in agent performance such as effective communication, problem-solving skills, and customer rapport
-5. Determine what is successful and what needs improvement, with clear justifications
-6. Write a concise but structured summary with clear sections and bullet points
+RESPONSE FORMAT (strict):
+1) VERBATIM_EXCERPTS:
+   - Bullet points.
+   - Each bullet must include a short quote (5–30 words) copied exactly from context 
+     and a citation like [evaluationId=..., time?=MM:SS if visible].
+2) ANALYSIS:
+   - Synthesize only from the VERBATIM_EXCERPTS above.
+   - No new facts. If something is missing, say it’s not present.
+3) ACTIONS (if the user asked): concrete, short.
 
-✅ ENHANCED SEARCH CONTEXT (with vector similarity matching):
+CONTEXT (vector-matched):
+
 {context}
 
-CRITICAL INSTRUCTIONS:
-- ONLY use data from the provided context above
-- Always answer questions based on the provided evaluation data
-- Do not generate statistics not directly calculable from the data
-- Be objective and data-informed
-- Avoid overgeneralizations  
-- Make the summary suitable for leadership or QA team use
-- ✅ NOTE: Search results are enhanced with semantic similarity for better relevance
-
-Respond in a clear, professional format with specific examples from the data."""
+Rules:
+- No statistics unless directly calculable from excerpts you provided.
+- Every factual claim must be traceable to an excerpt.
+- If nothing relevant exists, return only: "Not found in the provided evaluations."
+"""
 
         # STEP 3: Streamlined Llama payload
+        user_only_history = [
+                {"role": "user", "content": h["content"]}
+                for h in (req.history or [])
+                if h.get("role") == "user"
+            ][-5:]
+        
         llama_payload = {
+
             "messages": [
                 {"role": "system", "content": system_message},
-                *[{"role": msg.get("role", "user"), "content": msg.get("content", "")} for msg in req.history[-10:]],
+                *user_only_history,
                 {"role": "user", "content": req.message}
             ],
             "temperature": GENAI_TEMPERATURE,
@@ -1706,7 +1797,7 @@ Respond in a clear, professional format with specific examples from the data."""
             reply_text = result["response"].strip()
         
         if not reply_text:
-            logger.error(f"❌ Could not extract reply from Llama response")
+            logger.error("❌ Could not extract reply from Llama response")
             reply_text = "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
         
         # Clean up Llama response artifacts
@@ -1796,7 +1887,7 @@ Respond in a clear, professional format with specific examples from the data."""
         # Remove any references to search types, scores, or internal mechanics
         # No vector_sources, hybrid_sources, search_type counts, etc.
         
-        logger.info(f"✅ CHAT RESPONSE COMPLETE")
+        logger.info("✅ CHAT RESPONSE COMPLETE")
         logger.info(f"📊 Reply: {len(reply_text)} chars, Sources: {len(unique_sources)} evaluations")
         
         return JSONResponse(content=response_data)
