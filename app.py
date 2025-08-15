@@ -2214,7 +2214,9 @@ async def check_transcript_field():
             status_code=500,
             content={"error": str(e)}
         )
-
+# ============================================================================
+# Transcript Testing
+# ============================================================================
 @app.get("/debug/test_transcript_search")
 async def test_transcript_search():
     """
@@ -2294,56 +2296,199 @@ async def test_transcript_search():
 @app.get("/debug/test_extract_function")
 async def test_extract_function():
     """
-    Test the _extract_transcript_text function directly
+    Test the _extract_transcript_text function with detailed error handling
     """
-    from search_utils import perform_text_search
+    debug_info = {
+        "step_reached": "start",
+        "errors": [],
+        "results": {}
+    }
     
     try:
-        # Get a sample document
-        results = perform_text_search("*", {}, size=1)
+        # Step 1: Test OpenSearch connection
+        debug_info["step_reached"] = "opensearch_import"
+        from opensearch_client import get_opensearch_client
         
-        if not results or not results.get("results"):
+        debug_info["step_reached"] = "get_client"
+        client = get_opensearch_client()
+        
+        # Step 2: Get a document
+        debug_info["step_reached"] = "search_request"
+        response = client.search(
+            index="eval-template-*",
+            body={
+                "query": {"match_all": {}},
+                "size": 1,
+                "_source": True
+            }
+        )
+        
+        debug_info["step_reached"] = "check_hits"
+        if not response["hits"]["hits"]:
             return JSONResponse(content={
-                "error": "No documents found to test"
+                "error": "No documents found",
+                "debug": debug_info
             })
         
-        hit = results["results"][0]
+        hit = response["hits"]["hits"][0]
         source = hit.get("_source", {})
         
-        # Try different extraction methods
-        extraction_tests = {
-            "direct_transcript": source.get("transcript", "")[:200] if source.get("transcript") else "",
-            "direct_transcript_text": source.get("transcript_text", "")[:200] if source.get("transcript_text") else "",
-            "direct_evaluation": source.get("evaluation", "")[:200] if source.get("evaluation") else "",
-            "available_fields": list(source.keys())
+        debug_info["results"]["document_found"] = True
+        debug_info["results"]["evaluationId"] = source.get("evaluationId")
+        debug_info["results"]["has_transcript_field"] = "transcript" in source
+        debug_info["results"]["transcript_length"] = len(source.get("transcript", ""))
+        
+        # Step 3: Try to import and test the extraction function
+        debug_info["step_reached"] = "import_extract_function"
+        
+        try:
+            from chat_handlers import _extract_transcript_text
+            debug_info["results"]["import_successful"] = True
+        except ImportError as e:
+            debug_info["errors"].append(f"Import error: {str(e)}")
+            debug_info["results"]["import_successful"] = False
+            
+            # Try manual extraction as fallback
+            manual_extract = source.get("transcript", "")
+            debug_info["results"]["manual_extraction"] = {
+                "success": bool(manual_extract),
+                "length": len(manual_extract),
+                "preview": manual_extract[:200] if manual_extract else None
+            }
+            
+            return JSONResponse(content={
+                "status": "import_failed",
+                "debug": debug_info,
+                "recommendation": "Check that _extract_transcript_text is defined in chat_handlers.py"
+            })
+        
+        # Step 4: Test the function
+        debug_info["step_reached"] = "test_extraction"
+        
+        try:
+            extracted = _extract_transcript_text(hit)
+            debug_info["results"]["extraction_result"] = {
+                "success": bool(extracted),
+                "length": len(extracted) if extracted else 0,
+                "preview": extracted[:200] if extracted else None
+            }
+        except Exception as e:
+            debug_info["errors"].append(f"Extraction error: {str(e)}")
+            debug_info["results"]["extraction_result"] = {"error": str(e)}
+        
+        # Step 5: Compare with direct access
+        debug_info["step_reached"] = "comparison"
+        direct_transcript = source.get("transcript", "")
+        
+        comparison = {
+            "direct_access_works": bool(direct_transcript),
+            "direct_length": len(direct_transcript),
+            "function_works": bool(extracted) if 'extracted' in locals() else False,
+            "function_length": len(extracted) if 'extracted' in locals() and extracted else 0,
+            "match": (direct_transcript == extracted) if 'extracted' in locals() else False
         }
         
-        # Now test the actual function
-        from chat_handlers import _extract_transcript_text
-        extracted = _extract_transcript_text(hit)
+        debug_info["results"]["comparison"] = comparison
+        
+        # Final status
+        if comparison["function_works"]:
+            status = "✅ EXTRACTION WORKING!"
+            recommendation = "Your _extract_transcript_text function is working correctly"
+        elif comparison["direct_access_works"]:
+            status = "⚠️ Transcript exists but extraction failing"
+            recommendation = "Update _extract_transcript_text to: return src.get('transcript', '')"
+        else:
+            status = "❌ No transcript found"
+            recommendation = "Check your data import - transcript field is missing"
         
         return JSONResponse(content={
-            "evaluationId": source.get("evaluationId"),
-            "extraction_tests": extraction_tests,
-            "function_result": {
-                "extracted_text": extracted[:500] if extracted else None,
-                "extracted_length": len(extracted) if extracted else 0,
-                "success": bool(extracted)
-            },
-            "fix_needed": (
-                f"Update _extract_transcript_text to use: src.get('transcript')"
-                if source.get("transcript") and not extracted
-                else "Function is working correctly"
-                if extracted
-                else "No transcript field found in documents"
-            )
+            "status": status,
+            "recommendation": recommendation,
+            "debug": debug_info
         })
         
     except Exception as e:
-        logger.error(f"Error testing extract function: {e}")
+        import traceback
+        debug_info["errors"].append(str(e))
+        debug_info["traceback"] = traceback.format_exc()
+        
         return JSONResponse(
             status_code=500,
-            content={"error": str(e)}
+            content={
+                "error": "Internal server error",
+                "exception": str(e),
+                "debug": debug_info
+            }
+        )
+
+# Also add this simpler test that doesn't rely on imports
+@app.get("/debug/test_transcript_direct")
+async def test_transcript_direct():
+    """
+    Direct test without importing chat_handlers
+    """
+    try:
+        from opensearch_client import get_opensearch_client
+        
+        client = get_opensearch_client()
+        response = client.search(
+            index="eval-template-*",
+            body={
+                "query": {"match_all": {}},
+                "size": 3,
+                "_source": ["evaluationId", "transcript", "transcript_text", "evaluation"]
+            }
+        )
+        
+        results = []
+        for hit in response["hits"]["hits"]:
+            source = hit.get("_source", {})
+            results.append({
+                "evaluationId": source.get("evaluationId"),
+                "has_transcript": "transcript" in source,
+                "transcript_length": len(source.get("transcript", "")),
+                "transcript_preview": source.get("transcript", "")[:100] + "..." if source.get("transcript") else None,
+                "has_transcript_text": "transcript_text" in source,
+                "transcript_text_length": len(source.get("transcript_text", ""))
+            })
+        
+        # Test manual extraction logic
+        test_extraction = []
+        for hit in response["hits"]["hits"]:
+            src = hit.get("_source", hit) or {}
+            
+            # This is what your function should do
+            transcript = (
+                src.get("transcript", "") or
+                src.get("transcript_text") or
+                src.get("full_text") or
+                ""
+            )
+            
+            test_extraction.append({
+                "evaluationId": src.get("evaluationId"),
+                "extracted_successfully": bool(transcript),
+                "extracted_length": len(transcript)
+            })
+        
+        return JSONResponse(content={
+            "documents_checked": len(results),
+            "document_details": results,
+            "extraction_test": test_extraction,
+            "summary": {
+                "all_have_transcripts": all(r["has_transcript"] for r in results),
+                "extraction_would_work": all(t["extracted_successfully"] for t in test_extraction)
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
         )
 
 @app.get("/debug/full_transcript_diagnostic")
