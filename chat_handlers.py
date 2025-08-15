@@ -456,8 +456,8 @@ def detect_report_query(message: str) -> bool:
 
 def build_search_context(query: str, filters: dict, max_results: int = 100) -> Tuple[str, List[dict]]:
     """
-    ✅ ENHANCED: Build search context with VECTOR SEARCH integration + FILTER VALIDATION
-    UPDATED VERSION with strict metadata filtering
+    ENHANCED: Build search context with VECTOR SEARCH integration + FILTER VALIDATION
+    UPDATED VERSION with strict metadata filtering AND TRANSCRIPT EXTRACTION
     """
     if max_results is None:
         max_results = CHAT_MAX_RESULTS
@@ -468,7 +468,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
     
     def validate_filter_compliance(results: List[dict], strategy_name: str) -> List[dict]:
         """
-        ✅ NEW: Validate that search results comply with applied filters
+        Validate that search results comply with applied filters
         """
         if not filters or not results:
             return results
@@ -533,24 +533,24 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
             logger.warning("OpenSearch not available for search context")
             return create_empty_search_context("opensearch_unavailable"), []
         
-        logger.info("✅ OpenSearch connection verified")
+        logger.info(" OpenSearch connection verified")
         
-        # ✅ STEP 1: Try to generate query vector for enhanced search
+        # STEP 1: Try to generate query vector for enhanced search
         query_vector = None
         try:
             query_vector = embed_text(query)
-            logger.info(f"✅ Query vector generated: {len(query_vector)} dimensions")
+            logger.info(f" Query vector generated: {len(query_vector)} dimensions")
         except Exception as e:
-            logger.warning(f"⚠️ Vector generation failed: {e}")
+            logger.warning(f" Vector generation failed: {e}")
         
-        # ✅ STEP 2: Use enhanced search strategies WITH FILTER VALIDATION
+        # STEP 2: Use enhanced search strategies WITH FILTER VALIDATION
         all_sources = []
         search_methods_used = []
         
         # Strategy 1: Hybrid search (text + vector) if vector available
         if query_vector:
             try:
-                logger.info("🔥 Trying hybrid text+vector search...")
+                logger.info("Trying hybrid text+vector search...")
                 hybrid_results = hybrid_search(
                     query=query,
                     query_vector=query_vector,
@@ -559,11 +559,10 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                     vector_weight=0.6  # 60% vector, 40% text
                 )
                 
-                logger.info(f"📊 Hybrid search returned {len(hybrid_results)} hits")
+                logger.info(f"Hybrid search returned {len(hybrid_results)} hits")
                 
-                # ✅ VALIDATE FILTERS BEFORE PROCESSING
+                # VALIDATE FILTERS BEFORE PROCESSING
                 validated_hybrid = validate_filter_compliance(hybrid_results, "hybrid_search")
-
                 validated_hybrid = clean_all_sources(validated_hybrid)
                 
                 for hit in validated_hybrid:
@@ -579,7 +578,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
         # Strategy 2: Pure vector search as fallback/supplement
         if query_vector and len(all_sources) < max_results:  
             try:  
-                logger.info("🔮 Trying vector search...")
+                logger.info("Trying vector search...")
                 vector_results = search_vector(
                     query_vector=query_vector,
                     filters=filters,
@@ -619,7 +618,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 
                 logger.info(f" Text search returned {len(text_results)} hits")
                 
-                # CRITICAL: VALIDATE FILTERS - This is where violations were coming from!
+                # VALIDATE FILTERS - BEFORE PROCESSING
                 validated_text = validate_filter_compliance(text_results, "text")
                 
                 # CLEAN RESULTS IMMEDIATELY
@@ -636,10 +635,10 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                 search_methods_used.append("text")
                 
             except Exception as e:
-                logger.error(f"❌ Text search failed: {e}")                
+                logger.error(f"Text search failed: {e}")                
                
         # Final filter validation on combined results
-        logger.info(f"🔗 Total sources before final cleaning: {len(all_sources)}")
+        logger.info(f" Total sources before final cleaning: {len(all_sources)}")
         
         all_sources = clean_all_sources(all_sources)
         all_sources = validate_filter_compliance(all_sources, "final")
@@ -660,8 +659,8 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
 
         processed_sources = clean_all_sources(processed_sources)
 
-# ✅ MAINTAIN FILTER COMPLIANCE CHECKING (Important for validation)
-        # Check if filters are being respected (for internal logging only)
+# FILTER COMPLIANCE CHECKING (Important for validation)
+        # Check if filters are being respected (forinternal logging only)
         filter_compliance_passed = True
         if filters:
             # Check template filter compliance
@@ -688,23 +687,23 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
                     
                     if found_values and expected_value not in found_values:
                         filter_compliance_passed = False
-                        logger.warning(f"⚠️ {filter_key} filter violation detected")
+                        logger.warning(f" {filter_key} filter violation detected")
         
         # Log filter compliance status (internal use only)
         if filter_compliance_passed:
-            logger.info("✅ All filters respected in final results")
+            logger.info(" All filters respected in final results")
         else:
-            logger.warning("🚨 Filter violations detected in final results")
+            logger.warning(" Filter violations detected in final results")
         
         # Verify metadata alignment
-        logger.info("🔍 Performing metadata verification...")
+        logger.info(" Performing metadata verification...")
         
         # Build context with STRICT display rules
         if processed_sources:
             # Extract actual metadata values for constraints
             strict_metadata = extract_actual_metadata_values(processed_sources)
             
-            # 🔴 BUILD CONTEXT WITHOUT SCORES OR INTERNAL FIELDS
+            #  BUILD CONTEXT WITHOUT SCORES OR INTERNAL FIELDS
             context = f"""
 
 EVALUATION DATA FOUND: {len(processed_sources)} evaluations matching "{query}"
@@ -735,6 +734,8 @@ EVALUATION DETAILS:
 """
             
             # Add evaluation details WITHOUT scores or types
+            transcripts_added = 0  # Track how many transcripts we add
+
             for i, source in enumerate(processed_sources[:10], 1):
                 eval_str = f"\n[Evaluation {i}] ID: {source.get('evaluationId', 'Unknown')}\n"
                 
@@ -767,12 +768,37 @@ EVALUATION DETAILS:
                         else:
                             eval_str += f"- {field_label}: {value}\n"
                 
-                # Add snippet of content if available (but no internal fields)
-                if source.get("text"):
-                    content_preview = source["text"][:200].replace('\n', ' ')
-                    eval_str += f"- Content Preview: {content_preview}...\n"
+                # ===== EXTRACT AND ADD THE ACTUAL TRANSCRIPT =====
+                 try:
+                    # This is the key addition - extract the transcript!
+                    transcript = _extract_transcript_text(source)
+                    
+                    if transcript and len(transcript) > 100:  # Only add if substantial
+                        eval_str += f"\n📝 TRANSCRIPT:\n"
+                        eval_str += f"{transcript[:4000]}\n"  # Include up to 4000 chars
+                        eval_str += f"\n[Full transcript length: {len(transcript)} characters]\n"
+                        
+                        # Mark this source as having a transcript
+                        source['has_transcript'] = True
+                        source['transcript_preview'] = transcript[:50]
+                        transcripts_added += 1
+                        
+                        logger.debug(f"✅ Added transcript for eval {source.get('evaluationId')}: {len(transcript)} chars")
+                    else:
+                        eval_str += f"\n[No transcript available for this evaluation]\n"
+                        source['has_transcript'] = False
+                        
+                except Exception as e:
+                    logger.error(f"Failed to extract transcript for eval {source.get('evaluationId')}: {e}")
+                    eval_str += f"\n[Transcript extraction error]\n"
+                    source['has_transcript'] = False
+                # ===== END OF NEW TRANSCRIPT SECTION =====
                 
                 context += eval_str
+                context += "\n" + "="*50 + "\n"  # Add separator between evaluations
+            
+            # Log how many transcripts were added
+            logger.info(f"📝 Added {transcripts_added} transcripts to context out of {min(10, len(processed_sources))} evaluations")
             
             if len(processed_sources) > 10:
                 context += f"\n... and {len(processed_sources) - 10} more evaluations\n"
