@@ -47,7 +47,7 @@ def get_client():
             http_auth=(os.getenv("OPENSEARCH_USER"), os.getenv("OPENSEARCH_PASS")),
             use_ssl=True,
             verify_certs=False,
-            request_timeout=30,        # INTEGER: 30 seconds
+            request_timeout=180,        # INTEGER: 3 minutes
             connect_timeout=10,        # INTEGER: 10 seconds  
             max_retries=3,
             retry_on_timeout=True,
@@ -262,7 +262,7 @@ def search_vector(query_vector: List[float], index_override: str = None,
                 vector_query["query"]["bool"]["filter"] = filter_clauses
         
         # Execute vector search
-        response = safe_search_with_error_handling(client, index_pattern, vector_query, timeout=30)
+        response = safe_search_with_error_handling(client, index_pattern, vector_query, timeout=180)
         
         # Process results
         results = []
