@@ -1819,7 +1819,7 @@ function escapeHtml(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
-unction formatMessage(message) {
+function formatMessage(message) {
     // Convert markdown-like formatting to HTML with proper bullet support
     return message
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
