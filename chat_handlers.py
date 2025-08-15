@@ -769,7 +769,7 @@ EVALUATION DETAILS:
                             eval_str += f"- {field_label}: {value}\n"
                 
                 # ===== EXTRACT AND ADD THE ACTUAL TRANSCRIPT =====
-                 try:
+                try:
                     # This is the key addition - extract the transcript!
                     transcript = _extract_transcript_text(source)
                     
