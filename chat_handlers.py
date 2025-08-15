@@ -1620,8 +1620,7 @@ async def relay_chat_rag(request: Request):
         logger.info(f"📋 ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 
         MIN_CONTEXT_CHARS = 2500
-        MIN_DISTINCT_EVALS = 5
-        CHAT_MAX_RESULTS = 1000  # Maximum results for chat queries
+        MIN_DISTINCT_EVALS = 5        
 
         # BLOCK hallucinated responses if no real data
         if (not context or not sources 
