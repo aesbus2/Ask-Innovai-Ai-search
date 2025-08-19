@@ -1580,7 +1580,9 @@ function displayEvaluationResults(data, searchedId) {
         call_date: data.call_date || data.callDate || '',
         call_duration: ultraSafeNumber(data.call_duration || data.callDuration || 0),
         language: ultraSafeString(data.language || ''),
-        evaluation: ultraSafeString(data.evaluation || '')
+        evaluation: ultraSafeString(data.evaluation || ''),
+        transcript: ultraSafeString(data.transcript || data.transcript_text || data.full_text || '')
+
     };
     
     // Format score for display
@@ -1753,6 +1755,45 @@ function displayEvaluationResults(data, searchedId) {
     
     resultsContainer.innerHTML = html;
 }
+
+// NEW: Function to switch between tabs
+function switchTab(tabId) {
+    // Remove active class from all headers and panels
+    document.querySelectorAll('.tab-header').forEach(header => {
+        header.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
+    
+    // Add active class to selected tab
+    const selectedHeader = document.getElementById(tabId + '-header');
+    const selectedPanel = document.getElementById(tabId);
+    
+    if (selectedHeader) selectedHeader.classList.add('active');
+    if (selectedPanel) selectedPanel.classList.add('active');
+}
+
+// Make switchTab function globally available
+window.switchTab = switchTab;
+
+// NEW: Function to format transcript text
+function formatTranscript(transcript) {
+    if (!transcript) return '';
+    
+    // Handle speaker patterns and timestamps
+    let formatted = transcript
+        // Format speaker headers
+        .replace(/Speaker ([AB]) \((\d{2}:\d{2}:\d{2})\):/g, 
+                '<div class="speaker-header"><strong>Speaker $1</strong> <span class="timestamp">$2</span></div>')
+        // Format regular line breaks
+        .replace(/\n/g, '<br>')
+        // Format timestamps that appear inline
+        .replace(/(\d{2}:\d{2}:\d{2})/g, '<span class="inline-timestamp">$1</span>');
+    
+    return formatted;
+
+        }
 
 function displayEvaluationError(message) {
     const resultsContainer = document.getElementById('evaluationResults');

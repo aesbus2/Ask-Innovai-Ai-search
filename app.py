@@ -1856,6 +1856,7 @@ async def get_evaluation_by_id(evaluation_id: str):
     """
     try:
         from opensearch_client import get_opensearch_client
+        from chat_handlers import _extract_transcript_text
         
         client = get_opensearch_client()
         if not client:
@@ -1903,8 +1904,18 @@ async def get_evaluation_by_id(evaluation_id: str):
         # Extract the evaluation data
         source = hits[0]["_source"]
         metadata = source.get("metadata", {})
+        # ENHANCED: Use the transcript extraction function
+        extracted_transcript = _extract_transcript_text(hits[0])
         
         logger.info(f"✅ Found evaluation {evaluation_id} in index: {hits[0]['_index']}")
+
+        if extracted_transcript:
+            logger.info(f"📝 Transcript extracted: {len(extracted_transcript)} characters")
+        else:
+            logger.info("📝 No transcript data found for this evaluation")
+            # Debug: Log what fields are available
+            available_fields = list(source.keys())
+            logger.debug(f"Available fields in document: {available_fields}")
         
         # Return the evaluation data in the format expected by the frontend
         evaluation_data = {
@@ -1938,12 +1949,25 @@ async def get_evaluation_by_id(evaluation_id: str):
             "language": metadata.get("language") or source.get("language", "english"),
             "evaluation": source.get("evaluation_text") or source.get("evaluation"),
             "transcript": source.get("transcript_text") or source.get("transcript"),
+            "transcript_length": len(extracted_transcript) if extracted_transcript else 0,
+            "has_transcript": bool(extracted_transcript and len(extracted_transcript) > 50),
             
             # System info
             "indexed_at": source.get("indexed_at"),
             "source_index": hits[0]["_index"],
-            "search_score": hits[0].get("_score", 0)
+            "search_score": hits[0].get("_score", 0),
+            # DEBUG: Include transcript extraction debug info
+            "transcript_debug": {
+                "extraction_used": bool(extracted_transcript),
+                "direct_transcript_field": bool(source.get("transcript")),
+                "direct_transcript_text_field": bool(source.get("transcript_text")),
+                "available_content_fields": [
+                    field for field in ["transcript", "transcript_text", "evaluation", "evaluation_text", "text", "content"]
+                    if field in source and source[field]
+                ]
+            }
         }
+        
         
         return evaluation_data
         
