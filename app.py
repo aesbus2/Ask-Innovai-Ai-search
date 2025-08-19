@@ -2601,7 +2601,7 @@ async def test_transcript_direct():
 @app.get("/debug/full_transcript_diagnostic")
 async def full_transcript_diagnostic():
     """
-    Run a complete diagnostic of your transcript system
+    Run a complete diagnostic of your transcript system - FIXED VERSION
     """
     diagnostics = {
         "1_document_structure": {},
@@ -2628,7 +2628,9 @@ async def full_transcript_diagnostic():
             diagnostics["1_document_structure"] = {
                 "fields_found": list(source.keys()),
                 "has_transcript": "transcript" in source,
-                "has_evaluation": "evaluation" in source
+                "has_evaluation": "evaluation" in source,
+                "has_transcript_text": "transcript_text" in source,
+                "has_full_text": "full_text" in source
             }
             
             if not diagnostics["1_document_structure"]["has_transcript"]:
@@ -2641,70 +2643,115 @@ async def full_transcript_diagnostic():
                 "transcript_length": len(transcript),
                 "starts_with": transcript[:100],
                 "has_timestamps": "00:00" in transcript,
-                "has_speakers": "Speaker" in transcript
+                "has_speakers": "Speaker" in transcript,
+                "is_conversation_format": ("Speaker" in transcript and "00:" in transcript)
             }
         
-        # 3. Search test
-        from search_utils import perform_text_search
-        search_result = perform_text_search("Speaker", {}, size=1)
-        diagnostics["3_search_test"] = {
-            "search_works": bool(search_result and search_result.get("results")),
-            "results_count": len(search_result.get("results", [])) if search_result else 0
-        }
-        
-        # 4. Extraction test
-        if search_result and search_result.get("results"):
-            from chat_handlers import _extract_transcript_text
-            hit = search_result["results"][0]
-            extracted = _extract_transcript_text(hit)
-            diagnostics["4_extraction_test"] = {
-                "extraction_works": bool(extracted),
-                "extracted_length": len(extracted) if extracted else 0
+        # 3. Search test - FIXED: Use opensearch_client directly
+        try:
+            search_response = client.search(
+                index="eval-template-*",
+                body={
+                    "query": {"match": {"transcript": "Speaker"}},
+                    "size": 1
+                }
+            )
+            
+            search_hits = search_response.get("hits", {}).get("hits", [])
+            diagnostics["3_search_test"] = {
+                "search_works": len(search_hits) > 0,
+                "results_count": len(search_hits),
+                "found_transcript_content": bool(search_hits and search_hits[0].get("_source", {}).get("transcript"))
             }
             
-            if not extracted and "transcript" in hit.get("_source", {}):
+        except Exception as e:
+            diagnostics["3_search_test"] = {
+                "search_works": False,
+                "error": str(e)
+            }
+        
+        # 4. Extraction test
+        if diagnostics["3_search_test"].get("search_works") and search_hits:
+            try:
+                from chat_handlers import _extract_transcript_text
+                hit = search_hits[0]
+                extracted = _extract_transcript_text(hit)
+                diagnostics["4_extraction_test"] = {
+                    "extraction_works": bool(extracted),
+                    "extracted_length": len(extracted) if extracted else 0,
+                    "extracted_preview": extracted[:200] if extracted else "No content",
+                    "is_conversation_format": ("Speaker" in extracted and "00:" in extracted) if extracted else False,
+                    "is_qa_format": ("Question:" in extracted and "Answer:" in extracted) if extracted else False
+                }
+                
+                if not extracted and "transcript" in hit.get("_source", {}):
+                    diagnostics["fix_instructions"].append(
+                        "❌ _extract_transcript_text not working. Check field priority order."
+                    )
+                elif extracted and ("Question:" in extracted):
+                    diagnostics["fix_instructions"].append(
+                        "⚠️ Extracting Q&A format instead of conversation. Update field priority in _extract_transcript_text."
+                    )
+                    
+            except Exception as e:
+                diagnostics["4_extraction_test"] = {
+                    "extraction_works": False,
+                    "error": str(e)
+                }
+        
+        # 5. Context build test - FIXED: Use your actual function
+        try:
+            from chat_handlers import build_search_context
+            context, sources = build_search_context("customer", {}, max_results=5)
+            diagnostics["5_context_build"] = {
+                "context_built": bool(context),
+                "context_length": len(context),
+                "sources_found": len(sources),
+                "has_transcript_sections": "📝 TRANSCRIPT:" in context if context else False,
+                "context_preview": context[:500] if context else "No context built"
+            }
+            
+            if not diagnostics["5_context_build"]["has_transcript_sections"]:
                 diagnostics["fix_instructions"].append(
-                    "❌ _extract_transcript_text not working. "
-                    "Update it to: return src.get('transcript', '')"
+                    "❌ Context doesn't contain transcript sections. Check transcript extraction in build_search_context."
                 )
-        
-        # 5. Context build test
-        from chat_handlers import build_search_context, MIN_CONTEXT_CHARS
-        context, sources = build_search_context("customer", {}, max_results=5)
-        diagnostics["5_context_build"] = {
-            "context_built": bool(context),
-            "context_length": len(context),
-            "sources_found": len(sources),
-            "min_context_chars": MIN_CONTEXT_CHARS,
-            "meets_minimum": len(context) >= MIN_CONTEXT_CHARS if context else False
-        }
-        
-        if not diagnostics["5_context_build"]["meets_minimum"]:
-            diagnostics["fix_instructions"].append(
-                f"⚠️ Context length ({len(context)}) below minimum ({MIN_CONTEXT_CHARS}). "
-                "Consider lowering MIN_CONTEXT_CHARS or getting more results"
-            )
+                
+        except Exception as e:
+            diagnostics["5_context_build"] = {
+                "context_built": False,
+                "error": str(e)
+            }
         
         # Final assessment
-        all_working = (
-            diagnostics["1_document_structure"].get("has_transcript", False) and
-            diagnostics["3_search_test"].get("search_works", False) and
-            diagnostics["4_extraction_test"].get("extraction_works", False) and
-            diagnostics["5_context_build"].get("context_built", False)
-        )
+        has_transcripts = diagnostics["1_document_structure"].get("has_transcript", False)
+        extraction_works = diagnostics["4_extraction_test"].get("extraction_works", False)
+        context_has_transcripts = diagnostics["5_context_build"].get("has_transcript_sections", False)
+        uses_conversation_format = diagnostics["4_extraction_test"].get("is_conversation_format", False)
         
-        diagnostics["final_status"] = (
-            "✅ SYSTEM FULLY OPERATIONAL - Transcripts are working!"
-            if all_working
-            else "⚠️ ISSUES FOUND - See fix_instructions"
-        )
+        if has_transcripts and extraction_works and context_has_transcripts and uses_conversation_format:
+            diagnostics["final_status"] = "✅ SYSTEM FULLY OPERATIONAL - Transcripts are working perfectly!"
+        elif has_transcripts and extraction_works and uses_conversation_format:
+            diagnostics["final_status"] = "⚠️ Extraction working but not included in chat context"
+            diagnostics["fix_instructions"].append("Check build_search_context function")
+        elif has_transcripts and extraction_works:
+            diagnostics["final_status"] = "⚠️ Extracting Q&A instead of conversations"
+            diagnostics["fix_instructions"].append("Update _extract_transcript_text field priority")
+        elif has_transcripts:
+            diagnostics["final_status"] = "❌ Transcripts exist but extraction failing"
+            diagnostics["fix_instructions"].append("Fix _extract_transcript_text function")
+        else:
+            diagnostics["final_status"] = "❌ No transcript data found in documents"
+            diagnostics["fix_instructions"].append("Check data import process")
         
         return JSONResponse(content=diagnostics)
         
     except Exception as e:
+        import traceback
         diagnostics["error"] = str(e)
+        diagnostics["traceback"] = traceback.format_exc()
+        diagnostics["final_status"] = "❌ Diagnostic failed"
+        
         return JSONResponse(content=diagnostics)
-
 
 @app.get("/debug/test_hybrid_search")
 async def debug_test_hybrid_search(query: str = "call dispositions"):

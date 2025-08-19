@@ -366,16 +366,10 @@ SEARCH ENHANCEMENT: {'VECTOR-ENHANCED' if vector_search_used or hybrid_search_us
     
     return context
 
+
 def _extract_transcript_text(hit: dict) -> str:
     """
-    IMPROVED: Pull usable text from a search hit WITHOUT changing existing field names.
-    Tries common fields in priority order; returns '' if none found.
-    
-    Key improvements:
-    1. Better handling of empty/None values
-    2. String conversion for safety
-    3. HTML tag removal
-    4. Better debugging info
+    FIXED: Extract actual call transcript text, prioritizing conversation over Q&A
     """
     src = hit.get("_source", hit) or {}
     
@@ -389,71 +383,76 @@ def _extract_transcript_text(hit: dict) -> str:
         text = re.sub(r'<[^>]+>', ' ', text)
         # Normalize whitespace
         text = re.sub(r'\s+', ' ', text).strip()
-        return text if text and len(text) > 10 else ""  # Must be substantial
+        return text if text and len(text) > 10 else ""
     
-    # Try fields in priority order - stop at first substantial content
+    # FIXED PRIORITY ORDER: transcript fields FIRST, evaluation fields LAST
     field_attempts = [
-        # Primary transcript fields
+        # PRIORITY 1: ACTUAL CALL TRANSCRIPTS (Speaker A/B conversations)
         ("transcript", src.get("transcript")),
         ("transcript_text", src.get("transcript_text")),
         ("full_text", src.get("full_text")),
         
-        # Evaluation content fields  
-        ("evaluation", src.get("evaluation")),
-        ("evaluation_text", src.get("evaluation_text")),
-        ("content", src.get("content")),
+        # PRIORITY 2: NESTED TRANSCRIPT FIELDS
+        ("metadata.transcript", src.get("metadata", {}).get("transcript")),
+        ("metadata.transcript_text", src.get("metadata", {}).get("transcript_text")),
+        ("metadata.full_text", src.get("metadata", {}).get("full_text")),
         
-        # Chunk-based fields
+        # PRIORITY 3: SEARCH HIGHLIGHTS (often contain transcript snippets)
+        ("highlight.transcript", hit.get("highlight", {}).get("transcript", [None])[0] if hit.get("highlight", {}).get("transcript") else None),
+        ("highlight.transcript_text", hit.get("highlight", {}).get("transcript_text", [None])[0] if hit.get("highlight", {}).get("transcript_text") else None),
+        
+        # PRIORITY 4: CHUNK-BASED FIELDS (may contain transcript chunks)
         ("chunks_text", src.get("chunks_text")),
         ("text", src.get("text")),
         
-        # Nested metadata fields
-        ("metadata.transcript", src.get("metadata", {}).get("transcript")),
-        ("metadata.full_text", src.get("metadata", {}).get("full_text")),
-        ("metadata.evaluation", src.get("metadata", {}).get("evaluation")),
-        
-        # Search highlight fields (often contain relevant text)
-        ("highlight.transcript_text", hit.get("highlight", {}).get("transcript_text", [None])[0] if hit.get("highlight", {}).get("transcript_text") else None),
-        ("highlight.transcript", hit.get("highlight", {}).get("transcript", [None])[0] if hit.get("highlight", {}).get("transcript") else None),
-        ("highlight.text", hit.get("highlight", {}).get("text", [None])[0] if hit.get("highlight", {}).get("text") else None),
-        ("highlight.chunks.text", hit.get("highlight", {}).get("chunks.text", [None])[0] if hit.get("highlight", {}).get("chunks.text") else None),
+        # PRIORITY 5: EVALUATION FIELDS (Q&A format - LAST RESORT ONLY)
+        ("evaluation_text", src.get("evaluation_text")),
+        ("evaluation", src.get("evaluation")),
+        ("content", src.get("content")),
     ]
     
     transcript_text = ""
     found_field = None
     
+    # Try fields in priority order - stop at first substantial content
     for field_name, field_value in field_attempts:
         text = safe_get_text(field_value)
         if text:
-            transcript_text = text
-            found_field = field_name
-            break
+            # ADDITIONAL CHECK: Prefer content that looks like actual conversation
+            # (contains "Speaker A" or timestamps) over Q&A format
+            is_conversation = ("Speaker" in text and "00:" in text) or ":" in text[:100]
+            is_qa_format = ("Question:" in text and "Answer:" in text)
+            
+            # If this is actual conversation format, use it immediately
+            if is_conversation and not is_qa_format:
+                transcript_text = text
+                found_field = field_name
+                logger.debug(f"✅ Found conversation format in field '{field_name}' for eval {src.get('evaluationId')}")
+                break
+            # If this is Q&A format, continue looking for better content
+            elif is_qa_format:
+                # Only use Q&A if we haven't found anything else yet
+                if not transcript_text:
+                    transcript_text = text
+                    found_field = field_name
+                    logger.debug(f"⚠️ Using Q&A format from field '{field_name}' as fallback for eval {src.get('evaluationId')}")
+                continue
+            # If it's other content, use it if we haven't found conversation yet
+            else:
+                transcript_text = text
+                found_field = field_name
+                break
     
     # Enhanced debugging
     eval_id = src.get("evaluationId", "unknown")
     
     if not transcript_text:
         available_fields = [k for k, v in src.items() if v is not None and str(v).strip()]
-        metadata_fields = []
-        if src.get("metadata") and isinstance(src["metadata"], dict):
-            metadata_fields = [f"metadata.{k}" for k, v in src["metadata"].items() if v is not None and str(v).strip()]
-        
         logger.warning(f"❌ No substantial transcript text found for document: {eval_id}")
         logger.debug(f"📋 Available source fields: {available_fields}")
-        if metadata_fields:
-            logger.debug(f"📋 Available metadata fields: {metadata_fields}")
-        
-        # Log the actual content of transcript-related fields for debugging
-        transcript_debug = src.get("transcript", "")
-        if transcript_debug:
-            logger.debug(f"🔍 'transcript' field content (first 200 chars): {str(transcript_debug)[:200]}")
-        
-        evaluation_debug = src.get("evaluation", "")
-        if evaluation_debug:
-            logger.debug(f"🔍 'evaluation' field content (first 200 chars): {str(evaluation_debug)[:200]}")
-            
     else:
-        logger.debug(f"✅ Extracted {len(transcript_text)} chars from field '{found_field}' for eval {eval_id}")
+        content_type = "conversation" if ("Speaker" in transcript_text and "00:" in transcript_text) else "Q&A" if ("Question:" in transcript_text) else "other"
+        logger.debug(f"✅ Extracted {len(transcript_text)} chars of {content_type} content from field '{found_field}' for eval {eval_id}")
     
     return transcript_text
 
