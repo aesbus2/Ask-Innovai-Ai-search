@@ -2217,6 +2217,89 @@ async def check_transcript_field():
 # ============================================================================
 # Transcript Testing
 # ============================================================================
+
+@app.get("/debug/test_specific_evaluation/{eval_id}")
+async def test_specific_evaluation(eval_id: str):
+    """Test transcript extraction for a specific evaluation"""
+    try:
+        from opensearch_client import get_opensearch_client
+        from chat_handlers import _extract_transcript_text
+        
+        client = get_opensearch_client()
+        
+        # Search for the specific evaluation
+        response = client.search(
+            index="eval-template-*",
+            body={
+                "query": {
+                    "term": {"evaluationId.keyword": eval_id}
+                },
+                "size": 1
+            }
+        )
+        
+        if not response["hits"]["hits"]:
+            return JSONResponse(content={"error": f"Evaluation {eval_id} not found"})
+        
+        hit = response["hits"]["hits"][0]
+        source = hit.get("_source", {})
+        
+        # Test the extraction function
+        extracted_text = _extract_transcript_text(hit)
+        
+        # Manual debug info
+        debug_info = {
+            "evaluationId": source.get("evaluationId", "unknown"),
+            "available_fields": list(source.keys()),
+            "has_transcript_field": "transcript" in source,
+            "has_evaluation_field": "evaluation" in source,
+            "has_text_field": "text" in source,
+            "extraction_result": {
+                "success": bool(extracted_text),
+                "length": len(extracted_text) if extracted_text else 0,
+                "preview": extracted_text[:200] if extracted_text else "No content extracted"
+            },
+            "field_contents": {}
+        }
+        
+        # Check specific fields for content
+        important_fields = ["transcript", "evaluation", "text", "content"]
+        for field in important_fields:
+            if field in source:
+                value = source[field]
+                debug_info["field_contents"][field] = {
+                    "type": type(value).__name__,
+                    "length": len(str(value)) if value else 0,
+                    "preview": str(value)[:100] if value else "Empty/None",
+                    "has_content": bool(value and str(value).strip())
+                }
+        
+        # Check metadata fields
+        if "metadata" in source and isinstance(source["metadata"], dict):
+            debug_info["metadata_fields"] = {}
+            for field in important_fields:
+                if field in source["metadata"]:
+                    value = source["metadata"][field]
+                    debug_info["metadata_fields"][field] = {
+                        "type": type(value).__name__,
+                        "length": len(str(value)) if value else 0,
+                        "preview": str(value)[:100] if value else "Empty/None",
+                        "has_content": bool(value and str(value).strip())
+                    }
+        
+        return JSONResponse(content=debug_info)
+        
+    except Exception as e:
+        import traceback
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+        )
+
+
 @app.get("/debug/test_transcript_search")
 async def test_transcript_search():
     """

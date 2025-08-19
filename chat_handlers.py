@@ -368,70 +368,163 @@ SEARCH ENHANCEMENT: {'VECTOR-ENHANCED' if vector_search_used or hybrid_search_us
 
 def _extract_transcript_text(hit: dict) -> str:
     """
-    Pull usable text from a search hit WITHOUT changing existing field names.
+    IMPROVED: Pull usable text from a search hit WITHOUT changing existing field names.
     Tries common fields in priority order; returns '' if none found.
+    
+    Key improvements:
+    1. Better handling of empty/None values
+    2. String conversion for safety
+    3. HTML tag removal
+    4. Better debugging info
     """
     src = hit.get("_source", hit) or {}
-    transcript_text = (
+    
+    # Try each field and convert to string, checking for actual content
+    def safe_get_text(value):
+        if value is None or value == "":
+            return ""
+        text = str(value).strip()
+        # Remove HTML tags if present
+        import re
+        text = re.sub(r'<[^>]+>', ' ', text)
+        # Normalize whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text if text and len(text) > 10 else ""  # Must be substantial
+    
+    # Try fields in priority order - stop at first substantial content
+    field_attempts = [
         # Primary transcript fields
+        ("transcript", src.get("transcript")),
+        ("transcript_text", src.get("transcript_text")),
+        ("full_text", src.get("full_text")),
         
-        src.get("transcript", "") or
-        src.get("transcript_text") or
-        src.get("full_text") or
-        
-        # Evaluation content fields
-        src.get("evaluation") or
-        src.get("evaluation_text") or
-        src.get("content") or
+        # Evaluation content fields  
+        ("evaluation", src.get("evaluation")),
+        ("evaluation_text", src.get("evaluation_text")),
+        ("content", src.get("content")),
         
         # Chunk-based fields
-        src.get("chunks_text") or
-        src.get("text") or
+        ("chunks_text", src.get("chunks_text")),
+        ("text", src.get("text")),
         
         # Nested metadata fields
-        src.get("metadata", {}).get("transcript") or
-        src.get("metadata", {}).get("full_text") or
+        ("metadata.transcript", src.get("metadata", {}).get("transcript")),
+        ("metadata.full_text", src.get("metadata", {}).get("full_text")),
+        ("metadata.evaluation", src.get("metadata", {}).get("evaluation")),
         
         # Search highlight fields (often contain relevant text)
-        hit.get("highlight", {}).get("transcript_text", [""])[0] or
-        hit.get("highlight", {}).get("chunks.text", [""])[0] or
-        
-        ""
-    )
-
+        ("highlight.transcript_text", hit.get("highlight", {}).get("transcript_text", [None])[0] if hit.get("highlight", {}).get("transcript_text") else None),
+        ("highlight.transcript", hit.get("highlight", {}).get("transcript", [None])[0] if hit.get("highlight", {}).get("transcript") else None),
+        ("highlight.text", hit.get("highlight", {}).get("text", [None])[0] if hit.get("highlight", {}).get("text") else None),
+        ("highlight.chunks.text", hit.get("highlight", {}).get("chunks.text", [None])[0] if hit.get("highlight", {}).get("chunks.text") else None),
+    ]
+    
+    transcript_text = ""
+    found_field = None
+    
+    for field_name, field_value in field_attempts:
+        text = safe_get_text(field_value)
+        if text:
+            transcript_text = text
+            found_field = field_name
+            break
+    
+    # Enhanced debugging
+    eval_id = src.get("evaluationId", "unknown")
+    
     if not transcript_text:
-        logger.warning(f"No transcript text found for document: {src.get('evaluationId', 'unknown')}")
-        logger.debug(f"Available fields: {list(src.keys())}")
+        available_fields = [k for k, v in src.items() if v is not None and str(v).strip()]
+        metadata_fields = []
+        if src.get("metadata") and isinstance(src["metadata"], dict):
+            metadata_fields = [f"metadata.{k}" for k, v in src["metadata"].items() if v is not None and str(v).strip()]
+        
+        logger.warning(f"❌ No substantial transcript text found for document: {eval_id}")
+        logger.debug(f"📋 Available source fields: {available_fields}")
+        if metadata_fields:
+            logger.debug(f"📋 Available metadata fields: {metadata_fields}")
+        
+        # Log the actual content of transcript-related fields for debugging
+        transcript_debug = src.get("transcript", "")
+        if transcript_debug:
+            logger.debug(f"🔍 'transcript' field content (first 200 chars): {str(transcript_debug)[:200]}")
+        
+        evaluation_debug = src.get("evaluation", "")
+        if evaluation_debug:
+            logger.debug(f"🔍 'evaluation' field content (first 200 chars): {str(evaluation_debug)[:200]}")
+            
+    else:
+        logger.debug(f"✅ Extracted {len(transcript_text)} chars from field '{found_field}' for eval {eval_id}")
     
     return transcript_text
 
-def _short(s: str, max_chars: int) -> str:
-    s = (s or "").strip()
-    return s if len(s) <= max_chars else (s[:max_chars] + " …")
 
-def assemble_grounded_context(results: list, max_docs: int = 20, per_doc_chars: int = 2000) -> str:
+def debug_transcript_extraction(hit: dict) -> dict:
     """
-    Build a single context string from top-N search hits, trimmed per doc so the prompt stays small.
-    Includes doc ids/urls for traceability.
+    NEW: Debug function to see exactly what's in a document
+    Call this to understand why transcript extraction might be failing
     """
-    parts = []
-    for i, hit in enumerate(results[:max_docs], 1):
-        src = hit.get("_source", {}) if isinstance(hit, dict) else {}
-        text = _extract_transcript_text(hit)
-        if not text:
-            continue
-        doc_id = src.get("internalId") or src.get("evaluationId") or src.get("id") or src.get("_id") or "unknown-id"
-        url = src.get("url") or ""
-        header = f"[DOC {i} | id={doc_id}{' | ' + url if url else ''}]"
-        parts.append(f"{header}\n{_short(text, per_doc_chars)}")
-    return "\n\n---\n\n".join(parts)
+    src = hit.get("_source", hit) or {}
+    eval_id = src.get("evaluationId", "unknown")
+    
+    debug_info = {
+        "evaluationId": eval_id,
+        "source_fields": {},
+        "metadata_fields": {},
+        "extraction_result": {},
+        "recommendations": []
+    }
+    
+    # Check all source fields
+    for key, value in src.items():
+        if value is not None:
+            debug_info["source_fields"][key] = {
+                "type": type(value).__name__,
+                "length": len(str(value)) if value else 0,
+                "preview": str(value)[:100] if value else "",
+                "is_substantial": len(str(value).strip()) > 10 if value else False
+            }
+    
+    # Check metadata fields specifically
+    metadata = src.get("metadata", {})
+    if isinstance(metadata, dict):
+        for key, value in metadata.items():
+            if value is not None:
+                debug_info["metadata_fields"][key] = {
+                    "type": type(value).__name__,
+                    "length": len(str(value)) if value else 0,
+                    "preview": str(value)[:100] if value else "",
+                    "is_substantial": len(str(value).strip()) > 10 if value else False
+                }
+    
+    # Test extraction
+    extracted = _extract_transcript_text(hit)
+    debug_info["extraction_result"] = {
+        "success": bool(extracted),
+        "length": len(extracted) if extracted else 0,
+        "preview": extracted[:200] if extracted else ""
+    }
+    
+    # Provide recommendations
+    if not extracted:
+        has_transcript_field = bool(src.get("transcript"))
+        has_evaluation_field = bool(src.get("evaluation"))
+        has_text_field = bool(src.get("text"))
+        
+        if has_transcript_field:
+            debug_info["recommendations"].append("✅ 'transcript' field exists - check if it contains actual content")
+        elif has_evaluation_field:
+            debug_info["recommendations"].append("✅ 'evaluation' field exists - this might contain transcript data")
+        elif has_text_field:
+            debug_info["recommendations"].append("✅ 'text' field exists - this might contain transcript data")
+        else:
+            debug_info["recommendations"].append("❌ No obvious transcript fields found")
+            debug_info["recommendations"].append("🔍 Check if transcript data is stored under a different field name")
+    
+    return debug_info
 
 GROUNDING_POLICY = (
-    "You are an assistant that MUST answer ONLY using the transcript context provided. "
-    "If the answer is not present in the context, respond exactly with: "
-    "\"I could not find that information in the provided transcripts.\" "
-    "Do not guess or invent any detail. Prefer quoting short, exact phrases from the transcripts. "
-    "If a document header like [DOC N | id=…] appears above the quote, keep that reference."
+    "You are an AI assistant. Base your answers strictly on the provided transcript context. "
+    "If the answer is not present, respond with the required fallback sentence."
 )
 
 def build_chat_prompt(user_query: str, context: str) -> str:
