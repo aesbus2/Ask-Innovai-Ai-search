@@ -1738,18 +1738,62 @@ function displayEvaluationResults(data, searchedId) {
                 </div>
             </div>
             
-            <!-- Evaluation Content 111
-            ${evalData.evaluation ? `
-            <div class="evaluation-section">
-                <h4>
-                    <span class="emoji">📄</span>
-                    Evaluation Content
-                </h4>
-                <div class="evaluation-text">
-                    ${evalData.evaluation.replace(/\n/g, '<br>')}
+           // Replace the entire section from "<!-- Evaluation Content" to the end of your HTML template with this:
+
+            <!-- Content Sections with Tabs -->
+            <div class="content-tabs">
+                <div class="tab-headers">
+                    <button class="tab-header active" onclick="switchTab('evaluation-tab')" id="evaluation-tab-header">
+                        <span class="emoji">📝</span>
+                        Evaluation Content
+                    </button>
+                    <button class="tab-header" onclick="switchTab('transcript-tab')" id="transcript-tab-header">
+                        <span class="emoji">🎙️</span>
+                        Call Transcript
+                        ${evalData.transcript ? '<span class="tab-indicator">●</span>' : '<span class="tab-indicator empty">○</span>'}
+                    </button>
+                </div>
+                
+                <div class="tab-content">
+                    <!-- Evaluation Content Tab -->
+                    <div id="evaluation-tab" class="tab-panel active">
+                        ${evalData.evaluation ? `
+                        <div class="evaluation-section">
+                            <div class="evaluation-text">
+                                ${evalData.evaluation.replace(/\n/g, '<br>')}
+                            </div>
+                        </div>
+                        ` : `
+                        <div class="no-content">
+                            <span class="emoji">📋</span>
+                            <p>No evaluation content available for this evaluation.</p>
+                        </div>
+                        `}
+                    </div>
+                    
+                    <!-- Transcript Tab -->
+                    <div id="transcript-tab" class="tab-panel">
+                        ${evalData.transcript ? `
+                        <div class="transcript-section">
+                            <div class="transcript-info">
+                                <span class="emoji">ℹ️</span>
+                                <strong>Call Transcript</strong> 
+                                <span class="transcript-length">(${evalData.transcript.length.toLocaleString()} characters)</span>
+                            </div>
+                            <div class="transcript-text">
+                                ${formatTranscript(evalData.transcript)}
+                            </div>
+                        </div>
+                        ` : `
+                        <div class="no-content">
+                            <span class="emoji">🎙️</span>
+                            <p>No call transcript available for this evaluation.</p>
+                            <small>Transcript data may not have been captured for this call.</small>
+                        </div>
+                        `}
+                    </div>
                 </div>
             </div>
-            ` : ''}
         </div>
     `;
     
