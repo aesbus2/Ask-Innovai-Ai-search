@@ -1973,20 +1973,86 @@ function escapeHtml(unsafe) {
 
 function formatMessage(message) {
     // Convert markdown-like formatting to HTML with proper bullet support
-    return message
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code style="background: #f5f5f5; padding: 2px 4px; border-radius: 3px; font-family: monospace;">$1</code>')
-        // Handle bullet lists properly
-        .replace(/^[\s]*[-*+]\s+(.+)$/gm, '<li>$1</li>')
-        // Handle numbered lists
-        .replace(/^[\s]*(\d+\.)\s+(.+)$/gm, '<li>$2</li>')
-        // Wrap consecutive list items in ul tags
-        .replace(/(<li>.*<\/li>)(?:\n<li>.*<\/li>)*/g, function(match) {
-            return '<ul>' + match + '</ul>';
-        })
-        // Handle line breaks
-        .replace(/\n/g, '<br>');
+    if (!message) return '';
+    
+    let formatted = message;
+    
+    // Handle Headers
+    formatted = formatted.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+    formatted = formatted.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+    formatted = formatted.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+    
+    // Handle Bold and Italic (your existing code)
+    formatted = formatted.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');
+    formatted = formatted.replace(/\\*(.*?)\\*/g, '<em>$1</em>');
+    formatted = formatted.replace(/`(.*?)`/g, '<code style="background: #f5f5f5; padding: 2px 4px; border-radius: 3px; font-family: monospace;">$1</code>');
+    
+    // Enhanced status badges
+    formatted = formatted.replace(/(✅|🟢)\\s*([^,\\n\\.]+)/g, '<span class="status-badge status-success">✅ $2</span>');
+    formatted = formatted.replace(/(⚠️|🟡)\\s*([^,\\n\\.]+)/g, '<span class="status-badge status-warning">⚠️ $2</span>');
+    formatted = formatted.replace(/(ℹ️|🔵)\\s*([^,\\n\\.]+)/g, '<span class="status-badge status-info">ℹ️ $2</span>');
+    formatted = formatted.replace(/(❌|🔴)\\s*([^,\\n\\.]+)/g, '<span class="status-badge status-error">❌ $2</span>');
+    
+    // Handle Tables (simple markdown style) - NEW ADDITION
+    const tableRegex = /\\n\\|(.+)\\|\\n\\|[-\\s\\|:]+\\|\\n((?:\\|.+\\|\\n?)+)/g;
+    formatted = formatted.replace(tableRegex, (match, headerRow, bodyRows) => {
+        const headers = headerRow.split('|').map(h => h.trim()).filter(h => h);
+        const rows = bodyRows.trim().split('\\n').map(row => 
+            row.split('|').map(cell => cell.trim()).filter(cell => cell)
+        );
+        
+        let tableHtml = '<table>';
+        tableHtml += '<thead><tr>';
+        headers.forEach(header => {
+            tableHtml += `<th>${header}</th>`;
+        });
+        tableHtml += '</tr></thead><tbody>';
+        rows.forEach(row => {
+            tableHtml += '<tr>';
+            row.forEach(cell => {
+                tableHtml += `<td>${cell}</td>`;
+            });
+            tableHtml += '</tr>';
+        });
+        tableHtml += '</tbody></table>';
+        
+        return '\\n' + tableHtml + '\\n';
+    });
+    
+    // Handle bullet lists properly (your original logic but enhanced)
+    formatted = formatted.replace(/^[\\s]*[-*+]\\s+(.+)$/gm, '<li>$1</li>');
+    // Handle numbered lists  
+    formatted = formatted.replace(/^[\\s]*(\\d+\\.)\\s+(.+)$/gm, '<li>$2</li>');
+    
+    // Wrap consecutive list items in ul tags (your original logic but improved)
+    formatted = formatted.replace(/((?:<li>.*?<\/li>\s*){2,})/g, function(match) {
+        // Check if this looks like a numbered list by checking for <li> elements that start with a digit and a dot
+        const hasNumbers = /^<li>\d+\..*?<\/li>/.test(match.trim());
+        const tag = hasNumbers ? 'ol' : 'ul';
+        return `<${tag}>${match}</${tag}>`;
+    });
+    
+    // Handle line breaks and paragraphs (from your original)
+    formatted = formatted.replace(/\\n\\n+/g, '</p><p>');
+    formatted = formatted.replace(/\\n/g, '<br>');
+    
+    // Wrap in paragraph tags if needed (but avoid wrapping headers, lists, tables)
+    if (!formatted.includes('<p>') && !formatted.includes('<h') && !formatted.includes('<ul>') && !formatted.includes('<ol>') && !formatted.includes('<table>')) {
+        formatted = '<p>' + formatted + '</p>';
+    }
+    
+    // Clean up any formatting issues
+    formatted = formatted.replace(/<p><\/p>/g, '');
+    formatted = formatted.replace(/<p><h/g, '<h');
+    formatted = formatted.replace(/<\/h([1-6])><\/p>/g, '</h$1>');
+    formatted = formatted.replace(/<p><ul>/g, '<ul>');
+    formatted = formatted.replace(/<\/ul><\/p>/g, '</ul>');
+    formatted = formatted.replace(/<p><ol>/g, '<ol>');
+    formatted = formatted.replace(/<\/ol><\/p>/g, '</ol>');
+    formatted = formatted.replace(/<p><table>/g, '<table>');
+    formatted = formatted.replace(/<\/table><\/p>/g, '</table>');
+    
+    return formatted;
 }
 
 function askQuestion(question) {

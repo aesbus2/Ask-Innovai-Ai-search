@@ -477,6 +477,238 @@ body {
     outline-offset: 2px;
 }
 
+/*Chat response styles
+
+const ENHANCED_CHAT_STYLES = `
+/* Enhanced Message Content Styling for Your System */
+.message-content {
+    padding: 20px !important;
+    border-radius: 16px !important;
+    line-height: 1.6 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+.assistant-message .message-content {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+    border-left: 4px solid #6e32a0 !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08) !important;
+}
+
+/* Enhanced Typography */
+.message-content h1, .message-content h2, .message-content h3 {
+    color: #2c3e50 !important;
+    margin: 1.5em 0 0.8em 0 !important;
+    font-weight: 600 !important;
+}
+
+.message-content h1 {
+    font-size: 1.8em !important;
+    border-bottom: 2px solid #6e32a0 !important;
+    padding-bottom: 0.5em !important;
+}
+
+.message-content h2 {
+    font-size: 1.4em !important;
+    color: #6e32a0 !important;
+}
+
+.message-content h3 {
+    font-size: 1.2em !important;
+    color: #8b4cb8 !important;
+}
+
+/* Enhanced Lists */
+.message-content ul {
+    margin: 1em 0 !important;
+    padding-left: 0 !important;
+    list-style: none !important;
+}
+
+.message-content ul li {
+    position: relative !important;
+    padding: 12px 20px 12px 45px !important;
+    margin: 8px 0 !important;
+    background: rgba(110, 50, 160, 0.03) !important;
+    border-radius: 10px !important;
+    border-left: 4px solid #6e32a0 !important;
+    transition: all 0.2s ease !important;
+}
+
+.message-content ul li:hover {
+    background: rgba(110, 50, 160, 0.06) !important;
+    transform: translateX(3px) !important;
+}
+
+.message-content ul li::before {
+    content: "•" !important;
+    position: absolute !important;
+    left: 18px !important;
+    top: 12px !important;
+    color: #6e32a0 !important;
+    font-weight: bold !important;
+    font-size: 1.3em !important;
+}
+
+/* Enhanced Numbered Lists */
+.message-content ol {
+    margin: 1em 0 !important;
+    padding-left: 0 !important;
+    counter-reset: modern-counter !important;
+}
+
+.message-content ol li {
+    position: relative !important;
+    padding: 14px 20px 14px 55px !important;
+    margin: 10px 0 !important;
+    background: linear-gradient(135deg, rgba(110, 50, 160, 0.04) 0%, rgba(139, 76, 184, 0.02) 100%) !important;
+    border-radius: 12px !important;
+    border-left: 4px solid #6e32a0 !important;
+    counter-increment: modern-counter !important;
+    list-style: none !important;
+}
+
+.message-content ol li::before {
+    content: counter(modern-counter) !important;
+    position: absolute !important;
+    left: 18px !important;
+    top: 14px !important;
+    background: #6e32a0 !important;
+    color: white !important;
+    width: 26px !important;
+    height: 26px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 0.85em !important;
+    font-weight: bold !important;
+}
+
+/* Modern Tables */
+.message-content table {
+    width: 100% !important;
+    margin: 1.5em 0 !important;
+    border-collapse: collapse !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important;
+    background: white !important;
+}
+
+.message-content table thead {
+    background: linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%) !important;
+}
+
+.message-content table th {
+    padding: 16px 20px !important;
+    color: white !important;
+    font-weight: 600 !important;
+    text-align: left !important;
+    font-size: 0.95em !important;
+    letter-spacing: 0.5px !important;
+}
+
+.message-content table td {
+    padding: 14px 20px !important;
+    border-bottom: 1px solid rgba(0,0,0,0.05) !important;
+    transition: background-color 0.2s ease !important;
+}
+
+.message-content table tbody tr:hover {
+    background: rgba(110, 50, 160, 0.02) !important;
+}
+
+.message-content table tbody tr:nth-child(even) {
+    background: rgba(248, 249, 250, 0.8) !important;
+}
+
+/* Status Badges */
+.status-badge {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 6px 14px !important;
+    border-radius: 18px !important;
+    font-size: 0.85em !important;
+    font-weight: 500 !important;
+    margin: 4px 6px 4px 0 !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1) !important;
+    color: white !important;
+}
+
+.status-success {
+    background: linear-gradient(135deg, #4caf50 0%, #45a049 100%) !important;
+    color: white !important;
+}
+
+.status-warning {
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%) !important;
+    color: white !important;
+}
+
+.status-info {
+    background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%) !important;
+    color: white !important;
+}
+
+.status-error {
+    background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%) !important;
+    color: white !important;
+}
+
+/* Code Enhancement */
+.message-content code {
+    background: rgba(110, 50, 160, 0.1) !important;
+    color: #6e32a0 !important;
+    padding: 4px 8px !important;
+    border-radius: 6px !important;
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace !important;
+    font-size: 0.9em !important;
+}
+
+.message-content pre {
+    background: #2d3748 !important;
+    color: #e2e8f0 !important;
+    padding: 20px !important;
+    border-radius: 12px !important;
+    overflow-x: auto !important;
+    margin: 1.5em 0 !important;
+    border-left: 4px solid #6e32a0 !important;
+}
+
+/* Info Cards */
+.info-card {
+    background: white !important;
+    border: 1px solid rgba(0,0,0,0.06) !important;
+    border-radius: 12px !important;
+    padding: 20px !important;
+    margin: 16px 0 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+}
+
+.info-card-header {
+    font-weight: 600 !important;
+    color: #6e32a0 !important;
+    margin-bottom: 12px !important;
+    font-size: 1.1em !important;
+}
+
+/* Animations */
+@keyframes modernFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.message {
+    animation: modernFadeIn 0.4s ease !important;
+}
+
 /* Comprehensive option in header */
 .header-transcript-toggle .comprehensive-option {
     display: inline-flex;

@@ -42,7 +42,7 @@ GENAI_MODEL = os.getenv("GENAI_MODEL", "n/a")
 GENAI_TEMPERATURE = float(os.getenv("GENAI_TEMPERATURE", "0.7"))
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 
-CHAT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "500"))  
+CHAT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "10000"))  
 HYBRID_SEARCH_LIMIT = int(os.getenv("HYBRID_SEARCH_LIMIT", "1000"))  
 VECTOR_SEARCH_LIMIT = int(os.getenv("VECTOR_SEARCH_LIMIT", "1000"))  
 TEXT_SEARCH_LIMIT = int(os.getenv("TEXT_SEARCH_LIMIT", "1000"))   
@@ -1760,28 +1760,43 @@ async def relay_chat_rag(request: Request):
 
         
         # STEP 2: Enhanced system message with vector search awareness
-        system_message = f"""You are an analyst. You MUST base answers ONLY on the CONTEXT below. 
-If the answer is not explicitly present in the context, say: 
-"Not found in the provided evaluations." Do NOT guess or infer.
+        system_message = f"""You are a professional call center analytics assistant. Provide clear, concise executive level insights based on the filtered evaluation data.
 
-RESPONSE FORMAT (strict):
-1) VERBATIM_EXCERPTS:
-   - Bullet points.
-   - Each bullet must include a short quote (5–30 words) copied exactly from context 
-     and a citation like [evaluationId=..., time?=MM:SS if visible].
-2) ANALYSIS:
-   - Synthesize only from the VERBATIM_EXCERPTS above.
-   - No new facts. If something is missing, say it’s not present.
-3) ACTIONS (if the user asked): concrete, short.
+## Response Format:
+**Key Findings:**
+- Summarize main patterns and trends
+- Focus on actionable insights
+- Provide churn analysis and potential retention strategies
+- Find sales opportunities
+    - list sales phones, devices, plans, home internet, if available and list success rate and count
+- Include brief relevant quotes as a summaryonly when essential (max 2-3)
 
-CONTEXT (vector-matched):
+**Recommendations:**
+- Provide specific, actionable steps 
+- Prioritize by impact
+- Provide coaching recommendations
 
+**Summary:**
+- Overall assessment and metrics
+- List sub-disposition as bullet points and included trends and insights
+- list all partners included in metadata "partner" filter as bullet points and rank performance
+
+## Guidelines:
+- Base answers strictly on the provided context and data
+- Do not generate or estimate statistics not present in the context
+- provided evaluation counts along with other relevant metrics
+- only use bullet points for sub items
+- Be concise and professional - avoid lengthy excerpts
+- If information is not available, state that clearly
+- Focus on business insights rather than raw data dumps
+
+CONTEXT:
 {context}
 
 Rules:
-- No statistics unless directly calculable from excerpts you provided.
-- Every factual claim must be traceable to an excerpt.
-- If nothing relevant exists, return only: "Not found in the provided evaluations."
+- Use only the provided evaluation data
+- Keep quotes brief and relevant
+- If no relevant data exists, return: "No relevant data found for this query."
 """
 
         # STEP 3: Streamlined Llama payload
@@ -1931,7 +1946,7 @@ Rules:
         
         # Define allowed fields for display
         ALLOWED_DISPLAY_FIELDS = {
-            "evaluationId", "weighted_score", "url", "partner", "site", "lob",
+            "evaluationId","url", "partner", "site", "lob",
             "agentName", "agentId", "disposition", "subDisposition",
             "created_on", "call_date", "call_duration", "language", "evaluation"
         }
