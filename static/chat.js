@@ -47,6 +47,15 @@ const PRODUCTION_CONFIG = {
     VECTOR_SEARCH_UI: true
 };
 
+//Configuration for default evaluation inclusion
+const EVALUATION_DEFAULTS = {
+    INCLUDE_ALL_FILTERED: true,     // Default to all filtered evaluations
+    DEFAULT_MAX_RESULTS: null,      // null = no limit
+    DEFAULT_CHAT_LIMIT: null,       // null = no limit for chat
+    DEFAULT_TRANSCRIPT_LIMIT: null, // null = no limit for transcript search
+    ALLOW_USER_OVERRIDE: true       // Allow users to specify limits
+};
+
 // Performance monitoring
 const performanceMetrics = {
     filterLoadTime: 0,
@@ -279,6 +288,44 @@ function initializeTranscriptSearch() {
     }, 200);
 }
 
+function addEvaluationScopeToggle() {
+    const chatHeaderFilters = document.getElementById('chatHeaderFilters');
+    if (!chatHeaderFilters) return;
+    
+    // Check if toggle already exists
+    if (document.getElementById('evaluationScopeToggle')) return;
+    
+    const scopeToggle = document.createElement('div');
+    scopeToggle.id = 'evaluationScopeToggle';
+    scopeToggle.innerHTML = `
+        <label class="toggle-switch header-toggle">
+            <input type="checkbox" id="includeAllFilteredToggle" checked onchange="updateEvaluationScope()">
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">All Filtered Evaluations</span>
+        </label>
+    `;
+    
+    chatHeaderFilters.appendChild(scopeToggle);
+}
+
+function updateEvaluationScope() {
+    const toggle = document.getElementById('includeAllFilteredToggle');
+    if (toggle) {
+        EVALUATION_DEFAULTS.INCLUDE_ALL_FILTERED = toggle.checked;
+        console.log(`🔧 Evaluation scope updated: ${toggle.checked ? 'ALL filtered' : 'LIMITED'}`);
+        
+        // Show feedback
+        if (typeof showToast === 'function') {
+            showToast(
+                toggle.checked ? 
+                '✅ Now using ALL evaluations matching filters' : 
+                '⚠️ Now using LIMITED evaluations matching filters',
+                toggle.checked ? 'success' : 'warning'
+            );
+        }
+    }
+}
+
 
 function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
     console.log(`🔄 FIXED: Updating interface for transcript mode: ${isTranscriptMode}`);
@@ -367,6 +414,7 @@ function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
         clearTranscriptResults();
     }
 }
+
 
 
 function addTranscriptSearchGuidance() {
@@ -624,7 +672,7 @@ function handleEnhancedTranscriptToggleChange() {
 }
 
 async function sendMessageWithTranscriptSearch() {
-    console.log("🎯 FIXED: Starting transcript search with increased limits...");
+    console.log("🎯 FIXED: Starting transcript search with increased limits and all filtered evaluations...");
     
     const chatInput = document.getElementById('chatInput');
     const sendButton = document.getElementById('sendButton') || document.querySelector('.send-btn');
@@ -667,27 +715,28 @@ async function sendMessageWithTranscriptSearch() {
         const requestBody = {
             query: message,
             filters: currentFilters || {},
-            display_size: useComprehensive ? 1000 : 1000,  
-            size: useComprehensive ? 1000 : 1000,          
-            max_scan: useComprehensive ? 25000 : 10000, 
-            highlight: true
+            // DEFAULT: No limits - use all evaluations matching filters
+            display_size: null,     // null = all matching evaluations
+            size: null,             // null = all matching evaluations  
+            max_scan: null,         // null = scan all available
+            highlight: true,
+            include_all_filtered: true  // Explicitly request all filtered results
         };
         
-        console.log("🔍 FIXED: Sending transcript search with increased limits:", {
+        console.log("🔍 Sending transcript search with increased limits:", {
             endpoint,
             query: message,
-            comprehensive: useComprehensive,
-            display_size: requestBody.display_size,
-            max_scan: requestBody.max_scan,
-            filtersCount: Object.keys(currentFilters || {}).length
+            comprehensive: useComprehensive,      
+            filtersCount: Object.keys(currentFilters || {}).length,
+            defaultToAll: true
         });
         
-        // Execute search with timeout
+        // Execute search with timeout for large data sets
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => {
             abortController.abort();
-            console.warn("⏰ Request timeout after 45 seconds");
-        }, 45000); // Increased timeout for larger searches
+            console.warn("Request timeout after 60 seconds");
+        },60000); // Increased timeout for larger searches
         
         const response = await fetch(endpoint, {
             method: 'POST',
@@ -737,6 +786,32 @@ async function sendMessageWithTranscriptSearch() {
     }
 }
 
+function getAppliedFilters() {
+    const filters = {};
+    
+    // Collect filter values from UI elements
+    const filterMappings = {
+        'templateFilter': 'template_name',
+        'programFilter': 'program', 
+        'partnerFilter': 'partner',
+        'siteFilter': 'site',
+        'lobFilter': 'lob',
+        'callDispositionFilter': 'disposition',
+        'callSubDispositionFilter': 'subDisposition',
+        'languageFilter': 'language',
+        'startCallDate': 'call_date_start',
+        'endCallDate': 'call_date_end'
+    };
+    
+    Object.entries(filterMappings).forEach(([elementId, filterKey]) => {
+        const element = document.getElementById(elementId);
+        if (element && element.value && element.value !== '') {
+            filters[filterKey] = element.value;
+        }
+    });
+    
+    return filters;
+}
 
 // =============================================================================
 // FILTER MANAGEMENT
@@ -768,8 +843,8 @@ async function loadDynamicFilterOptions() {
                 partners: data.partners || [],
                 sites: data.sites || [],
                 lobs: data.lobs || [],
-                callDispositions: data.callDispositions || [],
-                callSubDispositions: data.callSubDispositions || [],
+                callDispositions: data.Dispositions || [],
+                callSubDispositions: data.SubDispositions || [],
                 languages: data.languages || [],
                 callTypes: data.callTypes || []
             };
@@ -824,8 +899,8 @@ function populateFilterOptions(options) {
     populateSelect('lobFilter', options.lobs);
     
     // Disposition filters
-    populateSelect('callDispositionFilter', options.callDispositions);
-    populateSelect('callSubDispositionFilter', options.callSubDispositions);
+    populateDispositionDropdown(options.callDispositions);
+    populateSubDispositionDropdown(options.callSubDispositions);
     
     // Other filters
     populateSelect('languageFilter', options.languages);    
@@ -984,8 +1059,8 @@ function updateIndividualFilterCounts(data) {
         { id: 'partnerCount', data: data.partners, label: 'partners' },
         { id: 'siteCount', data: data.sites, label: 'sites' },
         { id: 'lobCount', data: data.lobs, label: 'LOBs' },
-        { id: 'dispositionCount', data: data.callDispositions, label: 'dispositions' },
-        { id: 'subDispositionCount', data: data.callSubDispositions, label: 'sub-dispositions' },
+        { id: 'dispositionCount', data: data.Dispositions, label: 'dispositions' },
+        { id: 'subDispositionCount', data: data.SubDispositions, label: 'sub-dispositions' },
         { id: 'languageCount', data: data.languages, label: 'languages' }
     ];
 
@@ -1005,6 +1080,65 @@ function updateIndividualFilterCounts(data) {
         }
     });
 }
+
+// Populate the main disposition dropdown
+function populateDispositionDropdown(dispositions) {
+    const dispositionSelect = document.getElementById('callDispositionFilter');
+    if (!dispositionSelect) {
+        console.warn("⚠️ Disposition dropdown not found");
+        return;
+    }
+    
+    // Clear existing options (except the default "All" option)
+    dispositionSelect.innerHTML = '<option value="">All Dispositions</option>';
+    
+    // Add each disposition as an option
+    dispositions.forEach(disposition => {
+        const option = document.createElement('option');
+        option.value = disposition;
+        option.textContent = disposition;
+        dispositionSelect.appendChild(option);
+    });
+    
+    // Update count indicator
+    const countIndicator = document.getElementById('dispositionCount');
+    if (countIndicator) {
+        countIndicator.textContent = `(${dispositions.length})`;
+        countIndicator.className = 'count-indicator data-status-ok';
+    }
+    
+    console.log(`✅ Populated ${dispositions.length} dispositions`);
+}
+
+// Populate the subdisposition dropdown
+function populateSubDispositionDropdown(subDispositions) {
+    const subDispositionSelect = document.getElementById('callSubDispositionFilter');
+    if (!subDispositionSelect) {
+        console.warn("⚠️ Sub-disposition dropdown not found");
+        return;
+    }
+    
+    // Clear existing options
+    subDispositionSelect.innerHTML = '<option value="">All Sub-Dispositions</option>';
+    
+    // Add each subdisposition as an option
+    subDispositions.forEach(subDisposition => {
+        const option = document.createElement('option');
+        option.value = subDisposition;
+        option.textContent = subDisposition;
+        subDispositionSelect.appendChild(option);
+    });
+    
+    // Update count indicator
+    const countIndicator = document.getElementById('subDispositionCount');
+    if (countIndicator) {
+        countIndicator.textContent = `(${subDispositions.length})`;
+        countIndicator.className = 'count-indicator data-status-ok';
+    }
+    
+    console.log(`✅ Populated ${subDispositions.length} sub-dispositions`);
+}
+
 
 // 🔧 NEW FUNCTION - This was completely missing!
 function updateChatHeaderStats(data) {
@@ -1035,7 +1169,7 @@ function updateChatHeaderStats(data) {
 function updateDataStatusIndicators(data) {
     const statusElements = [
         { id: 'hierarchyDataStatus', categories: ['templates', 'programs', 'partners', 'sites', 'lobs'] },
-        { id: 'callDataStatus', categories: ['callDispositions', 'callSubDispositions'] },
+        { id: 'callDataStatus', categories: ['Dispositions', 'SubDispositions'] },
         { id: 'languageDataStatus', categories: ['languages'] }
     ];
 
@@ -1170,17 +1304,23 @@ function getErrorMessage(errorMessage) {
 // =============================================================================
 
 async function refreshAnalyticsStats() {
-    console.log("📊 Refreshing analytics stats with filters:", currentFilters);
+    console.log(" Refreshing analytics stats with filters:", currentFilters);
     
     try {
+        // 🔧 UPDATED: Request stats for all evaluations matching filters
+        const requestBody = {
+            filters: currentFilters,
+            include_all_filtered: true,  // Include all matching evaluations
+            max_evaluations: null,       // null = no limit
+            comprehensive: true          // Request comprehensive stats
+        };
+        
         const response = await fetch('/analytics/stats', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                filters: currentFilters
-            })
+            body: JSON.stringify(requestBody)
         });
         
         if (!response.ok) {
@@ -1188,7 +1328,7 @@ async function refreshAnalyticsStats() {
         }
         
         const data = await response.json();
-        console.log("📊 Analytics stats response:", data);
+        console.log("Analytics stats response:", data);
         
         if (data.status === 'success') {
             // Update totalRecords in chat header
@@ -1442,6 +1582,18 @@ async function sendMessage() {
         showTypingIndicator();
         
         const startTime = performance.now();
+
+        const requestBody = {
+            message: message,
+            history: chatHistory,
+            filters: currentFilters,
+            analytics: true,
+            // DEFAULT: Use all evaluations that match current filters
+            max_results: null,  // null = no limit, use all matching
+            size: null,         // null = no limit, use all matching
+            include_all_filtered: true  // Explicitly request all filtered results
+        };
+        
         
         // Send request
         const response = await fetch('/api/chat', {
@@ -1861,8 +2013,23 @@ function updateHierarchyFilters() {
 }
 
 function updateSubDispositions() {
-    // Update sub-dispositions based on selected disposition
-    console.log("🔄 Updating sub-dispositions");
+    const dispositionSelect = document.getElementById('callDispositionFilter');
+    const subDispositionSelect = document.getElementById('callSubDispositionFilter');
+    
+    if (!dispositionSelect || !subDispositionSelect) {
+        console.warn("⚠️ Disposition or sub-disposition dropdown not found");
+        return;
+    }
+    
+    const selectedDisposition = dispositionSelect.value;
+    
+    // For now, show all subdispositions regardless of disposition selection
+    // You can add business logic here to filter subdispositions based on disposition
+    if (filterOptions && filterOptions.callSubDispositions) {
+        populateSubDispositionDropdown(filterOptions.callSubDispositions);
+    }
+    
+    console.log(`📋 Updated sub-dispositions for disposition: ${selectedDisposition}`);
 }
 
 function toggleDetailedTable() {
@@ -3513,8 +3680,13 @@ window.debugChatSystem = debugChatSystem;
 window.getProductionMetrics = () => performanceMetrics;
 window.getProductionConfig = () => PRODUCTION_CONFIG;
 
+//Export the configuration for use by other functions
+window.EVALUATION_DEFAULTS = EVALUATION_DEFAULTS;
+window.getAppliedFilters = getAppliedFilters;
+window.updateEvaluationScope = updateEvaluationScope;
+
 // =============================================================================
-// 🔧 FIXED: INITIALIZATION WITH ANALYTICS STATS
+// INITIALIZATION WITH ANALYTICS STATS
 // Added refreshAnalyticsStats() call to load initial stats on page startup
 // =============================================================================
 
@@ -3543,7 +3715,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 500);
         
         // Load filter options (non-blocking)
-        setTimeout(() => {
+        setTimeout(() => {            
             loadDynamicFilterOptions()
                 .then(() => {
                     const loadTime = performance.now() - startTime;
@@ -3565,7 +3737,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 🔧 UPDATED: Use enhanced transcript search initialization
     setTimeout(initializeEnhancedTranscriptSearch, 1000);
+    setTimeout(() => {
+        addEvaluationScopeToggle();
+    }, 1500);
 
+    console.log("✅ Default evaluation scope: ALL filtered evaluations");    
     console.log("✅ Metro AI Call Center Analytics v4.9.0 production loaded successfully");
     console.log("🔧 FIXED: Chat-stats integration, duplicate functions removed, analytics connected");
     console.log("🔮 Vector search: Enhanced relevance and semantic similarity support");
