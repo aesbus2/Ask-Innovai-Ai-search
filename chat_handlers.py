@@ -1767,8 +1767,8 @@ async def relay_chat_rag(request: Request):
 - Summarize main patterns and trends
 - Focus on actionable insights
 - Provide churn analysis and potential retention strategies
-- Find sales opportunities
-    - list sales phones, devices, plans, home internet, if available and list success rate and count
+- list sales attempts and success rartes
+    - list sales for phones, devices, plans, home internet,
 - Include brief relevant quotes as a summaryonly when essential (max 2-3)
 
 **Recommendations:**
