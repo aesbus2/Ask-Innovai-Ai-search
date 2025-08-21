@@ -1636,7 +1636,6 @@ async function sendBatchAnalysis(message, filters, batchSize = 500) {
     }
 }
 
-// Modify your existing sendMessage function (find it around line 1565)
 async function sendMessage() {
     const chatInput = document.getElementById('chatInput');
     const message = chatInput.value.trim();
@@ -1811,11 +1810,34 @@ function displayEvaluationSources(sources, sources_summary = null) {
     const partnersCount = sources_summary?.partners || new Set(sources.map(s => s.partner || s.metadata?.partner).filter(Boolean)).size || 4;
     const agentsCount = sources_summary?.agents || new Set(sources.map(s => s.agentName || s.agent_name).filter(Boolean)).size || 800;
     
-    // Calculate percentage of data found in Questions vs Transcripts
-    const transcriptSources = sources.filter(s => s.transcript || s.text);
-    const questionSources = sources.filter(s => s.question || s.questions);
-    const transcriptPercentage = sources.length > 0 ? Math.round((transcriptSources.length / sources.length) * 100) : 75;
-    const questionPercentage = 100 - transcriptPercentage;
+    // Check what type of content was actually extracted and used
+const transcriptSources = sources.filter(s => {
+    // Check if the source contains actual conversation/transcript data
+    const content = s.transcript || s.transcript_text || s.full_text || s.text || '';
+    return content && (
+        content.includes('Speaker A') || 
+        content.includes('Speaker B') || 
+        content.includes('00:') ||
+        (content.includes(':') && content.length > 100)
+    );
+});
+
+const questionSources = sources.filter(s => {
+    // Check if the source contains Q&A format data
+    const content = s.evaluation || s.content || s.text || '';
+    return content && (
+        content.includes('Question:') || 
+        content.includes('Answer:') || 
+        content.includes('Q:') ||
+        content.includes('A:')
+    );
+});
+
+const transcriptPercentage = sources.length > 0 ? Math.round((transcriptSources.length / sources.length) * 100) : 0;
+const questionPercentage = sources.length > 0 ? Math.round((questionSources.length / sources.length) * 100) : 0;
+
+// Handle cases where sources don't clearly fit either category
+const otherPercentage = 100 - transcriptPercentage - questionPercentage;
     
     // Create the new data summary section
     const summaryDiv = document.createElement('div');
@@ -1875,20 +1897,11 @@ function displayEvaluationSources(sources, sources_summary = null) {
                         background: #4caf50; 
                         border-radius: 2px;
                     "></div>
-                    <span style="font-size: 0.8rem; color: #333;">
-                        <strong>${transcriptPercentage}%</strong> Transcripts
-                    </span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 6px;">
-                    <div style="
-                        width: 12px; 
-                        height: 12px; 
-                        background: #2196f3; 
-                        border-radius: 2px;
-                    "></div>
-                    <span style="font-size: 0.8rem; color: #333;">
-                        <strong>${questionPercentage}%</strong> Questions
-                    </span>
+                    <div style="font-size: 0.8rem; color: #333; margin-top: 4px; text-align: center;">
+                        ${transcriptPercentage > 0 ? `<span style="color: #4caf50;">●</span> ${transcriptPercentage}% Transcripts` : ''}
+                        ${questionPercentage > 0 ? `<span style="margin-left: 16px; color: #2196f3;">●</span> ${questionPercentage}% Questions` : ''}
+                        ${otherPercentage > 0 ? `<span style="margin-left: 16px; color: #ff9800;">●</span> ${otherPercentage}% Other` : ''}
+                    </div>
                 </div>
             </div>
             
@@ -1901,18 +1914,27 @@ function displayEvaluationSources(sources, sources_summary = null) {
                 margin-top: 8px;
                 overflow: hidden;
             ">
-                <div style="
-                    width: ${transcriptPercentage}%;
-                    height: 100%;
-                    background: linear-gradient(90deg, #4caf50 0%, #66bb6a 100%);
-                    float: left;
-                "></div>
-                <div style="
-                    width: ${questionPercentage}%;
-                    height: 100%;
-                    background: linear-gradient(90deg, #2196f3 0%, #42a5f5 100%);
-                    float: left;
-                "></div>
+            ${transcriptPercentage > 0 ? `<div style="
+                width: ${transcriptPercentage}%;
+                height: 100%;
+                background: linear-gradient(90deg, #4caf50 0%, #66bb6a 100%);
+                float: left;
+                title: 'Transcript Data: ${transcriptPercentage}%';
+            "></div>` : ''}
+            ${questionPercentage > 0 ? `<div style="
+                width: ${questionPercentage}%;
+                height: 100%;
+                background: linear-gradient(90deg, #2196f3 0%, #42a5f5 100%);
+                float: left;
+                title: 'Q&A Data: ${questionPercentage}%';
+            "></div>` : ''}
+            ${otherPercentage > 0 ? `<div style="
+                width: ${otherPercentage}%;
+                height: 100%;
+                background: linear-gradient(90deg, #ff9800 0%, #ffb74d 100%);
+                float: left;
+                title: 'Other Data: ${otherPercentage}%';
+            "></div>` : ''}
             </div>
         </div>
     `;
@@ -2089,86 +2111,81 @@ function escapeHtml(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
+function cleanMalformedText(text) {
+    if (!text) return '';
+    
+    // Remove malformed strong tags that wrap every character
+    let cleaned = text.replace(/<strong><\/strong>/g, '');
+    
+    // Fix cases where every character is wrapped
+    cleaned = cleaned.replace(/<strong>(.)<\/strong>/g, '$1');
+    
+    // Clean up any remaining empty tags
+    cleaned = cleaned.replace(/<(\w+)><\/\1>/g, '');
+    
+    // Fix multiple consecutive tags
+    cleaned = cleaned.replace(/<\/strong><strong>/g, '');
+    
+    return cleaned;
+}
+
+// Then update your formatMessage to use it:
 function formatMessage(message) {
-    // Convert markdown-like formatting to HTML with proper bullet support
+    if (!message) return '';
+    
+    // FIRST: Clean malformed formatting
+    let formatted = cleanMalformedText(message);
+    
+    // Then continue with normal formatting...
+    // ... rest of your formatMessage code
+}
+
+function formatMessage(message) {
     if (!message) return '';
     
     let formatted = message;
+    
+    // FIRST: Clean up any malformed HTML
+    formatted = formatted.replace(/<strong><\/strong>/g, '');
+    formatted = formatted.replace(/<\/strong><strong>/g, '');
     
     // Handle Headers
     formatted = formatted.replace(/^### (.*$)/gm, '<h3>$1</h3>');
     formatted = formatted.replace(/^## (.*$)/gm, '<h2>$1</h2>');
     formatted = formatted.replace(/^# (.*$)/gm, '<h1>$1</h1>');
     
-    // Handle Bold and Italic (your existing code)
-    formatted = formatted.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');
-    formatted = formatted.replace(/\\*(.*?)\\*/g, '<em>$1</em>');
+    // Handle Bold and Italic - but only if not already wrapped
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Handle Code
     formatted = formatted.replace(/`(.*?)`/g, '<code style="background: #f5f5f5; padding: 2px 4px; border-radius: 3px; font-family: monospace;">$1</code>');
     
-    // Enhanced status badges
-    formatted = formatted.replace(/(✅|🟢)\\s*([^,\\n\\.]+)/g, '<span class="status-badge status-success">✅ $2</span>');
-    formatted = formatted.replace(/(⚠️|🟡)\\s*([^,\\n\\.]+)/g, '<span class="status-badge status-warning">⚠️ $2</span>');
-    formatted = formatted.replace(/(ℹ️|🔵)\\s*([^,\\n\\.]+)/g, '<span class="status-badge status-info">ℹ️ $2</span>');
-    formatted = formatted.replace(/(❌|🔴)\\s*([^,\\n\\.]+)/g, '<span class="status-badge status-error">❌ $2</span>');
-    
-    // Handle Tables (simple markdown style) - NEW ADDITION
-    const tableRegex = /\\n\\|(.+)\\|\\n\\|[-\\s\\|:]+\\|\\n((?:\\|.+\\|\\n?)+)/g;
-    formatted = formatted.replace(tableRegex, (match, headerRow, bodyRows) => {
-        const headers = headerRow.split('|').map(h => h.trim()).filter(h => h);
-        const rows = bodyRows.trim().split('\\n').map(row => 
-            row.split('|').map(cell => cell.trim()).filter(cell => cell)
-        );
-        
-        let tableHtml = '<table>';
-        tableHtml += '<thead><tr>';
-        headers.forEach(header => {
-            tableHtml += `<th>${header}</th>`;
-        });
-        tableHtml += '</tr></thead><tbody>';
-        rows.forEach(row => {
-            tableHtml += '<tr>';
-            row.forEach(cell => {
-                tableHtml += `<td>${cell}</td>`;
-            });
-            tableHtml += '</tr>';
-        });
-        tableHtml += '</tbody></table>';
-        
-        return '\\n' + tableHtml + '\\n';
-    });
-    
-    // Handle bullet lists properly (your original logic but enhanced)
-    formatted = formatted.replace(/^[\\s]*[-*+]\\s+(.+)$/gm, '<li>$1</li>');
+    // Handle bullet lists
+    formatted = formatted.replace(/^[\s]*[-*+]\s+(.+)$/gm, '<li>$1</li>');
     // Handle numbered lists  
-    formatted = formatted.replace(/^[\\s]*(\\d+\\.)\\s+(.+)$/gm, '<li>$2</li>');
+    formatted = formatted.replace(/^[\s]*(\d+\.)\s+(.+)$/gm, '<li>$2</li>');
     
-    // Wrap consecutive list items in ul tags (your original logic but improved)
-    formatted = formatted.replace(/((?:<li>.*?<\/li>\s*){2,})/g, function(match) {
-        // Check if this looks like a numbered list by checking for <li> elements that start with a digit and a dot
-        const hasNumbers = /^<li>\d+\..*?<\/li>/.test(match.trim());
-        const tag = hasNumbers ? 'ol' : 'ul';
-        return `<${tag}>${match}</${tag}>`;
+    // Wrap consecutive list items
+    formatted = formatted.replace(/(<li>.*<\/li>)(?:\n<li>.*<\/li>)+/g, function(match) {
+        return '<ul>' + match + '</ul>';
     });
     
-    // Handle line breaks and paragraphs (from your original)
-    formatted = formatted.replace(/\\n\\n+/g, '</p><p>');
-    formatted = formatted.replace(/\\n/g, '<br>');
+    // Handle line breaks
+    formatted = formatted.replace(/\n\n+/g, '</p><p>');
+    formatted = formatted.replace(/\n/g, '<br>');
     
-    // Wrap in paragraph tags if needed (but avoid wrapping headers, lists, tables)
-    if (!formatted.includes('<p>') && !formatted.includes('<h') && !formatted.includes('<ul>') && !formatted.includes('<ol>') && !formatted.includes('<table>')) {
+    // Wrap in paragraphs if needed
+    if (!formatted.includes('<p>') && !formatted.includes('<h') && !formatted.includes('<ul>')) {
         formatted = '<p>' + formatted + '</p>';
     }
     
-    // Clean up any formatting issues
+    // Clean up formatting issues
     formatted = formatted.replace(/<p><\/p>/g, '');
     formatted = formatted.replace(/<p><h/g, '<h');
     formatted = formatted.replace(/<\/h([1-6])><\/p>/g, '</h$1>');
     formatted = formatted.replace(/<p><ul>/g, '<ul>');
     formatted = formatted.replace(/<\/ul><\/p>/g, '</ul>');
-    formatted = formatted.replace(/<p><ol>/g, '<ol>');
-    formatted = formatted.replace(/<\/ol><\/p>/g, '</ol>');
-    formatted = formatted.replace(/<p><table>/g, '<table>');
-    formatted = formatted.replace(/<\/table><\/p>/g, '</table>');
     
     return formatted;
 }
@@ -3729,7 +3746,7 @@ function loadFormattingStyles() {
         .typing-dots span {
             width: 8px;
             height: 8px;
-            background: #ccc;
+            background: #e20074;
             border-radius: 50%;
             animation: typing 1.4s infinite ease-in-out;
         }

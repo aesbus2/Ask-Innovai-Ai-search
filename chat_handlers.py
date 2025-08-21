@@ -6,6 +6,7 @@
 
 import os
 import logging
+# from pydoc import text  # Removed unused import to avoid shadowing
 import requests
 import time
 import json
@@ -388,8 +389,8 @@ def _extract_transcript_text(hit: dict) -> str:
     # FIXED PRIORITY ORDER: transcript fields FIRST, evaluation fields LAST
     field_attempts = [
         # PRIORITY 1: ACTUAL CALL TRANSCRIPTS (Speaker A/B conversations)
-        ("transcript", src.get("transcript")),
         ("transcript_text", src.get("transcript_text")),
+        ("transcript", src.get("transcript")),        
         ("full_text", src.get("full_text")),
         
         # PRIORITY 2: NESTED TRANSCRIPT FIELDS
@@ -420,8 +421,9 @@ def _extract_transcript_text(hit: dict) -> str:
         if text:
             # ADDITIONAL CHECK: Prefer content that looks like actual conversation
             # (contains "Speaker A" or timestamps) over Q&A format
-            is_conversation = ("Speaker" in text and "00:" in text) or ":" in text[:100]
-            is_qa_format = ("Question:" in text and "Answer:" in text)
+            is_conversation = ("Speaker A" in text or "Speaker B" in text or 
+                  (":" in text[:100] and "00:" in text))
+            is_qa_format = ("Question:" in text or "Answer:" in text)
             
             # If this is actual conversation format, use it immediately
             if is_conversation and not is_qa_format:
@@ -1763,6 +1765,14 @@ async def relay_chat_rag(request: Request):
         system_message = f"""You are a professional call center analytics assistant. Provide clear, concise executive level insights based on the filtered evaluation data.
 
 ## Response Format:
+
+Format your response with:
+- **Bold text** for key points using markdown
+- Bullet points for lists
+- Clear section headers
+
+Keep formatting simple and readable.
+
 **Key Findings:**
 - Summarize main patterns and trends
 - Focus on actionable insights
@@ -1779,13 +1789,12 @@ async def relay_chat_rag(request: Request):
 **Summary:**
 - Overall assessment and metrics
 - List sub-disposition as bullet points and included trends and insights
-- list all partners included in metadata "partner" filter as bullet points and rank performance
+- list all partners included in metadata "partner" filters
 
 ## Guidelines:
 - Base answers strictly on the provided context and data
 - Do not generate or estimate statistics not present in the context
 - provided evaluation counts along with other relevant metrics
-- only use bullet points for sub items
 - Be concise and professional - avoid lengthy excerpts
 - If information is not available, state that clearly
 - Focus on business insights rather than raw data dumps
