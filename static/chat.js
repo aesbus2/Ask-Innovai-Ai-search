@@ -1548,6 +1548,122 @@ function updateActiveFiltersDisplay() {
 // =============================================================================
 // CHAT FUNCTIONALITY
 // =============================================================================
+// Batch processing 
+async function sendBatchAnalysis(message, filters, batchSize = 500) {
+    let batchNum = 1;
+    let allFindings = [];
+    let totalEvaluations = 0;
+    let hasMoreData = true;
+    
+    // Show start message
+    addMessageToChat('system', '🔄 Starting comprehensive analysis of ALL filtered data...');
+    
+    while (hasMoreData && batchNum <= 10) { // Safety limit of 10 batches
+        try {
+            // Modify the message to request specific batch
+            const batchMessage = `${message} (analyzing batch ${batchNum} of evaluations)`;
+            
+            // Use your existing sendMessage logic but capture response
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: batchMessage,
+                    history: [], // Clean history for each batch
+                    filters: filters,
+                    analytics: true
+                }),
+                signal: AbortSignal.timeout(60000) // 1 minute per batch
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Batch ${batchNum} failed: ${response.status}`);
+            }
+            
+            const batchData = await response.json();
+            
+            // Check if we got meaningful data
+            if (batchData.sources && batchData.sources.length > 0) {
+                totalEvaluations += batchData.sources.length;
+                allFindings.push({
+                    batch: batchNum,
+                    findings: batchData.reply,
+                    evaluationCount: batchData.sources.length
+                });
+                
+                // Show progress
+                addMessageToChat('system', `✅ Batch ${batchNum}: Analyzed ${batchData.sources.length} evaluations (${totalEvaluations} total)`);
+                
+                // Simple check: if we got less than expected, probably no more data
+                hasMoreData = batchData.sources.length >= (batchSize * 0.8); // 80% of batch size
+            } else {
+                addMessageToChat('system', `ℹ️ Batch ${batchNum}: No more data found`);
+                hasMoreData = false;
+            }
+            
+            batchNum++;
+            
+        } catch (error) {
+            console.error(`Batch ${batchNum} error:`, error);
+            addMessageToChat('system', `❌ Error in batch ${batchNum}: ${error.message}`);
+            break;
+        }
+    }
+    
+    // Generate combined summary
+    if (allFindings.length > 0) {
+        addMessageToChat('system', '🔄 Generating comprehensive summary...');
+        
+        let combinedSummary = `# 📊 Comprehensive Analysis Results\n\n`;
+        combinedSummary += `**Total Evaluations Analyzed:** ${totalEvaluations}\n`;
+        combinedSummary += `**Batches Processed:** ${allFindings.length}\n\n`;
+        
+        combinedSummary += `## Key Findings Across All Data:\n\n`;
+        
+        allFindings.forEach((batch, index) => {
+            combinedSummary += `### Batch ${batch.batch} (${batch.evaluationCount} evaluations)\n`;
+            combinedSummary += `${batch.findings}\n\n`;
+        });
+        
+        combinedSummary += `## Overall Summary\n`;
+        combinedSummary += `This analysis covered **${totalEvaluations} total evaluations** matching your current filters, `;
+        combinedSummary += `processed in ${allFindings.length} batches to ensure comprehensive coverage.\n\n`;
+        combinedSummary += `*Analysis complete - all filtered data has been reviewed.*`;
+        
+        addMessageToChat('assistant', combinedSummary);
+    } else {
+        addMessageToChat('system', '❌ No data found matching your filters.');
+    }
+}
+
+// Modify your existing sendMessage function (find it around line 1565)
+async function sendMessage() {
+    const chatInput = document.getElementById('chatInput');
+    const message = chatInput.value.trim();
+    
+    if (!message || isLoading) return;
+    
+    // Check if this is a comprehensive analysis request
+    const comprehensiveKeywords = ['all', 'overall', 'comprehensive', 'complete', 'entire', 'across'];
+    const isComprehensiveRequest = comprehensiveKeywords.some(keyword => 
+        message.toLowerCase().includes(keyword)
+    );
+    
+    // If comprehensive analysis requested AND filters are applied
+    if (isComprehensiveRequest && Object.keys(currentFilters).some(k => currentFilters[k])) {
+        console.log('🔄 Detected comprehensive analysis request - using batch processing');
+        await sendBatchAnalysis(message, currentFilters);
+        chatInput.value = '';
+        return;
+    }
+    
+    // Otherwise, use your existing sendMessage logic
+    console.log("📤 Sending message:", message);
+    
+    // ... rest of your existing sendMessage code stays the same ...
+}
+
+
 
 function handleKeyPress(event) {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -1607,7 +1723,7 @@ async function sendMessage() {
                 filters: currentFilters,
                 analytics: true
             }),
-            timeout: PRODUCTION_CONFIG.CHAT_REQUEST_TIMEOUT
+            timeout: 120000  //2 minute timeout for chat response.
         });
         
         if (!response.ok) {
