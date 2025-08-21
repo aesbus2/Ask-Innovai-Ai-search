@@ -1640,6 +1640,8 @@ async function sendBatchAnalysis(message, filters, batchSize = 500) {
 async function sendMessage() {
     const chatInput = document.getElementById('chatInput');
     const message = chatInput.value.trim();
+
+    console.log('🔍 DEBUG: Message=', message, 'Filters=', currentFilters);
     
     if (!message || isLoading) return;
     
