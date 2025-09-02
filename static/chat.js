@@ -12,6 +12,7 @@ let chatHistory = [];
 let chatSessions = [];
 let currentSessionId = null;
 let isLoading = false;
+let excludeQAContent = false;
 let filterOptions = {
     templates: [],
     programs: [],
@@ -104,6 +105,57 @@ function toggleSidebar() {
     
     sidebar.classList.toggle('open');
     console.log("📱 Sidebar toggled");
+}
+
+function updateChatDataFilter(exclude) {
+    excludeQAContent = exclude;
+    const statusDiv = document.getElementById('chatDataStatus');
+    
+    if (exclude) {
+        statusDiv.textContent = 'Transcripts Only';
+        statusDiv.style.background = '#e8f5e8';
+        statusDiv.style.color = '#2e7d32';
+        console.log('🚫 Q&A CONTENT EXCLUDED - Using transcripts only');
+        
+        // Show notification about mode change
+        showChatModeNotification('Q&A evaluation content excluded. Chat will focus on transcript conversations only.', 'warning');
+    } else {
+        statusDiv.textContent = 'All Content';
+        statusDiv.style.background = '#e3f2fd';
+        statusDiv.style.color = '#1976d2';
+        console.log('✅ ALL CONTENT ENABLED - Using transcripts + Q&A data');
+        
+        // Show notification about mode change
+        showChatModeNotification('All content enabled. Chat will use both transcript and Q&A evaluation data.', 'info');
+    }
+}
+
+function showChatModeNotification(message, type = 'info') {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        background: ${type === 'warning' ? '#fff3cd' : '#d1ecf1'};
+        border: 1px solid ${type === 'warning' ? '#ffeaa7' : '#bee5eb'};
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin: 8px 0;
+        color: ${type === 'warning' ? '#856404' : '#0c5460'};
+        font-size: 0.85rem;
+        text-align: center;
+    `;
+    notification.innerHTML = `📝 ${message}`;
+    
+    chatMessages.appendChild(notification);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 3000);
 }
 
 function showCriticalError(message) {
@@ -1722,7 +1774,8 @@ async function sendMessage() {
                 message: message,
                 history: chatHistory,
                 filters: currentFilters,
-                analytics: true
+                analytics: true,
+                exclude_qa_content: excludeQAContent || false  // Use to only search through transcripts
             }),
             timeout: 120000  //2 minute timeout for chat response.
         });
@@ -1801,6 +1854,9 @@ function displayEvaluationSources(sources, sources_summary = null) {
      * Shows what data was used to generate the response
      */
     if (!sources || sources.length === 0) return;
+
+    // OPTIONAL: Call the debug function for detailed analysis
+    debugTranscriptSources(sources);  // <-- Manual function call
     
     const chatMessages = document.getElementById('chatMessages');
     if (!chatMessages) return;
@@ -1810,34 +1866,75 @@ function displayEvaluationSources(sources, sources_summary = null) {
     const partnersCount = sources_summary?.partners || new Set(sources.map(s => s.partner || s.metadata?.partner).filter(Boolean)).size || 4;
     const agentsCount = sources_summary?.agents || new Set(sources.map(s => s.agentName || s.agent_name).filter(Boolean)).size || 800;
     
-    // Check what type of content was actually extracted and used
-const transcriptSources = sources.filter(s => {
-    // Check if the source contains actual conversation/transcript data
-    const content = s.transcript || s.transcript_text || s.full_text || s.text || '';
-    return content && (
-        content.includes('Speaker A') || 
-        content.includes('Speaker B') || 
-        content.includes('00:') ||
-        (content.includes(':') && content.length > 100)
-    );
-});
+    // FIXED: Improved transcript detection logic
+    const transcriptSources = sources.filter(s => {
+        // Check multiple possible transcript fields and formats
+        const transcriptContent = s.transcript || s.transcript_text || s.full_text || s.text || s.content || '';
+        const evaluationContent = s.evaluation || s.evaluation_text || '';
+        
+        // More comprehensive transcript detection
+        const hasTranscriptMarkers = transcriptContent && (
+            transcriptContent.includes('Speaker A') || 
+            transcriptContent.includes('Speaker B') ||
+            transcriptContent.includes('Agent:') ||
+            transcriptContent.includes('Customer:') ||
+            transcriptContent.includes('Caller:') ||
+            transcriptContent.includes('[') ||  // Transcript timestamps like [00:01:23]
+            /\d{2}:\d{2}:\d{2}/.test(transcriptContent) ||  // Time patterns HH:MM:SS
+            /\d{2}:\d{2}/.test(transcriptContent) ||        // Time patterns MM:SS
+            (transcriptContent.includes(':') && transcriptContent.length > 50) // Dialogue format
+        );
+        
+        // Check if this looks like a real conversation vs Q&A
+        const hasConversationalContent = transcriptContent && (
+            transcriptContent.includes('I\'m pissed') ||
+            transcriptContent.includes('frustrated') ||
+            transcriptContent.includes('billing') ||
+            transcriptContent.includes('account') ||
+            transcriptContent.includes('payment') ||
+            transcriptContent.length > 200  // Longer content more likely to be transcript
+        );
+        
+        // Not a Q&A format
+        const isNotQA = !transcriptContent.includes('Question:') && 
+                       !transcriptContent.includes('Answer:') &&
+                       !evaluationContent.includes('Question:');
+        
+        return hasTranscriptMarkers || (hasConversationalContent && isNotQA);
+    });
 
-const questionSources = sources.filter(s => {
-    // Check if the source contains Q&A format data
-    const content = s.evaluation || s.content || s.text || '';
-    return content && (
-        content.includes('Question:') || 
-        content.includes('Answer:') || 
-        content.includes('Q:') ||
-        content.includes('A:')
-    );
-});
+    const questionSources = sources.filter(s => {
+        // Check if the source contains Q&A format data
+        const content = s.evaluation || s.evaluation_text || s.content || s.text || '';
+        return content && (
+            content.includes('Question:') || 
+            content.includes('Answer:') || 
+            content.includes('Q:') ||
+            content.includes('A:') ||
+            /Question \d+/.test(content) ||  // "Question 1", "Question 2", etc.
+            /Q\d+/.test(content)            // "Q1", "Q2", etc.
+        );
+    });
 
-const transcriptPercentage = sources.length > 0 ? Math.round((transcriptSources.length / sources.length) * 100) : 0;
-const questionPercentage = sources.length > 0 ? Math.round((questionSources.length / sources.length) * 100) : 0;
+    // Calculate percentages with better logic
+    const transcriptPercentage = sources.length > 0 ? Math.round((transcriptSources.length / sources.length) * 100) : 0;
+    const questionPercentage = sources.length > 0 ? Math.round((questionSources.length / sources.length) * 100) : 0;
 
-// Handle cases where sources don't clearly fit either category
-const otherPercentage = 100 - transcriptPercentage - questionPercentage;
+    // Handle cases where sources don't clearly fit either category
+    const otherPercentage = Math.max(0, 100 - transcriptPercentage - questionPercentage);
+    
+    // DEBUG: Log the detection results
+    console.log('🔍 Transcript Detection Results:', {
+        totalSources: sources.length,
+        transcriptSources: transcriptSources.length,
+        questionSources: questionSources.length,
+        transcriptPercentage,
+        questionPercentage,
+        otherPercentage,
+        sampleTranscriptContent: transcriptSources[0] ? 
+            (transcriptSources[0].transcript || transcriptSources[0].text || '').substring(0, 100) : 
+            'No transcript content found'
+    });
     
     // Create the new data summary section
     const summaryDiv = document.createElement('div');
@@ -3843,6 +3940,63 @@ function debugTranscriptToggle() {
     
     return elements;
 }
+
+// Add this debug function to your chat.js to understand the data structure
+function debugTranscriptSources(sources) {
+    console.log('🔍 DEBUGGING TRANSCRIPT SOURCES');
+    console.log('Total sources:', sources.length);
+    
+    // Sample first few sources to understand structure
+    sources.slice(0, 3).forEach((source, index) => {
+        console.log(`\n--- Source ${index + 1} ---`);
+        console.log('Available properties:', Object.keys(source));
+        
+        // Check all possible transcript fields
+        const fields = ['transcript', 'transcript_text', 'full_text', 'text', 'content', 'evaluation'];
+        fields.forEach(field => {
+            if (source[field]) {
+                console.log(`${field}: "${source[field].substring(0, 150)}..."`);
+            }
+        });
+        
+        // Check metadata
+        if (source.metadata) {
+            console.log('metadata:', source.metadata);
+        }
+    });
+    
+    // Analyze content patterns
+    const patterns = {
+        speakerA: 0,
+        speakerB: 0,
+        agent: 0,
+        customer: 0,
+        timestamps: 0,
+        questions: 0,
+        conversational: 0
+    };
+    
+    sources.forEach(source => {
+        const content = (source.transcript || source.transcript_text || source.full_text || source.text || source.content || '').toLowerCase();
+        
+        if (content.includes('speaker a')) patterns.speakerA++;
+        if (content.includes('speaker b')) patterns.speakerB++;
+        if (content.includes('agent:')) patterns.agent++;
+        if (content.includes('customer:')) patterns.customer++;
+        if (content.includes('00:') || /\d{2}:\d{2}/.test(content)) patterns.timestamps++;
+        if (content.includes('question:')) patterns.questions++;
+        if (content.includes('pissed') || content.includes('frustrated') || content.includes('billing')) patterns.conversational++;
+    });
+    
+    console.log('\n📊 Content Patterns Found:');
+    console.log(patterns);
+    
+    return patterns;
+}
+
+// Call this function in your displayEvaluationSources
+// Add this line right after: if (!sources || sources.length === 0) return;
+// debugTranscriptSources(sources);
 
 // =============================================================================
 // GLOBAL FUNCTION EXPOSURE

@@ -361,6 +361,41 @@
                         </div>
                 </div>
 
+                <div class="chat-data-filter" style="
+                    background: white;
+                    padding: 8px 12px;
+                    border-radius: 6px;
+                    border: 1px solid #e0e0e0;
+                    margin: 12px 0 8px 0;
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    font-size: 0.9rem;
+                ">
+                    <span style="color: #666; font-weight: 500;">💬 Chat Data:</span>
+                    
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input 
+                            type="checkbox" 
+                            id="excludeQAContent" 
+                            style="width: 16px; height: 16px; accent-color: #4caf50; cursor: pointer;"
+                            onchange="updateChatDataFilter(this.checked)"
+                        />
+                        <span style="color: #4caf50;">Exclude Q&A Evaluations</span>
+                    </label>
+                    
+                    <div id="chatDataStatus" style="
+                        background: #e3f2fd;
+                        color: #1976d2;
+                        padding: 2px 8px;
+                        border-radius: 12px;
+                        font-size: 0.75rem;
+                        font-weight: 500;
+                    ">
+                        All Content
+                    </div>
+                </div>
+
                 <!-- Chat Input -->
                 <div class="chat-input-area">
                     <div class="input-container">
