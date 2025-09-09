@@ -293,16 +293,27 @@ class ImportRequest(BaseModel):
 # ============================================================================
 
 def log_import(message: str):
-    """Add message to import logs with production formatting"""
+    """Enhanced logging that ensures all messages are captured"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_entry = f"[{timestamp}] {message}"
+    
+    # Add to import logs (for /logs endpoint)
     import_logs.append(log_entry)
+    
+    # Also log to console (for server logs)
     logger.info(message)
-    if len(import_logs) > 100:
+    
+    # Also force print for debugging (ensure it shows in console)
+    print(f"IMPORT_LOG: {log_entry}")
+    
+    # Increase log retention for debugging
+    if len(import_logs) > 1000:  # Increased from 100
         import_logs.pop(0)
 
+# Also add this enhanced status update function:
+
 def update_import_status(status: str, step: str = None, results: dict = None, error: str = None):
-    """Update import status with production tracking"""
+    """Enhanced status updates with better logging"""
     import_status["status"] = status
     import_status["current_step"] = step
     if results:
@@ -313,6 +324,15 @@ def update_import_status(status: str, step: str = None, results: dict = None, er
         import_status["start_time"] = datetime.now().isoformat()
     elif status in ["completed", "failed"]:
         import_status["end_time"] = datetime.now().isoformat()
+    
+    # ✅ ALWAYS LOG STATUS CHANGES
+    status_msg = f"STATUS: {status}"
+    if step:
+        status_msg += f" - {step}"
+    if error:
+        status_msg += f" - ERROR: {error}"
+    
+    log_import(status_msg)
 
 
 def load_model_background():
@@ -2118,6 +2138,16 @@ async def debug_test_vector_search(query: str = "customer service"):
             "query": query,
             "version": "4.8.0_vector_enabled"
         }
+    
+@app.get("/debug_logs")
+async def debug_logs():
+    """Enhanced logs endpoint with more debugging info"""
+    return {
+        "logs": import_logs[-50:] if import_logs else [],  # Last 50 logs
+        "total_logs": len(import_logs),
+        "import_status": import_status,
+        "timestamp": datetime.now().isoformat()
+    }
 
 @app.get("/debug/test_chat_context")
 async def test_chat_context(q: str = Query(default="customer", description="Test query")):
@@ -3416,50 +3446,73 @@ async def fetch_evaluations(
                 eval_id = evaluation.get('evaluationId', 'NO_ID')
                 
                 # Get the dates
-                created_on = evaluation.get("created_on")
-                updated = evaluation.get("updated")  # The new field from API
+                created_on = (
+                    evaluation.get("created_on") or 
+                    evaluation.get("createdAt") or 
+                    evaluation.get("create_date") or
+                    evaluation.get("created")
+                )
+                
+                updated = (
+                    evaluation.get("updated") or 
+                    evaluation.get("updated_on") or 
+                    evaluation.get("updatedAt") or 
+                    evaluation.get("last_updated") or 
+                    evaluation.get("modified_on")
+                )
+
+                # ✅ DEBUG LOGGING - Show exactly what we found
+                logger.info(f"🔍 Evaluation {eval_id}:")
+                logger.info(f"   created_on: {created_on}")
+                logger.info(f"   updated: {updated}")
                 
                 # Check if both dates exist
                 if not created_on or not updated:
                     missing_dates_count += 1
-                    if not created_on:
-                        logger.debug(f"⚠️ No created_on date for evaluation {eval_id}")
-                    if not updated:
-                        logger.debug(f"⚠️ No updated date for evaluation {eval_id}")
+                    logger.warning(f"⚠️ Missing dates for evaluation {eval_id}")
+                    logger.warning(f"   created_on: {created_on}")
+                    logger.warning(f"   updated: {updated}")
                     # Include evaluations with missing dates (safety fallback)
                     filtered_evaluations.append(evaluation)
                     continue
                 
                 # Parse and compare dates
                 try:
-                    # Parse created_on date
-                    if "T" in str(created_on):
-                        created_date = datetime.fromisoformat(str(created_on).replace("Z", "+00:00"))
-                    elif "/" in str(created_on):  # Handle MM/DD/YYYY format
-                        created_date = datetime.strptime(str(created_on), "%m/%d/%Y")
-                    else:
-                        created_date = datetime.strptime(str(created_on), "%Y-%m-%d")
-                    
-                    # Parse updated date
-                    if "T" in str(updated):
-                        updated_date = datetime.fromisoformat(str(updated).replace("Z", "+00:00"))
-                    elif "/" in str(updated):  # Handle MM/DD/YYYY format
-                        updated_date = datetime.strptime(str(updated), "%m/%d/%Y")
-                    else:
-                        updated_date = datetime.strptime(str(updated), "%Y-%m-%d")
+
+                    def parse_date_flexible(date_str):
+                        """Parse date in multiple formats"""
+                        if not date_str:
+                            return None
+                        date_str = str(date_str).strip()
+                        # Try ISO format first
+                        if "T" in date_str:
+                            return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                        
+                        # Try MM/DD/YYYY format
+                        if "/" in date_str:
+                            return datetime.strptime(date_str, "%m/%d/%Y")
+                        
+                        # Try YYYY-MM-DD format
+                        if "-" in date_str and len(date_str) >= 10:
+                            return datetime.strptime(date_str[:10], "%Y-%m-%d")
+                        
+                        raise ValueError(f"Unknown date format: {date_str}")
+            
+                    created_date = parse_date_flexible(created_on)
+                    updated_date = parse_date_flexible(updated)
                     
                     # Compare dates
                     if updated_date > created_date:
                         filtered_evaluations.append(evaluation)
                         included_count += 1
-                        logger.debug(f"✅ Including evaluation {eval_id}: updated ({updated}) > created ({created_on})")
+                        logger.info(f"✅ Including evaluation {eval_id}: updated ({updated_date}) > created ({created_date})")
                     else:
                         skipped_count += 1
-                        logger.debug(f"⏭️ Skipping evaluation {eval_id}: updated ({updated}) <= created ({created_on})")
-                        
+                        logger.info(f"⭐ Skipping evaluation {eval_id}: updated ({updated_date}) <= created ({created_date})")
+                                
                 except Exception as e:
                     parse_error_count += 1
-                    logger.warning(f"⚠️ Could not parse dates for evaluation {eval_id}: {e}")
+                    logger.warning(f"❌ Could not parse dates for evaluation {eval_id}: {e}")
                     logger.warning(f"   created_on: {created_on}, updated: {updated}")
                     # Include if we can't parse dates (safety fallback)
                     filtered_evaluations.append(evaluation)
@@ -6179,6 +6232,41 @@ EVALUATION DATABASE CONTEXT:
 # =============================================================================
 # DEBUG DASHBOARD ROUTE
 # =============================================================================
+
+@app.get("/debug_api_fields")
+async def debug_api_fields():
+    """Debug endpoint to see what fields the API actually returns"""
+    try:
+        # Fetch just 1 evaluation to inspect fields
+        evaluations = await fetch_evaluations(max_docs=1, filter_updated_after_created=False)
+        
+        if not evaluations:
+            return {"error": "No evaluations returned from API"}
+        
+        first_eval = evaluations[0]
+        
+        # Check for all possible date field variants
+        date_fields = {}
+        possible_fields = [
+            "updated", "updated_on", "updatedAt", "last_updated", "modified_on",
+            "created_on", "createdAt", "create_date", "created", "call_date"
+        ]
+        
+        for field in possible_fields:
+            value = first_eval.get(field)
+            if value:
+                date_fields[field] = value
+        
+        return {
+            "total_fields": len(first_eval.keys()),
+            "all_fields": list(first_eval.keys()),
+            "date_fields_found": date_fields,
+            "evaluationId": first_eval.get("evaluationId", "NO_ID"),
+            "sample_evaluation": first_eval
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/debug_metadata", response_class=HTMLResponse)
 async def serve_metadata_debug_dashboard():
