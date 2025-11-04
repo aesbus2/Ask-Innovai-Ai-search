@@ -85,7 +85,7 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    from opensearch_client import search_opensearch, index_document, search_vector
+    from opensearch_client import search_opensearch, index_document
     logging.info("✅ opensearch_client imported successfully")
 except ImportError as e:
     logging.error(f"❌ Failed to import opensearch_client: {e}")
@@ -96,7 +96,7 @@ EMBEDDER_AVAILABLE = True
 VECTOR_SEARCH_READY = True
 PRELOAD_MODEL_ON_STARTUP = True
 try:
-    from embedder import embed_text, get_embedding_stats, preload_embedding_model
+    from embedder import get_embedding_stats, preload_embedding_model
     
     logging.info("✅ embedder imported successfully - VECTOR SEARCH READY")
 except ImportError as e:
@@ -224,7 +224,7 @@ def check_evaluation_exists(evaluation_id: str) -> bool:
         
         if exists:
             existing_doc = response["hits"]["hits"][0]["_source"]
-            template_name = existing_doc.get("template_name", "Unknown")
+            existing_doc.get("template_name", "Unknown")
             logger.warning(f"   └── Found in index: {response['hits']['hits'][0]['_index']}")
         
         return exists
@@ -246,29 +246,19 @@ def validate_evaluation_content(evaluation: dict) -> tuple[bool, str, dict]:
         return False, "missing_required_fields", {"missing": "templateId"}
     
     # Check content
-    evaluation_text = evaluation.get("evaluation", "").strip()
-    transcript_text = evaluation.get("transcript", "").strip()
-    
-    if not evaluation_text and not transcript_text:
-        return False, "no_content", {"evaluation_length": 0, "transcript_length": 0}
-    
-    if not evaluation_text:
-        return False, "empty_evaluation", {
-            "evaluation_length": 0, 
-            "transcript_length": len(transcript_text)
-        }
+    transcript_text = evaluation.get("transcript", "").strip()   
+   
     
     if not transcript_text:
         return False, "empty_transcript", {
-            "evaluation_length": len(evaluation_text), 
             "transcript_length": 0
         }
     
     # Check minimum content length
-    total_content = evaluation_text + " " + transcript_text
-    if len(total_content.strip()) < 20:
+
+    if len(transcript_text.strip()) < 20:
         return False, "insufficient_content", {
-            "total_content_length": len(total_content.strip()),
+            "total_content_length": len(transcript_text.strip()),
             "minimum_required": 20
         }
     
@@ -355,7 +345,7 @@ def load_model_background():
         preload_embedding_model()
         
         # Test with actual embedding
-        test_embedding = embed_text("background preload test")
+        embed_text("background preload test")
         
         load_time = time.time() - start_time
         
