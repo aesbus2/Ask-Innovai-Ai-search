@@ -9,6 +9,8 @@ requirements.txt (installs required dependencies)
 /root/static
 
 main.js (handles import information from endpoints and triggers sync frequency)
+
+chat.js  (Handles chat and search responses from OpenSearch)
+
 index.html (admin  page for syncing from Mongo DB to OpenSearch)
 chat.html (frontend chat interface)
-chat.js  (Handles chat and search responses from OpenSearch)
