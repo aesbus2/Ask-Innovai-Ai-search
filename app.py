@@ -1,5 +1,5 @@
 # App.py - Real Data Filter System with Efficient Metadata Loading
-# Version: 6.0.0 - UPdated to Match API data exactly
+# Version: 6.1.0 - Updated to Match API data exactly
 
 
 
@@ -1332,62 +1332,6 @@ def safe_float(value, default=0.0):
         return float(value)
     except (ValueError, TypeError):
         return default
-
-def extract_qa_pairs(evaluation_text: str) -> List[Dict[str, Any]]:
-    """Extract Question and Answer pairs from evaluation text - PRODUCTION version"""
-    if not evaluation_text:
-        return []
-    
-    # Clean HTML
-    soup = BeautifulSoup(evaluation_text, "html.parser")
-    clean_text = soup.get_text(" ", strip=True)
-    
-    qa_chunks = []
-    
-    # Split by sections first
-    sections = re.split(r'Section:\s*([^<\n]+?)(?=Section:|$)', clean_text, flags=re.IGNORECASE)
-    
-    for i in range(1, len(sections), 2):
-        if i + 1 < len(sections):
-            section_name = sections[i].strip()
-            section_content = sections[i + 1].strip()
-            
-            # Extract Q&A pairs from this section
-            qa_pattern = r'Question:\s*([^?]+\??)\s*Answer:\s*([^.]+\.?)'
-            matches = re.finditer(qa_pattern, section_content, re.IGNORECASE | re.DOTALL)
-            
-            for match in matches:
-                question = match.group(1).strip()
-                answer = match.group(2).strip()
-                qa_text = f"Section: {section_name}\nQuestion: {question}\nAnswer: {answer}"
-                
-                qa_chunks.append({
-                    "text": qa_text,
-                    "section": section_name,
-                    "question": question,
-                    "answer": answer,
-                    "content_type": "evaluation_qa"
-                })
-    
-    # Fallback: if no sections, try direct Q&A extraction
-    if not qa_chunks:
-        qa_pattern = r'Question:\s*([^?]+\??)\s*Answer:\s*([^.]+\.?)'
-        matches = re.finditer(qa_pattern, clean_text, re.IGNORECASE | re.DOTALL)
-        
-        for match in matches:
-            question = match.group(1).strip()
-            answer = match.group(2).strip()
-            qa_text = f"Question: {question}\nAnswer: {answer}"
-            
-            qa_chunks.append({
-                "text": qa_text,
-                "section": "General",
-                "question": question,
-                "answer": answer,
-                "content_type": "evaluation_qa"
-            })
-    
-    return qa_chunks
 
 def split_transcript_by_speakers(transcript: str) -> List[Dict[str, Any]]:
     """Split transcript while preserving speaker boundaries - PRODUCTION version"""
@@ -3055,30 +2999,14 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             from embedder import embed_text, embed_texts
             import numpy as np
 
-            evaluation_text = evaluation.get("evaluation", "")
+            # evaluation_text = evaluation.get("evaluation", "")
             transcript_text = evaluation.get("transcript", "")
 
-            if not evaluation_text and not transcript_text:
+            if not transcript_text:
                 log_evaluation_skip(evaluation_id, "no_content", template_name)
                 return {"status": "skipped", "reason": "no_content"}
 
-            all_chunks = []
-
-            # Extract QA chunks
-            if evaluation_text:
-                qa_chunks = extract_qa_pairs(evaluation_text)
-                for i, qa_data in enumerate(qa_chunks):
-                    if len(qa_data["text"].strip()) >= 20:
-                        chunk_data = {
-                            "text": qa_data["text"],
-                            "content_type": "evaluation_qa",
-                            "chunk_index": len(all_chunks),
-                            "section": qa_data.get("section", "General"),
-                            "question": qa_data.get("question", ""),
-                            "answer": qa_data.get("answer", ""),
-                            "qa_pair_index": i
-                        }
-                        all_chunks.append(chunk_data)
+            all_chunks = []           
 
             # Extract transcript chunks
             if transcript_text:
@@ -3098,7 +3026,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
 
             if not all_chunks:
                 log_evaluation_skip(evaluation_id, "no_meaningful_content", template_name, 
-                                  {"total_content_length": len(evaluation_text + transcript_text)})
+                                  {"total_content_length": len(transcript_text)})
                 return {"status": "skipped", "reason": "no_meaningful_content"}
 
             comprehensive_metadata = extract_comprehensive_metadata(evaluation)
@@ -3177,14 +3105,10 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 "created_on": created_on,
                 "call_duration": evaluation.get("call_duration"),
                 "language": evaluation.get("language"),
-                "evaluation": evaluation_text,
-                "transcript": transcript_text,
-                "evaluation_text": evaluation_text,
-                "transcript_text": transcript_text,
+                "transcript": transcript_text,                
                 "full_text": full_text,
                 "document_embedding": document_embedding,
-                "total_chunks": len(all_chunks),
-                "evaluation_chunks_count": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
+                "total_chunks": len(all_chunks),                
                 "transcript_chunks_count": len([c for c in all_chunks if c["content_type"] == "transcript"]),
                 "chunks": [
                     {**chunk, "embedding": chunk_embeddings[i]} if i < len(chunk_embeddings) else chunk
@@ -3195,7 +3119,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 "indexed_at": datetime.now().isoformat(),
                 "collection_name": collection,
                 "collection_source": f"template_id_{template_id}",
-                "version": "5.0.0_enhanced_logging"
+                "version": "6.1.0_enhanced_logging"
             }
 
             try:
@@ -3216,8 +3140,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 "template_name": evaluation.get("template_name"),
                 "agentName": evaluation.get("agentName"),
                 "agentId": evaluation.get("agentId"),
-                "subDisposition": evaluation.get("subDisposition"),
-                "weighted_score": evaluation.get("weighted_score"),
+                "subDisposition": evaluation.get("subDisposition"),               
                 "partner": evaluation.get("partner"),
                 "site": evaluation.get("site"),
                 "lob": evaluation.get("lob"),
@@ -3227,8 +3150,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 "language": evaluation.get("language"),
                 "program": comprehensive_metadata.get("program"),
                 "collection": collection,
-                "total_chunks": len(all_chunks),
-                "evaluation_chunks": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
+                "total_chunks": len(all_chunks),                
                 "transcript_chunks": len([c for c in all_chunks if c["content_type"] == "transcript"]),
                 "total_content_length": sum(len(chunk["text"]) for chunk in all_chunks),
                 "has_embeddings": bool(chunk_embeddings),
@@ -3283,9 +3205,6 @@ def log_import_summary():
             logger.info(f"   🔑 Missing Fields: {processing_stats['missing_fields']}")
     
     logger.info("=" * 60)
-
-# Add this call at the very end of your import_evaluations function:
-# log_import_summary()
 
 # ============================================================================
 # PRODUCTION API FETCHING (Keeping existing)
@@ -5230,11 +5149,7 @@ async def debug_opensearch_data():
                     "id": hit.get("_id"),
                     "evaluationId": source.get("evaluationId"),
                     "template_name": source.get("template_name"),
-                    "template_id": source.get("template_id"),
-                    "has_full_text": bool(source.get("full_text")),
-                    "has_evaluation_text": bool(source.get("evaluation_text")),
-                    "has_transcript_text": bool(source.get("transcript_text")),
-                    "has_evaluation": bool(source.get("evaluation")),
+                    "template_id": source.get("template_id"),                   
                     "has_transcript": bool(source.get("transcript")),
                     "total_chunks": source.get("total_chunks", 0),
                     "chunks_count": len(source.get("chunks", [])),
@@ -5253,13 +5168,10 @@ async def debug_opensearch_data():
                         "lob": source.get("metadata", {}).get("lob"),
                         "agentName": source.get("metadata", {}).get("agentName"),
                         "disposition": source.get("metadata", {}).get("disposition"),
-                        "language": source.get("metadata", {}).get("language"),
-                        "weighted_score": source.get("metadata", {}).get("weighted_score"),
+                        "language": source.get("metadata", {}).get("language"),                        
                         "url": source.get("metadata", {}).get("url")
                     },
                     "content_preview": {
-                        "full_text": source.get("full_text", "")[:200],
-                        "evaluation": source.get("evaluation", "")[:200],
                         "transcript": source.get("transcript", "")[:200],
                         "first_chunk": source.get("chunks", [{}])[0].get("text", "")[:200] if source.get("chunks") else ""
                     }
@@ -5298,11 +5210,11 @@ async def debug_opensearch_data():
                     "vector_search_ready": VECTOR_SEARCH_READY,
                     "embedder_available": EMBEDDER_AVAILABLE
                 },
-                "version": "4.8.0_vector_enabled"
+                "version": "6.1.0"
             }
             
     except Exception as e:
-        return {"error": str(e), "version": "4.8.0_vector_enabled"}
+        return {"error": str(e), "version": ""}
 
 @app.get("/debug/test_search")
 async def debug_test_search(q: str = "customer service", filters: str = "{}"):
@@ -5459,7 +5371,7 @@ async def debug_test_filters():
         test_cases = [
             {"description": "No filters", "filters": {}},
             {"description": "Program filter", "filters": {"program": "Metro"}},
-            {"description": "Partner filter", "filters": {"partner": "Advanced Solutions"}},
+            {"description": "Partner filter", "filters": {"partner": "All"}},
             {"description": "LOB filter", "filters": {"lob": "Customer Service"}},
             {"description": "Template filter", "filters": {"template_name": "CSR Quality"}},
             {"description": "Multiple filters", "filters": {"program": "Metro", "lob": "Customer Service"}}

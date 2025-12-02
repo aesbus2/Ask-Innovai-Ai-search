@@ -64,14 +64,14 @@ def clean_source_metadata(source: dict) -> dict:
     ALLOWED_API_FIELDS = {
         "evaluationId", "weighted_score", "url", "partner", "site", "lob",
         "agentName", "agentId", "disposition", "subDisposition",
-        "created_on", "call_date", "call_duration", "language", "evaluation"
+        "created_on", "call_date", "call_duration", "language"
     }
     
     # Fields to never display
     FORBIDDEN_FIELDS = {
         "_score", "_id", "_index", "score", "search_type", "match_count",
         "chunk_id", "vector_score", "text_score", "hybrid_score",
-        "template_name", "template_id", "program", "internalId"
+        "template_name", "template_id", "internalId"
     }
     
     cleaned = {}
@@ -121,8 +121,7 @@ def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
         "subDispositions": [],
         "partners": [],
         "sites": [],
-        "lobs": [],
-        "weighted_scores": [],
+        "lobs": [],        
         "urls": [],
         "call_durations": [],
         "call_dates": [],
@@ -168,16 +167,8 @@ def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
         
         # LOB (Line of Business) information
         if meta.get("lob"):
-            metadata["lobs"].append(meta["lob"])
-        
-        # Score information
-        if meta.get("weighted_score"):
-            try:
-                score = float(meta["weighted_score"])
-                metadata["weighted_scores"].append(score)
-            except (ValueError, TypeError):
-                # Skip invalid scores
-                pass
+            metadata["lobs"].append(meta["lob"])       
+       
         
         # URL information
         if meta.get("url"):
@@ -218,15 +209,6 @@ def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
                     unique_list.append(item)
             metadata[key] = unique_list
     
-    # Calculate statistics for numeric fields
-    if metadata["weighted_scores"]:
-        metadata["score_stats"] = {
-            "min": min(metadata["weighted_scores"]),
-            "max": max(metadata["weighted_scores"]),
-            "avg": sum(metadata["weighted_scores"]) / len(metadata["weighted_scores"]),
-            "count": len(metadata["weighted_scores"])
-        }
-    
     # Add summary counts
     metadata["summary"] = {
         "total_evaluations": len(metadata["evaluations"]),
@@ -234,8 +216,7 @@ def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
         "unique_programs": len(metadata["programs"]),
         "unique_dispositions": len(metadata["dispositions"]),
         "unique_partners": len(metadata["partners"]),
-        "unique_sites": len(metadata["sites"]),
-        "has_scores": len(metadata["weighted_scores"]) > 0,
+        "unique_sites": len(metadata["sites"]),        
         "has_urls": len(metadata["urls"]) > 0
     }
     
@@ -317,8 +298,7 @@ DO NOT GENERATE OR ESTIMATE ANY NUMBERS, DATES, OR STATISTICS.
         "created_on": []
     })
 
-    # Get enhanced fields safely
-    weighted_scores = metadata_summary.get("weighted_scores", [])
+    # Get enhanced fields safely    
     urls = metadata_summary.get("urls", [])
     call_durations = metadata_summary.get("call_durations", [])
     
@@ -346,7 +326,6 @@ REAL METADATA AVAILABLE:
 - Programs: {metadata_summary.get('programs', [])}
 
 ADDITIONAL FIELDS AVAILABLE:
-- Weighted Scores: {len(weighted_scores)} values found ({weighted_scores[:5] if len(weighted_scores) <= 5 else weighted_scores[:5] + ['...']})
 - Evaluation URLs: {len(urls)} URLs found
 - Call Durations: {len(call_durations)} duration values found
 
@@ -358,7 +337,6 @@ CRITICAL INSTRUCTIONS:
 5. Report on {metadata_summary.get('total_evaluations', 0)} EVALUATIONS (not chunks)
 6. Use only the agent names found: {', '.join(essential_fields.get('agentName', [])[:10])}
 7. Use only the dispositions found: {', '.join(metadata_summary.get('dispositions', []))}
-8. If asked about scores, use only these weighted scores: {', '.join(weighted_scores[:10])}
 9. ✅ NOTE: Results enhanced with {'vector similarity matching' if vector_search_used else 'text matching only'}
 
 DATA VERIFICATION STATUS: {metadata_summary.get('data_verification', 'VERIFIED_REAL_DATA')}
@@ -404,12 +382,8 @@ def _extract_transcript_text(hit: dict) -> str:
         
         # PRIORITY 4: CHUNK-BASED FIELDS (may contain transcript chunks)
         ("chunks_text", src.get("chunks_text")),
-        ("text", src.get("text")),
+        ("text", src.get("text")),        
         
-        # PRIORITY 5: EVALUATION FIELDS (Q&A format - LAST RESORT ONLY)
-        ("evaluation_text", src.get("evaluation_text")),
-        ("evaluation", src.get("evaluation")),
-        ("content", src.get("content")),
     ]
     
     transcript_text = ""
@@ -507,14 +481,11 @@ def debug_transcript_extraction(hit: dict) -> dict:
     
     # Provide recommendations
     if not extracted:
-        has_transcript_field = bool(src.get("transcript"))
-        has_evaluation_field = bool(src.get("evaluation"))
+        has_transcript_field = bool(src.get("transcript"))        
         has_text_field = bool(src.get("text"))
         
         if has_transcript_field:
-            debug_info["recommendations"].append("✅ 'transcript' field exists - check if it contains actual content")
-        elif has_evaluation_field:
-            debug_info["recommendations"].append("✅ 'evaluation' field exists - this might contain transcript data")
+            debug_info["recommendations"].append("✅ 'transcript' field exists - check if it contains actual content")        
         elif has_text_field:
             debug_info["recommendations"].append("✅ 'text' field exists - this might contain transcript data")
         else:
@@ -840,8 +811,7 @@ EVALUATION DETAILS:
                     ('lob', 'LOB'),
                     ('agentName', 'Agent'),
                     ('disposition', 'Disposition'),
-                    ('subDisposition', 'SubDisposition'),
-                    ('weighted_score', 'Weighted Score'),
+                    ('subDisposition', 'SubDisposition'),                    
                     ('call_date', 'Call Date'),
                     ('call_duration', 'Duration'),
                     ('language', 'Language'),
@@ -853,8 +823,7 @@ EVALUATION DETAILS:
                     if value and str(value).strip():
                         # Format specific fields
                         if field_key == 'call_duration':
-                            eval_str += f"- {field_label}: {value} seconds\n"
-                        elif field_key == 'weighted_score':
+                            eval_str += f"- {field_label}: {value} seconds\n"                        
                             try:
                                 eval_str += f"- {field_label}: {float(value):.2f}\n"
                             except Exception:
@@ -1003,7 +972,7 @@ EVALUATION DETAILS:
         eval_detail = f"\n[Evaluation {i}] ID: {source.get('evaluationId', 'Unknown')}\n"
         
         # Only add allowed fields
-        for field in ["partner", "site", "lob", "agentName", "disposition", "subDisposition", "weighted_score", "url"]:
+        for field in ["partner", "site", "lob", "agentName", "disposition", "subDisposition", "url"]:
             if source.get(field):
                 eval_detail += f"- {field}: {source[field]}\n"
         
@@ -1132,7 +1101,7 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     total_sources = len(sources)
     if total_sources > 0:
         fields_to_check = ["program", "partner", "agentName", "disposition", 
-                          "subDisposition", "weighted_score", "call_duration"]
+                          "subDisposition", "call_duration"]
         
         for field in fields_to_check:
             count = sum(1 for s in sources if s.get("metadata", {}).get(field))
@@ -1187,8 +1156,7 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
         "dispositions": metadata.get("dispositions", []),
         "programs": metadata.get("programs", []),
         "partners": metadata.get("partners", []),
-        "sites": metadata.get("sites", []),
-        "weighted_scores": metadata.get("weighted_scores", []),
+        "sites": metadata.get("sites", []),       
         "urls": metadata.get("urls", []),
         "call_durations": metadata.get("call_durations", []),
         "vector_search_used": metadata.get("vector_enhanced_count", 0) > 0,
@@ -1957,7 +1925,7 @@ Rules:
         ALLOWED_DISPLAY_FIELDS = {
             "evaluationId","url", "partner", "site", "lob",
             "agentName", "agentId", "disposition", "subDisposition",
-            "created_on", "call_date", "call_duration", "language", "evaluation"
+            "created_on", "call_date", "call_duration", "language"
         }
         
         for source in sources:

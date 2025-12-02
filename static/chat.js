@@ -12,7 +12,6 @@ let chatHistory = [];
 let chatSessions = [];
 let currentSessionId = null;
 let isLoading = false;
-let excludeQAContent = false;
 let filterOptions = {
     templates: [],
     programs: [],
@@ -105,29 +104,6 @@ function toggleSidebar() {
     
     sidebar.classList.toggle('open');
     console.log("📱 Sidebar toggled");
-}
-
-function updateChatDataFilter(exclude) {
-    excludeQAContent = exclude;
-    const statusDiv = document.getElementById('chatDataStatus');
-    
-    if (exclude) {
-        statusDiv.textContent = 'Transcripts Only';
-        statusDiv.style.background = '#e8f5e8';
-        statusDiv.style.color = '#2e7d32';
-        console.log('🚫 Q&A CONTENT EXCLUDED - Using transcripts only');
-        
-        // Show notification about mode change
-        showChatModeNotification('Q&A evaluation content excluded. Chat will focus on transcript conversations only.', 'warning');
-    } else {
-        statusDiv.textContent = 'All Content';
-        statusDiv.style.background = '#e3f2fd';
-        statusDiv.style.color = '#1976d2';
-        console.log('✅ ALL CONTENT ENABLED - Using transcripts + Q&A data');
-        
-        // Show notification about mode change
-        showChatModeNotification('All content enabled. Chat will use both transcript and Q&A evaluation data.', 'info');
-    }
 }
 
 function showChatModeNotification(message, type = 'info') {
@@ -339,45 +315,6 @@ function initializeTranscriptSearch() {
         debugTranscriptToggle();
     }, 200);
 }
-
-function addEvaluationScopeToggle() {
-    const chatHeaderFilters = document.getElementById('chatHeaderFilters');
-    if (!chatHeaderFilters) return;
-    
-    // Check if toggle already exists
-    if (document.getElementById('evaluationScopeToggle')) return;
-    
-    const scopeToggle = document.createElement('div');
-    scopeToggle.id = 'evaluationScopeToggle';
-    scopeToggle.innerHTML = `
-        <label class="toggle-switch header-toggle">
-            <input type="checkbox" id="includeAllFilteredToggle" checked onchange="updateEvaluationScope()">
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">All Filtered Evaluations</span>
-        </label>
-    `;
-    
-    chatHeaderFilters.appendChild(scopeToggle);
-}
-
-function updateEvaluationScope() {
-    const toggle = document.getElementById('includeAllFilteredToggle');
-    if (toggle) {
-        EVALUATION_DEFAULTS.INCLUDE_ALL_FILTERED = toggle.checked;
-        console.log(`🔧 Evaluation scope updated: ${toggle.checked ? 'ALL filtered' : 'LIMITED'}`);
-        
-        // Show feedback
-        if (typeof showToast === 'function') {
-            showToast(
-                toggle.checked ? 
-                '✅ Now using ALL evaluations matching filters' : 
-                '⚠️ Now using LIMITED evaluations matching filters',
-                toggle.checked ? 'success' : 'warning'
-            );
-        }
-    }
-}
-
 
 function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
     console.log(`🔄 FIXED: Updating interface for transcript mode: ${isTranscriptMode}`);
@@ -787,8 +724,8 @@ async function sendMessageWithTranscriptSearch() {
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => {
             abortController.abort();
-            console.warn("Request timeout after 60 seconds");
-        },60000); // Increased timeout for larger searches
+            console.warn("Request timeout after 180 seconds");
+        },180000); // Increased timeout for larger searches
         
         const response = await fetch(endpoint, {
             method: 'POST',
@@ -1610,7 +1547,7 @@ async function sendBatchAnalysis(message, filters, batchSize = 500) {
     // Show start message
     addMessageToChat('system', '🔄 Starting comprehensive analysis of ALL filtered data...');
     
-    while (hasMoreData && batchNum <= 10) { // Safety limit of 10 batches
+    while (hasMoreData && batchNum <= 20) { // Safety limit of 20 batches
         try {
             // Modify the message to request specific batch
             const batchMessage = `${message} (analyzing batch ${batchNum} of evaluations)`;
@@ -1763,6 +1700,7 @@ async function sendMessage() {
             include_all_filtered: true  // Explicitly request all filtered results
         };
         
+        console.log("🔍 Sending chat request:", requestBody);
         
         // Send request
         const response = await fetch('/api/chat', {
@@ -1770,14 +1708,7 @@ async function sendMessage() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                message: message,
-                history: chatHistory,
-                filters: currentFilters,
-                analytics: true,
-                exclude_qa_content: excludeQAContent || false  // Use to only search through transcripts
-            }),
-            timeout: 120000  //2 minute timeout for chat response.
+            body: JSON.stringify(requestBody)
         });
         
         if (!response.ok) {
@@ -1869,8 +1800,7 @@ function displayEvaluationSources(sources, sources_summary = null) {
     // FIXED: Improved transcript detection logic
     const transcriptSources = sources.filter(s => {
         // Check multiple possible transcript fields and formats
-        const transcriptContent = s.transcript || s.transcript_text || s.full_text || s.text || s.content || '';
-        const evaluationContent = s.evaluation || s.evaluation_text || '';
+        const transcriptContent = s.transcript || s.transcript_text || s.full_text || s.text || s.content || '';        
         
         // More comprehensive transcript detection
         const hasTranscriptMarkers = transcriptContent && (
@@ -1895,14 +1825,9 @@ function displayEvaluationSources(sources, sources_summary = null) {
             transcriptContent.length > 200  // Longer content more likely to be transcript
         );
         
-        // Not a Q&A format
-        const isNotQA = !transcriptContent.includes('Question:') && 
-                       !transcriptContent.includes('Answer:') &&
-                       !evaluationContent.includes('Question:');
-        
-        return hasTranscriptMarkers || (hasConversationalContent && isNotQA);
+        return hasTranscriptMarkers || hasConversationalContent;
     });
-
+    
     const questionSources = sources.filter(s => {
         // Check if the source contains Q&A format data
         const content = s.evaluation || s.evaluation_text || s.content || s.text || '';
@@ -2040,62 +1965,6 @@ function displayEvaluationSources(sources, sources_summary = null) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-function addMessageToChat(role, content, metadata = null) {
-    const chatMessages = document.getElementById('chatMessages');
-    const welcomeScreen = document.getElementById('welcomeScreen');
-    
-    if (!chatMessages) return;
-    
-    // Hide welcome screen on first message
-    if (welcomeScreen && !welcomeScreen.classList.contains('hidden')) {
-        welcomeScreen.classList.add('hidden');
-        chatMessages.classList.remove('hidden');
-    }
-    
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${role}`;
-    
-    if (role === 'user') {
-        messageDiv.innerHTML = `
-            <div class="message-bubble user-bubble">
-                ${escapeHtml(content)}
-            </div>
-        `;
-    } else if (role === 'assistant') {
-        messageDiv.innerHTML = `
-            <div class="message-bubble assistant-bubble">
-                ${formatMessage(content)}
-            </div>
-        `;
-    } else if (role === 'error') {
-        messageDiv.innerHTML = `
-            <div class="message-bubble error-bubble">
-                <div class="error-icon">⚠️</div>
-                ${escapeHtml(content)}
-            </div>
-        `;
-    } else if (role === 'system') {
-        messageDiv.innerHTML = `
-            <div class="message-bubble system-bubble">
-                ${formatMessage(content)}
-            </div>
-        `;
-    }
-    
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-    
-    // Add to chat history
-    if (role !== 'system') {
-        chatHistory.push({
-            role: role,
-            content: content,
-            timestamp: new Date().toISOString(),
-            metadata: metadata
-        });
-    }
-}
-
 function showTypingIndicator() {
     const chatMessages = document.getElementById('chatMessages');
     if (!chatMessages) return;
@@ -2227,20 +2096,14 @@ function cleanMalformedText(text) {
     return cleaned;
 }
 
-// Then update your formatMessage to use it:
 function formatMessage(message) {
     if (!message) return '';
     
     // FIRST: Clean malformed formatting
-    let formatted = cleanMalformedText(message);    
-   
-}
-
-function formatMessage(message) {
-    if (!message) return '';
+    let formatted = cleanMalformedText(message);
     
     // Simple markdown-to-HTML conversion
-    let formatted = message
+    formatted = formatted
         // Bold text
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         // Italic text

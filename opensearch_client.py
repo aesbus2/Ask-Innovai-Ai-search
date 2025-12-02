@@ -287,8 +287,7 @@ def search_vector(query_vector: List[float], index_override: str = None,
                 "internalId": source.get("internalId"),
                 "template_name": source.get("template_name"),
                 "template_id": source.get("template_id"),
-                "text": source.get("text", source.get("full_text", "")),
-                "evaluation": source.get("evaluation", ""),
+                "text": source.get("text", source.get("full_text", "")),                
                 "transcript": source.get("transcript", ""),
                 "weight_score": source.get("weight_score", source.get("weighted_score")),
                 "url": source.get("url", ""),
@@ -400,7 +399,7 @@ def hybrid_search(query: str, query_vector: List[float] = None,
         }
         
         # Execute hybrid search
-        response = safe_search_with_error_handling(client, index_pattern, search_body, timeout=30)
+        response = safe_search_with_error_handling(client, index_pattern, search_body, timeout=120)
         
         # Process results
         results = []
@@ -417,8 +416,7 @@ def hybrid_search(query: str, query_vector: List[float] = None,
                 "internalId": source.get("internalId"),
                 "template_name": source.get("template_name"),
                 "template_id": source.get("template_id"),
-                "text": source.get("text", source.get("full_text", source.get("evaluation", ""))),
-                "evaluation": source.get("evaluation", ""),
+                "text": source.get("text", source.get("full_text", source.get("transcript", ""))),                
                 "transcript": source.get("transcript", ""),
                 "weight_score": source.get("weight_score", source.get("weighted_score")),
                 "url": source.get("url", ""),
@@ -582,10 +580,9 @@ def build_safe_search_query(query: str, available_fields: Dict[str, List[str]],
     # Build search fields with validation - Updated for API structure
     search_fields = []
     field_priorities = [
-        ("evaluation", 3.0),        # NEW: Full evaluation content (highest priority)
+        # NEW: Full evaluation content (highest priority)
         ("transcript", 2.8),        # NEW: Call transcript (high priority)
-        ("full_text", 2.5),
-        ("evaluation_text", 2.2),
+        ("full_text", 2.5),        
         ("template_name", 2.0),
         ("content", 1.8),
         ("text", 1.5),
@@ -1011,8 +1008,7 @@ def search_opensearch(query: str, index_override: str = None,
                 "internalId": source.get("internalId"),
                 "template_name": source.get("template_name"),
                 "template_id": source.get("template_id"),
-                "text": source.get("text", source.get("full_text", source.get("evaluation", ""))),
-                "evaluation": source.get("evaluation", ""),
+                "text": source.get("text", source.get("full_text", source.get("transcript", ""))),                
                 "transcript": source.get("transcript", ""),
                 "weight_score": source.get("weight_score", source.get("weighted_score")),
                 "url": source.get("url", ""),
@@ -1117,7 +1113,7 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
             "size": size,
             "sort": [{"_score": {"order": "desc"}}],
             "_source": ["evaluationId", "internalId", "template_name", "template_id", 
-                       "transcript_text", "metadata", "evaluation_text"],
+                       "transcript", "metadata", ],
         }
         
         # Add highlighting for matched words
@@ -1200,8 +1196,7 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
                 "program": safe_get_metadata(metadata, ["program"]),
                 "partner": safe_get_metadata(metadata, ["partner"]),
                 "site": safe_get_metadata(metadata, ["site"]),
-                "call_date": safe_get_metadata(metadata, ["call_date", "callDate"]),
-                "search_type": "transcript_only",
+                "call_date": safe_get_metadata(metadata, ["call_date", "callDate"]),                
                 "highlighted_snippets": highlights,
                 "match_count": len(highlights) if highlights else _count_word_occurrences(transcript_content, query)
             }
@@ -1381,7 +1376,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             "size": max_total_scan,
             "sort": [{"_score": {"order": "desc"}}],
             "_source": ["evaluationId", "internalId", "template_name", "template_id", 
-                       "transcript_text", "metadata", "evaluation_text"],
+                       "transcript", "metadata"],
             "track_total_hits": True
         }
         
@@ -1570,9 +1565,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
                 # Content fields
                 "text": {"type": "text", "analyzer": "standard"},
                 "full_text": {"type": "text", "analyzer": "standard"},
-                "content": {"type": "text", "analyzer": "standard"},
-                "evaluation_text": {"type": "text", "analyzer": "standard"},
-                "evaluation": {"type": "text", "analyzer": "standard"},
+                "content": {"type": "text", "analyzer": "standard"},                
                 "transcript": {"type": "text", "analyzer": "standard"},
                 
                 # Nested chunks with vector support
@@ -1581,11 +1574,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
                     "properties": {
                         "text": {"type": "text", "analyzer": "standard"},
                         "content": {"type": "text", "analyzer": "standard"},
-                        "content_type": {"type": "keyword"},
-                        "question": {"type": "text", "analyzer": "standard"},
-                        "answer": {"type": "text", "analyzer": "standard"},
-                        "section": {"type": "keyword"},
-                        "score": {"type": "float"},
+                        "content_type": {"type": "keyword"},                        
                         "chunk_id": {"type": "keyword"}
                     }
                 },
@@ -1609,8 +1598,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
                         "call_date": {"type": "date"},
                         "call_duration": {"type": "integer"},
                         "created_on": {"type": "date"},
-                        "call_type": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "weighted_score": {"type": "integer"},
+                        "call_type": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},                        
                         "url": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                     }
                 },
@@ -1687,7 +1675,7 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
         document["_structure_version"] = VERSION
 
         # Safe embedding logic
-        text_for_embedding = document.get("transcript") or document.get("evaluation") or ""
+        text_for_embedding = document.get("transcript") or document.get("text") or document.get("full_text") or ""
         if text_for_embedding.strip():
             document["document_embedding"] = embed_text(text_for_embedding)
         else:
@@ -1823,8 +1811,7 @@ def debug_search_simple(query: str = "test") -> Dict[str, Any]:
                 "has_metadata": "metadata" in source,
                 "has_chunks": "chunks" in source and isinstance(source.get("chunks"), list),
                 "has_weight_score": "weight_score" in source or "weighted_score" in source,
-                "has_url": "url" in source,
-                "has_evaluation": "evaluation" in source,
+                "has_url": "url" in source,               
                 "has_transcript": "transcript" in source,
                 "has_document_embedding": "document_embedding" in source,  # ✅ NEW
                 "has_chunk_embeddings": False,  # ✅ NEW
