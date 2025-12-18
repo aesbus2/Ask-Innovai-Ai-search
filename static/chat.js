@@ -12,7 +12,6 @@ let chatHistory = [];
 let chatSessions = [];
 let currentSessionId = null;
 let isLoading = false;
-let excludeQAContent = false;
 let filterOptions = {
     templates: [],
     programs: [],
@@ -200,7 +199,7 @@ async function loadDynamicFilterOptions() {
     console.log("🔄 Loading dynamic filter options from API...");
     
     try {
-        const response = await fetch('/api/filter_options', {
+        const response = await fetch('/filter_options_metadata', {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -553,16 +552,17 @@ async function sendMessage() {
     const loadingId = addLoadingMessage();
     
     try {
-        const response = await fetch('/api/chat', {
+        const response = await fetch('/api/ask_question', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
                 message: message,
+                history: chatHistory || [],
                 filters: currentFilters,
-                excludeQAContent: excludeQAContent,
-                sessionId: currentSessionId
+                analytics: true,
+                metadata_focus: []
             })
         });
         
@@ -720,7 +720,7 @@ async function refreshAnalyticsStats() {
     console.log("📊 Refreshing analytics stats...");
     
     try {
-        const response = await fetch('/api/stats', {
+        const response = await fetch('/analytics/stats', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -840,7 +840,7 @@ function debugChatSystem() {
 
 async function checkVectorSearchCapabilities() {
     try {
-        const response = await fetch('/api/vector-search-status');
+        const response = await fetch('/vector_status_simple');
         if (response.ok) {
             const status = await response.json();
             vectorSearchStatus = { ...vectorSearchStatus, ...status };
