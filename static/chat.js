@@ -552,7 +552,7 @@ async function sendMessage() {
     const loadingId = addLoadingMessage();
     
     try {
-        const response = await fetch('/api/ask_question', {
+        const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
