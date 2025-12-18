@@ -575,9 +575,8 @@ async function sendMessage() {
         // Remove loading message
         removeLoadingMessage(loadingId);
         
-        // Show response - handle both 'reply' and 'response' fields from backend
-        const responseText = data.reply || data.response || 'No response received';
-        addMessageToChat('assistant', responseText);
+        // Show response
+        addMessageToChat('assistant', data.response);
         
         // Update session ID if provided
         if (data.sessionId) {
@@ -610,102 +609,16 @@ function addMessageToChat(type, content) {
     
     const timestamp = new Date().toLocaleTimeString();
     
-    // Format content based on type
-    let formattedContent = content;
-    
-    if (type === 'assistant') {
-        formattedContent = formatAssistantMessage(content);
-    } else if (type === 'user') {
-        formattedContent = escapeHtml(content);
-    } else if (type === 'error') {
-        formattedContent = `<div class="error-content">${escapeHtml(content)}</div>`;
-    }
-    
     messageDiv.innerHTML = `
         <div class="message-header">
             <span class="message-type">${type === 'user' ? '👤 You' : type === 'assistant' ? '🤖 Assistant' : '❌ Error'}</span>
             <span class="message-time">${timestamp}</span>
         </div>
-        <div class="message-content">${formattedContent}</div>
+        <div class="message-content">${content}</div>
     `;
     
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
-
-function formatAssistantMessage(content) {
-    if (!content) return '';
-    
-    // If content is already HTML (contains tags), return as-is but clean it
-    if (content.includes('<') && content.includes('>')) {
-        return cleanHtml(content);
-    }
-    
-    // Otherwise, convert plain text to formatted HTML
-    let formatted = escapeHtml(content);
-    
-    // Convert line breaks to proper paragraphs
-    formatted = formatted
-        .split(/\n\s*\n/) // Split on double line breaks for paragraphs
-        .map(paragraph => {
-            if (paragraph.trim()) {
-                return `<p>${paragraph.replace(/\n/g, '<br>')}</p>`;
-            }
-            return '';
-        })
-        .filter(p => p) // Remove empty paragraphs
-        .join('');
-    
-    // If no paragraphs were created, wrap in a single paragraph
-    if (!formatted.includes('<p>')) {
-        formatted = `<p>${formatted.replace(/\n/g, '<br>')}</p>`;
-    }
-    
-    // Convert markdown-style formatting
-    formatted = convertBasicMarkdown(formatted);
-    
-    return formatted;
-}
-
-function convertBasicMarkdown(text) {
-    // Convert **bold** and __bold__
-    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    text = text.replace(/__(.*?)__/g, '<strong>$1</strong>');
-    
-    // Convert *italic* and _italic_
-    text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    text = text.replace(/_(.*?)_/g, '<em>$1</em>');
-    
-    // Convert `code`
-    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-    
-    // Convert numbered lists (basic)
-    text = text.replace(/^(\d+\.)\s+(.+)$/gm, '<ol><li>$2</li></ol>');
-    
-    // Convert bullet points (basic)
-    text = text.replace(/^[•\-\*]\s+(.+)$/gm, '<ul><li>$1</li></ul>');
-    
-    // Merge consecutive list items
-    text = text.replace(/<\/ol>\s*<ol>/g, '');
-    text = text.replace(/<\/ul>\s*<ul>/g, '');
-    
-    return text;
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function cleanHtml(html) {
-    // Basic HTML cleaning - remove script tags and dangerous attributes
-    let cleaned = html
-        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-        .replace(/javascript:/gi, '')
-        .replace(/on\w+\s*=/gi, '');
-    
-    return cleaned;
 }
 
 function addLoadingMessage() {
@@ -919,13 +832,6 @@ function debugChatSystem() {
     console.log("Filter Options:", filterOptions);
     console.log("Performance Metrics:", performanceMetrics);
     console.log("Vector Search Status:", vectorSearchStatus);
-    
-    // Debug last message formatting
-    const lastMessage = document.querySelector('.message:last-child .message-content');
-    if (lastMessage) {
-        console.log("🔧 DEBUG: Last message content:", lastMessage.innerHTML);
-        console.log("🔧 DEBUG: Last message text:", lastMessage.textContent);
-    }
 }
 
 // =============================================================================
