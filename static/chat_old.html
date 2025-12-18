@@ -19,7 +19,7 @@
                 <span class="version-badge">v5.1.0 Production</span>
             </h1>
             <div class="header-controls">
-                <button class="header-btn" onclick="toggleSidebar()" id="toggleSidebarBtn">
+                <button class="header-btn" onclick="toggleSidebar()">
                     <span class="material-icons">tune</span>
                     <span>Filters</span>
                 </button>
@@ -131,7 +131,7 @@
                                     <option value="">All Sites</option>
                                 </select>
                                 <small class="filter-help">
-                                    🗺️ Physical locations from your evaluations
+                                    🏗️ Physical locations from your evaluations
                                 </small>
                             </div>
 
@@ -159,12 +159,6 @@
                             </div>
                         </h4>
                         <div class="filter-content">
-                            <div class="filter-group">
-                                <label class="filter-label">Evaluation ID</label>
-                                <input type="text" id="evaluationIdFilter" class="filter-input"
-                                    placeholder="e.g., EVAL-12345-2024" maxlength="50">
-                            </div>
-
                             <div class="filter-group">
                                 <label class="filter-label">Phone Number</label>
                                 <input type="text" id="phoneNumberFilter" class="filter-input"
@@ -206,55 +200,83 @@
                                     onchange="updateSubDispositions()">
                                     <option value="">All Dispositions</option>
                                 </select>
+                                <small class="filter-help">
+                                    📞 Actual call dispositions from your evaluation data
+                                </small>
                             </div>
 
                             <div class="filter-group">
                                 <label class="filter-label">
-                                    Call Sub-Disposition
+                                    Call Sub Disposition
                                     <span id="subDispositionCount" class="count-indicator"></span>
                                 </label>
                                 <select id="callSubDispositionFilter" class="filter-select">
                                     <option value="">All Sub-Dispositions</option>
                                 </select>
+                                <small class="filter-help">
+                                    📞 Detailed call sub-dispositions from your data
+                                </small>
                             </div>
 
                             <div class="filter-group">
+                                <label class="filter-label">Call Duration (seconds)</label>
+                                <div class="input-grid">
+                                    <input type="number" id="minDuration" class="filter-input"
+                                        placeholder="Min (e.g., 120)" min="0" max="7200">
+                                    <input type="number" id="maxDuration" class="filter-input"
+                                        placeholder="Max (e.g., 600)" min="0" max="7200">
+                                </div>
+                                <small class="filter-help">
+                                    ⏱️ Filter by call duration range
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Language Filter -->
+                    <div class="filter-section">
+                        <h4>
+                            <div class="section-title">
+                                <span class="material-icons">language</span>
+                                Language Filter
+                            </div>
+                            <span id="languageDataStatus" class="data-status data-status-ok">
+                                ✅ Ready
+                            </span>
+                        </h4>
+                        <div class="filter-content">
+                            <div class="filter-group">
                                 <label class="filter-label">
-                                    Call Language
+                                    Language
                                     <span id="languageCount" class="count-indicator"></span>
                                 </label>
                                 <select id="languageFilter" class="filter-select">
                                     <option value="">All Languages</option>
                                 </select>
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">
-                                    Call Type
-                                    <span id="callTypeCount" class="count-indicator"></span>
-                                </label>
-                                <select id="callTypeFilter" class="filter-select">
-                                    <option value="">All Call Types</option>
-                                </select>
+                                <small class="filter-help">
+                                    🌐 Languages used in your evaluations
+                                </small>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Action Buttons -->
-                    <div class="filter-actions">
-                        <button class="apply-btn" onclick="applyFilters()">
-                            <span class="material-icons">search</span>
-                            Apply Filters
-                        </button>
-                        <button class="clear-btn" onclick="clearFilters()">
-                            <span class="material-icons">clear</span>
-                            Clear All
-                        </button>
+                <div class="filter-actions">
+                    <button class="btn btn-primary" onclick="applyFilters()">
+                        <span class="material-icons">filter_alt</span>
+                        Apply Filters
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearFilters()">
+                        <span class="material-icons">clear</span>
+                        Clear All
+                    </button>
+                    <div class="active-filters" id="activeFilters">
+                        <!-- Active filter tags will appear here -->
                     </div>
                 </div>
             </div>
 
-            <!-- Chat Area -->
+            <!-- Main Chat Area -->
             <div class="chat-area">
                 <div class="chat-header">
                     <div class="chat-header-top">
@@ -295,6 +317,7 @@
                                 onclick="askQuestion('Review the overall tone, acknowledgement, empathy, and call ownership across agents.')">
                                 <h4>📊 Review Customer Service</h4>
                                 <p>Analyze basic customer service metrics and agent performance trends</p>
+                                    data</p>
                             </div>
                             <div class="example-card"
                                 onclick="askQuestion('Identify customer satisfaction or frustration, highlight patterns in unresolved issues, and call sub-dispositions for transactions.')">
@@ -337,6 +360,41 @@
                             Troubleshooting patterns
                         </button>
                         </div>
+                </div>
+
+                <div class="chat-data-filter" style="
+                    background: white;
+                    padding: 8px 12px;
+                    border-radius: 6px;
+                    border: 1px solid #e0e0e0;
+                    margin: 12px 0 8px 0;
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    font-size: 0.9rem;
+                ">
+                    <span style="color: #666; font-weight: 500;">💬 Chat Data:</span>
+                    
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input 
+                            type="checkbox" 
+                            id="excludeQAContent" 
+                            style="width: 16px; height: 16px; accent-color: #4caf50; cursor: pointer;"
+                            onchange="updateChatDataFilter(this.checked)"
+                        />
+                        <span style="color: #4caf50;">Exclude Q&A Evaluations</span>
+                    </label>
+                    
+                    <div id="chatDataStatus" style="
+                        background: #e3f2fd;
+                        color: #1976d2;
+                        padding: 2px 8px;
+                        border-radius: 12px;
+                        font-size: 0.75rem;
+                        font-weight: 500;
+                    ">
+                        All Content
+                    </div>
                 </div>
 
                 <!-- Chat Input -->
