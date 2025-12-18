@@ -79,7 +79,7 @@ body {
     display: flex;
     width: 100%;
     height: 100vh;
-    padding-top: 70px;
+    padding-top: 80px; /* Increased from 70px to prevent collision */
 }
 
 /* Sidebar - FIXED for proper toggle functionality */
@@ -101,8 +101,8 @@ body {
     .sidebar {
         position: fixed;
         left: 0;
-        top: 70px;
-        height: calc(100vh - 70px);
+        top: 80px; /* Match main-layout padding-top */
+        height: calc(100vh - 80px);
         transform: translateX(-100%);
         z-index: 999;
     }
@@ -940,7 +940,7 @@ body {
 
 @media (max-width: 480px) {
     .main-layout {
-        padding-top: 60px;
+        padding-top: 80px; /* Match main desktop padding */
     }
     
     .header {
@@ -949,6 +949,9 @@ body {
     
     .sidebar {
         width: 100%;
+        top: 80px; /* Match main-layout padding */
+        height: calc(100vh - 80px);
+    }
     }
     
     .sidebar.open::before {

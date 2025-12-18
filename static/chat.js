@@ -533,11 +533,24 @@ function handleKeyPress(event) {
 }
 
 async function sendMessage() {
+    console.log("🔄 sendMessage called");
+    
     const chatInput = document.getElementById('chatInput');
-    if (!chatInput) return;
+    if (!chatInput) {
+        console.error("❌ chatInput element not found");
+        return;
+    }
     
     const message = chatInput.value.trim();
-    if (!message || isLoading) return;
+    if (!message) {
+        console.log("⚠️ No message to send");
+        return;
+    }
+    
+    if (isLoading) {
+        console.log("⚠️ Already loading, ignoring request");
+        return;
+    }
     
     console.log("💬 Sending message:", message);
     
@@ -590,6 +603,7 @@ async function sendMessage() {
         addMessageToChat('error', `Sorry, I encountered an error: ${error.message}`);
     } finally {
         isLoading = false;
+        console.log("✅ sendMessage completed");
     }
 }
 
@@ -826,7 +840,18 @@ async function refreshAnalyticsStats() {
         // Update total records display
         const totalRecords = document.getElementById('totalRecords');
         if (totalRecords && stats.total !== undefined) {
-            totalRecords.textContent = `${stats.total.toLocaleString()} records`;
+            totalRecords.textContent = `${stats.total.toLocaleString()} transcripts`;
+        }
+        
+        // Update active filters count if filters are applied
+        const activeFiltersCount = document.getElementById('activeFiltersCount');
+        const filterCount = Object.keys(currentFilters).length;
+        if (activeFiltersCount) {
+            if (filterCount > 0 && stats.total !== undefined) {
+                activeFiltersCount.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${stats.total.toLocaleString()} results)`;
+            } else {
+                activeFiltersCount.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
+            }
         }
         
         console.log("✅ Analytics stats updated:", stats);
@@ -864,7 +889,48 @@ function initializePage() {
         }
     });
     
+    // Initialize send button functionality
+    initializeSendButton();
+    
     console.log("✅ Page initialization complete");
+}
+
+function initializeSendButton() {
+    console.log("🔄 Initializing send button...");
+    
+    const sendBtn = document.getElementById('sendBtn');
+    const chatInput = document.getElementById('chatInput');
+    
+    if (!sendBtn) {
+        console.error("❌ Send button not found!");
+        return;
+    }
+    
+    if (!chatInput) {
+        console.error("❌ Chat input not found!");
+        return;
+    }
+    
+    // Ensure send button is enabled
+    sendBtn.disabled = false;
+    
+    // Add event listener as backup to onclick attribute
+    sendBtn.addEventListener('click', function(event) {
+        event.preventDefault();
+        console.log("🔄 Send button clicked via event listener");
+        sendMessage();
+    });
+    
+    // Add input event listener for Enter key
+    chatInput.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            console.log("🔄 Enter key pressed in chat input");
+            sendMessage();
+        }
+    });
+    
+    console.log("✅ Send button initialized successfully");
 }
 
 function addEvaluationScopeToggle() {
@@ -912,6 +978,44 @@ function downloadCategoryData() {
     console.log("⬇️ Downloading category data");
 }
 
+function testSendButton() {
+    console.log("🔧 Testing send button functionality");
+    
+    // Check if elements exist
+    const sendBtn = document.getElementById('sendBtn');
+    const chatInput = document.getElementById('chatInput');
+    
+    console.log("Send button found:", !!sendBtn);
+    console.log("Chat input found:", !!chatInput);
+    
+    // Check if functions are available globally
+    console.log("sendMessage function:", typeof window.sendMessage);
+    console.log("handleKeyPress function:", typeof window.handleKeyPress);
+    
+    // Check onclick attribute
+    if (sendBtn) {
+        console.log("Send button onclick:", sendBtn.getAttribute('onclick'));
+        console.log("Send button disabled:", sendBtn.disabled);
+    }
+    
+    // Test direct call
+    if (chatInput) {
+        const originalValue = chatInput.value;
+        chatInput.value = "test message";
+        console.log("Testing direct sendMessage call...");
+        try {
+            if (window.sendMessage) {
+                window.sendMessage();
+            } else {
+                console.error("❌ sendMessage not available on window");
+            }
+        } catch (error) {
+            console.error("❌ Error calling sendMessage:", error);
+        }
+        chatInput.value = originalValue;
+    }
+}
+
 function debugChatSystem() {
     console.log("🔧 DEBUG: Chat System Status");
     console.log("Current Filters:", currentFilters);
@@ -926,6 +1030,9 @@ function debugChatSystem() {
         console.log("🔧 DEBUG: Last message content:", lastMessage.innerHTML);
         console.log("🔧 DEBUG: Last message text:", lastMessage.textContent);
     }
+    
+    // Test send button
+    testSendButton();
 }
 
 // =============================================================================
@@ -997,6 +1104,7 @@ window.downloadCategoryData = downloadCategoryData;
 
 // Debug functions
 window.debugChatSystem = debugChatSystem;
+window.testSendButton = testSendButton;
 window.getProductionMetrics = () => performanceMetrics;
 window.getProductionConfig = () => PRODUCTION_CONFIG;
 
