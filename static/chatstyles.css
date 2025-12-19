@@ -12,7 +12,7 @@ body {
 }
 
 .container {
-    display: block; /* Changed from flex to block to fix header overlap */
+    display: flex;
     height: 100vh;
     overflow: hidden;
 }
@@ -80,9 +80,8 @@ body {
 .main-layout {
     display: flex;
     width: 100%;
-    height: calc(100vh - 48px); /* Account for 48px header height */
-    margin-top: 48px; /* Push content below fixed header */
-    padding-top: 16px; /* Add some spacing after the header */
+    height: 100vh;
+    padding-top: 90px; /* Increased from 80px to prevent header overlap */
 }
 
 /* Sidebar - FIXED for proper toggle functionality */
@@ -104,8 +103,8 @@ body {
     .sidebar {
         position: fixed;
         left: 0;
-        top: 48px; /* Match header height */
-        height: calc(100vh - 48px); /* Account for header */
+        top: 90px; /* Match main-layout padding-top */
+        height: calc(100vh - 90px);
         transform: translateX(-100%);
         z-index: 999;
     }
@@ -928,17 +927,6 @@ body {
         font-size: 0.6em; /* Even smaller on mobile */
         padding: 1px 4px;
     }
-    
-    /* Update main layout for mobile header */
-    .main-layout {
-        height: calc(100vh - 44px); /* Account for smaller mobile header */
-        margin-top: 44px; /* Match mobile header height */
-    }
-    
-    .sidebar {
-        top: 44px !important; /* Override previous setting */
-        height: calc(100vh - 44px) !important;
-    }
     }
     
     .date-range, .input-grid {
@@ -982,6 +970,10 @@ body {
 }
 
 @media (max-width: 480px) {
+    .main-layout {
+        padding-top: 90px; /* Match main layout padding */
+    }
+    
     .header {
         padding: 4px 8px; /* Ultra-compact on small screens */
         min-height: 40px; /* Even smaller on tiny screens */
@@ -1002,19 +994,11 @@ body {
         display: none; /* Hide version badge on tiny screens */
     }
     
-    /* Update main layout for ultra-small screens */
-    .main-layout {
-        height: calc(100vh - 40px) !important; /* Account for 40px header */
-        margin-top: 40px !important; /* Match tiny header height */
-        padding-top: 12px; /* Smaller padding on tiny screens */
-    }
-    
     .sidebar {
         width: 100%;
-        top: 40px !important; /* Match tiny header height */
-        height: calc(100vh - 40px) !important;
+        top: 90px; /* Match main-layout padding */
+        height: calc(100vh - 90px);
     }
-}
     }
     
     .sidebar.open::before {
