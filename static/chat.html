@@ -15,8 +15,7 @@
         <div class="header">
             <h1>
                 <span class="material-icons">analytics</span>
-                Metro AI Call Center Analytics
-                <span class="version-badge">v5.1.0 Production</span>
+                InnovAI Call Center Analytics                
             </h1>
             <div class="header-controls">
                 <button class="header-btn" onclick="toggleSidebar()" id="toggleSidebarBtn">
@@ -75,7 +74,7 @@
                         </h4>
                         <div class="filter-content">
                             <div class="hierarchy-note">
-                                <strong>🎯 REAL DATA Filters:</strong> Template (evaluation form) → Program (business
+                                <strong>REAL DATA Filters:</strong> Template (evaluation form) → Program (business
                                 unit) → Partner → Site → LOB
                                 <br><small>All options loaded from your actual evaluation database</small>
                             </div>
@@ -90,7 +89,7 @@
                                     <option value="">All Templates</option>
                                 </select>
                                 <small class="filter-help">
-                                    📋 Actual evaluation form names from your database
+                                    InnovAi QA evaluation templates
                                 </small>
                             </div>
 
@@ -104,7 +103,7 @@
                                     <option value="">All Programs</option>
                                 </select>
                                 <small class="filter-help">
-                                    🏢 Business programs from your evaluations (Metro, T-Mobile Prepaid, ASW)
+                                   Metro, ASW, T-Mobile Prepaid
                                 </small>
                             </div>
 
@@ -118,7 +117,7 @@
                                     <option value="">All Partners</option>
                                 </select>
                                 <small class="filter-help">
-                                    🤝 Call center vendors
+                                    Call center vendors
                                 </small>
                             </div>
 
@@ -131,7 +130,7 @@
                                     <option value="">All Sites</option>
                                 </select>
                                 <small class="filter-help">
-                                    🗺️ Physical locations from your evaluations
+                                    where the site is located
                                 </small>
                             </div>
 
@@ -144,7 +143,7 @@
                                     <option value="">All LOBs</option>
                                 </select>
                                 <small class="filter-help">
-                                    📊 Service types from your evaluation data
+                                    CSR, DSG, WNP, Specialty, etc.
                                 </small>
                             </div>
                         </div>
@@ -178,7 +177,7 @@
                             </div>
 
                             <div class="filter-group">
-                                <label class="filter-label">UCID</label>
+                                <label class="filter-label">Transaction ID (UCID)/label>
                                 <input type="text" id="ucidFilter" class="filter-input"
                                     placeholder="e.g., 000011103817514224423" maxlength="30">
                             </div>
@@ -206,6 +205,9 @@
                                     onchange="updateSubDispositions()">
                                     <option value="">All Dispositions</option>
                                 </select>
+                                <small class="filter-help">
+                                    Main interaction reason
+                                </small>
                             </div>
 
                             <div class="filter-group">
@@ -216,6 +218,9 @@
                                 <select id="callSubDispositionFilter" class="filter-select">
                                     <option value="">All Sub-Dispositions</option>
                                 </select>
+                                <small class="filter-help">
+                                    Detailed reason for the interaction
+                                </small>
                             </div>
 
                             <div class="filter-group">
@@ -293,19 +298,41 @@
                         <div class="example-questions">
                             <div class="example-card"
                                 onclick="askQuestion('Review the overall tone, acknowledgement, empathy, and call ownership across agents.')">
-                                <h4>📊 Review Customer Service</h4>
+                                <h4>Review Customer Service</h4>
                                 <p>Analyze basic customer service metrics and agent performance trends</p>
                             </div>
                             <div class="example-card"
                                 onclick="askQuestion('Identify customer satisfaction or frustration, highlight patterns in unresolved issues, and call sub-dispositions for transactions.')">
-                                <h4>📈 Customer Satisfaction</h4>
+                                <h4>Customer Satisfaction</h4>
                                 <p>Deep dive into call resolution analysis and performance optimization opportunities</p>
                             </div>
                             <div class="example-card"
                                 onclick="askQuestion('Identify calls with a high Churn risk and provide coaching insights')">
-                                <h4>🔍 Identify Churn Risk</h4>
+                                <h4>Identify Churn Risk</h4>
                                 <p>Identify low-scoring evaluations and suggest coaching or process
                                     enhancement</p>
+                            </div>
+                            <div class="example-card"
+                                onclick="askQuestion('Identify calls with a High Sales Risk where a successful sale was made')">
+                                <h4>Sales Risk Analysis</h4>
+                                <p>Focus is on identifying turnover risks from bad pitch practices (cancel/chargeback exposure) and incomplete sale processes (order fulfillment failures).
+                                    cancel/chargeback exposure:
+                                    - Implying/advising that they could call back and cancel
+                                    - No clear mention of Add a Line without stating the customer is adding a new line
+                                    - Misrepresenting Add a line as device replacement program instead of new line addition
+                                    - Positioned device as "Device Upgrade Eligible" - Customer believes they're upgrading existing line, not adding new line
+                                    - Advised customer to keep service active for 31+ days and cancel after - Coaching customers to game the system, guaranteed chargeback
+
+                                    order fulfillment failures:
+                                    - Advised customer of their New Monthly recurrence amount
+                                    - Advised customer of Activation email and activation steps
+                                    - Advised customer of Order Ship Out/Tracking email 
+                                    - Verified shipping address and billing info
+                                    - Advised delivery timeframe
+                                    - Advised customer of Order Confirmation email
+                                    - Confirmed Device Model ordered
+                                    - Advised order total
+                                    - Reviewed Service Agreement</p>
                             </div>
                            </div>
                     </div>
