@@ -3,31 +3,12 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>InnovAI Call Center Analytics - Local Preview</title>
+    <title>Metro AI Call Center Analytics v6.0.0 - Production</title>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
-    <!-- Use relative paths for local testing -->
-    <link rel="stylesheet" href="chatstyles.css" />
-    <!-- <link rel="stylesheet" href="/static/transcript-search.css"> -->
-    <!-- <link rel="stylesheet" href="/static/styles.css"> -->
-    
-    <!-- Demo notification styles -->
-    <style>
-        .demo-notice {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            padding: 8px 16px;
-            text-align: center;
-            font-size: 0.9rem;
-            color: #856404;
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            border-radius: 6px;
-            z-index: 2000;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-    </style>
+    <!-- PRODUCTION PATHS - DO NOT CHANGE THESE -->
+    <link rel="stylesheet" href="/static/chatstyles.css" />
+    <link rel="stylesheet" href="/static/transcript-search.css">
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
     <div class="container">
@@ -402,93 +383,24 @@
         </div>
     </div>
 
-    <!-- Demo Notice -->
-    <div class="demo-notice">
-        💻 <strong>Local Preview Mode</strong> - Testing header overlap fix. For full functionality, run your FastAPI backend locally.
-    </div>
-
     <script>
-    // LOCAL DEMO FUNCTIONS - No backend required
-    function toggleSidebar() {
-        const sidebar = document.getElementById('sidebar');
-        if (!sidebar) return;
-        sidebar.classList.toggle('open');
-        console.log("✅ Sidebar toggled (local demo)");
-    }
-
-    function sendMessage() {
-        const input = document.getElementById('chatInput');
-        if (!input || !input.value.trim()) return;
-        
-        alert(`Demo Mode: Would send message "${input.value}"\n\nTo test full functionality:\n1. Run: python app.py\n2. Visit: http://localhost:8080/chat`);
-        input.value = '';
-    }
-
-    function exportChat() {
-        alert("Demo Mode: Export functionality requires backend server");
-    }
-
-    function clearChat() {
-        alert("Demo Mode: Clear functionality requires backend server");
-    }
-
-    function askQuestion(question) {
-        const input = document.getElementById('chatInput');
-        if (input) {
-            input.value = question;
-            sendMessage();
-        }
-    }
-
-    function handleKeyPress(event) {
-        if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            sendMessage();
-        }
-    }
-
-    function applyFilters() {
-        alert("Demo Mode: Filter functionality requires backend server");
-    }
-
-    function clearFilters() {
-        alert("Demo Mode: Filter functionality requires backend server");
-    }
-
-    // Demo initialization
+    // Production initialization - KEEP ONLY THIS
     document.addEventListener('DOMContentLoaded', function () {
-        console.log("🎨 LOCAL PREVIEW MODE - Header overlap fix testing");
-        
-        // Measure header positioning for debugging
-        setTimeout(() => {
-            const header = document.querySelector('.header');
-            const chatHeader = document.querySelector('.chat-header');
-            const mainLayout = document.querySelector('.main-layout');
-            
-            if (header && chatHeader && mainLayout) {
-                console.log("📏 Header height:", header.offsetHeight + 'px');
-                console.log("📏 Chat header position:", chatHeader.offsetTop + 'px');
-                console.log("📏 Main layout margin-top:", getComputedStyle(mainLayout).marginTop);
-                console.log("📏 Gap between headers:", chatHeader.offsetTop - (header.offsetTop + header.offsetHeight) + 'px');
-                
-                // Visual indicator if there's still overlap
-                const gap = chatHeader.offsetTop - (header.offsetTop + header.offsetHeight);
-                if (gap < 0) {
-                    console.error("❌ OVERLAP DETECTED:", Math.abs(gap) + 'px overlap');
-                } else {
-                    console.log("✅ NO OVERLAP - Good separation:", gap + 'px');
-                }
-            }
-        }, 500);
+        console.log("🚀 Production Chat Interface v4.4.0 initializing...");
 
-        // Add demo content
-        document.getElementById('totalRecords').textContent = '1,234 transcripts';
-        document.getElementById('activeFiltersCount').textContent = '0 filters';
+        // Set initial loading state
+        const selects = document.querySelectorAll('.filter-select');
+        selects.forEach(select => {
+            select.classList.add('loading-filter');
+            select.disabled = true;
+        });
+
+        // Track page load performance
+        window.pageLoadStart = performance.now();
     });
     </script>
 
-    <!-- For production deployment, uncomment this line: -->
-    <!-- <script src="/static/chat.js"></script> -->
+    <script src="/static/chat.js"></script>
 </body>
 
 </html>
