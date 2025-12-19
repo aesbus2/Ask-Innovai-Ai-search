@@ -120,21 +120,7 @@ function toggleSidebar() {
     console.log("🔄 Sidebar toggled:", sidebar.classList.contains('open') ? 'OPEN' : 'CLOSED');
 }
 
-// Fixed updateEvaluationScope function with proper error handling
-function updateEvaluationScope() {
-    const toggle = document.getElementById('includeAllFilteredToggle');
-    if (toggle) {
-        EVALUATION_DEFAULTS.INCLUDE_ALL_FILTERED = toggle.checked;
-        console.log(`🔧 Evaluation scope updated: ${toggle.checked ? 'ALL filtered' : 'LIMITED'}`);
-        
-        // Show feedback
-        if (typeof showToast === 'function') {
-            showToast(toggle.checked ? 'Using all filtered evaluations' : 'Using limited evaluations', 'info');
-        }
-    } else {
-        console.warn("⚠️ includeAllFilteredToggle element not found");
-    }
-}
+// Function removed - toggle no longer needed
 
 function showCriticalError(message) {
     console.error("🚨 CRITICAL ERROR:", message);
@@ -837,18 +823,23 @@ async function refreshAnalyticsStats() {
         
         const stats = await response.json();
         
+        console.log("📊 Stats response:", stats); // Debug log
+        
         // Update total records display
         const totalRecords = document.getElementById('totalRecords');
-        if (totalRecords && stats.total !== undefined) {
-            totalRecords.textContent = `${stats.total.toLocaleString()} transcripts`;
+        if (totalRecords && stats.totalRecords !== undefined) {
+            totalRecords.textContent = `${stats.totalRecords.toLocaleString()} transcripts`;
+            console.log(`✅ Updated transcript count: ${stats.totalRecords}`);
+        } else {
+            console.warn("⚠️ totalRecords not found in stats:", stats);
         }
         
         // Update active filters count if filters are applied
         const activeFiltersCount = document.getElementById('activeFiltersCount');
         const filterCount = Object.keys(currentFilters).length;
         if (activeFiltersCount) {
-            if (filterCount > 0 && stats.total !== undefined) {
-                activeFiltersCount.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${stats.total.toLocaleString()} results)`;
+            if (filterCount > 0 && stats.totalRecords !== undefined) {
+                activeFiltersCount.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${stats.totalRecords.toLocaleString()} results)`;
             } else {
                 activeFiltersCount.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
             }
@@ -933,32 +924,7 @@ function initializeSendButton() {
     console.log("✅ Send button initialized successfully");
 }
 
-function addEvaluationScopeToggle() {
-    const chatHeaderFilters = document.getElementById('chatHeaderFilters');
-    if (!chatHeaderFilters) {
-        console.warn("⚠️ chatHeaderFilters not found, skipping scope toggle");
-        return;
-    }
-    
-    // Check if toggle already exists
-    if (document.getElementById('evaluationScopeToggle')) {
-        console.log("ℹ️ Evaluation scope toggle already exists");
-        return;
-    }
-    
-    const scopeToggle = document.createElement('div');
-    scopeToggle.id = 'evaluationScopeToggle';
-    scopeToggle.innerHTML = `
-        <label class="toggle-switch header-toggle">
-            <input type="checkbox" id="includeAllFilteredToggle" checked onchange="updateEvaluationScope()">
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">All Filtered Evaluations</span>
-        </label>
-    `;
-    
-    chatHeaderFilters.appendChild(scopeToggle);
-    console.log("✅ Evaluation scope toggle added");
-}
+// Function removed - not needed
 
 // =============================================================================
 // UTILITY FUNCTIONS
@@ -1086,7 +1052,6 @@ window.removeFilter = removeFilter;
 window.updateFilterCounts = updateFilterCounts;
 window.updateHierarchyFilters = updateHierarchyFilters;
 window.updateSubDispositions = updateSubDispositions;
-window.updateEvaluationScope = updateEvaluationScope;
 
 // Analytics function
 window.refreshAnalyticsStats = refreshAnalyticsStats;
@@ -1164,9 +1129,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize enhanced transcript search
     setTimeout(initializeEnhancedTranscriptSearch, 1000);
-    setTimeout(() => {
-        addEvaluationScopeToggle();
-    }, 1500);
 
     console.log("✅ Default evaluation scope: ALL filtered evaluations");    
     console.log("✅ Metro AI Call Center Analytics v6.0.0 Fixed version loaded successfully");
