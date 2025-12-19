@@ -383,6 +383,68 @@
     </div>
 
     <script>
+    // Sidebar toggle functionality with backdrop
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        if (!sidebar) {
+            console.error('Sidebar element not found');
+            return;
+        }
+        
+        const isOpen = sidebar.classList.contains('open');
+        
+        if (isOpen) {
+            // Close sidebar
+            sidebar.classList.remove('open');
+            removeBackdrop();
+            console.log('Sidebar toggled: CLOSED');
+        } else {
+            // Open sidebar
+            sidebar.classList.add('open');
+            createBackdrop();
+            console.log('Sidebar toggled: OPEN');
+        }
+    }
+    
+    // Create backdrop overlay
+    function createBackdrop() {
+        // Remove existing backdrop if any
+        removeBackdrop();
+        
+        const backdrop = document.createElement('div');
+        backdrop.className = 'sidebar-backdrop';
+        backdrop.id = 'sidebarBackdrop';
+        backdrop.addEventListener('click', closeSidebar);
+        
+        document.body.appendChild(backdrop);
+        
+        // Show backdrop with slight delay for animation
+        setTimeout(() => {
+            backdrop.classList.add('show');
+        }, 10);
+    }
+    
+    // Remove backdrop overlay
+    function removeBackdrop() {
+        const backdrop = document.getElementById('sidebarBackdrop');
+        if (backdrop) {
+            backdrop.classList.remove('show');
+            setTimeout(() => {
+                backdrop.remove();
+            }, 300); // Match transition duration
+        }
+    }
+    
+    // Close sidebar (used by backdrop click)
+    function closeSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar && sidebar.classList.contains('open')) {
+            sidebar.classList.remove('open');
+            removeBackdrop();
+            console.log('Sidebar closed via backdrop');
+        }
+    }
+    
     // Production initialization - KEEP ONLY THIS
     document.addEventListener('DOMContentLoaded', function () {
         console.log("🚀 Production Chat Interface v4.4.0 initializing...");
@@ -396,6 +458,17 @@
 
         // Track page load performance
         window.pageLoadStart = performance.now();
+        
+        // Initialize sidebar as closed
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) {
+            // Ensure sidebar starts closed
+            sidebar.classList.remove('open');
+            console.log('Sidebar initialized: CLOSED');
+        }
+        
+        // Remove any existing backdrop on page load
+        removeBackdrop();
     });
     </script>
 

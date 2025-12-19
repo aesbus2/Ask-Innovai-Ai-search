@@ -86,7 +86,26 @@ body {
     padding-top: 70px; /* 60px header + 10px clearance */
 }
 
-/* Sidebar - WIDER for full browser width utilization */
+/* Sidebar backdrop overlay */
+.sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 998; /* Below sidebar but above everything else */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.sidebar-backdrop.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Sidebar - Hidden by default, shows when .open class added */
 .sidebar {
     width: 420px; /* Increased from 380px for better full-width usage */
     background: white;
@@ -95,33 +114,21 @@ body {
     flex-direction: column;
     overflow: hidden;
     box-shadow: 2px 0 10px rgba(0,0,0,0.05);
-    transition: transform 0.3s ease, margin-left 0.3s ease;
-    position: relative;
-    z-index: 100;
+    transition: transform 0.3s ease;
+    position: fixed; /* Fixed positioning so chat area can use full width */
+    left: 0;
+    top: 70px; /* Below header */
+    height: calc(100vh - 70px);
+    z-index: 999;
+    transform: translateX(-100%); /* Hidden by default */
 }
 
-/* Default closed state for mobile */
+.sidebar.open {
+    transform: translateX(0); /* Shown when open class added */
+}
+
+/* Mobile adjustments */
 @media (max-width: 768px) {
-    .sidebar {
-        position: fixed;
-        left: 0;
-        top: 70px; /* Match main-layout padding-top */
-        height: calc(100vh - 70px);
-        transform: translateX(-100%);
-        z-index: 999;
-    }
-    
-    .sidebar.open {
-        transform: translateX(0);
-    }
-}
-
-/* Desktop always visible */
-@media (min-width: 769px) {
-    .sidebar {
-        transform: translateX(0);
-    }
-    
     .sidebar.open {
         transform: translateX(0);
     }
