@@ -17,11 +17,11 @@ body {
     overflow: hidden;
 }
 
-/* Header - COMPACT VERSION */
+/* Header - ULTRA COMPACT VERSION */
 .header {
     background: linear-gradient(135deg, #6e32a0 0%, #e20074 100%);
     color: white;
-    padding: 8px 16px; /* Reduced from 16px 24px */
+    padding: 2px 4px; /* Ultra-small: was 4px 8px */
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -30,16 +30,16 @@ body {
     left: 0;
     right: 0;
     z-index: 1000;
-    box-shadow: 0 1px 8px rgba(0,0,0,0.1); /* Reduced shadow */
-    min-height: 48px; /* Set explicit compact height */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1); /* Minimal shadow */
+    min-height: 24px; /* Much smaller: was 32px */
 }
 
 .header h1 {
-    font-size: 1.1rem; /* Reduced from 1.4rem */
+    font-size: 0.7rem; /* Much smaller: was 0.9rem */
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 6px; /* Reduced from 10px */
+    gap: 2px; /* Tiny gap: was 4px */
 }
 
 .version-badge {
@@ -60,15 +60,15 @@ body {
     background: rgba(255, 255, 255, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.3);
     color: white;
-    padding: 4px 8px; /* Reduced from 8px 16px */
-    border-radius: 4px; /* Reduced from 6px */
+    padding: 1px 3px; /* Ultra-tiny: was 2px 6px */
+    border-radius: 2px; /* Tiny: was 3px */
     cursor: pointer;
-    font-size: 0.8rem; /* Reduced from 0.9rem */
+    font-size: 0.6rem; /* Very small: was 0.7rem */
     transition: all 0.2s;
     display: flex;
     align-items: center;
-    gap: 4px; /* Reduced from 6px */
-    height: 32px; /* Set explicit compact height */
+    gap: 2px; /* Tiny: was 3px */
+    height: 20px; /* Small: was 24px */
 }
 
 .header-btn:hover {
@@ -81,7 +81,7 @@ body {
     display: flex;
     width: 100%;
     height: 100vh;
-    padding-top: 90px; /* Increased from 80px to prevent header overlap */
+    padding-top: 120px; /* Massive clearance: was 110px */
 }
 
 /* Sidebar - FIXED for proper toggle functionality */
@@ -103,8 +103,8 @@ body {
     .sidebar {
         position: fixed;
         left: 0;
-        top: 90px; /* Match main-layout padding-top */
-        height: calc(100vh - 90px);
+        top: 120px; /* Match main-layout padding-top */
+        height: calc(100vh - 120px);
         transform: translateX(-100%);
         z-index: 999;
     }
@@ -904,12 +904,12 @@ body {
 /* Responsive Design */
 @media (max-width: 768px) {
     .header {
-        padding: 6px 12px; /* Even smaller on mobile */
-        min-height: 44px; /* Slightly smaller on mobile */
+        padding: 1px 2px; /* Ultra-tiny mobile: was 3px 6px */
+        min-height: 20px; /* Very small: was 28px */
     }
     
     .header h1 {
-        font-size: 1rem; /* Smaller font on mobile */
+        font-size: 0.6rem; /* Tiny: was 0.8rem */
     }
     
     .header-btn span:not(.material-icons) {
@@ -917,9 +917,9 @@ body {
     }
     
     .header-btn {
-        padding: 4px 6px; /* More compact when only showing icons */
-        min-width: 28px;
-        height: 28px;
+        padding: 1px 2px; /* Ultra-tiny when only showing icons */
+        min-width: 16px;
+        height: 16px; /* Much smaller: was 20px */
         justify-content: center;
     }
     
@@ -971,16 +971,16 @@ body {
 
 @media (max-width: 480px) {
     .main-layout {
-        padding-top: 90px; /* Match main layout padding */
+        padding-top: 120px; /* Match main layout padding */
     }
     
     .header {
-        padding: 4px 8px; /* Ultra-compact on small screens */
-        min-height: 40px; /* Even smaller on tiny screens */
+        padding: 1px 2px; /* Ultra-compact on small screens */
+        min-height: 16px; /* Extremely small: was 24px */
     }
     
     .header h1 {
-        font-size: 0.9rem; /* Ultra-compact title */
+        font-size: 0.5rem; /* Extremely small: was 0.7rem */
     }
     
     .header-btn {
@@ -996,8 +996,8 @@ body {
     
     .sidebar {
         width: 100%;
-        top: 90px; /* Match main-layout padding */
-        height: calc(100vh - 90px);
+        top: 120px; /* Match main-layout padding */
+        height: calc(100vh - 120px);
     }
     }
     
