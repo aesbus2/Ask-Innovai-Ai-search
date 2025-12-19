@@ -13,16 +13,15 @@ body {
 
 .container {
     display: flex;
-    width: 100vw; /* Full viewport width */
     height: 100vh;
     overflow: hidden;
 }
 
-/* Header - EXACTLY 60px Fixed Height */
+/* Header - ULTRA COMPACT VERSION */
 .header {
     background: linear-gradient(135deg, #6e32a0 0%, #e20074 100%);
     color: white;
-    padding: 8px 16px; /* Balanced padding for 60px height */
+    padding: 2px 4px; /* Ultra-small: was 4px 8px */
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -31,26 +30,25 @@ body {
     left: 0;
     right: 0;
     z-index: 1000;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-    height: 60px; /* EXACTLY 60px - fixed height */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1); /* Minimal shadow */
+    min-height: 24px; /* Much smaller: was 32px */
 }
 
 .header h1 {
-    font-size: 18px; /* Converted from 1.16px */
+    font-size: 0.7rem; /* Much smaller: was 0.9rem */
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 8px; /* Proper spacing */
-    margin: 0;
+    gap: 2px; /* Tiny gap: was 4px */
 }
 
 .version-badge {
     background: rgba(255, 255, 255, 0.2);
-    padding: 4px 8px; /* Proper padding for 60px header */
-    border-radius: 12px;
-    font-size: 0.75em; /* Good readable size for 60px header */
+    padding: 1px 6px; /* Reduced from 2px 8px */
+    border-radius: 8px; /* Reduced from 12px */
+    font-size: 0.65em; /* Reduced from 0.7em */
     font-weight: 500;
-    margin-left: 8px;
+    margin-left: 6px; /* Reduced from 8px */
 }
 
 .header-controls {
@@ -62,15 +60,15 @@ body {
     background: rgba(255, 255, 255, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.3);
     color: white;
-    padding: 8px 12px; /* Proper padding for 60px header */
-    border-radius: 6px;
+    padding: 1px 3px; /* Ultra-tiny: was 2px 6px */
+    border-radius: 2px; /* Tiny: was 3px */
     cursor: pointer;
-    font-size: 14px; /* Converted from 14px */
+    font-size: 0.6rem; /* Very small: was 0.7rem */
     transition: all 0.2s;
     display: flex;
     align-items: center;
-    gap: 6px;
-    height: 40px; /* Fits nicely in 60px header with padding */
+    gap: 2px; /* Tiny: was 3px */
+    height: 20px; /* Small: was 24px */
 }
 
 .header-btn:hover {
@@ -81,14 +79,14 @@ body {
 /* Main Layout */
 .main-layout {
     display: flex;
-    width: 100%; /* Full available width */
+    width: 100%;
     height: 100vh;
-    padding-top: 70px; /* 60px header + 10px clearance */
+    padding-top: 120px; /* Massive clearance: was 110px */
 }
 
-/* Sidebar - WIDER for full browser width utilization */
+/* Sidebar - FIXED for proper toggle functionality */
 .sidebar {
-    width: 420px; /* Increased from 380px for better full-width usage */
+    width: 380px;
     background: white;
     border-right: 1px solid #e1e8ed;
     display: flex;
@@ -105,8 +103,8 @@ body {
     .sidebar {
         position: fixed;
         left: 0;
-        top: 70px; /* Match main-layout padding-top */
-        height: calc(100vh - 70px);
+        top: 120px; /* Match main-layout padding-top */
+        height: calc(100vh - 120px);
         transform: translateX(-100%);
         z-index: 999;
     }
@@ -135,13 +133,13 @@ body {
 
 .sidebar-header h3 {
     color: #6e32a0;
-    font-size: 18px; /* Converted from 1.16px */
+    font-size: 1.1rem;
     margin-bottom: 8px;
 }
 
 .sidebar-header p {
     color: #666;
-    font-size: 14px; /* Converted from 14px */
+    font-size: 0.9rem;
 }
 
 /* Filter Panel */
@@ -163,7 +161,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 15px; /* Converted from 15px */
+    font-size: 0.95rem;
     font-weight: 600;
     color: #495057;
 }
@@ -180,7 +178,7 @@ body {
 }
 
 .data-status {
-    font-size: 12px;
+    font-size: 0.75rem;
     padding: 2px 6px;
     border-radius: 10px;
     font-weight: 500;
@@ -208,14 +206,14 @@ body {
     display: block;
     margin-bottom: 6px;
     font-weight: 500;
-    font-size: 14px;
+    font-size: 0.9rem;
     color: #495057;
 }
 
 .count-indicator {
     color: #6c757d;
     font-weight: normal;
-    font-size: 13px;
+    font-size: 0.8rem;
 }
 
 .count-indicator.data-status-ok {
@@ -238,7 +236,7 @@ body {
     padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 6px;
-    font-size: 14px;
+    font-size: 0.9rem;
     transition: all 0.2s;
     box-sizing: border-box; /* Ensure proper sizing */
 }
@@ -257,7 +255,7 @@ body {
 
 .filter-help {
     color: #6c757d;
-    font-size: 13px;
+    font-size: 0.8rem;
     margin-top: 4px; 
     display: block;
     line-height: 1.3;
@@ -282,7 +280,7 @@ body {
     border-radius: 6px;
     padding: 12px;
     margin-bottom: 16px;
-    font-size: 14px;
+    font-size: 0.85rem;
 }
 
 .hierarchy-note strong {
@@ -303,7 +301,7 @@ body {
     padding: 10px 16px;
     border: none;
     border-radius: 6px;
-    font-size: 14px;
+    font-size: 0.9rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
@@ -372,7 +370,7 @@ body {
 }
 
 .chat-title {
-    font-size: 18px; /* Converted from 1.16px */
+    font-size: 1.1rem; /* Reduced from 1.3rem */
     font-weight: 600;
     color: #2c3e50;
     margin-bottom: 2px; /* Reduced from 4px */
@@ -380,7 +378,7 @@ body {
 
 .chat-subtitle {
     color: #6c757d;
-    font-size: 14px; /* Converted from 14px */
+    font-size: 0.85rem; /* Slightly smaller */
 }
 
 .chat-stats {
@@ -393,7 +391,7 @@ body {
     align-items: center;
     gap: 6px;
     color: #495057;
-    font-size: 14px;
+    font-size: 0.9rem;
 }
 
 .stat-item .material-icons {
@@ -414,7 +412,7 @@ body {
     border: 1px solid #bbdefb;
     border-radius: 16px;
     padding: 4px 12px;
-    font-size: 13px;
+    font-size: 0.8rem;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -438,7 +436,7 @@ body {
     border: none;
     color: #1976d2;
     cursor: pointer;
-    font-size: 1.16px;
+    font-size: 1.1rem;
     padding: 0;
     width: 16px;
     height: 16px;
@@ -475,19 +473,19 @@ body {
 }
 
 .welcome-icon {
-    font-size: 64px;
+    font-size: 4rem;
     margin-bottom: 20px;
 }
 
 .welcome-title {
-    font-size: 32px;
+    font-size: 2rem;
     color: #2c3e50;
     margin-bottom: 16px;
     font-weight: 600;
 }
 
 .welcome-subtitle {
-    font-size: 1.16px;
+    font-size: 1.1rem;
     color: #6c757d;
     margin-bottom: 40px;
     line-height: 1.5;
@@ -519,12 +517,12 @@ body {
 .example-card h4 {
     color: #6e32a0;
     margin-bottom: 8px;
-    font-size: 16px;
+    font-size: 1rem;
 }
 
 .example-card p {
     color: #666;
-    font-size: 14px;
+    font-size: 0.9rem;
     line-height: 1.4;
 }
 
@@ -548,12 +546,12 @@ body {
 
 .message-type {
     font-weight: 600;
-    font-size: 14px;
+    font-size: 0.9rem;
 }
 
 .message-time {
     color: #6c757d;
-    font-size: 13px;
+    font-size: 0.8rem;
 }
 
 .user-message .message-type {
@@ -569,7 +567,7 @@ body {
     color: #2c3e50;
     white-space: pre-wrap; /* Preserve line breaks and spacing */
     word-wrap: break-word; /* Handle long words */
-    font-size: 15px;
+    font-size: 0.95rem;
 }
 
 /* Enhanced formatting for assistant messages */
@@ -599,10 +597,10 @@ body {
     line-height: 1.3;
 }
 
-.message-content h1 { font-size: 22px; }
-.message-content h2 { font-size: 19px; }
-.message-content h3 { font-size: 1.16px; }
-.message-content h4 { font-size: 16px; }
+.message-content h1 { font-size: 1.4rem; }
+.message-content h2 { font-size: 1.2rem; }
+.message-content h3 { font-size: 1.1rem; }
+.message-content h4 { font-size: 1rem; }
 
 .message-content ul,
 .message-content ol {
@@ -645,7 +643,7 @@ body {
     margin: 12px 0;
     overflow-x: auto;
     font-family: 'Monaco', 'Consolas', monospace;
-    font-size: 14px;
+    font-size: 0.85rem;
     line-height: 1.4;
 }
 
@@ -669,7 +667,7 @@ body {
     border-collapse: collapse;
     width: 100%;
     margin: 12px 0;
-    font-size: 14px;
+    font-size: 0.9rem;
 }
 
 .message-content th,
@@ -803,7 +801,7 @@ body {
 .quick-questions h4 {
     margin-bottom: 12px;
     color: #495057;
-    font-size: 14px;
+    font-size: 0.9rem;
 }
 
 .question-buttons {
@@ -818,7 +816,7 @@ body {
     color: #6c757d;
     padding: 6px 12px;
     border-radius: 16px;
-    font-size: 13px;
+    font-size: 0.8rem;
     cursor: pointer;
     transition: all 0.2s;
 }
@@ -850,7 +848,7 @@ body {
     border: 1px solid #ddd;
     border-radius: 22px;
     resize: none;
-    font-size: 14px;
+    font-size: 0.9rem;
     font-family: inherit;
     transition: all 0.2s;
 }
@@ -868,7 +866,7 @@ body {
     border-radius: 22px;
     padding: 12px 20px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 0.9rem;
     font-weight: 500;
     transition: all 0.2s;
     display: flex;
@@ -906,12 +904,12 @@ body {
 /* Responsive Design */
 @media (max-width: 768px) {
     .header {
-        padding: 8px 12px; /* Slightly less padding on mobile */
-        height: 60px; /* Same 60px height on mobile */
+        padding: 1px 2px; /* Ultra-tiny mobile: was 3px 6px */
+        min-height: 20px; /* Very small: was 28px */
     }
     
     .header h1 {
-        font-size: 16px; /* Converted from 16px */
+        font-size: 0.6rem; /* Tiny: was 0.8rem */
     }
     
     .header-btn span:not(.material-icons) {
@@ -919,15 +917,15 @@ body {
     }
     
     .header-btn {
-        padding: 6px 8px; /* Proper mobile button padding */
-        min-width: auto;
-        height: 36px; /* Fits nicely in 60px header */
+        padding: 1px 2px; /* Ultra-tiny when only showing icons */
+        min-width: 16px;
+        height: 16px; /* Much smaller: was 20px */
         justify-content: center;
     }
     
     .version-badge {
-        font-size: 0.7em; /* Good size for 60px mobile header */
-        padding: 3px 6px; /* Proper padding for mobile */
+        font-size: 0.6em; /* Even smaller on mobile */
+        padding: 1px 4px;
     }
     }
     
@@ -973,16 +971,16 @@ body {
 
 @media (max-width: 480px) {
     .main-layout {
-        padding-top: 70px; /* Match main layout padding */
+        padding-top: 120px; /* Match main layout padding */
     }
     
     .header {
-        padding: 6px 8px; /* Compact padding for small screens */
-        height: 60px; /* Same 60px height on small screens */
+        padding: 1px 2px; /* Ultra-compact on small screens */
+        min-height: 16px; /* Extremely small: was 24px */
     }
     
     .header h1 {
-        font-size: 14px; /* Converted from 14px */
+        font-size: 0.5rem; /* Extremely small: was 0.7rem */
     }
     
     .header-btn {
@@ -998,8 +996,8 @@ body {
     
     .sidebar {
         width: 100%;
-        top: 70px; /* Match main-layout padding */
-        height: calc(100vh - 70px);
+        top: 120px; /* Match main-layout padding */
+        height: calc(100vh - 120px);
     }
     }
     
@@ -1013,7 +1011,7 @@ body {
     }
     
     .welcome-title {
-        font-size: 24px;
+        font-size: 1.5rem;
     }
 }
 

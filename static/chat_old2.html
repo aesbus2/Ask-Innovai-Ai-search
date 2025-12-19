@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Metro AI Call Center Analytics v6.0.0 - Production</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/chatstyles.css" />
+    <link rel="stylesheet" href="/static/transcript-search.css">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>
+                <span class="material-icons">analytics</span>
+                InnovAI Call Center Analytics                
+            </h1>
+            <div class="header-controls">
+                <button class="header-btn" onclick="toggleSidebar()" id="toggleSidebarBtn">
+                    <span class="material-icons">tune</span>
+                    <span>Filters</span>
+                </button>
+                <button class="header-btn" onclick="exportChat()">
+                    <span class="material-icons">download</span>
+                    <span>Export</span>
+                </button>
+                <button class="header-btn" onclick="clearChat()">
+                    <span class="material-icons">refresh</span>
+                    <span>Clear</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="main-layout">
+            <!-- Sidebar -->
+            <div class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <h3>Real-Time Analytics Filters</h3>
+                    <p>All options loaded from live evaluation database</p>
+                </div>
+
+                <div class="filter-panel">
+                    <!-- Date Filters -->
+                    <div class="filter-section">
+                        <h4>
+                            <div class="section-title">
+                                <span class="material-icons">date_range</span>
+                                Date & Time Filters
+                            </div>
+                        </h4>
+                        <div class="filter-content">
+                            <div class="filter-group">
+                                <label class="filter-label">Call Date Range</label>
+                                <div class="date-range">
+                                    <input type="date" id="startCallDate" class="filter-input" title="Start Date">
+                                    <input type="date" id="endCallDate" class="filter-input" title="End Date">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Organizational Hierarchy -->
+                    <div class="filter-section">
+                        <h4>
+                            <div class="section-title">
+                                <span class="material-icons">account_tree</span>
+                                Organizational Hierarchy
+                            </div>
+                            <span id="hierarchyDataStatus" class="data-status data-status-ok">
+                                ✅ Ready
+                            </span>
+                        </h4>
+                        <div class="filter-content">
+                            <div class="hierarchy-note">
+                                <strong>REAL DATA Filters:</strong> Template (evaluation form) → Program (business
+                                unit) → Partner → Site → LOB
+                                <br><small>All options loaded from your actual evaluation database</small>
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">
+                                    Template (Evaluation Form)
+                                    <span id="templateCount" class="count-indicator"></span>
+                                </label>
+                                <select id="templateFilter" class="filter-select"
+                                    onchange="updateHierarchyFilters('template')">
+                                    <option value="">All Templates</option>
+                                </select>
+                                <small class="filter-help">
+                                    InnovAi QA evaluation templates
+                                </small>
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">
+                                    Program (Business Unit)
+                                    <span id="programCount" class="count-indicator"></span>
+                                </label>
+                                <select id="programFilter" class="filter-select"
+                                    onchange="updateHierarchyFilters('program')">
+                                    <option value="">All Programs</option>
+                                </select>
+                                <small class="filter-help">
+                                   Metro, ASW, T-Mobile Prepaid
+                                </small>
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">
+                                    Partner (Vendor)
+                                    <span id="partnerCount" class="count-indicator"></span>
+                                </label>
+                                <select id="partnerFilter" class="filter-select"
+                                    onchange="updateHierarchyFilters('partner')">
+                                    <option value="">All Partners</option>
+                                </select>
+                                <small class="filter-help">
+                                    Call center vendors
+                                </small>
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">
+                                    Site (Location)
+                                    <span id="siteCount" class="count-indicator"></span>
+                                </label>
+                                <select id="siteFilter" class="filter-select" onchange="updateHierarchyFilters('site')">
+                                    <option value="">All Sites</option>
+                                </select>
+                                <small class="filter-help">
+                                    where the site is located
+                                </small>
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">
+                                    Line of Business (LOB)
+                                    <span id="lobCount" class="count-indicator"></span>
+                                </label>
+                                <select id="lobFilter" class="filter-select">
+                                    <option value="">All LOBs</option>
+                                </select>
+                                <small class="filter-help">
+                                    CSR, DSG, WNP, Specialty, etc.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Call Identifiers -->
+                    <div class="filter-section">
+                        <h4>
+                            <div class="section-title">
+                                <span class="material-icons">fingerprint</span>
+                                Call Identifiers
+                            </div>
+                        </h4>
+                        <div class="filter-content">
+                            <div class="filter-group">
+                                <label class="filter-label">Evaluation ID</label>
+                                <input type="text" id="evaluationIdFilter" class="filter-input"
+                                    placeholder="e.g., EVAL-12345-2024" maxlength="50">
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">Phone Number</label>
+                                <input type="text" id="phoneNumberFilter" class="filter-input"
+                                    placeholder="e.g., 3094399902" maxlength="15">
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">Contact ID</label>
+                                <input type="text" id="contactIdFilter" class="filter-input"
+                                    placeholder="e.g., 3014818427" maxlength="20">
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">Transaction ID (UCID)/label>
+                                <input type="text" id="ucidFilter" class="filter-input"
+                                    placeholder="e.g., 000011103817514224423" maxlength="30">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Call Classification -->
+                    <div class="filter-section">
+                        <h4>
+                            <div class="section-title">
+                                <span class="material-icons">call</span>
+                                Call Classification
+                            </div>
+                            <span id="callDataStatus" class="data-status data-status-ok">
+                                ✅ Ready
+                            </span>
+                        </h4>
+                        <div class="filter-content">
+                            <div class="filter-group">
+                                <label class="filter-label">
+                                    Call Disposition
+                                    <span id="dispositionCount" class="count-indicator"></span>
+                                </label>
+                                <select id="callDispositionFilter" class="filter-select"
+                                    onchange="updateSubDispositions()">
+                                    <option value="">All Dispositions</option>
+                                </select>
+                                <small class="filter-help">
+                                    Main interaction reason
+                                </small>
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">
+                                    Call Sub-Disposition
+                                    <span id="subDispositionCount" class="count-indicator"></span>
+                                </label>
+                                <select id="callSubDispositionFilter" class="filter-select">
+                                    <option value="">All Sub-Dispositions</option>
+                                </select>
+                                <small class="filter-help">
+                                    Detailed reason for the interaction
+                                </small>
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">
+                                    Call Language
+                                    <span id="languageCount" class="count-indicator"></span>
+                                </label>
+                                <select id="languageFilter" class="filter-select">
+                                    <option value="">All Languages</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label">
+                                    Call Type
+                                    <span id="callTypeCount" class="count-indicator"></span>
+                                </label>
+                                <select id="callTypeFilter" class="filter-select">
+                                    <option value="">All Call Types</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="filter-actions">
+                        <button class="apply-btn" onclick="applyFilters()">
+                            <span class="material-icons">search</span>
+                            Apply Filters
+                        </button>
+                        <button class="clear-btn" onclick="clearFilters()">
+                            <span class="material-icons">clear</span>
+                            Clear All
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="chat-area">
+                <div class="chat-header">
+                    <div class="chat-header-top">
+                        <div>
+                            <div class="chat-title">Call Center Analytics Dashboard</div>
+                            <div class="chat-subtitle">AI-powered insights from real evaluation data</div>
+                        </div>
+                        <div class="chat-stats">
+                            <div class="stat-item">
+                                <span class="material-icons">dataset</span>
+                                <span id="totalRecords">Ready for analysis</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="material-icons">filter_alt</span>
+                                <span id="activeFiltersCount">0 filters</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Header Filter Display -->
+                    <div class="chat-header-filters" id="chatHeaderFilters">
+                        <!-- Filter tags will be populated here -->
+                    </div>
+                </div>
+
+                <div class="messages-container" id="messagesContainer">
+                    <!-- Welcome Screen -->
+                    <div class="welcome-screen" id="welcomeScreen">
+                        <div class="welcome-icon">📞</div>
+                        <h2 class="welcome-title">InnovAi Call Center Analytics</h2>
+                        <p class="welcome-subtitle">
+                            Ask InnovAI to analyze call dispositions, agent performance, site comparisons, and more from
+                            your live evaluation database...
+                        </p>
+
+                        <div class="example-questions">
+                            <div class="example-card"
+                                onclick="askQuestion('Review the overall tone, acknowledgement, empathy, and call ownership across agents.')">
+                                <h4>Review Customer Service</h4>
+                                <p>Analyze basic customer service metrics and agent performance trends</p>
+                            </div>
+                            <div class="example-card"
+                                onclick="askQuestion('Identify customer satisfaction or frustration, highlight patterns in unresolved issues, and call sub-dispositions for transactions.')">
+                                <h4>Customer Satisfaction</h4>
+                                <p>Deep dive into call resolution analysis and performance optimization opportunities</p>
+                            </div>
+                            <div class="example-card"
+                                onclick="askQuestion('Identify calls with a high Churn risk and provide coaching insights')">
+                                <h4>Identify Churn Risk</h4>
+                                <p>Identify low-scoring evaluations and suggest coaching or process
+                                    enhancement</p>
+                            </div>
+                            <div class="example-card"
+                                onclick="askQuestion('Identify calls with a High Sales Risk where a successful sale was made')">
+                                <h4>Sales Risk Analysis</h4>
+                                <p>Focus is on identifying turnover risks from bad pitch practices (cancel/chargeback exposure) and incomplete sale processes (order fulfillment failures).
+                                    cancel/chargeback exposure:
+                                    - Implying/advising that they could call back and cancel
+                                    - No clear mention of Add a Line without stating the customer is adding a new line
+                                    - Misrepresenting Add a line as device replacement program instead of new line addition
+                                    - Positioned device as "Device Upgrade Eligible" - Customer believes they're upgrading existing line, not adding new line
+                                    - Advised customer to keep service active for 31+ days and cancel after - Coaching customers to game the system, guaranteed chargeback
+
+                                    order fulfillment failures:
+                                    - Advised customer of their New Monthly recurrence amount
+                                    - Advised customer of Activation email and activation steps
+                                    - Advised customer of Order Ship Out/Tracking email 
+                                    - Verified shipping address and billing info
+                                    - Advised delivery timeframe
+                                    - Advised customer of Order Confirmation email
+                                    - Confirmed Device Model ordered
+                                    - Advised order total
+                                    - Reviewed Service Agreement</p>
+                            </div>
+                           </div>
+                    </div>
+
+                    <!-- Chat Messages -->
+                    <div id="chatMessages" class="hidden">
+                        <!-- Chat sessions will be populated here -->
+                    </div>
+                </div>
+
+                <!-- Quick Questions -->
+                <div class="quick-questions" id="quickQuestions">
+                    <h4>💡 Quick Analytics Questions</h4>
+                    <div class="question-buttons">
+                        <button class="question-btn"
+                            onclick="askQuestion('show me all call that are less than 60 seconds')">
+                            Short Calls
+                        </button>
+                        <button class="question-btn"
+                            onclick="askQuestion('Show me the longest calls with their outcomes and patterns, and the call type')">
+                            Long Calls
+                        </button>
+                        <button class="question-btn"
+                            onclick="askQuestion('Show me all the calls where the agent made a sales offer or account upgrade')">
+                            Sales opportunities
+                        </button>
+                        <button class="question-btn"
+                            onclick="askQuestion('What patterns do we see for calls that require technical troubleshooting?')">
+                            Troubleshooting patterns
+                        </button>
+                        </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="chat-input-area">
+                    <div class="input-container">
+                        <textarea id="chatInput" class="chat-input"
+                            placeholder="Ask specific questions about calls, dispositions, site performance, quality metrics, or any evaluation data from your live database..."
+                            rows="1" onkeydown="handleKeyPress(event)"></textarea>
+                        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                            <span class="material-icons">analytics</span>
+                            Analyze
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Production initialization - KEEP ONLY THIS
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log("🚀 Production Chat Interface v4.4.0 initializing...");
+
+        // Set initial loading state
+        const selects = document.querySelectorAll('.filter-select');
+        selects.forEach(select => {
+            select.classList.add('loading-filter');
+            select.disabled = true;
+        });
+
+        // Track page load performance
+        window.pageLoadStart = performance.now();
+    });
+    </script>
+
+    <script src="/static/chat.js"></script>
+</body>
+
+</html>
