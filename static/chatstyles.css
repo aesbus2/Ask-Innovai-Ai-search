@@ -105,10 +105,10 @@ body {
     visibility: visible;
 }
 
-/* Sidebar toggle tab - Smaller and moves with panel */
+/* Sidebar toggle tab - Smaller and always visible at left edge */
 .sidebar-tab {
     position: fixed; /* Fixed to viewport */
-    left: -35px; /* Start hidden with sidebar */
+    left: 0px; /* Always visible at left edge */
     top: 170px; /* Position below header with some spacing */
     width: 35px; /* Smaller: was 45px */
     height: 90px; /* Smaller: was 120px */
@@ -132,16 +132,10 @@ body {
     box-shadow: 4px 4px 12px rgba(0,0,0,0.3);
 }
 
-/* Tab moves with sidebar when open */
-.sidebar.open ~ .sidebar-tab {
-    left: 385px; /* Move to right edge of 420px sidebar - 35px tab width */
-    border-radius: 6px 0 0 6px; /* Flip rounded edges when on right */
-}
-
 /* Active state when sidebar is open */
 .sidebar-tab.active {
     background: linear-gradient(135deg, #8e4bc7 0%, #ff2a9b 100%);
-    transform: translateX(0px); /* No additional transform when active */
+    transform: translateX(5px);
     box-shadow: 6px 6px 16px rgba(0,0,0,0.4);
 }
 
@@ -158,10 +152,10 @@ body {
     letter-spacing: 1px;
 }
 
-/* Apply Filters Tab - Below Filter Tab */
+/* Apply Filters Tab - Below Filter Tab and always visible */
 .apply-tab {
     position: fixed;
-    left: -35px; /* Start hidden with sidebar */
+    left: 0px; /* Always visible at left edge */
     top: 275px; /* Position below filter tab (170 + 90 + 15px spacing) */
     width: 35px;
     height: 90px;
@@ -177,21 +171,12 @@ body {
     transition: all 0.3s ease;
     z-index: 1001;
     user-select: none;
-    opacity: 0.7; /* Slightly dimmed when sidebar closed */
 }
 
 .apply-tab:hover {
     background: linear-gradient(135deg, #218838 0%, #1ea589 100%);
     transform: translateX(3px);
     box-shadow: 4px 4px 12px rgba(0,0,0,0.3);
-    opacity: 1;
-}
-
-/* Apply tab moves with sidebar when open */
-.sidebar.open ~ .apply-tab {
-    left: 385px; /* Move to right edge of sidebar */
-    border-radius: 6px 0 0 6px;
-    opacity: 1; /* Full opacity when sidebar open */
 }
 
 .apply-tab .material-icons {
@@ -257,7 +242,7 @@ body {
     left: 0;
     top: 70px; /* Below header */
     height: calc(100vh - 70px);
-    z-index: 999;
+    z-index: 999; /* Below tabs (1001) but above content */
     transform: translateX(-100%); /* Hidden by default */
 }
 
@@ -271,28 +256,19 @@ body {
         transform: translateX(0);
     }
     
-    /* Adjust both tabs on mobile */
+    /* Adjust both tabs on mobile - always visible at left edge */
     .sidebar-tab {
         top: 140px; /* Higher up on mobile */
         width: 30px; /* Even smaller on mobile */
         height: 80px;
-        left: -30px; /* Adjust for smaller width */
+        left: 0px; /* Always at left edge */
     }
     
     .apply-tab {
         top: 235px; /* Adjust position relative to sidebar tab */
         width: 30px;
         height: 80px;
-        left: -30px;
-    }
-    
-    /* Mobile positioning when open */
-    .sidebar.open ~ .sidebar-tab {
-        left: 390px; /* Adjust for mobile */
-    }
-    
-    .sidebar.open ~ .apply-tab {
-        left: 390px;
+        left: 0px; /* Always at left edge */
     }
     
     .sidebar-tab .material-icons,
