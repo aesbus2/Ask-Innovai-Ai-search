@@ -30,10 +30,16 @@
         </div>
 
         <div class="main-layout">
-            <!-- Filter Toggle Tab - Always Visible -->
+            <!-- Filter Toggle Tab - Smaller and moves with panel -->
             <div class="sidebar-tab" onclick="toggleSidebar()" id="sidebarTab">
                 <span class="material-icons">tune</span>
                 <span class="tab-text">FILTERS</span>
+            </div>
+
+            <!-- Apply Filters Tab - Below Filter Tab -->
+            <div class="apply-tab" onclick="applyFilters()" id="applyTab">
+                <span class="material-icons">check</span>
+                <span class="tab-text">APPLY</span>
             </div>
 
             <!-- Sidebar -->
@@ -249,10 +255,6 @@
 
                     <!-- Action Buttons -->
                     <div class="filter-actions">
-                        <button class="apply-btn" onclick="applyFilters()">
-                            <span class="material-icons">search</span>
-                            Apply Filters
-                        </button>
                         <button class="clear-btn" onclick="clearFilters()">
                             <span class="material-icons">clear</span>
                             Clear All
@@ -423,48 +425,93 @@
             const totalText = totalRecordsElement.textContent || '';
             const filterText = activeFiltersCountElement.textContent || '';
             
+            console.log('🔍 Current displays:', { totalText, filterText });
+            
             // Extract total count (e.g., "1,234 evaluations" -> 1234)
             const totalMatch = totalText.match(/([0-9,]+)/);
             const totalCount = totalMatch ? totalMatch[1] : '0';
             
-            // Extract filter count (e.g., "2 filters" -> 2)
+            // Extract filter count (e.g., "2 filters" -> 2)  
             const filterMatch = filterText.match(/^(\d+)/);
             const filterCount = filterMatch ? parseInt(filterMatch[1]) : 0;
             
+            console.log('🔍 Extracted:', { totalCount, filterCount });
+            
             // Enhance the display to show results count too
+            let newText = '';
             if (filterCount > 0 && totalCount !== '0') {
-                activeFiltersCountElement.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${totalCount} results)`;
+                newText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${totalCount} results)`;
             } else if (totalCount !== '0') {
-                activeFiltersCountElement.textContent = `0 filters (${totalCount} total)`;
+                newText = `0 filters (${totalCount} total)`;
+            } else {
+                newText = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
             }
             
-            console.log(`✅ Enhanced filter display: ${activeFiltersCountElement.textContent}`);
+            // Only update if it's different from current text
+            if (activeFiltersCountElement.textContent !== newText) {
+                activeFiltersCountElement.textContent = newText;
+                console.log(`✅ Updated filter display: "${newText}"`);
+            } else {
+                console.log('📊 Filter display already correct');
+            }
+        } else {
+            console.error('❌ Required elements not found:', { 
+                activeFiltersCountElement: !!activeFiltersCountElement, 
+                totalRecordsElement: !!totalRecordsElement 
+            });
         }
     }
     
     // Monitor for changes to the analytics display and enhance them
     function monitorAnalyticsUpdates() {
-        const targetNode = document.getElementById('activeFiltersCount');
-        if (!targetNode) return;
+        const totalRecordsElement = document.getElementById('totalRecords');
+        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
         
-        // Create observer to watch for changes
+        if (!totalRecordsElement || !activeFiltersCountElement) {
+            console.error('❌ Cannot monitor - required elements not found');
+            return;
+        }
+        
+        // Create observer for both elements
         const observer = new MutationObserver(function(mutations) {
+            let shouldEnhance = false;
+            
             mutations.forEach(function(mutation) {
                 if (mutation.type === 'childList' || mutation.type === 'characterData') {
-                    // Wait a moment for both elements to be updated, then enhance
-                    setTimeout(enhanceFilterCountDisplay, 100);
+                    console.log('🔄 Analytics update detected on:', mutation.target.id || mutation.target.className);
+                    shouldEnhance = true;
                 }
             });
+            
+            if (shouldEnhance) {
+                // Multiple timeouts to catch different update patterns
+                setTimeout(() => enhanceFilterCountDisplay(), 50);
+                setTimeout(() => enhanceFilterCountDisplay(), 200);
+                setTimeout(() => enhanceFilterCountDisplay(), 500);
+            }
         });
         
-        // Start observing
-        observer.observe(targetNode, {
+        // Observe both elements
+        const observeConfig = {
             childList: true,
             subtree: true,
-            characterData: true
-        });
+            characterData: true,
+            attributes: false
+        };
         
-        console.log('📊 Analytics display monitor activated');
+        observer.observe(totalRecordsElement, observeConfig);
+        observer.observe(activeFiltersCountElement, observeConfig);
+        
+        // Also set up periodic enhancement (fallback)
+        setInterval(() => {
+            const current = activeFiltersCountElement.textContent || '';
+            if (current.includes('filters') && !current.includes('results') && !current.includes('total')) {
+                console.log('🔄 Periodic enhancement check - needs update');
+                enhanceFilterCountDisplay();
+            }
+        }, 3000);
+        
+        console.log('📊 Advanced analytics display monitor activated');
     }
     
     // Create backdrop overlay
@@ -523,7 +570,19 @@
             console.log('✅ Sidebar tab initialized: INACTIVE');
         }
         
+        // Initialize apply tab
+        const applyTab = document.getElementById('applyTab');
+        if (applyTab) {
+            console.log('✅ Apply tab initialized');
+            // Apply tab doesn't have active states, it's action-based
+        }
+        
         removeBackdrop(); // Clean up any existing backdrop
+        
+        // Ensure applyFilters function is available
+        if (typeof window.applyFilters !== 'function') {
+            console.warn('⚠️ applyFilters function not yet loaded, will be available when chat.js loads');
+        }
         
         // Activate analytics display enhancement
         setTimeout(() => {
@@ -536,10 +595,81 @@
         console.log('📊 Filter counts will be enhanced to show results by monitor system');
     });
     
-    // Debug functions for testing (accessible via browser console)
+    // Debug function to manually test analytics stats
     window.testEnhancedDisplay = function() {
+        console.log('🧪 Manual enhancement test...');
+        const activeElement = document.getElementById('activeFiltersCount');
+        const totalElement = document.getElementById('totalRecords');
+        
+        console.log('Current values:', {
+            activeFilters: activeElement ? activeElement.textContent : 'NOT FOUND',
+            totalRecords: totalElement ? totalElement.textContent : 'NOT FOUND'
+        });
+        
         enhanceFilterCountDisplay();
-        console.log('🧪 Enhanced display test completed');
+        
+        console.log('After enhancement:', {
+            activeFilters: activeElement ? activeElement.textContent : 'NOT FOUND',
+            totalRecords: totalElement ? totalElement.textContent : 'NOT FOUND'
+        });
+    };
+    
+    window.simulateFilterUpdate = function(filterCount, resultCount) {
+        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
+        const totalRecordsElement = document.getElementById('totalRecords');
+        
+        if (activeFiltersCountElement) {
+            activeFiltersCountElement.textContent = `${filterCount} filters`;
+        }
+        if (totalRecordsElement) {
+            totalRecordsElement.textContent = `${resultCount.toLocaleString()} evaluations`;
+        }
+        
+        // Trigger enhancement immediately and with delays
+        enhanceFilterCountDisplay();
+        setTimeout(() => enhanceFilterCountDisplay(), 100);
+        setTimeout(() => enhanceFilterCountDisplay(), 500);
+        
+        console.log(`🧪 Simulated: ${filterCount} filters with ${resultCount} results`);
+    };
+    
+    // Force enhancement function (more aggressive)
+    window.forceEnhanceDisplay = function() {
+        console.log('🚀 FORCE enhancing display...');
+        
+        const activeElement = document.getElementById('activeFiltersCount');
+        const totalElement = document.getElementById('totalRecords');
+        
+        if (!activeElement || !totalElement) {
+            console.error('❌ Required elements not found!');
+            return;
+        }
+        
+        const totalText = totalElement.textContent || '';
+        const filterText = activeElement.textContent || '';
+        
+        console.log('🔍 FORCE: Current displays:', { totalText, filterText });
+        
+        // Force extract and update
+        const totalMatch = totalText.match(/([0-9,]+)/);
+        const filterMatch = filterText.match(/^(\d+)/);
+        
+        if (totalMatch && filterMatch) {
+            const totalCount = totalMatch[1];
+            const filterCount = parseInt(filterMatch[1]);
+            
+            let newText;
+            if (filterCount > 0) {
+                newText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${totalCount} results)`;
+            } else {
+                newText = `0 filters (${totalCount} total)`;
+            }
+            
+            activeElement.textContent = newText;
+            console.log('✅ FORCE: Updated to:', newText);
+        } else {
+            console.warn('⚠️ FORCE: Could not extract numbers');
+        }
     };
     
     window.simulateFilterUpdate = function(filterCount, resultCount) {
@@ -556,6 +686,35 @@
         // Trigger enhancement
         setTimeout(enhanceFilterCountDisplay, 100);
         console.log(`🧪 Simulated: ${filterCount} filters with ${resultCount} results`);
+    };
+    
+    // Fallback applyFilters function (will be replaced by chat.js when it loads)
+    if (typeof window.applyFilters !== 'function') {
+        window.applyFilters = function() {
+            console.log('🔄 Apply filters called (fallback) - waiting for chat.js to load...');
+            // The real applyFilters will be available once chat.js loads
+            if (window.applyFilters && window.applyFilters !== arguments.callee) {
+                window.applyFilters();
+            }
+        };
+    }
+    
+    // Debug function to test tabs
+    window.testTabs = function() {
+        console.log('🧪 Testing tab functionality...');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarTab = document.getElementById('sidebarTab');
+        const applyTab = document.getElementById('applyTab');
+        
+        console.log('Elements found:', {
+            sidebar: !!sidebar,
+            sidebarTab: !!sidebarTab, 
+            applyTab: !!applyTab
+        });
+        
+        if (sidebar) {
+            console.log('Sidebar classes:', sidebar.className);
+        }
     };
     </script>
 

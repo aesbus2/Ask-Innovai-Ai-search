@@ -105,6 +105,53 @@ body {
     visibility: visible;
 }
 
+/* Sidebar toggle tab - Always visible on left edge */
+.sidebar-tab {
+    position: fixed; /* Fixed to viewport */
+    left: 0px; /* Always at left edge of screen */
+    top: 170px; /* Position below header with some spacing */
+    width: 45px;
+    height: 120px;
+    background: linear-gradient(135deg, #6e32a0 0%, #e20074 100%);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 0 8px 8px 0; /* Rounded right edges */
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
+    transition: all 0.3s ease;
+    z-index: 1001; /* Above sidebar and backdrop */
+    user-select: none;
+}
+
+.sidebar-tab:hover {
+    background: linear-gradient(135deg, #7d3db3 0%, #f01187 100%);
+    transform: translateX(3px);
+    box-shadow: 4px 4px 12px rgba(0,0,0,0.3);
+}
+
+/* Active state when sidebar is open */
+.sidebar-tab.active {
+    background: linear-gradient(135deg, #8e4bc7 0%, #ff2a9b 100%);
+    transform: translateX(5px);
+    box-shadow: 6px 6px 16px rgba(0,0,0,0.4);
+}
+
+.sidebar-tab .material-icons {
+    font-size: 20px;
+    margin-bottom: 8px;
+}
+
+.sidebar-tab .tab-text {
+    font-size: 10px;
+    font-weight: 600;
+    writing-mode: vertical-rl; /* Vertical text */
+    text-orientation: mixed;
+    letter-spacing: 1px;
+}
+
 /* Sidebar - Hidden by default, shows when .open class added */
 .sidebar {
     width: 420px; /* Increased from 380px for better full-width usage */
@@ -131,6 +178,22 @@ body {
 @media (max-width: 768px) {
     .sidebar.open {
         transform: translateX(0);
+    }
+    
+    /* Adjust tab position on mobile */
+    .sidebar-tab {
+        top: 140px; /* Higher up on mobile */
+        width: 40px; /* Slightly smaller */
+        height: 100px;
+    }
+    
+    .sidebar-tab .material-icons {
+        font-size: 18px;
+        margin-bottom: 6px;
+    }
+    
+    .sidebar-tab .tab-text {
+        font-size: 9px;
     }
 }
 
