@@ -18,6 +18,10 @@
                 InnovAI Call Center Analytics                
             </h1>
             <div class="header-controls">
+                <button class="header-btn" onclick="toggleSidebar()" id="toggleSidebarBtn">
+                    <span class="material-icons">tune</span>
+                    <span>Filters</span>
+                </button>
                 <button class="header-btn" onclick="exportChat()">
                     <span class="material-icons">download</span>
                     <span>Export</span>
@@ -30,12 +34,6 @@
         </div>
 
         <div class="main-layout">
-            <!-- Filter Toggle Tab - Always Visible -->
-            <div class="sidebar-tab" onclick="toggleSidebar()" id="sidebarTab">
-                <span class="material-icons">tune</span>
-                <span class="tab-text">FILTERS</span>
-            </div>
-
             <!-- Sidebar -->
             <div class="sidebar" id="sidebar">
                 <div class="sidebar-header">
@@ -385,11 +383,9 @@
     </div>
 
     <script>
-    // Sidebar toggle functionality - integrates with existing chat.js
+    // Sidebar toggle functionality with backdrop
     function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
-        const tab = document.getElementById('sidebarTab');
-        
         if (!sidebar) {
             console.error('Sidebar element not found');
             return;
@@ -400,76 +396,20 @@
         if (isOpen) {
             // Close sidebar
             sidebar.classList.remove('open');
-            if (tab) tab.classList.remove('active');
             removeBackdrop();
             console.log('Sidebar toggled: CLOSED');
         } else {
             // Open sidebar
             sidebar.classList.add('open');
-            if (tab) tab.classList.add('active');
             createBackdrop();
             console.log('Sidebar toggled: OPEN');
         }
     }
     
-    // Enhancement: Improve filter count display to show results
-    function enhanceFilterCountDisplay() {
-        // This enhances the existing chat.js functionality
-        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
-        const totalRecordsElement = document.getElementById('totalRecords');
-        
-        if (activeFiltersCountElement && totalRecordsElement) {
-            // Extract numbers from the existing displays
-            const totalText = totalRecordsElement.textContent || '';
-            const filterText = activeFiltersCountElement.textContent || '';
-            
-            // Extract total count (e.g., "1,234 evaluations" -> 1234)
-            const totalMatch = totalText.match(/([0-9,]+)/);
-            const totalCount = totalMatch ? totalMatch[1] : '0';
-            
-            // Extract filter count (e.g., "2 filters" -> 2)
-            const filterMatch = filterText.match(/^(\d+)/);
-            const filterCount = filterMatch ? parseInt(filterMatch[1]) : 0;
-            
-            // Enhance the display to show results count too
-            if (filterCount > 0 && totalCount !== '0') {
-                activeFiltersCountElement.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${totalCount} results)`;
-            } else if (totalCount !== '0') {
-                activeFiltersCountElement.textContent = `0 filters (${totalCount} total)`;
-            }
-            
-            console.log(`✅ Enhanced filter display: ${activeFiltersCountElement.textContent}`);
-        }
-    }
-    
-    // Monitor for changes to the analytics display and enhance them
-    function monitorAnalyticsUpdates() {
-        const targetNode = document.getElementById('activeFiltersCount');
-        if (!targetNode) return;
-        
-        // Create observer to watch for changes
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList' || mutation.type === 'characterData') {
-                    // Wait a moment for both elements to be updated, then enhance
-                    setTimeout(enhanceFilterCountDisplay, 100);
-                }
-            });
-        });
-        
-        // Start observing
-        observer.observe(targetNode, {
-            childList: true,
-            subtree: true,
-            characterData: true
-        });
-        
-        console.log('📊 Analytics display monitor activated');
-    }
-    
     // Create backdrop overlay
     function createBackdrop() {
-        removeBackdrop(); // Remove existing first
+        // Remove existing backdrop if any
+        removeBackdrop();
         
         const backdrop = document.createElement('div');
         backdrop.className = 'sidebar-backdrop';
@@ -478,6 +418,7 @@
         
         document.body.appendChild(backdrop);
         
+        // Show backdrop with slight delay for animation
         setTimeout(() => {
             backdrop.classList.add('show');
         }, 10);
@@ -488,75 +429,47 @@
         const backdrop = document.getElementById('sidebarBackdrop');
         if (backdrop) {
             backdrop.classList.remove('show');
-            setTimeout(() => backdrop.remove(), 300);
+            setTimeout(() => {
+                backdrop.remove();
+            }, 300); // Match transition duration
         }
     }
     
     // Close sidebar (used by backdrop click)
     function closeSidebar() {
         const sidebar = document.getElementById('sidebar');
-        const tab = document.getElementById('sidebarTab');
-        
         if (sidebar && sidebar.classList.contains('open')) {
             sidebar.classList.remove('open');
-            if (tab) tab.classList.remove('active');
             removeBackdrop();
             console.log('Sidebar closed via backdrop');
         }
     }
     
-    // Initialize sidebar state when page loads
+    // Production initialization - KEEP ONLY THIS
     document.addEventListener('DOMContentLoaded', function () {
-        console.log("🎛️ Sidebar integration initializing...");
+        console.log("🚀 Production Chat Interface v4.4.0 initializing...");
+
+        // Set initial loading state
+        const selects = document.querySelectorAll('.filter-select');
+        selects.forEach(select => {
+            select.classList.add('loading-filter');
+            select.disabled = true;
+        });
+
+        // Track page load performance
+        window.pageLoadStart = performance.now();
         
         // Initialize sidebar as closed
         const sidebar = document.getElementById('sidebar');
-        const tab = document.getElementById('sidebarTab');
-        
         if (sidebar) {
+            // Ensure sidebar starts closed
             sidebar.classList.remove('open');
-            console.log('✅ Sidebar initialized: CLOSED');
+            console.log('Sidebar initialized: CLOSED');
         }
         
-        if (tab) {
-            tab.classList.remove('active');
-            console.log('✅ Sidebar tab initialized: INACTIVE');
-        }
-        
-        removeBackdrop(); // Clean up any existing backdrop
-        
-        // Activate analytics display enhancement
-        setTimeout(() => {
-            monitorAnalyticsUpdates();
-            // Also enhance any existing display immediately
-            enhanceFilterCountDisplay();
-        }, 2000); // Wait for existing chat.js to load and update first
-        
-        // Note: Analytics stats are handled by the main chat.js file
-        console.log('📊 Filter counts will be enhanced to show results by monitor system');
+        // Remove any existing backdrop on page load
+        removeBackdrop();
     });
-    
-    // Debug functions for testing (accessible via browser console)
-    window.testEnhancedDisplay = function() {
-        enhanceFilterCountDisplay();
-        console.log('🧪 Enhanced display test completed');
-    };
-    
-    window.simulateFilterUpdate = function(filterCount, resultCount) {
-        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
-        const totalRecordsElement = document.getElementById('totalRecords');
-        
-        if (activeFiltersCountElement) {
-            activeFiltersCountElement.textContent = `${filterCount} filters`;
-        }
-        if (totalRecordsElement) {
-            totalRecordsElement.textContent = `${resultCount.toLocaleString()} evaluations`;
-        }
-        
-        // Trigger enhancement
-        setTimeout(enhanceFilterCountDisplay, 100);
-        console.log(`🧪 Simulated: ${filterCount} filters with ${resultCount} results`);
-    };
     </script>
 
     <script src="/static/chat.js"></script>
