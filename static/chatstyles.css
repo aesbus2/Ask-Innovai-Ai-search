@@ -1125,7 +1125,6 @@ body {
         background: rgba(0, 0, 0, 0.5);
         z-index: -1;
     }
-}
 
 @media (max-width: 480px) {
     .main-layout {
@@ -1171,7 +1170,6 @@ body {
     .welcome-title {
         font-size: 24px;
     }
-}
 
 /* High contrast mode support */
 @media (prefers-contrast: high) {

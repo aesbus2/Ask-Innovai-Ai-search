@@ -320,23 +320,7 @@
                                 onclick="askQuestion('Identify calls with a High Sales Risk where a successful sale was made')">
                                 <h4>Sales Risk Analysis</h4>
                                 <p>Focus is on identifying turnover risks from bad pitch practices (cancel/chargeback exposure) and incomplete sale processes (order fulfillment failures).
-                                    cancel/chargeback exposure:
-                                    - Implying/advising that they could call back and cancel
-                                    - No clear mention of Add a Line without stating the customer is adding a new line
-                                    - Misrepresenting Add a line as device replacement program instead of new line addition
-                                    - Positioned device as "Device Upgrade Eligible" - Customer believes they're upgrading existing line, not adding new line
-                                    - Advised customer to keep service active for 31+ days and cancel after - Coaching customers to game the system, guaranteed chargeback
-
-                                    order fulfillment failures:
-                                    - Advised customer of their New Monthly recurrence amount
-                                    - Advised customer of Activation email and activation steps
-                                    - Advised customer of Order Ship Out/Tracking email 
-                                    - Verified shipping address and billing info
-                                    - Advised delivery timeframe
-                                    - Advised customer of Order Confirmation email
-                                    - Confirmed Device Model ordered
-                                    - Advised order total
-                                    - Reviewed Service Agreement</p>
+                                    </p>
                             </div>
                            </div>
                     </div>
@@ -414,52 +398,147 @@
         }
     }
     
-    // Enhancement: Improve filter count display to show results
-    function enhanceFilterCountDisplay() {
-        // This enhances the existing chat.js functionality
-        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
+    // Direct override: Intercept and enhance the analytics display updates
+    function interceptAnalyticsUpdates() {
+        // Store reference to original textContent setter
+        const originalTextContentSetter = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').set;
+        
+        const activeFiltersElement = document.getElementById('activeFiltersCount');
         const totalRecordsElement = document.getElementById('totalRecords');
         
-        if (activeFiltersCountElement && totalRecordsElement) {
-            // Extract numbers from the existing displays
-            const totalText = totalRecordsElement.textContent || '';
-            const filterText = activeFiltersCountElement.textContent || '';
-            
-            console.log('🔍 Current displays:', { totalText, filterText });
-            
-            // Extract total count (e.g., "1,234 evaluations" -> 1234)
-            const totalMatch = totalText.match(/([0-9,]+)/);
-            const totalCount = totalMatch ? totalMatch[1] : '0';
-            
-            // Extract filter count (e.g., "2 filters" -> 2)  
-            const filterMatch = filterText.match(/^(\d+)/);
-            const filterCount = filterMatch ? parseInt(filterMatch[1]) : 0;
-            
-            console.log('🔍 Extracted:', { totalCount, filterCount });
-            
-            // Enhance the display to show results count too
-            let newText = '';
-            if (filterCount > 0 && totalCount !== '0') {
-                newText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${totalCount} results)`;
-            } else if (totalCount !== '0') {
-                newText = `0 filters (${totalCount} total)`;
-            } else {
-                newText = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
-            }
-            
-            // Only update if it's different from current text
-            if (activeFiltersCountElement.textContent !== newText) {
-                activeFiltersCountElement.textContent = newText;
-                console.log(`✅ Updated filter display: "${newText}"`);
-            } else {
-                console.log('📊 Filter display already correct');
-            }
-        } else {
-            console.error('❌ Required elements not found:', { 
-                activeFiltersCountElement: !!activeFiltersCountElement, 
-                totalRecordsElement: !!totalRecordsElement 
-            });
+        if (!activeFiltersElement || !totalRecordsElement) {
+            console.error('❌ Cannot intercept - elements not found');
+            return;
         }
+        
+        // Override the textContent setter for activeFiltersCount element specifically
+        Object.defineProperty(activeFiltersElement, 'textContent', {
+            set: function(value) {
+                console.log('🔄 Intercepted activeFiltersCount update:', value);
+                
+                // Call original setter first
+                originalTextContentSetter.call(this, value);
+                
+                // Then enhance the display
+                setTimeout(() => {
+                    const totalText = totalRecordsElement.textContent || '';
+                    const filterText = this.textContent || '';
+                    
+                    console.log('🔍 Post-intercept values:', { totalText, filterText });
+                    
+                    // Extract numbers
+                    const totalMatch = totalText.match(/([0-9,]+)/);
+                    const filterMatch = filterText.match(/^(\d+)/);
+                    
+                    if (totalMatch && filterMatch) {
+                        const totalCount = totalMatch[1];
+                        const filterCount = parseInt(filterMatch[1]);
+                        
+                        let enhancedText;
+                        if (filterCount > 0) {
+                            enhancedText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${totalCount} results)`;
+                        } else {
+                            enhancedText = `0 filters (${totalCount} total)`;
+                        }
+                        
+                        if (this.textContent !== enhancedText) {
+                            // Use original setter to avoid recursion
+                            originalTextContentSetter.call(this, enhancedText);
+                            console.log(`✅ Enhanced to: "${enhancedText}"`);
+                        }
+                    }
+                }, 10);
+            },
+            get: function() {
+                return this.innerText;
+            },
+            configurable: true
+        });
+        
+        console.log('📊 Analytics display interceptor activated');
+    }
+    
+    // Backup: Direct DOM manipulation approach
+    function forceUpdateFilterDisplay() {
+        const activeFiltersElement = document.getElementById('activeFiltersCount');
+        const totalRecordsElement = document.getElementById('totalRecords');
+        
+        if (!activeFiltersElement || !totalRecordsElement) {
+            console.error('❌ Elements not found for force update');
+            return;
+        }
+        
+        const totalText = totalRecordsElement.textContent || '';
+        const filterText = activeFiltersElement.textContent || '';
+        
+        console.log('🔍 Force update - current values:', { totalText, filterText });
+        
+        // Extract numbers
+        const totalMatch = totalText.match(/([0-9,]+)/);
+        const filterMatch = filterText.match(/^(\d+)/);
+        
+        if (totalMatch && filterMatch) {
+            const totalCount = totalMatch[1];
+            const filterCount = parseInt(filterMatch[1]);
+            
+            let newText;
+            if (filterCount > 0) {
+                newText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${totalCount} results)`;
+            } else {
+                newText = `0 filters (${totalCount} total)`;
+            }
+            
+            // Try multiple DOM update methods
+            activeFiltersElement.textContent = newText;
+            activeFiltersElement.innerText = newText;
+            activeFiltersElement.innerHTML = newText;
+            
+            console.log(`🚀 Force updated to: "${newText}"`);
+            return newText;
+        } else {
+            console.warn('⚠️ Could not extract numbers from:', { totalText, filterText });
+        }
+    }
+    
+    // Aggressive monitoring with multiple approaches
+    function aggressiveAnalyticsMonitoring() {
+        const activeFiltersElement = document.getElementById('activeFiltersCount');
+        const totalRecordsElement = document.getElementById('totalRecords');
+        
+        if (!activeFiltersElement || !totalRecordsElement) return;
+        
+        // Method 1: Mutation Observer
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList' || mutation.type === 'characterData') {
+                    console.log('🔄 Mutation detected on:', mutation.target.id || 'unknown');
+                    setTimeout(forceUpdateFilterDisplay, 10);
+                    setTimeout(forceUpdateFilterDisplay, 100);
+                    setTimeout(forceUpdateFilterDisplay, 300);
+                }
+            });
+        });
+        
+        observer.observe(activeFiltersElement, { childList: true, subtree: true, characterData: true });
+        observer.observe(totalRecordsElement, { childList: true, subtree: true, characterData: true });
+        
+        // Method 2: Polling
+        setInterval(() => {
+            const current = activeFiltersElement.textContent || '';
+            if (current.match(/^\d+ filters?$/) && !current.includes('results') && !current.includes('total')) {
+                console.log('🔄 Polling detected basic filter text, enhancing...');
+                forceUpdateFilterDisplay();
+            }
+        }, 1000);
+        
+        // Method 3: Event listeners
+        ['DOMSubtreeModified', 'DOMNodeInserted', 'DOMCharacterDataModified'].forEach(eventType => {
+            activeFiltersElement.addEventListener(eventType, () => {
+                setTimeout(forceUpdateFilterDisplay, 50);
+            });
+        });
+        
+        console.log('📊 Aggressive monitoring activated');
     }
     
     // Monitor for changes to the analytics display and enhance them
@@ -584,11 +663,19 @@
             console.warn('⚠️ applyFilters function not yet loaded, will be available when chat.js loads');
         }
         
-        // Activate analytics display enhancement
+        // Activate all monitoring and interception systems
         setTimeout(() => {
-            monitorAnalyticsUpdates();
-            // Also enhance any existing display immediately
-            enhanceFilterCountDisplay();
+            console.log('🚀 Activating aggressive analytics monitoring...');
+            
+            // Method 1: Intercept textContent updates
+            interceptAnalyticsUpdates();
+            
+            // Method 2: Aggressive monitoring
+            aggressiveAnalyticsMonitoring();
+            
+            // Method 3: Force update any existing display
+            forceUpdateFilterDisplay();
+            
         }, 2000); // Wait for existing chat.js to load and update first
         
         // Note: Analytics stats are handled by the main chat.js file
@@ -597,21 +684,38 @@
     
     // Debug function to manually test analytics stats
     window.testEnhancedDisplay = function() {
-        console.log('🧪 Manual enhancement test...');
+        console.log('🧪 Manual enhancement test using new system...');
+        const result = forceUpdateFilterDisplay();
+        console.log('🧪 Force update result:', result);
+    };
+    
+    // Remove duplicate simulateFilterUpdate function and keep only the updated one
+    window.simulateFilterUpdate = function(filterCount, resultCount) {
+        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
+        const totalRecordsElement = document.getElementById('totalRecords');
+        
+        console.log(`🧪 Simulating: ${filterCount} filters with ${resultCount} results`);
+        
+        if (totalRecordsElement) {
+            totalRecordsElement.textContent = `${resultCount.toLocaleString()} evaluations`;
+        }
+        if (activeFiltersCountElement) {
+            activeFiltersCountElement.textContent = `${filterCount} filters`;
+        }
+        
+        // Force immediate update with new system
+        setTimeout(() => forceUpdateFilterDisplay(), 100);
+    };
+    
+    // Reference the new force update function
+    window.forceEnhanceDisplay = forceUpdateFilterDisplay;
+    
+    window.testInterceptor = function() {
         const activeElement = document.getElementById('activeFiltersCount');
-        const totalElement = document.getElementById('totalRecords');
-        
-        console.log('Current values:', {
-            activeFilters: activeElement ? activeElement.textContent : 'NOT FOUND',
-            totalRecords: totalElement ? totalElement.textContent : 'NOT FOUND'
-        });
-        
-        enhanceFilterCountDisplay();
-        
-        console.log('After enhancement:', {
-            activeFilters: activeElement ? activeElement.textContent : 'NOT FOUND',
-            totalRecords: totalElement ? totalElement.textContent : 'NOT FOUND'
-        });
+        if (activeElement) {
+            console.log('🧪 Testing interceptor by setting "2 filters"...');
+            activeElement.textContent = '2 filters';
+        }
     };
     
     window.simulateFilterUpdate = function(filterCount, resultCount) {
@@ -633,59 +737,15 @@
         console.log(`🧪 Simulated: ${filterCount} filters with ${resultCount} results`);
     };
     
-    // Force enhancement function (more aggressive)
-    window.forceEnhanceDisplay = function() {
-        console.log('🚀 FORCE enhancing display...');
-        
-        const activeElement = document.getElementById('activeFiltersCount');
-        const totalElement = document.getElementById('totalRecords');
-        
-        if (!activeElement || !totalElement) {
-            console.error('❌ Required elements not found!');
-            return;
-        }
-        
-        const totalText = totalElement.textContent || '';
-        const filterText = activeElement.textContent || '';
-        
-        console.log('🔍 FORCE: Current displays:', { totalText, filterText });
-        
-        // Force extract and update
-        const totalMatch = totalText.match(/([0-9,]+)/);
-        const filterMatch = filterText.match(/^(\d+)/);
-        
-        if (totalMatch && filterMatch) {
-            const totalCount = totalMatch[1];
-            const filterCount = parseInt(filterMatch[1]);
-            
-            let newText;
-            if (filterCount > 0) {
-                newText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${totalCount} results)`;
-            } else {
-                newText = `0 filters (${totalCount} total)`;
-            }
-            
-            activeElement.textContent = newText;
-            console.log('✅ FORCE: Updated to:', newText);
-        } else {
-            console.warn('⚠️ FORCE: Could not extract numbers');
-        }
-    };
+    // Force enhancement function reference
+    window.forceEnhanceDisplay = forceUpdateFilterDisplay;
     
-    window.simulateFilterUpdate = function(filterCount, resultCount) {
-        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
-        const totalRecordsElement = document.getElementById('totalRecords');
-        
-        if (activeFiltersCountElement) {
-            activeFiltersCountElement.textContent = `${filterCount} filters`;
+    window.testInterceptor = function() {
+        const activeElement = document.getElementById('activeFiltersCount');
+        if (activeElement) {
+            console.log('🧪 Testing interceptor by setting "2 filters"...');
+            activeElement.textContent = '2 filters';
         }
-        if (totalRecordsElement) {
-            totalRecordsElement.textContent = `${resultCount.toLocaleString()} evaluations`;
-        }
-        
-        // Trigger enhancement
-        setTimeout(enhanceFilterCountDisplay, 100);
-        console.log(`🧪 Simulated: ${filterCount} filters with ${resultCount} results`);
     };
     
     // Fallback applyFilters function (will be replaced by chat.js when it loads)
