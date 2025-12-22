@@ -433,7 +433,7 @@ function clearFilters() {
 
 function updateActiveFiltersDisplay() {
     const filtersContainer = document.getElementById('chatHeaderFilters');
-    // REMOVED: activeFiltersCount update - this is handled by refreshAnalyticsStats()
+    const activeFiltersCount = document.getElementById('activeFiltersCount');
     
     if (!filtersContainer) return;
     
@@ -442,9 +442,9 @@ function updateActiveFiltersDisplay() {
     
     const filterCount = Object.keys(currentFilters).length;
     
-    // REMOVED: Conflicting activeFiltersCount update
-    // The refreshAnalyticsStats() function handles this with enhanced format:
-    // "X filters (Y,YYY results)" instead of just "X filters"
+    if (activeFiltersCount) {
+        activeFiltersCount.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
+    }
     
     if (filterCount === 0) return;
     
@@ -839,16 +839,10 @@ async function refreshAnalyticsStats() {
         const filterCount = Object.keys(currentFilters).length;
         if (activeFiltersCount) {
             if (filterCount > 0 && stats.totalRecords !== undefined) {
-                const enhancedText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${stats.totalRecords.toLocaleString()} results)`;
-                activeFiltersCount.textContent = enhancedText;
-                console.log(`✅ Enhanced filter count display: "${enhancedText}"`);
+                activeFiltersCount.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${stats.totalRecords.toLocaleString()} results)`;
             } else {
-                const basicText = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
-                activeFiltersCount.textContent = basicText;
-                console.log(`✅ Basic filter count display: "${basicText}"`);
+                activeFiltersCount.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
             }
-        } else {
-            console.warn("⚠️ activeFiltersCount element not found in DOM");
         }
         
         console.log("✅ Analytics stats updated:", stats);

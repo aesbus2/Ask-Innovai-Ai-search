@@ -1095,8 +1095,15 @@ body {
         grid-template-columns: 1fr;
     }
     
+    /* Keep chat-stats visible but make them more mobile-friendly */
     .chat-stats {
-        display: none;
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+    }
+    
+    .stat-item {
+        font-size: 12px;
     }
     
     .filter-actions {
