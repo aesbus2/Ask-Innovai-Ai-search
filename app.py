@@ -1,5 +1,5 @@
 # App.py - Real Data Filter System with Efficient Metadata Loading
-# Version: 6.0.0 - UPdated to Match API data exactly
+# Version: 12-22.1 - UPdated to Match API data exactly
 
 
 
@@ -4879,7 +4879,7 @@ async def analytics_stats(request: dict):
             return {
                 "status": "error",
                 "error": f"Search failed: {str(search_error)}",
-                "total_results": 0  # ✅ Fixed: totalRecords → total_results,
+                "total_results": 0,  # ✅ Fixed: totalRecords → total_results
                 "filters_applied": filters
             }
         
@@ -4905,11 +4905,11 @@ async def analytics_stats(request: dict):
         return {
             "status": "error",
             "error": str(e),
-            "total_results": 0  # ✅ Fixed: totalRecords → total_results,
+            "total_results": 0,  # ✅ Fixed: totalRecords → total_results
             "filters_applied": filters,
             "timestamp": datetime.now().isoformat()
         }
-    
+  
 # Add this debug endpoint to your app.py to test metadata extraction
 @app.get("/debug/test_metadata_extraction_new_fields")
 async def test_metadata_extraction_new_fields():
