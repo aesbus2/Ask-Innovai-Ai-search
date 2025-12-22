@@ -368,7 +368,11 @@ function updateSubDispositions() {
 // =============================================================================
 
 function applyFilters() {
-    console.log("🔍 Applying filters...");
+    const timestamp = new Date().toISOString();
+    console.log(`🔍 [${timestamp}] === APPLYING FILTERS ===`);
+    
+    // Log current state before collecting filters
+    console.log(`🔍 [${timestamp}] Previous filters:`, JSON.stringify(currentFilters, null, 2));
     
     // Collect filter values
     currentFilters = {
@@ -389,6 +393,11 @@ function applyFilters() {
         callType: document.getElementById('callTypeFilter')?.value || ''
     };
     
+    console.log(`🔍 [${timestamp}] Collected raw filters:`, JSON.stringify(currentFilters, null, 2));
+    
+    // Count filters before removing empty ones
+    const beforeCount = Object.keys(currentFilters).filter(key => currentFilters[key]).length;
+    
     // Remove empty filters
     Object.keys(currentFilters).forEach(key => {
         if (!currentFilters[key]) {
@@ -396,13 +405,24 @@ function applyFilters() {
         }
     });
     
-    console.log("📊 Applied filters:", currentFilters);
+    const afterCount = Object.keys(currentFilters).length;
+    
+    console.log(`🔍 [${timestamp}] Filter processing complete:`, {
+        beforeEmptyRemoval: beforeCount,
+        afterEmptyRemoval: afterCount,
+        filtersChanged: beforeCount !== afterCount
+    });
+    console.log(`🔍 [${timestamp}] Final filters to apply:`, JSON.stringify(currentFilters, null, 2));
     
     // Update UI to show active filters
+    console.log(`🔍 [${timestamp}] Calling updateActiveFiltersDisplay()...`);
     updateActiveFiltersDisplay();
     
     // Update stats
+    console.log(`🔍 [${timestamp}] Calling refreshAnalyticsStats()...`);
     refreshAnalyticsStats();
+    
+    console.log(`🔍 [${timestamp}] === FILTER APPLICATION COMPLETE ===`);
 }
 
 function clearFilters() {
@@ -804,18 +824,27 @@ function exportChat() {
 // =============================================================================
 
 async function refreshAnalyticsStats() {
-    console.log("📊 Refreshing analytics stats...");
+    const timestamp = new Date().toISOString();
+    console.log(`📊 [${timestamp}] Refreshing analytics stats...`);
+    console.log(`📊 [${timestamp}] Current filters being sent:`, JSON.stringify(currentFilters, null, 2));
+    console.log(`📊 [${timestamp}] Filter count: ${Object.keys(currentFilters).length}`);
     
     try {
+        const requestPayload = {
+            filters: currentFilters
+        };
+        
+        console.log(`📊 [${timestamp}] Sending POST to /analytics/stats with payload:`, requestPayload);
+        
         const response = await fetch('/analytics/stats', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                filters: currentFilters
-            })
+            body: JSON.stringify(requestPayload)
         });
+        
+        console.log(`📊 [${timestamp}] Response status: ${response.status}`);
         
         if (!response.ok) {
             throw new Error(`Stats API error: ${response.status}`);
@@ -823,41 +852,71 @@ async function refreshAnalyticsStats() {
         
         const stats = await response.json();
         
-        console.log("📊 Stats response:", stats); // Debug log
+        console.log(`📊 [${timestamp}] Stats API response:`, JSON.stringify(stats, null, 2));
+        console.log(`📊 [${timestamp}] Total records in response: ${stats.totalRecords}`);
         
         // Update total records display
         const totalRecords = document.getElementById('totalRecords');
         if (totalRecords && stats.totalRecords !== undefined) {
-            totalRecords.textContent = `${stats.totalRecords.toLocaleString()} transcripts`;
-            console.log(`✅ Updated transcript count: ${stats.totalRecords}`);
+            const oldValue = totalRecords.textContent;
+            const newValue = `${stats.totalRecords.toLocaleString()} transcripts`;
+            totalRecords.textContent = newValue;
+            console.log(`✅ [${timestamp}] Updated transcript count: "${oldValue}" → "${newValue}"`);
         } else {
-            console.warn("⚠️ totalRecords not found in stats:", stats);
+            console.warn(`⚠️ [${timestamp}] totalRecords element not found or stats.totalRecords undefined:`, {
+                elementFound: !!totalRecords,
+                statsValue: stats.totalRecords,
+                fullStats: stats
+            });
         }
         
         // Update active filters count if filters are applied
         const activeFiltersCount = document.getElementById('activeFiltersCount');
         const filterCount = Object.keys(currentFilters).length;
+        
+        console.log(`📊 [${timestamp}] Updating filter count display:`, {
+            elementFound: !!activeFiltersCount,
+            filterCount: filterCount,
+            hasResults: stats.totalRecords !== undefined
+        });
+        
         if (activeFiltersCount) {
+            const oldValue = activeFiltersCount.textContent;
+            
             if (filterCount > 0 && stats.totalRecords !== undefined) {
                 const enhancedText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${stats.totalRecords.toLocaleString()} results)`;
                 activeFiltersCount.textContent = enhancedText;
-                console.log(`✅ Enhanced filter count display: "${enhancedText}"`);
+                console.log(`✅ [${timestamp}] Enhanced filter count: "${oldValue}" → "${enhancedText}"`);
+            } else if (filterCount === 0 && stats.totalRecords !== undefined) {
+                const totalText = `0 filters (${stats.totalRecords.toLocaleString()} total)`;
+                activeFiltersCount.textContent = totalText;
+                console.log(`✅ [${timestamp}] Zero filters display: "${oldValue}" → "${totalText}"`);
             } else {
                 const basicText = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
                 activeFiltersCount.textContent = basicText;
-                console.log(`✅ Basic filter count display: "${basicText}"`);
+                console.log(`✅ [${timestamp}] Basic filter count: "${oldValue}" → "${basicText}"`);
             }
         } else {
-            console.warn("⚠️ activeFiltersCount element not found in DOM");
+            console.warn(`⚠️ [${timestamp}] activeFiltersCount element not found in DOM`);
         }
         
-        console.log("✅ Analytics stats updated:", stats);
+        console.log(`✅ [${timestamp}] Analytics stats update completed successfully`);
         
     } catch (error) {
-        console.error("❌ Failed to refresh analytics stats:", error);
+        console.error(`❌ [${timestamp}] Failed to refresh analytics stats:`, error);
+        console.error(`❌ [${timestamp}] Error details:`, {
+            message: error.message,
+            stack: error.stack,
+            filters: currentFilters
+        });
+        
         const totalRecords = document.getElementById('totalRecords');
         if (totalRecords) {
             totalRecords.textContent = 'Stats unavailable';
+            console.log(`⚠️ [${timestamp}] Set totalRecords to error state`);
+        }
+    }
+}
         }
     }
 }
@@ -1144,5 +1203,94 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log("🗑️ REMOVED: chat-data-filter functionality (no longer needed)");
     console.log("🔧 Debug mode:", PRODUCTION_CONFIG.DEBUG_MODE ? "ENABLED" : "DISABLED");
 });
+
+// =============================================================================
+// MANUAL DEBUGGING FUNCTIONS FOR STATS API TESTING
+// =============================================================================
+
+// Manual stats testing function for debugging
+window.testStatsAPI = function() {
+    console.log('🧪 === MANUAL STATS API TEST ===');
+    console.log('Current filters:', JSON.stringify(currentFilters, null, 2));
+    refreshAnalyticsStats();
+};
+
+// Function to force apply filters and test
+window.forceFilterTest = function() {
+    console.log('🧪 === FORCED FILTER APPLICATION TEST ===');
+    applyFilters();
+};
+
+// Function to manually check current DOM state
+window.checkStatsDisplay = function() {
+    const totalRecords = document.getElementById('totalRecords');
+    const activeFiltersCount = document.getElementById('activeFiltersCount');
+    
+    console.log('🧪 === CURRENT STATS DISPLAY STATE ===');
+    console.log('totalRecords element:', {
+        found: !!totalRecords,
+        text: totalRecords ? totalRecords.textContent : 'NOT FOUND'
+    });
+    console.log('activeFiltersCount element:', {
+        found: !!activeFiltersCount,
+        text: activeFiltersCount ? activeFiltersCount.textContent : 'NOT FOUND'
+    });
+    console.log('currentFilters variable:', JSON.stringify(currentFilters, null, 2));
+    console.log('Filter count:', Object.keys(currentFilters).length);
+};
+
+// Function to test API without filters
+window.testStatsAPINoFilters = async function() {
+    console.log('🧪 === TESTING STATS API WITHOUT FILTERS ===');
+    try {
+        const response = await fetch('/analytics/stats', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ filters: {} })
+        });
+        
+        const stats = await response.json();
+        console.log('Stats API response (no filters):', stats);
+        return stats;
+    } catch (error) {
+        console.error('Stats API test failed:', error);
+        return null;
+    }
+};
+
+// Function to compare stats with and without filters
+window.compareStatsAPI = async function() {
+    console.log('🧪 === COMPARING STATS API WITH/WITHOUT FILTERS ===');
+    
+    // Test without filters
+    const noFiltersResult = await window.testStatsAPINoFilters();
+    
+    // Test with current filters
+    console.log('Testing with current filters:', JSON.stringify(currentFilters, null, 2));
+    try {
+        const response = await fetch('/analytics/stats', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ filters: currentFilters })
+        });
+        
+        const withFiltersResult = await response.json();
+        console.log('Stats API response (with filters):', withFiltersResult);
+        
+        console.log('🧪 === COMPARISON RESULTS ===');
+        console.log('No filters total:', noFiltersResult?.totalRecords || 'ERROR');
+        console.log('With filters total:', withFiltersResult?.totalRecords || 'ERROR');
+        console.log('Numbers are different:', (noFiltersResult?.totalRecords !== withFiltersResult?.totalRecords));
+        
+        return { noFilters: noFiltersResult, withFilters: withFiltersResult };
+    } catch (error) {
+        console.error('Stats API test with filters failed:', error);
+        return { noFilters: noFiltersResult, withFilters: null };
+    }
+};
 
 console.log("🎯 Fixed chat.js loaded successfully - All issues resolved");
