@@ -19,7 +19,7 @@ setInterval(() => {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("🚀 DOM loaded, initializing enhanced admin interface v6.1.0...");
+    console.log("ðŸš€ DOM loaded, initializing enhanced admin interface v6.1.0...");
     refreshStatus();
     checkSystemHealth();
     checkLastImportInfo();
@@ -29,8 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Basic server ping to verify connectivity
     fetch("/ping")
         .then(r => r.json())
-        .then(data => console.log("✅ Server ping successful:", data))
-        .catch(error => console.error("❌ Server ping failed:", error));
+        .then(data => console.log("âœ… Server ping successful:", data))
+        .catch(error => console.error("âŒ Server ping failed:", error));
 
     setupMaxDocsValidation();
 
@@ -257,11 +257,11 @@ function ultraSafeFormat(value) {
 // ============================================================================
 
 async function loadOpenSearchStats() {
-    console.log("📊 Loading OpenSearch statistics...");
+    console.log("ðŸ“Š Loading OpenSearch statistics...");
     
     const container = document.getElementById('statisticsContainer');
     if (!container) {
-        console.warn('❌ Statistics container not found - add id="statisticsContainer" to your HTML');
+        console.warn('âŒ Statistics container not found - add id="statisticsContainer" to your HTML');
         return;
     }
     
@@ -269,7 +269,7 @@ async function loadOpenSearchStats() {
     container.innerHTML = `
         <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
             <div class="stats-card">
-                <h3><span class="emoji">🔄</span> Loading...</h3>
+                <h3><span class="emoji">ðŸ”„</span> Loading...</h3>
                 <div class="stats-number">Please wait</div>
                 <div class="stats-label">Fetching statistics</div>
             </div>
@@ -280,7 +280,7 @@ async function loadOpenSearchStats() {
         const response = await fetch('/opensearch_statistics');
         const data = await response.json();
         
-        console.log("📊 Full OpenSearch response:", data);
+        console.log("ðŸ“Š Full OpenSearch response:", data);
         
         if (!response.ok) {
             throw new Error(data.error || `HTTP ${response.status}`);
@@ -288,9 +288,9 @@ async function loadOpenSearchStats() {
 
         // Your API returns: { status: "success", data: { total_documents: 2954, ... } }
         const actualData = data.data || data;
-        console.log("📊 Actual statistics data:", actualData);
+        console.log("ðŸ“Š Actual statistics data:", actualData);
         
-        // ✅ FIXED: Handle the actual API response structure
+        // âœ… FIXED: Handle the actual API response structure
         const stats = {
             total_documents: ultraSafeNumber(actualData.total_documents || 0),
             active_indices: ultraSafeNumber(actualData.active_indices || 0),
@@ -315,13 +315,13 @@ async function loadOpenSearchStats() {
             <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                 <!-- Primary Metrics -->
                 <div class="stats-card priority-metric" style="border: 2px solid #6e32a0;">
-                    <h3><span class="emoji">📄</span> Total Documents</h3>
+                    <h3><span class="emoji">ðŸ“„</span> Total Documents</h3>
                     <div class="stats-number" style="color: #6e32a0; font-size: 2em;">${ultraSafeFormat(stats.total_documents)}</div>
                     <div class="stats-label">Documents in OpenSearch</div>
                 </div>
                 
                 <div class="stats-card">
-                    <h3><span class="emoji">💾</span> Active Indices</h3>
+                    <h3><span class="emoji">ðŸ’¾</span> Active Indices</h3>
                     <div class="stats-number">${ultraSafeFormat(stats.active_indices)}</div>
                     <div class="stats-label">OpenSearch Indices</div>
                 </div>
@@ -329,7 +329,7 @@ async function loadOpenSearchStats() {
                 <!-- Evaluation Data -->
                 ${stats.total_evaluations > 0 ? `
                 <div class="stats-card">
-                    <h3><span class="emoji">🎯</span> Unique Evaluations</h3>
+                    <h3><span class="emoji">ðŸŽ¯</span> Unique Evaluations</h3>
                     <div class="stats-number">${ultraSafeFormat(stats.total_evaluations)}</div>
                     <div class="stats-label">Distinct Evaluations</div>
                 </div>` : ''}
@@ -337,7 +337,7 @@ async function loadOpenSearchStats() {
                 <!-- Template Data -->
                 ${stats.unique_templates > 0 ? `
                 <div class="stats-card">
-                    <h3><span class="emoji">📋</span> Templates</h3>
+                    <h3><span class="emoji">ðŸ“‹</span> Templates</h3>
                     <div class="stats-number">${ultraSafeFormat(stats.unique_templates)}</div>
                     <div class="stats-label">Evaluation Templates</div>
                 </div>` : ''}
@@ -345,7 +345,7 @@ async function loadOpenSearchStats() {
                 <!-- Program Data -->
                 ${stats.unique_programs > 0 ? `
                 <div class="stats-card">
-                    <h3><span class="emoji">🏢</span> Programs</h3>
+                    <h3><span class="emoji">ðŸ¢</span> Programs</h3>
                     <div class="stats-number">${ultraSafeFormat(stats.unique_programs)}</div>
                     <div class="stats-label">Different Programs</div>
                 </div>` : ''}
@@ -353,7 +353,7 @@ async function loadOpenSearchStats() {
                 <!-- Agent Data -->
                 ${stats.unique_agents > 0 ? `
                 <div class="stats-card">
-                    <h3><span class="emoji">👥</span> Agents</h3>
+                    <h3><span class="emoji">ðŸ‘¥</span> Agents</h3>
                     <div class="stats-number">${ultraSafeFormat(stats.unique_agents)}</div>
                     <div class="stats-label">Unique Agents</div>
                 </div>` : ''}
@@ -361,7 +361,7 @@ async function loadOpenSearchStats() {
                 <!-- Disposition Data -->
                 ${stats.unique_dispositions > 0 ? `
                 <div class="stats-card">
-                    <h3><span class="emoji">📞</span> Dispositions</h3>
+                    <h3><span class="emoji">ðŸ“ž</span> Dispositions</h3>
                     <div class="stats-number">${ultraSafeFormat(stats.unique_dispositions)}</div>
                     <div class="stats-label">Call Dispositions</div>
                 </div>` : ''}
@@ -369,7 +369,7 @@ async function loadOpenSearchStats() {
                 <!-- Partner Data -->
                 ${stats.unique_partners > 0 ? `
                 <div class="stats-card">
-                    <h3><span class="emoji">🤝</span> Partners</h3>
+                    <h3><span class="emoji">ðŸ¤</span> Partners</h3>
                     <div class="stats-number">${ultraSafeFormat(stats.unique_partners)}</div>
                     <div class="stats-label">Business Partners</div>
                 </div>` : ''}
@@ -377,7 +377,7 @@ async function loadOpenSearchStats() {
                 <!-- Vector Search Status -->
                 ${stats.vector_support ? `
                 <div class="stats-card ${stats.vector_ready ? 'vector-ready' : 'vector-disabled'}" style="border-color: ${stats.vector_ready ? '#28a745' : '#ffc107'};">
-                    <h3><span class="emoji">${stats.vector_ready ? '🔍' : '⚠️'}</span> Vector Search</h3>
+                    <h3><span class="emoji">${stats.vector_ready ? 'ðŸ”' : 'âš ï¸'}</span> Vector Search</h3>
                     <div class="stats-number">${stats.vector_coverage}%</div>
                     <div class="stats-label">${stats.vector_ready ? 'Ready' : 'Disabled'} (${ultraSafeFormat(stats.documents_with_vectors)} docs)</div>
                 </div>` : ''}
@@ -386,13 +386,13 @@ async function loadOpenSearchStats() {
             <!-- Footer Info -->
             <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #6e32a0;">
                 <div style="font-size: 0.9em; color: #666;">
-                    📅 Last updated: ${ultraSafeTimestamp(data.timestamp || new Date())} | 
-                    🏥 Cluster: <span style="color: ${actualData.cluster_status === 'green' ? '#28a745' : '#dc3545'};">${actualData.cluster_status || 'Unknown'}</span> |
-                    📊 Processing: ${data.processing_time || 'Unknown'}s
+                    ðŸ“… Last updated: ${ultraSafeTimestamp(data.timestamp || new Date())} | 
+                    ðŸ¥ Cluster: <span style="color: ${actualData.cluster_status === 'green' ? '#28a745' : '#dc3545'};">${actualData.cluster_status || 'Unknown'}</span> |
+                    ðŸ“Š Processing: ${data.processing_time || 'Unknown'}s
                 </div>
                 ${actualData.available_fields ? `
                 <details style="margin-top: 10px;">
-                    <summary style="cursor: pointer; font-weight: bold;">📋 Available Fields (${actualData.available_fields.length})</summary>
+                    <summary style="cursor: pointer; font-weight: bold;">ðŸ“‹ Available Fields (${actualData.available_fields.length})</summary>
                     <div style="margin-top: 8px; font-family: monospace; font-size: 0.8em; background: #fff; padding: 8px; border-radius: 4px;">
                         ${actualData.available_fields.join(', ')}
                     </div>
@@ -401,10 +401,10 @@ async function loadOpenSearchStats() {
         `;
         
         container.innerHTML = html;
-        console.log("✅ OpenSearch statistics loaded successfully with real data!");
+        console.log("âœ… OpenSearch statistics loaded successfully with real data!");
         
     } catch (error) {
-        console.error('❌ Failed to load OpenSearch statistics:', error);
+        console.error('âŒ Failed to load OpenSearch statistics:', error);
         
         // Enhanced error display
         const errorType = error.message.includes('fetch') ? 'network_error' : 
@@ -413,19 +413,19 @@ async function loadOpenSearchStats() {
         
         container.innerHTML = `
             <div class="stats-error" style="text-align: center; padding: 40px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; color: #721c24;">
-                <div style="font-size: 3em; margin-bottom: 16px;">❌</div>
+                <div style="font-size: 3em; margin-bottom: 16px;">âŒ</div>
                 <h3>Statistics Loading Failed</h3>
                 <p><strong>Error:</strong> ${ultraSafeString(error.message)}</p>
                 <div style="margin-top: 20px;">
                     <button class="btn primary" onclick="loadOpenSearchStats()">
-                        🔄 Retry Loading
+                        ðŸ”„ Retry Loading
                     </button>
                     <button class="btn secondary" onclick="window.open('/opensearch_statistics', '_blank')" style="margin-left: 10px;">
-                        🔗 View Raw Data
+                        ðŸ”— View Raw Data
                     </button>
                 </div>
                 <div style="margin-top: 16px; font-size: 0.9em; color: #856404; background: #fff3cd; padding: 12px; border-radius: 4px;">
-                    💡 <strong>Troubleshooting:</strong> Check if your OpenSearch cluster is running and accessible.
+                    ðŸ’¡ <strong>Troubleshooting:</strong> Check if your OpenSearch cluster is running and accessible.
                     Try visiting <code>/opensearch_statistics</code> directly to see the raw response.
                 </div>
             </div>
@@ -458,41 +458,41 @@ function displayStatistics(response, timestamp) {
     const html = `
         <div class="stats-dashboard">
             <div class="stats-card priority-metric">
-                <h3><span class="emoji">🆔</span> Evaluations Processed</h3>
+                <h3><span class="emoji">ðŸ†”</span> Evaluations Processed</h3>
                 <div class="stats-number">${ultraSafeFormat(safeData.total_evaluations)}</div>
                 <div class="stats-label">Total Documents in OpenSearch</div>
             </div>
             
             <div class="stats-card">
-                <h3><span class="emoji">💾</span> Active Indices</h3>
+                <h3><span class="emoji">ðŸ’¾</span> Active Indices</h3>
                 <div class="stats-number">${ultraSafeFormat(safeData.active_indices)}</div>
                 <div class="stats-label">OpenSearch Indices</div>
             </div>
             
             ${safeData.agents > 0 ? `
             <div class="stats-card">
-                <h3><span class="emoji">👥</span> Agents</h3>
+                <h3><span class="emoji">ðŸ‘¥</span> Agents</h3>
                 <div class="stats-number">${ultraSafeFormat(safeData.agents)}</div>
                 <div class="stats-label">Unique Agents</div>
             </div>` : ''}
             
             ${safeData.dispositions > 0 ? `
             <div class="stats-card">
-                <h3><span class="emoji">📋</span> Dispositions</h3>
+                <h3><span class="emoji">ðŸ“‹</span> Dispositions</h3>
                 <div class="stats-number">${ultraSafeFormat(safeData.dispositions)}</div>
                 <div class="stats-label">Call Dispositions</div>
             </div>` : ''}
             
             ${safeData.templates > 0 ? `
             <div class="stats-card">
-                <h3><span class="emoji">📄</span> Templates</h3>
+                <h3><span class="emoji">ðŸ“„</span> Templates</h3>
                 <div class="stats-number">${ultraSafeFormat(safeData.templates)}</div>
                 <div class="stats-label">Evaluation Templates</div>
             </div>` : ''}
             
             ${safeData.weighted_scores_available > 0 ? `
             <div class="stats-card">
-                <h3><span class="emoji">📊</span> Scored Evaluations</h3>
+                <h3><span class="emoji">ðŸ“Š</span> Scored Evaluations</h3>
                 <div class="stats-number">${ultraSafeFormat(safeData.weighted_scores_available)}</div>
                 <div class="stats-label">With Weighted Scores</div>
             </div>` : ''}
@@ -500,15 +500,15 @@ function displayStatistics(response, timestamp) {
         
         <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #6e32a0;">
             <div style="font-size: 0.9em; color: #666;">
-                📅 Last updated: ${ultraSafeTimestamp(responseTimestamp)} | 
-                🔄 Processing: ${response.processing_time || 'Unknown'}s | 
-                🏷️ Version: ${response.version || 'Unknown'}
+                ðŸ“… Last updated: ${ultraSafeTimestamp(responseTimestamp)} | 
+                ðŸ”„ Processing: ${response.processing_time || 'Unknown'}s | 
+                ðŸ·ï¸ Version: ${response.version || 'Unknown'}
             </div>
         </div>
     `;
     
     container.innerHTML = html;
-    console.log("📊 Statistics dashboard updated with actual API data");
+    console.log("ðŸ“Š Statistics dashboard updated with actual API data");
 }
 
 
@@ -578,7 +578,7 @@ function clearDateRange() {
     if (endDate) endDate.value = '';
     
     updateDateRangeDisplay();
-    console.log("📅 Date range cleared");
+    console.log("ðŸ“… Date range cleared");
 }
 
 function updateImportPreview() {
@@ -598,19 +598,19 @@ function updateImportPreview() {
     // Add date range info
     if (startDate || endDate) {
         if (startDate && endDate) {
-            previewText += `\n📅 Date range: ${startDate} to ${endDate}`;
+            previewText += `\nðŸ“… Date range: ${startDate} to ${endDate}`;
         } else if (startDate) {
-            previewText += `\n📅 From: ${startDate} onwards`;
+            previewText += `\nðŸ“… From: ${startDate} onwards`;
         } else if (endDate) {
-            previewText += `\n📅 Up to: ${endDate}`;
+            previewText += `\nðŸ“… Up to: ${endDate}`;
         }
     }
     
     // Add max docs info
     if (maxDocs !== null && !isNaN(maxDocs)) {
-        previewText += `\n📊 Limited to: ${maxDocs} documents`;
+        previewText += `\nðŸ“Š Limited to: ${maxDocs} documents`;
     } else {
-        previewText += `\n📊 Processing: All matching documents`;
+        previewText += `\nðŸ“Š Processing: All matching documents`;
     }
     
     importPreviewText.textContent = previewText;
@@ -632,7 +632,7 @@ async function startImport() {
         if (!isNaN(parsedValue) && parsedValue > 0) {
             maxDocs = parsedValue;
         } else {
-            alert("❌ Max Documents must be a positive number or left empty for all documents");
+            alert("âŒ Max Documents must be a positive number or left empty for all documents");
             return;
         }
     }
@@ -649,7 +649,7 @@ async function startImport() {
 
     // Validate date range
     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-        alert("❌ Start date cannot be after end date");
+        alert("âŒ Start date cannot be after end date");
         return;
     }
 
@@ -700,7 +700,7 @@ async function startImport() {
     // Add filter info to confirmation
     let filterText = "";
     if (filterUpdatedAfterCreated) {
-        filterText = "\n🔍 Filter: Only modified evaluations (updated > created_on)";
+        filterText = "\nðŸ” Filter: Only modified evaluations (updated > created_on)";
     }
     
     const importTypeText = importType === "incremental" ? "Incremental (only updated documents)" : "Full (all documents)";
@@ -715,23 +715,23 @@ This will fetch evaluation data from your API and index it for search and chat.`
     if (!confirm(confirmMsg)) return;
 
     // Debug logging
-    console.log("🚀 Starting import with config:", config);
-    console.log(`📋 Import Type Selected: ${importType}`);
-    console.log(`🔢 Max Docs Element Value: ${maxDocsInput ? maxDocsInput.value : 'N/A'}`);
-    console.log(`📊 Max Docs Parsed: ${maxDocs}`);
+    console.log("ðŸš€ Starting import with config:", config);
+    console.log(`ðŸ“‹ Import Type Selected: ${importType}`);
+    console.log(`ðŸ”¢ Max Docs Element Value: ${maxDocsInput ? maxDocsInput.value : 'N/A'}`);
+    console.log(`ðŸ“Š Max Docs Parsed: ${maxDocs}`);
 
     if (maxDocs !== null) {
-        console.log(`📊 Max documents limit: ${maxDocs}`);
+        console.log(`ðŸ“Š Max documents limit: ${maxDocs}`);
     } else {
-        console.log("📊 No document limit - importing all available");
+        console.log("ðŸ“Š No document limit - importing all available");
     }
 
     if (startDate || endDate) {
-        console.log(`📅 Date range: ${startDate || 'unlimited'} to ${endDate || 'unlimited'}`);
+        console.log(`ðŸ“… Date range: ${startDate || 'unlimited'} to ${endDate || 'unlimited'}`);
     }
     
     if (filterUpdatedAfterCreated) {
-        console.log("🔍 Filter enabled: Only importing evaluations where updated > created_on");
+        console.log("ðŸ” Filter enabled: Only importing evaluations where updated > created_on");
     }
 
     try {
@@ -741,17 +741,17 @@ This will fetch evaluation data from your API and index it for search and chat.`
             body: JSON.stringify(config) // Use config, not requestBody
         });
 
-        console.log("📡 POST request sent to: /import");
+        console.log("ðŸ“¡ POST request sent to: /import");
 
         const text = await response.text();
-        console.log("📥 Raw response:", text);
+        console.log("ðŸ“¥ Raw response:", text);
 
         let data;
         try {
             data = JSON.parse(text);
         } catch (e) {
-            console.error("❌ Non-JSON response:", text);
-            alert(`❌ Server returned non-JSON response: ${text.substring(0, 200)}...`);
+            console.error("âŒ Non-JSON response:", text);
+            alert(`âŒ Server returned non-JSON response: ${text.substring(0, 200)}...`);
             return;
         }
 
@@ -762,17 +762,17 @@ This will fetch evaluation data from your API and index it for search and chat.`
             }
             if (startDate || endDate) {
                 if (startDate && endDate) {
-                    successMsg += `\n📅 Date range: ${startDate} to ${endDate}`;
+                    successMsg += `\nðŸ“… Date range: ${startDate} to ${endDate}`;
                 } else if (startDate) {
-                    successMsg += `\n📅 From: ${startDate}`;
+                    successMsg += `\nðŸ“… From: ${startDate}`;
                 } else if (endDate) {
-                    successMsg += `\n📅 Up to: ${endDate}`;
+                    successMsg += `\nðŸ“… Up to: ${endDate}`;
                 }
             }
             
             // Add filter status to success message
             if (filterUpdatedAfterCreated) {
-                successMsg += `\n🔍 Filter: Only modified evaluations`;
+                successMsg += `\nðŸ” Filter: Only modified evaluations`;
             }
             
             alert(successMsg);
@@ -781,13 +781,13 @@ This will fetch evaluation data from your API and index it for search and chat.`
             startPolling();
             
         } else {
-            console.error("❌ Import failed with status:", response.status);
-            console.error("❌ Error response:", data);
-            alert(`❌ Import failed: ${data.detail || data.message || data.error || "Unknown error"}`);
+            console.error("âŒ Import failed with status:", response.status);
+            console.error("âŒ Error response:", data);
+            alert(`âŒ Import failed: ${data.detail || data.message || data.error || "Unknown error"}`);
         }
     } catch (error) {
-        console.error("❌ Import request failed:", error);
-        alert(`❌ Import request failed: ${error.message}`);
+        console.error("âŒ Import request failed:", error);
+        alert(`âŒ Import request failed: ${error.message}`);
     }
 }
 
@@ -803,12 +803,12 @@ function safeUpdateElement(elementId, content, fallbackMessage = null) {
             return true;
         } else {
             if (fallbackMessage) {
-                console.warn(`⚠️ Element '${elementId}' not found: ${fallbackMessage}`);
+                console.warn(`âš ï¸ Element '${elementId}' not found: ${fallbackMessage}`);
             }
             return false;
         }
     } catch (error) {
-        console.error(`❌ Error updating element '${elementId}':`, error);
+        console.error(`âŒ Error updating element '${elementId}':`, error);
         return false;
     }
 }
@@ -821,12 +821,12 @@ function safeUpdateHTML(elementId, htmlContent, fallbackMessage = null) {
             return true;
         } else {
             if (fallbackMessage) {
-                console.warn(`⚠️ Element '${elementId}' not found: ${fallbackMessage}`);
+                console.warn(`âš ï¸ Element '${elementId}' not found: ${fallbackMessage}`);
             }
             return false;
         }
     } catch (error) {
-        console.error(`❌ Error updating HTML for element '${elementId}':`, error);
+        console.error(`âŒ Error updating HTML for element '${elementId}':`, error);
         return false;
     }
 }
@@ -893,7 +893,7 @@ function updateMaxDocsDisplay() {
 }
 
 function startPolling() {
-    console.log("🔄 Starting status polling...");
+    console.log("ðŸ”„ Starting status polling...");
     
     // Stop any existing polling first
     stopPolling();
@@ -904,17 +904,17 @@ function startPolling() {
         try {
             await checkImportStatus();
         } catch (error) {
-            console.error("❌ Polling error:", error);
+            console.error("âŒ Polling error:", error);
             // Don't stop polling on single errors, but log them
         }
     }, 2000); // Poll every 2 seconds
     
-    console.log("✅ Polling started");
+    console.log("âœ… Polling started");
 }
 
 function stopPolling() {
     if (pollInterval) {
-        console.log("🛑 Stopping status polling...");
+        console.log("ðŸ›‘ Stopping status polling...");
         clearInterval(pollInterval);
         pollInterval = null;
     }
@@ -926,19 +926,19 @@ async function checkImportStatus() {
         const response = await fetch('/import_status');
         
         if (!response.ok) {
-            console.warn(`⚠️ Status check returned ${response.status}`);
+            console.warn(`âš ï¸ Status check returned ${response.status}`);
             return;
         }
         
         const data = await response.json();
-        console.log("📊 Import status:", data.status);
+        console.log("ðŸ“Š Import status:", data.status);
         
         // Update the UI with status
         updateStatus(data);
         
         // Stop polling if import is finished
         if (data.status && !['running', 'starting', 'pending'].includes(data.status.toLowerCase())) {
-            console.log(`🏁 Import finished with status: ${data.status}`);
+            console.log(`ðŸ Import finished with status: ${data.status}`);
             stopPolling();
             
             // Refresh stats after completion
@@ -955,7 +955,7 @@ async function checkImportStatus() {
         }
         
     } catch (error) {
-        console.error("❌ Failed to check import status:", error);
+        console.error("âŒ Failed to check import status:", error);
     }
 }
 
@@ -1009,18 +1009,18 @@ function showResults(results) {
     section.classList.remove('hidden');
     
     let html = '<div class="results-summary">';
-    html += `<h3>✅ Import Completed Successfully</h3>`;
+    html += `<h3>âœ… Import Completed Successfully</h3>`;
     
     if (results.total_documents_processed) {
-        html += `<p>📄 Documents processed: ${results.total_documents_processed.toLocaleString()}</p>`;
+        html += `<p>ðŸ“„ Documents processed: ${results.total_documents_processed.toLocaleString()}</p>`;
     }
     
     if (results.total_evaluations_indexed) {
-        html += `<p>🎯 Evaluations indexed: ${results.total_evaluations_indexed.toLocaleString()}</p>`;
+        html += `<p>ðŸŽ¯ Evaluations indexed: ${results.total_evaluations_indexed.toLocaleString()}</p>`;
     }
     
     if (results.errors && results.errors > 0) {
-        html += `<p>⚠️ Errors: ${results.errors}</p>`;
+        html += `<p>âš ï¸ Errors: ${results.errors}</p>`;
     }
     
     html += '</div>';
@@ -1028,7 +1028,7 @@ function showResults(results) {
 }
 
 async function refreshStatus() {
-    console.log("🔄 Refreshing all status information...");
+    console.log("ðŸ”„ Refreshing all status information...");
     
     try {
         // Run all checks in parallel for better performance
@@ -1038,10 +1038,10 @@ async function refreshStatus() {
         ];
         
         await Promise.allSettled(promises);
-        console.log("✅ Status refresh completed");
+        console.log("âœ… Status refresh completed");
         
     } catch (error) {
-        console.error("❌ Error during status refresh:", error);
+        console.error("âŒ Error during status refresh:", error);
     }
 }
 
@@ -1125,12 +1125,12 @@ function showResults(results) {
     
     // ENHANCED: Define key metrics with Evaluations Processed as priority #1
     const metrics = [
-        { key: 'total_evaluations_indexed', label: 'Evaluations Processed', class: 'success', icon: '🆔', priority: 1 },
-        { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: '📄', priority: 2 },
-        { key: 'total_chunks_processed', label: 'Chunks Processed', class: 'info', icon: '🧩', priority: 3 },
-        { key: 'errors', label: 'Errors', class: 'warning', icon: '❌', priority: 4 },
-        { key: 'opensearch_errors', label: 'OpenSearch Errors', class: 'danger', icon: '🔥', priority: 5 },
-        { key: 'import_type', label: 'Import Type', class: 'info', icon: '🔄', priority: 6 }
+        { key: 'total_evaluations_indexed', label: 'Evaluations Processed', class: 'success', icon: 'ðŸ†”', priority: 1 },
+        { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: 'ðŸ“„', priority: 2 },
+        { key: 'total_chunks_processed', label: 'Chunks Processed', class: 'info', icon: 'ðŸ§©', priority: 3 },
+        { key: 'errors', label: 'Errors', class: 'warning', icon: 'âŒ', priority: 4 },
+        { key: 'opensearch_errors', label: 'OpenSearch Errors', class: 'danger', icon: 'ðŸ”¥', priority: 5 },
+        { key: 'import_type', label: 'Import Type', class: 'info', icon: 'ðŸ”„', priority: 6 }
     ];
     
     // Display key metrics (sorted by priority)
@@ -1169,7 +1169,7 @@ function showResults(results) {
         const collections = ultraSafeArray(results.template_collections_created);
         html += `
             <div class="result-card">
-                <h4>📁 Template Collections</h4>
+                <h4>ðŸ“ Template Collections</h4>
                 <div class="result-value info">${ultraSafeFormat(collections.length)}</div>
                 <div style="font-size: 0.8em; margin-top: 8px; color: #666;">
                     ${collections.slice(0, 3).map(c => ultraSafeString(c)).join(', ')}
@@ -1185,7 +1185,7 @@ function showResults(results) {
             const timestamp = ultraSafeTimestamp(results.completed_at);
             html += `
                 <div class="result-card">
-                    <h4>⏰ Completed At</h4>
+                    <h4>â° Completed At</h4>
                     <div class="result-value" style="font-size: 1.2em; color: #666;">${timestamp}</div>
                 </div>
             `;
@@ -1198,7 +1198,7 @@ function showResults(results) {
     if (results.success_rate) {
         html += `
             <div class="result-card">
-                <h4>📈 Success Rate</h4>
+                <h4>ðŸ“ˆ Success Rate</h4>
                 <div class="result-value success">${ultraSafeString(results.success_rate)}</div>
             </div>
         `;
@@ -1206,7 +1206,7 @@ function showResults(results) {
     
     grid.innerHTML = html;
     
-    console.log("📈 Import results displayed with BULLETPROOF handling:", results);
+    console.log("ðŸ“ˆ Import results displayed with BULLETPROOF handling:", results);
 }
 
 // ============================================================================
@@ -1214,18 +1214,18 @@ function showResults(results) {
 // ============================================================================
 
 async function checkSystemHealth() {
-    console.log("🏥 Checking system health...");
+    console.log("ðŸ¥ Checking system health...");
     
     const container = document.getElementById('healthContainer');
     if (!container) {
-        console.warn('❌ Health container not found - add id="healthContainer" to your HTML');
+        console.warn('âŒ Health container not found - add id="healthContainer" to your HTML');
         return;
     }
     
     container.innerHTML = `
         <div class="health-item">
             <span class="health-label">System Status</span>
-            <span class="health-value">🔄 Checking...</span>
+            <span class="health-value">ðŸ”„ Checking...</span>
         </div>
     `;
     
@@ -1233,25 +1233,25 @@ async function checkSystemHealth() {
         const response = await fetch('/health');
         const data = await response.json();
         
-        console.log("🩺 Health check response:", data);
+        console.log("ðŸ©º Health check response:", data);
         
-        // ✅ FIXED: Match the actual API response structure
+        // âœ… FIXED: Match the actual API response structure
         const isHealthy = response.ok && (data.status === 'ok' || data.status === 'healthy');
         
-        // ✅ FIXED: Handle the correct OpenSearch status structure
-        let openSearchStatus = '❌ Unknown';
+        // âœ… FIXED: Handle the correct OpenSearch status structure
+        let openSearchStatus = 'âŒ Unknown';
         if (data.components && data.components.opensearch) {
             const osStatus = data.components.opensearch.status;
             if (osStatus === 'connected') {
-                openSearchStatus = '✅ Connected';
+                openSearchStatus = 'âœ… Connected';
             } else if (osStatus === 'not configured') {
-                openSearchStatus = '⚠️ Not Configured';
+                openSearchStatus = 'âš ï¸ Not Configured';
             } else {
-                openSearchStatus = '❌ Disconnected';
+                openSearchStatus = 'âŒ Disconnected';
             }
         }
         
-        // ✅ FIXED: Handle memory usage if available
+        // âœ… FIXED: Handle memory usage if available
         let memoryDisplay = 'Unknown';
         if (data.memory_usage) {
             memoryDisplay = Math.round(data.memory_usage) + '%';
@@ -1259,14 +1259,14 @@ async function checkSystemHealth() {
             memoryDisplay = Math.round(data.components.system.memory_usage) + '%';
         }
         
-        // ✅ FIXED: Add vector search status if available
+        // âœ… FIXED: Add vector search status if available
         let vectorSearchStatus = '';
         if (data.components && data.components.opensearch && data.components.opensearch.vector_search_support !== undefined) {
             const vectorEnabled = data.components.opensearch.vector_search_support;
             vectorSearchStatus = `
                 <div class="health-item">
                     <span class="health-label">Vector Search</span>
-                    <span class="health-value">${vectorEnabled ? '✅ Enabled' : '❌ Disabled'}</span>
+                    <span class="health-value">${vectorEnabled ? 'âœ… Enabled' : 'âŒ Disabled'}</span>
                 </div>
             `;
         }
@@ -1274,7 +1274,7 @@ async function checkSystemHealth() {
         container.innerHTML = `
             <div class="health-item ${isHealthy ? '' : 'unhealthy'}">
                 <span class="health-label">System Status</span>
-                <span class="health-value">${isHealthy ? '✅ Healthy' : '❌ Unhealthy'}</span>
+                <span class="health-value">${isHealthy ? 'âœ… Healthy' : 'âŒ Unhealthy'}</span>
             </div>
             <div class="health-item">
                 <span class="health-label">OpenSearch</span>
@@ -1287,27 +1287,27 @@ async function checkSystemHealth() {
             ${vectorSearchStatus}
         `;
         
-        console.log("✅ Health check completed successfully");
+        console.log("âœ… Health check completed successfully");
         
     } catch (error) {
-        console.error('❌ Health check failed:', error);
+        console.error('âŒ Health check failed:', error);
         container.innerHTML = `
             <div class="health-item unhealthy">
                 <span class="health-label">System Status</span>
-                <span class="health-value">❌ Error: ${error.message}</span>
+                <span class="health-value">âŒ Error: ${error.message}</span>
             </div>
         `;
     }
 }
 
 async function checkLastImportInfo() {
-    console.log("📅 Checking last import info...");
+    console.log("ðŸ“… Checking last import info...");
     
     let container = document.getElementById('lastImportInfo');
     
-    // ✅ FIXED: Create the container if it doesn't exist
+    // âœ… FIXED: Create the container if it doesn't exist
     if (!container) {
-        console.log("⚠️ lastImportInfo container not found, creating it...");
+        console.log("âš ï¸ lastImportInfo container not found, creating it...");
         
         // Find a good place to add it (after the health container)
         const healthSection = document.getElementById('healthContainer')?.parentElement;
@@ -1319,13 +1319,13 @@ async function checkLastImportInfo() {
             
             // Add a header
             const header = document.createElement('h3');
-            header.innerHTML = '<span class="emoji">📅</span> Last Import Information';
+            header.innerHTML = '<span class="emoji">ðŸ“…</span> Last Import Information';
             healthSection.appendChild(header);
             healthSection.appendChild(newContainer);
             
             container = newContainer;
         } else {
-            console.warn('❌ Could not create lastImportInfo container - no health section found');
+            console.warn('âŒ Could not create lastImportInfo container - no health section found');
             return;
         }
     }
@@ -1333,7 +1333,7 @@ async function checkLastImportInfo() {
     container.innerHTML = `
         <div class="health-item">
             <span class="health-label">Last Import</span>
-            <span class="health-value">🔄 Checking...</span>
+            <span class="health-value">ðŸ”„ Checking...</span>
         </div>
     `;
     
@@ -1341,13 +1341,13 @@ async function checkLastImportInfo() {
         const response = await fetch('/import_info');
         const data = await response.json();
         
-        console.log("📊 Import info response:", data);
+        console.log("ðŸ“Š Import info response:", data);
         
         if (data.last_import) {
             container.innerHTML = `
                 <div class="health-item">
                     <span class="health-label">Last Import</span>
-                    <span class="health-value">✅ ${ultraSafeTimestamp(data.last_import.timestamp)}</span>
+                    <span class="health-value">âœ… ${ultraSafeTimestamp(data.last_import.timestamp)}</span>
                 </div>
                 <div class="health-item">
                     <span class="health-label">Import Type</span>
@@ -1362,19 +1362,19 @@ async function checkLastImportInfo() {
             container.innerHTML = `
                 <div class="health-item">
                     <span class="health-label">Last Import</span>
-                    <span class="health-value">⚠️ No import history found</span>
+                    <span class="health-value">âš ï¸ No import history found</span>
                 </div>
             `;
         }
         
-        console.log("✅ Last import info loaded successfully");
+        console.log("âœ… Last import info loaded successfully");
         
     } catch (error) {
-        console.error('❌ Failed to load import info:', error);
+        console.error('âŒ Failed to load import info:', error);
         container.innerHTML = `
             <div class="health-item unhealthy">
                 <span class="health-label">Last Import</span>
-                <span class="health-value">❌ Error: ${error.message}</span>
+                <span class="health-value">âŒ Error: ${error.message}</span>
             </div>
         `;
     }
@@ -1435,7 +1435,7 @@ async function toggleLogs() {
             
         } catch (error) {
             if (logsContent) {
-                logsContent.innerHTML = `<div style="padding: 16px; color: #dc3545;">❌ Failed to load logs: ${error.message}</div>`;
+                logsContent.innerHTML = `<div style="padding: 16px; color: #dc3545;">âŒ Failed to load logs: ${error.message}</div>`;
             }
         }
     } else {
@@ -1449,7 +1449,7 @@ async function testSearch() {
     
     container.innerHTML = `
         <div class="status processing">
-            🔍 Testing search functionality...
+            ðŸ” Testing search functionality...
         </div>
     `;
     
@@ -1466,20 +1466,20 @@ async function testSearch() {
             const resultCount = ultraSafeNumber(data.results?.length || 0);
             container.innerHTML = `
                 <div class="status completed">
-                    ✅ Search test successful! Found ${ultraSafeFormat(resultCount)} results.
+                    âœ… Search test successful! Found ${ultraSafeFormat(resultCount)} results.
                 </div>
             `;
         } else {
             container.innerHTML = `
                 <div class="status failed">
-                    ❌ Search test failed: ${ultraSafeString(data.error || 'Unknown error')}
+                    âŒ Search test failed: ${ultraSafeString(data.error || 'Unknown error')}
                 </div>
             `;
         }
     } catch (error) {
         container.innerHTML = `
             <div class="status failed">
-                ❌ Search test failed: ${ultraSafeString(error.message)}
+                âŒ Search test failed: ${ultraSafeString(error.message)}
             </div>
         `;
     }
@@ -1539,12 +1539,12 @@ async function lookupEvaluation() {
         }
         
         const data = await response.json();
-        console.log('✅ Evaluation data retrieved:', data);
+        console.log('âœ… Evaluation data retrieved:', data);
         
         displayEvaluationResults(data, evaluationId);
         
     } catch (error) {
-        console.error('❌ Evaluation lookup failed:', error);
+        console.error('âŒ Evaluation lookup failed:', error);
         
         let errorMessage = 'Network error - unable to connect to server';
         if (error.message.includes('fetch')) {
@@ -1592,7 +1592,7 @@ function displayEvaluationResults(data, searchedId) {
     const html = `
         <div class="evaluation-header">
             <h3>
-                <span class="emoji">📋</span>
+                <span class="emoji">ðŸ“‹</span>
                 Evaluation: ${evalData.evaluationId}
             </h3>
             <div class="evaluation-score" style="background-color: ${scoreColor};">
@@ -1744,13 +1744,13 @@ function displayEvaluationResults(data, searchedId) {
             <div class="content-tabs">
                 <div class="tab-headers">
                     <button class="tab-header active" onclick="switchTab('evaluation-tab')" id="evaluation-tab-header">
-                        <span class="emoji">📝</span>
+                        <span class="emoji">ðŸ“</span>
                         Evaluation Content
                     </button>
                     <button class="tab-header" onclick="switchTab('transcript-tab')" id="transcript-tab-header">
-                        <span class="emoji">🎙️</span>
+                        <span class="emoji">ðŸŽ™ï¸</span>
                         Call Transcript
-                        ${evalData.transcript ? '<span class="tab-indicator">●</span>' : '<span class="tab-indicator empty">○</span>'}
+                        ${evalData.transcript ? '<span class="tab-indicator">â—</span>' : '<span class="tab-indicator empty">â—‹</span>'}
                     </button>
                 </div>
                 
@@ -1765,7 +1765,7 @@ function displayEvaluationResults(data, searchedId) {
                         </div>
                         ` : `
                         <div class="no-content">
-                            <span class="emoji">📋</span>
+                            <span class="emoji">ðŸ“‹</span>
                             <p>No evaluation content available for this evaluation.</p>
                         </div>
                         `}
@@ -1776,7 +1776,7 @@ function displayEvaluationResults(data, searchedId) {
                         ${evalData.transcript ? `
                         <div class="transcript-section">
                             <div class="transcript-info">
-                                <span class="emoji">ℹ️</span>
+                                <span class="emoji">â„¹ï¸</span>
                                 <strong>Call Transcript</strong> 
                                 <span class="transcript-length">(${evalData.transcript.length.toLocaleString()} characters)</span>
                             </div>
@@ -1786,7 +1786,7 @@ function displayEvaluationResults(data, searchedId) {
                         </div>
                         ` : `
                         <div class="no-content">
-                            <span class="emoji">🎙️</span>
+                            <span class="emoji">ðŸŽ™ï¸</span>
                             <p>No call transcript available for this evaluation.</p>
                             <small>Transcript data may not have been captured for this call.</small>
                         </div>
@@ -1821,23 +1821,31 @@ function switchTab(tabId) {
 // Make switchTab function globally available
 window.switchTab = switchTab;
 
-// NEW: Function to format transcript text
+
+// NEW: Function to format transcript text with Agent vs Customer labels
 function formatTranscript(transcript) {
     if (!transcript) return '';
     
     // Handle speaker patterns and timestamps
     let formatted = transcript
-        // Format speaker headers
-        .replace(/Speaker ([AB]) \((\d{2}:\d{2}:\d{2})\):/g, 
-                '<div class="speaker-header"><strong>Speaker $1</strong> <span class="timestamp">$2</span></div>')
+        // Format Agent headers (Speaker A -> Agent)
+        .replace(/Speaker A \((\d{2}:\d{2}:\d{2})\):/g, 
+                '<div class="speaker-header agent-header"><span class="speaker-icon">👤</span><strong>Agent</strong> <span class="timestamp">$1</span></div>')
+        // Format Customer headers (Speaker B -> Customer)  
+        .replace(/Speaker B \((\d{2}:\d{2}:\d{2})\):/g, 
+                '<div class="speaker-header customer-header"><span class="speaker-icon">💬</span><strong>Customer</strong> <span class="timestamp">$1</span></div>')
+        // Handle cases without timestamps but with speakers
+        .replace(/Speaker A:/g, 
+                '<div class="speaker-header agent-header"><span class="speaker-icon">👤</span><strong>Agent</strong></div>')
+        .replace(/Speaker B:/g, 
+                '<div class="speaker-header customer-header"><span class="speaker-icon">💬</span><strong>Customer</strong></div>')
         // Format regular line breaks
         .replace(/\n/g, '<br>')
         // Format timestamps that appear inline
         .replace(/(\d{2}:\d{2}:\d{2})/g, '<span class="inline-timestamp">$1</span>');
     
     return formatted;
-
-        }
+}
 
 function displayEvaluationError(message) {
     const resultsContainer = document.getElementById('evaluationResults');
@@ -1845,14 +1853,14 @@ function displayEvaluationError(message) {
     
     resultsContainer.innerHTML = `
         <div class="evaluation-error">
-            <h3>❌ Evaluation Lookup Failed</h3>
+            <h3>âŒ Evaluation Lookup Failed</h3>
             <p>${ultraSafeString(message)}</p>
             <div style="margin-top: 16px;">
                 <button onclick="clearEvaluationLookup()" class="btn secondary">
-                    <span class="emoji">🗑️</span> Clear Results
+                    <span class="emoji">ðŸ—‘ï¸</span> Clear Results
                 </button>
                 <button onclick="lookupEvaluation()" class="btn primary">
-                    <span class="emoji">🔄</span> Try Again
+                    <span class="emoji">ðŸ”„</span> Try Again
                 </button>
             </div>
         </div>
@@ -1899,7 +1907,7 @@ window.lookupEvaluation = lookupEvaluation;
 window.clearEvaluationLookup = clearEvaluationLookup;
 window.handleEvaluationLookupKeyPress = handleEvaluationLookupKeyPress;
 
-console.log("✅ Ask InnovAI Admin BULLETPROOF main.js v2.2.3 loaded successfully");
-console.log("🛡️ BULLETPROOF: ALL toLocaleString() errors COMPLETELY ELIMINATED");
-console.log("🔧 COMPLETE PROTECTION: ultraSafe functions handle ALL undefined/null/invalid values");
-console.log("📊 All functions including enhanced statistics with ULTIMATE error handling available");
+console.log("âœ… Ask InnovAI Admin BULLETPROOF main.js v2.2.3 loaded successfully");
+console.log("ðŸ›¡ï¸ BULLETPROOF: ALL toLocaleString() errors COMPLETELY ELIMINATED");
+console.log("ðŸ”§ COMPLETE PROTECTION: ultraSafe functions handle ALL undefined/null/invalid values");
+console.log("ðŸ“Š All functions including enhanced statistics with ULTIMATE error handling available");

@@ -1,6 +1,6 @@
 // Enhanced main.js for Ask InnovAI Admin Interface v2.2.3
 // BULLETPROOF FIX: Complete error handling for toLocaleString() undefined errors
-// Version: 6.1.0 - Updated for new admin interface
+// Version: 12-22.1 - Updated for new admin interface
 
 let pollInterval = null
 let isPolling = false;
@@ -1822,7 +1822,7 @@ function switchTab(tabId) {
 window.switchTab = switchTab;
 
 
-// NEW: Function to format transcript text with Agent vs Customer labels
+// NEW: Function to format transcript text with Agent vs Customer labels using Material Icons
 function formatTranscript(transcript) {
     if (!transcript) return '';
     
@@ -1830,15 +1830,15 @@ function formatTranscript(transcript) {
     let formatted = transcript
         // Format Agent headers (Speaker A -> Agent)
         .replace(/Speaker A \((\d{2}:\d{2}:\d{2})\):/g, 
-                '<div class="speaker-header agent-header"><span class="speaker-icon">👤</span><strong>Agent</strong> <span class="timestamp">$1</span></div>')
+                '<div class="speaker-header agent-header"><span class="material-icons speaker-icon">person</span><strong>Agent</strong> <span class="timestamp">$1</span></div>')
         // Format Customer headers (Speaker B -> Customer)  
         .replace(/Speaker B \((\d{2}:\d{2}:\d{2})\):/g, 
-                '<div class="speaker-header customer-header"><span class="speaker-icon">💬</span><strong>Customer</strong> <span class="timestamp">$1</span></div>')
+                '<div class="speaker-header customer-header"><span class="material-icons speaker-icon">chat</span><strong>Customer</strong> <span class="timestamp">$1</span></div>')
         // Handle cases without timestamps but with speakers
         .replace(/Speaker A:/g, 
-                '<div class="speaker-header agent-header"><span class="speaker-icon">👤</span><strong>Agent</strong></div>')
+                '<div class="speaker-header agent-header"><span class="material-icons speaker-icon">person</span><strong>Agent</strong></div>')
         .replace(/Speaker B:/g, 
-                '<div class="speaker-header customer-header"><span class="speaker-icon">💬</span><strong>Customer</strong></div>')
+                '<div class="speaker-header customer-header"><span class="material-icons speaker-icon">chat</span><strong>Customer</strong></div>')
         // Format regular line breaks
         .replace(/\n/g, '<br>')
         // Format timestamps that appear inline
