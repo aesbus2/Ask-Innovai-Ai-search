@@ -917,9 +917,6 @@ async function refreshAnalyticsStats() {
         }
     }
 }
-        }
-    }
-}
 
 // =============================================================================
 // INITIALIZATION FUNCTIONS
@@ -1282,9 +1279,9 @@ window.compareStatsAPI = async function() {
         console.log('Stats API response (with filters):', withFiltersResult);
         
         console.log('🧪 === COMPARISON RESULTS ===');
-        console.log('No filters total:', noFiltersResult?.totalRecords || 'ERROR');
-        console.log('With filters total:', withFiltersResult?.totalRecords || 'ERROR');
-        console.log('Numbers are different:', (noFiltersResult?.totalRecords !== withFiltersResult?.totalRecords));
+        console.log('No filters total:', noFiltersResult?.total_results || 'ERROR');  // ✅ Fixed: totalRecords → total_results
+        console.log('With filters total:', withFiltersResult?.total_results || 'ERROR');  // ✅ Fixed: totalRecords → total_results
+        console.log('Numbers are different:', (noFiltersResult?.total_results !== withFiltersResult?.total_results));  // ✅ Fixed: totalRecords → total_results
         
         return { noFilters: noFiltersResult, withFilters: withFiltersResult };
     } catch (error) {

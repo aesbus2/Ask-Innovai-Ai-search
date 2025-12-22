@@ -4716,8 +4716,8 @@ async def analytics_stats(request: dict):
                 logger.debug(f"Applied date filter: {date_range}")
             
             # Template filter (user selected from dropdown - HIGHEST PRIORITY)
-            if filters.get("template"):
-                template_name = str(filters["template"]).strip()
+            if filters.get("template_name"):  # ✅ Fixed: template → template_name to match frontend
+                template_name = str(filters["template_name"]).strip()  # ✅ Fixed: template → template_name
                 template_filter = {
                     "bool": {
                         "should": [
