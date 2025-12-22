@@ -1544,8 +1544,8 @@ async def filter_options_metadata():
             "partners": metadata_values.get("partners", []),
             "sites": metadata_values.get("sites", []),
             "lobs": metadata_values.get("lobs", []),
-            "Dispositions": metadata_values.get("dispositions", []),
-            "SubDispositions": metadata_values.get("subDispositions", []),
+            "callDispositions": metadata_values.get("dispositions", []),  # ✅ Fixed: Dispositions → callDispositions
+            "callSubDispositions": metadata_values.get("subDispositions", []),  # ✅ Fixed: SubDispositions → callSubDispositions
             "agentNames": metadata_values.get("agentName", []),
             "languages": metadata_values.get("languages", []),
             "callTypes": metadata_values.get("call_types", []),
