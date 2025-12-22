@@ -374,23 +374,23 @@ function applyFilters() {
     // Log current state before collecting filters
     console.log(`🔍 [${timestamp}] Previous filters:`, JSON.stringify(currentFilters, null, 2));
     
-    // Collect filter values
+    // Collect filter values - UPDATED to match exact API field names
     currentFilters = {
         evaluationId: document.getElementById('evaluationIdFilter')?.value || '',
         phoneNumber: document.getElementById('phoneNumberFilter')?.value || '',
         contactId: document.getElementById('contactIdFilter')?.value || '',
         ucid: document.getElementById('ucidFilter')?.value || '',
-        startCallDate: document.getElementById('startCallDate')?.value || '',
-        endCallDate: document.getElementById('endCallDate')?.value || '',
-        template: document.getElementById('templateFilter')?.value || '',
+        call_date_start: document.getElementById('startCallDate')?.value || '',
+        call_date_end: document.getElementById('endCallDate')?.value || '',
+        template_name: document.getElementById('templateFilter')?.value || '',  // ✅ Fixed: template → template_name
         program: document.getElementById('programFilter')?.value || '',
         partner: document.getElementById('partnerFilter')?.value || '',
         site: document.getElementById('siteFilter')?.value || '',
         lob: document.getElementById('lobFilter')?.value || '',
-        callDisposition: document.getElementById('callDispositionFilter')?.value || '',
-        callSubDisposition: document.getElementById('callSubDispositionFilter')?.value || '',
-        language: document.getElementById('languageFilter')?.value || '',
-        callType: document.getElementById('callTypeFilter')?.value || ''
+        disposition: document.getElementById('callDispositionFilter')?.value || '',  // ✅ Fixed: callDisposition → disposition  
+        subDisposition: document.getElementById('callSubDispositionFilter')?.value || '',  // ✅ Fixed: callSubDisposition → subDisposition
+        language: document.getElementById('languageFilter')?.value || ''
+        // ❌ REMOVED: call_type (doesn't exist in your API)
     };
     
     console.log(`🔍 [${timestamp}] Collected raw filters:`, JSON.stringify(currentFilters, null, 2));
@@ -853,19 +853,19 @@ async function refreshAnalyticsStats() {
         const stats = await response.json();
         
         console.log(`📊 [${timestamp}] Stats API response:`, JSON.stringify(stats, null, 2));
-        console.log(`📊 [${timestamp}] Total records in response: ${stats.totalRecords}`);
+        console.log(`📊 [${timestamp}] Total results in response: ${stats.total_results}`);
         
         // Update total records display
         const totalRecords = document.getElementById('totalRecords');
-        if (totalRecords && stats.totalRecords !== undefined) {
+        if (totalRecords && stats.total_results !== undefined) {
             const oldValue = totalRecords.textContent;
-            const newValue = `${stats.totalRecords.toLocaleString()} transcripts`;
+            const newValue = `${stats.total_results.toLocaleString()} transcripts`;
             totalRecords.textContent = newValue;
             console.log(`✅ [${timestamp}] Updated transcript count: "${oldValue}" → "${newValue}"`);
         } else {
-            console.warn(`⚠️ [${timestamp}] totalRecords element not found or stats.totalRecords undefined:`, {
+            console.warn(`⚠️ [${timestamp}] totalRecords element not found or stats.total_results undefined:`, {
                 elementFound: !!totalRecords,
-                statsValue: stats.totalRecords,
+                statsValue: stats.total_results,
                 fullStats: stats
             });
         }
@@ -877,18 +877,18 @@ async function refreshAnalyticsStats() {
         console.log(`📊 [${timestamp}] Updating filter count display:`, {
             elementFound: !!activeFiltersCount,
             filterCount: filterCount,
-            hasResults: stats.totalRecords !== undefined
+            hasResults: stats.total_results !== undefined
         });
         
         if (activeFiltersCount) {
             const oldValue = activeFiltersCount.textContent;
             
-            if (filterCount > 0 && stats.totalRecords !== undefined) {
-                const enhancedText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${stats.totalRecords.toLocaleString()} results)`;
+            if (filterCount > 0 && stats.total_results !== undefined) {
+                const enhancedText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${stats.total_results.toLocaleString()} results)`;
                 activeFiltersCount.textContent = enhancedText;
                 console.log(`✅ [${timestamp}] Enhanced filter count: "${oldValue}" → "${enhancedText}"`);
-            } else if (filterCount === 0 && stats.totalRecords !== undefined) {
-                const totalText = `0 filters (${stats.totalRecords.toLocaleString()} total)`;
+            } else if (filterCount === 0 && stats.total_results !== undefined) {
+                const totalText = `0 filters (${stats.total_results.toLocaleString()} total)`;
                 activeFiltersCount.textContent = totalText;
                 console.log(`✅ [${timestamp}] Zero filters display: "${oldValue}" → "${totalText}"`);
             } else {

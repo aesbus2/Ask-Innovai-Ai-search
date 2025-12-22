@@ -1,5 +1,5 @@
 # App.py - Real Data Filter System with Efficient Metadata Loading
-# Version: 6.0.0 - UPdated to Match API data exactly
+# Version: 6.1.0 - Updated to Match API data exactly
 
 
 
@@ -72,23 +72,23 @@ except Exception as e:
     logging.error(f"Exception in debug_test_search: {e}")
     import psutil
     PSUTIL_AVAILABLE = True
-    logging.info("âœ… psutil available for memory monitoring")
+    logging.info("✅ psutil available for memory monitoring")
 except ImportError:
-    logging.warning("âš ï¸ psutil not available - memory monitoring disabled")
+    logging.warning("⚠️ psutil not available - memory monitoring disabled")
 
 # Import modules with error handling
 try:
     from sentence_splitter import split_into_chunks
-    logging.info("âœ… sentence_splitter imported successfully")
+    logging.info("✅ sentence_splitter imported successfully")
 except ImportError as e:
-    logging.error(f"âŒ Failed to import sentence_splitter: {e}")
+    logging.error(f"❌ Failed to import sentence_splitter: {e}")
     sys.exit(1)
 
 try:
     from opensearch_client import search_opensearch, index_document
-    logging.info("âœ… opensearch_client imported successfully")
+    logging.info("✅ opensearch_client imported successfully")
 except ImportError as e:
-    logging.error(f"âŒ Failed to import opensearch_client: {e}")
+    logging.error(f"❌ Failed to import opensearch_client: {e}")
     sys.exit(1)
 
 # Import embedder with fallback
@@ -98,9 +98,9 @@ PRELOAD_MODEL_ON_STARTUP = True
 try:
     from embedder import get_embedding_stats, preload_embedding_model
     
-    logging.info("âœ… embedder imported successfully - VECTOR SEARCH READY")
+    logging.info("✅ embedder imported successfully - VECTOR SEARCH READY")
 except ImportError as e:
-    logging.warning(f"âš ï¸ embedder import failed: {e} - vector search will be disabled")
+    logging.warning(f"⚠️ embedder import failed: {e} - vector search will be disabled")
 
 MODEL_LOADING_STATUS = {
     "loaded": False,
@@ -148,11 +148,11 @@ processing_stats = {
 
 def log_evaluation_start(evaluation_id: str, template_id: str, template_name: str):
     """Log the start of evaluation processing"""
-    logger.info(f"ðŸš€ Processing Evaluation {evaluation_id} | Template: {template_name} (ID: {template_id})")
+    logger.info(f"🚀 Processing Evaluation {evaluation_id} | Template: {template_name} (ID: {template_id})")
 
 def log_evaluation_chunks(evaluation_id: str, total_chunks: int, eval_chunks: int, transcript_chunks: int):
     """Log chunk creation details"""
-    logger.info(f"ðŸ§© Created {total_chunks} chunks for Evaluation {evaluation_id} ({eval_chunks} eval, {transcript_chunks} transcript)")
+    logger.info(f"🧩 Created {total_chunks} chunks for Evaluation {evaluation_id} ({eval_chunks} eval, {transcript_chunks} transcript)")
 
 def log_evaluation_success(evaluation_id: str, collection: str, total_chunks: int, agent_name: str = None, program: str = None):
     """Log successful evaluation processing"""
@@ -162,7 +162,7 @@ def log_evaluation_success(evaluation_id: str, collection: str, total_chunks: in
     if program:
         extra_info += f" | Program: {program}"
     
-    logger.info(f"âœ… Indexed Evaluation {evaluation_id} | Collection: {collection} | Chunks: {total_chunks}{extra_info}")
+    logger.info(f"✅ Indexed Evaluation {evaluation_id} | Collection: {collection} | Chunks: {total_chunks}{extra_info}")
     processing_stats["total_processed"] += 1
 
 def log_evaluation_skip(evaluation_id: str, reason: str, template_name: str = None, details: dict = None):
@@ -171,35 +171,35 @@ def log_evaluation_skip(evaluation_id: str, reason: str, template_name: str = No
     
     if reason == "already_exists":
         processing_stats["duplicates_found"] += 1
-        logger.warning(f"ðŸ”„ DUPLICATE: Evaluation {evaluation_id} already exists in OpenSearch")
+        logger.warning(f"🔄 DUPLICATE: Evaluation {evaluation_id} already exists in OpenSearch")
     elif reason == "empty_transcript":
         processing_stats["empty_transcripts"] += 1
-        logger.warning(f"ðŸ“ EMPTY TRANSCRIPT: Evaluation {evaluation_id} has no transcript content")
+        logger.warning(f"📝 EMPTY TRANSCRIPT: Evaluation {evaluation_id} has no transcript content")
         if details:
-            logger.warning(f"   â””â”€â”€ Evaluation content: {details.get('evaluation_length', 0)} chars")
+            logger.warning(f"   └── Evaluation content: {details.get('evaluation_length', 0)} chars")
     elif reason == "empty_evaluation":
         processing_stats["empty_evaluations"] += 1
-        logger.warning(f"ðŸ“‹ EMPTY EVALUATION: Evaluation {evaluation_id} has no evaluation content")
+        logger.warning(f"📋 EMPTY EVALUATION: Evaluation {evaluation_id} has no evaluation content")
         if details:
-            logger.warning(f"   â””â”€â”€ Transcript content: {details.get('transcript_length', 0)} chars")
+            logger.warning(f"   └── Transcript content: {details.get('transcript_length', 0)} chars")
     elif reason == "no_content":
-        logger.warning(f"âŒ NO CONTENT: Evaluation {evaluation_id} has neither transcript nor evaluation content")
+        logger.warning(f"❌ NO CONTENT: Evaluation {evaluation_id} has neither transcript nor evaluation content")
     elif reason == "missing_required_fields":
         processing_stats["missing_fields"] += 1
-        logger.warning(f"ðŸ”‘ MISSING FIELDS: Evaluation {evaluation_id} missing required fields")
+        logger.warning(f"🔑 MISSING FIELDS: Evaluation {evaluation_id} missing required fields")
         if details:
-            logger.warning(f"   â””â”€â”€ Missing: {details.get('missing', 'unknown')}")
+            logger.warning(f"   └── Missing: {details.get('missing', 'unknown')}")
     else:
-        logger.warning(f"â­ï¸ SKIPPED: Evaluation {evaluation_id} - {reason}")
+        logger.warning(f"⏭️ SKIPPED: Evaluation {evaluation_id} - {reason}")
     
     if template_name:
-        logger.warning(f"   â””â”€â”€ Template: {template_name}")
+        logger.warning(f"   └── Template: {template_name}")
 
 def log_evaluation_error(evaluation_id: str, error: str, template_name: str = None):
     """Log evaluation processing error"""
-    logger.error(f"âŒ FAILED: Evaluation {evaluation_id} - {error[:100]}")
+    logger.error(f"❌ FAILED: Evaluation {evaluation_id} - {error[:100]}")
     if template_name:
-        logger.error(f"   â””â”€â”€ Template: {template_name}")
+        logger.error(f"   └── Template: {template_name}")
     processing_stats["total_errors"] += 1
 
 def check_evaluation_exists(evaluation_id: str) -> bool:
@@ -225,7 +225,7 @@ def check_evaluation_exists(evaluation_id: str) -> bool:
         if exists:
             existing_doc = response["hits"]["hits"][0]["_source"]
             existing_doc.get("template_name", "Unknown")
-            logger.warning(f"   â””â”€â”€ Found in index: {response['hits']['hits'][0]['_index']}")
+            logger.warning(f"   └── Found in index: {response['hits']['hits'][0]['_index']}")
         
         return exists
         
@@ -315,7 +315,7 @@ def update_import_status(status: str, step: str = None, results: dict = None, er
     elif status in ["completed", "failed"]:
         import_status["end_time"] = datetime.now().isoformat()
     
-    # âœ… ALWAYS LOG STATUS CHANGES
+    # ✅ ALWAYS LOG STATUS CHANGES
     status_msg = f"STATUS: {status}"
     if step:
         status_msg += f" - {step}"
@@ -335,7 +335,7 @@ def load_model_background():
     
     try:
         MODEL_LOADING_STATUS["loading"] = True
-        logger.info("ðŸ”® BACKGROUND: Starting embedding model load...")
+        logger.info("🔮 BACKGROUND: Starting embedding model load...")
         
         start_time = time.time()
         
@@ -353,13 +353,13 @@ def load_model_background():
         MODEL_LOADING_STATUS["loading"] = False
         MODEL_LOADING_STATUS["load_time"] = round(load_time, 1)
         
-        logger.info(f"âœ… BACKGROUND: Model loaded successfully in {load_time:.1f}s")
-        logger.info("ðŸš€ Chat requests will now be fast!")
+        logger.info(f"✅ BACKGROUND: Model loaded successfully in {load_time:.1f}s")
+        logger.info("🚀 Chat requests will now be fast!")
         
     except Exception as e:
         MODEL_LOADING_STATUS["loading"] = False
         MODEL_LOADING_STATUS["error"] = str(e)
-        logger.error(f"âŒ BACKGROUND: Model loading failed: {e}")
+        logger.error(f"❌ BACKGROUND: Model loading failed: {e}")
 
     
 
@@ -384,7 +384,7 @@ class CompilationErrorMiddleware(BaseHTTPMiddleware):
                 "compile_error", 
                 "compilation_exception"
             ]):
-                logger.error(f"ðŸš¨ COMPILATION ERROR caught in {request.url.path}: {e}")
+                logger.error(f"🚨 COMPILATION ERROR caught in {request.url.path}: {e}")
                 
                 return JSONResponse(
                     status_code=500,
@@ -413,20 +413,20 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     try:
-        logger.info("ðŸš€ Ask InnovAI PRODUCTION starting...")
+        logger.info("🚀 Ask InnovAI PRODUCTION starting...")
         logger.info("   Version: 4.8.1_lifespan_fixed")
-        logger.info(f"   ðŸ”® VECTOR SEARCH: {'âœ… ENABLED' if VECTOR_SEARCH_READY else 'âŒ DISABLED'}")
-        logger.info(f"   ðŸ”¥ HYBRID SEARCH: {'âœ… AVAILABLE' if VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE else 'âŒ NOT AVAILABLE'}")
-        logger.info(f"   ðŸ“š EMBEDDER: {'âœ… LOADED' if EMBEDDER_AVAILABLE else 'âŒ NOT AVAILABLE'}")
+        logger.info(f"   🔮 VECTOR SEARCH: {'✅ ENABLED' if VECTOR_SEARCH_READY else '❌ DISABLED'}")
+        logger.info(f"   🔥 HYBRID SEARCH: {'✅ AVAILABLE' if VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
+        logger.info(f"   📚 EMBEDDER: {'✅ LOADED' if EMBEDDER_AVAILABLE else '❌ NOT AVAILABLE'}")
         
         # Check configuration
         api_configured = bool(API_AUTH_VALUE)
         genai_configured = bool(GENAI_ACCESS_KEY)
         opensearch_configured = bool(os.getenv("OPENSEARCH_HOST"))
 
-        logger.info(f"   API Source: {'âœ… Configured' if api_configured else 'âŒ Missing'}")
-        logger.info(f"   GenAI: {'âœ… Configured' if genai_configured else 'âŒ Missing'}")
-        logger.info(f"   OpenSearch: {'âœ… Configured' if opensearch_configured else 'âŒ Missing'}")
+        logger.info(f"   API Source: {'✅ Configured' if api_configured else '❌ Missing'}")
+        logger.info(f"   GenAI: {'✅ Configured' if genai_configured else '❌ Missing'}")
+        logger.info(f"   OpenSearch: {'✅ Configured' if opensearch_configured else '❌ Missing'}")
 
         
         logger.info("   Features: Vector Search + Real Data Filters + Hybrid Search + Semantic Similarity")
@@ -435,35 +435,35 @@ async def lifespan(app: FastAPI):
         logger.info("   Metadata Loading: Index-based efficient sampling")
         logger.info(f"   Filter Caching: {_filter_metadata_cache['ttl_seconds']}s TTL")
         logger.info(f"   Port: {os.getenv('PORT', '8080')}")
-        logger.info(f"   Memory Monitoring: {'âœ… Available' if PSUTIL_AVAILABLE else 'âŒ Disabled'}")           
+        logger.info(f"   Memory Monitoring: {'✅ Available' if PSUTIL_AVAILABLE else '❌ Disabled'}")           
            
         
         # Start model loading in background to avoid health check timeout
         if EMBEDDER_AVAILABLE:
-            logger.info("ðŸ”® STARTING EMBEDDING MODEL LOAD IN BACKGROUND...")
-            logger.info("â±ï¸ This will take 20-30s but won't block app startup")
-            logger.info("ðŸ“± Health checks will pass immediately, model loads separately")
+            logger.info("🔮 STARTING EMBEDDING MODEL LOAD IN BACKGROUND...")
+            logger.info("⏱️ This will take 20-30s but won't block app startup")
+            logger.info("📱 Health checks will pass immediately, model loads separately")
             
             # Start background loading thread
             from threading import Thread
             background_thread = Thread(target=load_model_background, daemon=True)
             background_thread.start()
             
-            logger.info("âœ… Background model loading initiated")
+            logger.info("✅ Background model loading initiated")
         else:
-            logger.info("âš ï¸ No embedder available - skipping model preload")
+            logger.info("⚠️ No embedder available - skipping model preload")
         
-        logger.info("âœ… PRODUCTION startup complete - HEALTH CHECKS WILL PASS")
+        logger.info("✅ PRODUCTION startup complete - HEALTH CHECKS WILL PASS")
                 
     except Exception as e:
-        logger.error(f"âŒ PRODUCTION startup error: {e}")
-        logger.error("ðŸš¨ Startup failed - some features may not work correctly")
+        logger.error(f"❌ PRODUCTION startup error: {e}")
+        logger.error("🚨 Startup failed - some features may not work correctly")
     
     # App runs here
     yield
     
     # Shutdown
-    logger.info("ðŸ›‘ Ask InnovAI PRODUCTION shutting down...")
+    logger.info("🛑 Ask InnovAI PRODUCTION shutting down...")
 
 # lifespan event handler (Above)
 # ============================================================================
@@ -519,7 +519,7 @@ async def add_security_headers(request: Request, call_next):
 try:
     app.mount("/static", StaticFiles(directory="static"), name="static")
 except Exception as e:
-    logger.warning(f"âš ï¸ Failed to mount static files: {e}")
+    logger.warning(f"⚠️ Failed to mount static files: {e}")
 
 # ============================================================================
 # IMPORT CHAT AND HEALTH ROUTERS (AFTER APP CREATION)
@@ -534,13 +534,13 @@ try:
     app.include_router(health_router)  # No prefix for backward compatibility
     
     
-    logger.info("âœ… All routers imported and mounted successfully")
+    logger.info("✅ All routers imported and mounted successfully")
     logger.info("   - Chat endpoints: /api/chat")
     logger.info("   - Import endpoints: /import, /import_status")
     logger.info("   - Health endpoints: /health, /ping")
 
 except ImportError as e:
-    logger.warning(f"âš ï¸ Could not import routers: {e}")
+    logger.warning(f"⚠️ Could not import routers: {e}")
     
     # Capture the error message to avoid scoping issues
     error_message = str(e)
@@ -554,7 +554,7 @@ except ImportError as e:
         return {"status": "router_import_failed", "error": error_message}
     
     app.include_router(fallback_router, prefix="/api")
-    logger.info("âœ… Fallback import router created")
+    logger.info("✅ Fallback import router created")
 
 @app.get("/logs")
 async def get_logs():
@@ -649,11 +649,11 @@ async def handle_import_with_safe_vector_handling(request: Request):
         use_vector_search = vector_capabilities.get("vector_search_enabled", False)
         recommended_space_type = vector_capabilities.get("recommended_space_type", "l2")
         
-        logger.info(f"ðŸ”„ Starting import - Vector search: {use_vector_search}")
+        logger.info(f"🔄 Starting import - Vector search: {use_vector_search}")
         if use_vector_search:
-            logger.info(f"ðŸ“Š Using space type: {recommended_space_type}")
+            logger.info(f"📊 Using space type: {recommended_space_type}")
         else:
-            logger.warning("âš ï¸ Vector search disabled - using text-only mode")
+            logger.warning("⚠️ Vector search disabled - using text-only mode")
         
         # Prepare import configuration
         import_config = {
@@ -701,8 +701,8 @@ async def get_index():
     except FileNotFoundError:
         return HTMLResponse(content="""
         <html><body>
-        <h1>ðŸ¤– Ask InnovAI Production v4.2.0</h1>
-        <p><strong>Status:</strong> Production Ready âœ…</p>
+        <h1>🤖 Ask InnovAI Production v4.2.0</h1>
+        <p><strong>Status:</strong> Production Ready ✅</p>
         <p><strong>Features:</strong> Real Data Filters + Efficient Metadata Loading + Evaluation Grouping</p>
         <p><strong>Structure:</strong> Template_ID Collections with Program Extraction</p>
         <p>Admin interface file not found. Please ensure static/index.html exists.</p>
@@ -878,7 +878,7 @@ async def search_transcripts_endpoint(request: Request):
                 content={"error": "Query must be at least 2 characters long"}
             )
         
-        logger.info(f"ðŸŽ¯ TRANSCRIPT SEARCH REQUEST: '{query}' with filters: {filters}")
+        logger.info(f"🎯 TRANSCRIPT SEARCH REQUEST: '{query}' with filters: {filters}")
         
         # Perform transcript-only search
         results = search_transcripts_only(query, filters, size, highlight)
@@ -904,7 +904,7 @@ async def search_transcripts_endpoint(request: Request):
         )
         
     except Exception as e:
-        logger.error(f"âŒ Transcript search endpoint failed: {e}")
+        logger.error(f"❌ Transcript search endpoint failed: {e}")
         return JSONResponse(
             status_code=500,
             content={"error": f"Search failed: {str(e)}"}
@@ -934,7 +934,7 @@ async def search_transcripts_comprehensive_endpoint(request: Request):
                 content={"error": "Query must be at least 2 characters long"}
             )
         
-        logger.info(f"ðŸ” COMPREHENSIVE TRANSCRIPT SEARCH: '{query}' (display={display_size}, max_scan={max_scan})")
+        logger.info(f"🔍 COMPREHENSIVE TRANSCRIPT SEARCH: '{query}' (display={display_size}, max_scan={max_scan})")
         
         # Perform comprehensive search
         result = search_transcripts_comprehensive(query, filters, display_size, max_scan)
@@ -954,7 +954,7 @@ async def search_transcripts_comprehensive_endpoint(request: Request):
         )
         
     except Exception as e:
-        logger.error(f"âŒ Comprehensive transcript search endpoint failed: {e}")
+        logger.error(f"❌ Comprehensive transcript search endpoint failed: {e}")
         return JSONResponse(
             status_code=500,
             content={"error": f"Search failed: {str(e)}"}
@@ -978,7 +978,7 @@ async def search_transcript_context_endpoint(
         return JSONResponse(status_code=200, content=result)
         
     except Exception as e:
-        logger.error(f"âŒ Transcript context search failed: {e}")
+        logger.error(f"❌ Transcript context search failed: {e}")
         return JSONResponse(
             status_code=500,
             content={"error": f"Context search failed: {str(e)}"}
@@ -1008,7 +1008,7 @@ async def warmup_embedding_model():
         }
     
     # Start background loading if not already started
-    logger.info("ðŸ”¥ MANUAL MODEL WARMUP REQUESTED...")
+    logger.info("🔥 MANUAL MODEL WARMUP REQUESTED...")
     from threading import Thread
     background_thread = Thread(target=load_model_background, daemon=True)
     background_thread.start()
@@ -1196,7 +1196,7 @@ def extract_program_from_template(template_name: str, template_id: str = None, e
     for mapping in program_mappings:
         for pattern in mapping["patterns"]:
             if pattern in template_lower:
-                log_import(f"ðŸŽ¯ Program extracted: '{mapping['program']}' from template '{template_name}' (pattern: '{pattern}')")
+                log_import(f"🎯 Program extracted: '{mapping['program']}' from template '{template_name}' (pattern: '{pattern}')")
                 return mapping["program"]
     
     # Second pass: Check evaluation data for additional context
@@ -1223,7 +1223,7 @@ def extract_program_from_template(template_name: str, template_id: str = None, e
         return "Unknown"
     
     # Final fallback for PRODUCTION
-    log_import(f"âš ï¸ Could not extract program from template '{template_name}' - using fallback")
+    log_import(f"⚠️ Could not extract program from template '{template_name}' - using fallback")
     return "Not Captured"  # Default to Corporate instead of "Unknown Program"
 
 def clean_field_value(value, default=None):
@@ -1278,7 +1278,7 @@ def extract_comprehensive_metadata(evaluation: Dict[str, Any], program: str = No
     # Enhanced program extraction with evaluation context
     program = extract_program_from_template(template_name, template_id, evaluation)
     
-    # âœ… EXACT API FIELD NAMES - No transformations whatsoever
+    # ✅ EXACT API FIELD NAMES - No transformations whatsoever
     metadata = {
         # PRIMARY IDENTIFIERS (exact from your API)
         "evaluationId": evaluation.get("evaluationId"),           # camelCase from API
@@ -1286,7 +1286,7 @@ def extract_comprehensive_metadata(evaluation: Dict[str, Any], program: str = No
         "template_id": template_id,                               # snake_case from API
         "template_name": template_name,                           # snake_case from API
         
-        # âœ… AGENT FIELDS (exact from your API)
+        # ✅ AGENT FIELDS (exact from your API)
         "agentName": evaluation.get("agentName"),                 # camelCase from API
         "agentId": evaluation.get("agentId"),                     # camelCase from API
         
@@ -1298,11 +1298,11 @@ def extract_comprehensive_metadata(evaluation: Dict[str, Any], program: str = No
         "site": clean_field_value(evaluation.get("site"), "Unknown Site"),
         "lob": clean_field_value(evaluation.get("lob"), "Unknown LOB"),
         
-        # âœ… CALL DISPOSITION (exact from your API)
+        # ✅ CALL DISPOSITION (exact from your API)
         "disposition": clean_field_value(evaluation.get("disposition"), "Unknown Disposition"),
         "subDisposition": clean_field_value(evaluation.get("subDisposition"), None),  # camelCase from API
         
-        # âœ… ENHANCED FIELDS (exact from your API)
+        # ✅ ENHANCED FIELDS (exact from your API)
         "weighted_score": safe_int(evaluation.get("weighted_score")),    # snake_case from API
         "url": clean_field_value(evaluation.get("url")),                 # exact from API
         
@@ -1332,62 +1332,6 @@ def safe_float(value, default=0.0):
         return float(value)
     except (ValueError, TypeError):
         return default
-
-def extract_qa_pairs(evaluation_text: str) -> List[Dict[str, Any]]:
-    """Extract Question and Answer pairs from evaluation text - PRODUCTION version"""
-    if not evaluation_text:
-        return []
-    
-    # Clean HTML
-    soup = BeautifulSoup(evaluation_text, "html.parser")
-    clean_text = soup.get_text(" ", strip=True)
-    
-    qa_chunks = []
-    
-    # Split by sections first
-    sections = re.split(r'Section:\s*([^<\n]+?)(?=Section:|$)', clean_text, flags=re.IGNORECASE)
-    
-    for i in range(1, len(sections), 2):
-        if i + 1 < len(sections):
-            section_name = sections[i].strip()
-            section_content = sections[i + 1].strip()
-            
-            # Extract Q&A pairs from this section
-            qa_pattern = r'Question:\s*([^?]+\??)\s*Answer:\s*([^.]+\.?)'
-            matches = re.finditer(qa_pattern, section_content, re.IGNORECASE | re.DOTALL)
-            
-            for match in matches:
-                question = match.group(1).strip()
-                answer = match.group(2).strip()
-                qa_text = f"Section: {section_name}\nQuestion: {question}\nAnswer: {answer}"
-                
-                qa_chunks.append({
-                    "text": qa_text,
-                    "section": section_name,
-                    "question": question,
-                    "answer": answer,
-                    "content_type": "evaluation_qa"
-                })
-    
-    # Fallback: if no sections, try direct Q&A extraction
-    if not qa_chunks:
-        qa_pattern = r'Question:\s*([^?]+\??)\s*Answer:\s*([^.]+\.?)'
-        matches = re.finditer(qa_pattern, clean_text, re.IGNORECASE | re.DOTALL)
-        
-        for match in matches:
-            question = match.group(1).strip()
-            answer = match.group(2).strip()
-            qa_text = f"Question: {question}\nAnswer: {answer}"
-            
-            qa_chunks.append({
-                "text": qa_text,
-                "section": "General",
-                "question": question,
-                "answer": answer,
-                "content_type": "evaluation_qa"
-            })
-    
-    return qa_chunks
 
 def split_transcript_by_speakers(transcript: str) -> List[Dict[str, Any]]:
     """Split transcript while preserving speaker boundaries - PRODUCTION version"""
@@ -1499,7 +1443,7 @@ async def filter_options_metadata():
         # Check cache first
         cached_data = get_cached_filter_metadata()
         if cached_data:
-            logger.info(f"ðŸ“‹ Returning cached filter metadata (age: {cached_data.get('cache_age_seconds', 0):.1f}s)")
+            logger.info(f"📋 Returning cached filter metadata (age: {cached_data.get('cache_age_seconds', 0):.1f}s)")
             return cached_data
         
         from opensearch_client import get_opensearch_client, test_connection, detect_vector_support
@@ -1513,12 +1457,12 @@ async def filter_options_metadata():
             logger.error("Could not create OpenSearch client for filter options")
             return create_empty_filter_response("client_unavailable")
         
-        logger.info("ðŸš€ Loading filter metadata using efficient index-based approach...")
+        logger.info("🚀 Loading filter metadata using efficient index-based approach...")
         start_time = time.time()
 
         # STEP 1: Check vector search support
         vector_support = detect_vector_support(client) if client else False
-        logger.info(f"ðŸ”® Vector search support: {'âœ… ENABLED' if vector_support else 'âŒ DISABLED'}")
+        logger.info(f"🔮 Vector search support: {'✅ ENABLED' if vector_support else '❌ DISABLED'}")
         
         # STEP 2: Get all evaluation indices efficiently
         indices_info = await get_evaluation_indices_info(client)
@@ -1579,14 +1523,14 @@ async def filter_options_metadata():
         cache_filter_metadata(filter_options)
         
         # PRODUCTION logging
-        logger.info(f"âœ… EFFICIENT metadata loading completed in {filter_options['load_time_ms']}ms:")
-        logger.info(f"   ðŸ“ Indices analyzed: {len(indices_info)}")
-        logger.info(f"   ðŸ“‹ Templates: {len(templates_from_indices)} (from index names)")
-        logger.info(f"   ðŸ¢ Programs: {len(metadata_values.get('programs', []))}")
-        logger.info(f"   ðŸ¤ Partners: {len(metadata_values.get('partners', []))}")
-        logger.info(f"   ðŸ“Š Total evaluations: {filter_options['total_evaluations']:,}")
-        logger.info(f"   ðŸ”® Vector search: {'âœ… ENABLED' if vector_support else 'âŒ DISABLED'}")
-        logger.info(f"   ðŸ”¥ Hybrid search: {'âœ… AVAILABLE' if filter_options['hybrid_search_available'] else 'âŒ NOT AVAILABLE'}")
+        logger.info(f"✅ EFFICIENT metadata loading completed in {filter_options['load_time_ms']}ms:")
+        logger.info(f"   📁 Indices analyzed: {len(indices_info)}")
+        logger.info(f"   📋 Templates: {len(templates_from_indices)} (from index names)")
+        logger.info(f"   🏢 Programs: {len(metadata_values.get('programs', []))}")
+        logger.info(f"   🤝 Partners: {len(metadata_values.get('partners', []))}")
+        logger.info(f"   📊 Total evaluations: {filter_options['total_evaluations']:,}")
+        logger.info(f"   🔮 Vector search: {'✅ ENABLED' if vector_support else '❌ DISABLED'}")
+        logger.info(f"   🔥 Hybrid search: {'✅ AVAILABLE' if filter_options['hybrid_search_available'] else '❌ NOT AVAILABLE'}")
         
         return filter_options
         
@@ -1617,7 +1561,7 @@ async def get_evaluation_indices_info(client):
                 "size_bytes": size_bytes
             })
         
-        logger.info(f"ðŸ“Š Found {len(indices_info)} evaluation indices")
+        logger.info(f"📊 Found {len(indices_info)} evaluation indices")
         return indices_info
         
     except Exception as e:
@@ -1667,7 +1611,7 @@ def extract_templates_from_indices(indices_info):
                     templates.append(fallback_name)
                     seen_templates.add(fallback_name)
         
-        logger.info(f"ðŸ“‹ Extracted {len(templates)} templates from index sampling")
+        logger.info(f"📋 Extracted {len(templates)} templates from index sampling")
         return sorted(templates)
         
     except Exception as e:
@@ -1698,8 +1642,8 @@ async def get_available_metadata_fields(client, indices_info):
             if "document_embedding" in properties:
                 vector_fields.add("document_embedding")
         
-        logger.info(f"ðŸ” Available metadata fields: {sorted(available_fields)}")
-        logger.info(f"ðŸ”® Vector fields detected: {sorted(vector_fields)}")
+        logger.info(f"🔍 Available metadata fields: {sorted(available_fields)}")
+        logger.info(f"🔮 Vector fields detected: {sorted(vector_fields)}")
         return list(available_fields)
     
         
@@ -1803,7 +1747,7 @@ def get_cached_filter_metadata():
         # Check if cache is expired
         cache_age = time.time() - cache["timestamp"]
         if cache_age > cache["ttl_seconds"]:
-            logger.info(f"ðŸ“‹ Filter cache expired (age: {cache_age:.1f}s > {cache['ttl_seconds']}s)")
+            logger.info(f"📋 Filter cache expired (age: {cache_age:.1f}s > {cache['ttl_seconds']}s)")
             return None
         
         # Add cache metadata to response
@@ -1826,7 +1770,7 @@ def cache_filter_metadata(data):
         _filter_metadata_cache["data"] = data.copy()
         _filter_metadata_cache["timestamp"] = time.time()
         
-        logger.info(f"ðŸ“‹ Filter metadata cached for {_filter_metadata_cache['ttl_seconds']}s")
+        logger.info(f"📋 Filter metadata cached for {_filter_metadata_cache['ttl_seconds']}s")
         
     except Exception as e:
         logger.warning(f"Failed to cache filter metadata: {e}")
@@ -1888,7 +1832,7 @@ async def get_evaluation_by_id(evaluation_id: str):
             "size": 1
         }
         
-        logger.info(f"ðŸ” Looking up evaluation ID: {evaluation_id}")
+        logger.info(f"🔍 Looking up evaluation ID: {evaluation_id}")
         
         response = client.search(index="eval-*", body=query)
         hits = response.get("hits", {}).get("hits", [])
@@ -1908,7 +1852,7 @@ async def get_evaluation_by_id(evaluation_id: str):
             hits = response.get("hits", {}).get("hits", [])
             
             if not hits:
-                logger.warning(f"âŒ Evaluation {evaluation_id} not found in database")
+                logger.warning(f"❌ Evaluation {evaluation_id} not found in database")
                 raise HTTPException(status_code=404, detail=f"Evaluation ID '{evaluation_id}' not found in the database")
         
         # Extract the evaluation data
@@ -1917,12 +1861,12 @@ async def get_evaluation_by_id(evaluation_id: str):
         # ENHANCED: Use the transcript extraction function
         extracted_transcript = _extract_transcript_text(hits[0])
         
-        logger.info(f"âœ… Found evaluation {evaluation_id} in index: {hits[0]['_index']}")
+        logger.info(f"✅ Found evaluation {evaluation_id} in index: {hits[0]['_index']}")
 
         if extracted_transcript:
-            logger.info(f"ðŸ“ Transcript extracted: {len(extracted_transcript)} characters")
+            logger.info(f"📝 Transcript extracted: {len(extracted_transcript)} characters")
         else:
-            logger.info("ðŸ“ No transcript data found for this evaluation")
+            logger.info("📝 No transcript data found for this evaluation")
             # Debug: Log what fields are available
             available_fields = list(source.keys())
             logger.debug(f"Available fields in document: {available_fields}")
@@ -1985,7 +1929,7 @@ async def get_evaluation_by_id(evaluation_id: str):
         # Re-raise HTTP exceptions (like 404)
         raise
     except Exception as e:
-        logger.error(f"âŒ Error retrieving evaluation {evaluation_id}: {str(e)}")
+        logger.error(f"❌ Error retrieving evaluation {evaluation_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error retrieving evaluation: {str(e)}")
 
 @app.post("/clear_filter_cache")
@@ -2049,7 +1993,7 @@ async def debug_routes():
 @app.get("/debug/test_vector_search")
 async def debug_test_vector_search(query: str = "customer service"):
     """
-    âœ… NEW: Test vector search functionality
+    ✅ NEW: Test vector search functionality
     """
     if not VECTOR_SEARCH_READY:
         return {
@@ -2078,7 +2022,7 @@ async def debug_test_vector_search(query: str = "customer service"):
             }
         
         # Generate query vector
-        logger.info(f"ðŸ”® Testing vector search with query: '{query}'")
+        logger.info(f"🔮 Testing vector search with query: '{query}'")
         query_vector = embed_text(query)
         
         # Perform vector search
@@ -2121,7 +2065,7 @@ async def debug_test_vector_search(query: str = "customer service"):
         }
         
     except Exception as e:
-        logger.error(f"âŒ Vector search test failed: {e}")
+        logger.error(f"❌ Vector search test failed: {e}")
         return {
             "status": "error",
             "error": str(e),
@@ -2244,9 +2188,9 @@ async def check_transcript_field():
                 if results["documents_checked"] > 0 else 0
             ),
             "recommendation": (
-                "âœ… Transcript field found! Update _extract_transcript_text to use src.get('transcript')"
+                "✅ Transcript field found! Update _extract_transcript_text to use src.get('transcript')"
                 if results["has_transcript_field"] > 0
-                else "âŒ No 'transcript' field found - check your data import"
+                else "❌ No 'transcript' field found - check your data import"
             )
         }
         
@@ -2404,11 +2348,11 @@ async def test_transcript_search():
                 "transcript_search_working": any_found,
                 "transcript_field_accessible": any_with_transcript,
                 "recommendation": (
-                    "âœ… Transcripts are searchable and accessible!"
+                    "✅ Transcripts are searchable and accessible!"
                     if any_with_transcript
-                    else "âš ï¸ Search works but transcript field not found - check field mapping"
+                    else "⚠️ Search works but transcript field not found - check field mapping"
                     if any_found
-                    else "âŒ Transcript content not searchable - check indexing"
+                    else "❌ Transcript content not searchable - check indexing"
                 )
             }
         })
@@ -2519,13 +2463,13 @@ async def test_extract_function():
         
         # Final status
         if comparison["function_works"]:
-            status = "âœ… EXTRACTION WORKING!"
+            status = "✅ EXTRACTION WORKING!"
             recommendation = "Your _extract_transcript_text function is working correctly"
         elif comparison["direct_access_works"]:
-            status = "âš ï¸ Transcript exists but extraction failing"
+            status = "⚠️ Transcript exists but extraction failing"
             recommendation = "Update _extract_transcript_text to: return src.get('transcript', '')"
         else:
-            status = "âŒ No transcript found"
+            status = "❌ No transcript found"
             recommendation = "Check your data import - transcript field is missing"
         
         return JSONResponse(content={
@@ -2654,7 +2598,7 @@ async def full_transcript_diagnostic():
             }
             
             if not diagnostics["1_document_structure"]["has_transcript"]:
-                diagnostics["fix_instructions"].append("âŒ No 'transcript' field found in documents")
+                diagnostics["fix_instructions"].append("❌ No 'transcript' field found in documents")
         
         # 2. Field content check
         if "transcript" in source:
@@ -2706,11 +2650,11 @@ async def full_transcript_diagnostic():
                 
                 if not extracted and "transcript" in hit.get("_source", {}):
                     diagnostics["fix_instructions"].append(
-                        "âŒ _extract_transcript_text not working. Check field priority order."
+                        "❌ _extract_transcript_text not working. Check field priority order."
                     )
                 elif extracted and ("Question:" in extracted):
                     diagnostics["fix_instructions"].append(
-                        "âš ï¸ Extracting Q&A format instead of conversation. Update field priority in _extract_transcript_text."
+                        "⚠️ Extracting Q&A format instead of conversation. Update field priority in _extract_transcript_text."
                     )
                     
             except Exception as e:
@@ -2727,13 +2671,13 @@ async def full_transcript_diagnostic():
                 "context_built": bool(context),
                 "context_length": len(context),
                 "sources_found": len(sources),
-                "has_transcript_sections": "ðŸ“ TRANSCRIPT:" in context if context else False,
+                "has_transcript_sections": "📝 TRANSCRIPT:" in context if context else False,
                 "context_preview": context[:500] if context else "No context built"
             }
             
             if not diagnostics["5_context_build"]["has_transcript_sections"]:
                 diagnostics["fix_instructions"].append(
-                    "âŒ Context doesn't contain transcript sections. Check transcript extraction in build_search_context."
+                    "❌ Context doesn't contain transcript sections. Check transcript extraction in build_search_context."
                 )
                 
         except Exception as e:
@@ -2749,18 +2693,18 @@ async def full_transcript_diagnostic():
         uses_conversation_format = diagnostics["4_extraction_test"].get("is_conversation_format", False)
         
         if has_transcripts and extraction_works and context_has_transcripts and uses_conversation_format:
-            diagnostics["final_status"] = "âœ… SYSTEM FULLY OPERATIONAL - Transcripts are working perfectly!"
+            diagnostics["final_status"] = "✅ SYSTEM FULLY OPERATIONAL - Transcripts are working perfectly!"
         elif has_transcripts and extraction_works and uses_conversation_format:
-            diagnostics["final_status"] = "âš ï¸ Extraction working but not included in chat context"
+            diagnostics["final_status"] = "⚠️ Extraction working but not included in chat context"
             diagnostics["fix_instructions"].append("Check build_search_context function")
         elif has_transcripts and extraction_works:
-            diagnostics["final_status"] = "âš ï¸ Extracting Q&A instead of conversations"
+            diagnostics["final_status"] = "⚠️ Extracting Q&A instead of conversations"
             diagnostics["fix_instructions"].append("Update _extract_transcript_text field priority")
         elif has_transcripts:
-            diagnostics["final_status"] = "âŒ Transcripts exist but extraction failing"
+            diagnostics["final_status"] = "❌ Transcripts exist but extraction failing"
             diagnostics["fix_instructions"].append("Fix _extract_transcript_text function")
         else:
-            diagnostics["final_status"] = "âŒ No transcript data found in documents"
+            diagnostics["final_status"] = "❌ No transcript data found in documents"
             diagnostics["fix_instructions"].append("Check data import process")
         
         return JSONResponse(content=diagnostics)
@@ -2769,14 +2713,14 @@ async def full_transcript_diagnostic():
         import traceback
         diagnostics["error"] = str(e)
         diagnostics["traceback"] = traceback.format_exc()
-        diagnostics["final_status"] = "âŒ Diagnostic failed"
+        diagnostics["final_status"] = "❌ Diagnostic failed"
         
         return JSONResponse(content=diagnostics)
 
 @app.get("/debug/test_hybrid_search")
 async def debug_test_hybrid_search(query: str = "call dispositions"):
     """
-    âœ… NEW: Test hybrid search functionality (text + vector)
+    ✅ NEW: Test hybrid search functionality (text + vector)
     """
     if not VECTOR_SEARCH_READY:
         return {
@@ -2803,7 +2747,7 @@ async def debug_test_hybrid_search(query: str = "call dispositions"):
             }
         
         # Generate query vector
-        logger.info(f"ðŸ”¥ Testing hybrid search with query: '{query}'")
+        logger.info(f"🔥 Testing hybrid search with query: '{query}'")
         query_vector = embed_text(query)
         
         # Perform hybrid search with different vector weights
@@ -2865,7 +2809,7 @@ async def debug_test_hybrid_search(query: str = "call dispositions"):
         }
         
     except Exception as e:
-        logger.error(f"âŒ Hybrid search test failed: {e}")
+        logger.error(f"❌ Hybrid search test failed: {e}")
         return {
             "status": "error",
             "error": str(e),
@@ -3006,20 +2950,20 @@ async def cleanup_memory_after_batch():
                     cache_info = service._cached_embed_single.cache_info()
                     if cache_info.currsize > 100:
                         service._cached_embed_single.cache_clear()
-                        log_import(f"ðŸ§¹ Cleared embedding LRU cache ({cache_info.currsize} entries)")
+                        log_import(f"🧹 Cleared embedding LRU cache ({cache_info.currsize} entries)")
             except Exception as e:
-                log_import(f"âš ï¸ Could not clear embedding cache: {str(e)[:50]}")
+                log_import(f"⚠️ Could not clear embedding cache: {str(e)[:50]}")
         
         # Force garbage collection
         collected = gc.collect()
         if collected > 0:
-            log_import(f"ðŸ§¹ Garbage collected {collected} objects")
+            log_import(f"🧹 Garbage collected {collected} objects")
         
         # Small delay to let cleanup complete
         await asyncio.sleep(0.1)
         
     except Exception as e:
-        log_import(f"âš ï¸ Memory cleanup error: {str(e)[:100]}")
+        log_import(f"⚠️ Memory cleanup error: {str(e)[:100]}")
 
 # ============================================================================
 # PRODUCTION EVALUATION PROCESSING 
@@ -3055,30 +2999,14 @@ async def process_evaluation(evaluation: Dict) -> Dict:
             from embedder import embed_text, embed_texts
             import numpy as np
 
-            evaluation_text = evaluation.get("evaluation", "")
+            # evaluation_text = evaluation.get("evaluation", "")
             transcript_text = evaluation.get("transcript", "")
 
-            if not evaluation_text and not transcript_text:
+            if not transcript_text:
                 log_evaluation_skip(evaluation_id, "no_content", template_name)
                 return {"status": "skipped", "reason": "no_content"}
 
-            all_chunks = []
-
-            # Extract QA chunks
-            if evaluation_text:
-                qa_chunks = extract_qa_pairs(evaluation_text)
-                for i, qa_data in enumerate(qa_chunks):
-                    if len(qa_data["text"].strip()) >= 20:
-                        chunk_data = {
-                            "text": qa_data["text"],
-                            "content_type": "evaluation_qa",
-                            "chunk_index": len(all_chunks),
-                            "section": qa_data.get("section", "General"),
-                            "question": qa_data.get("question", ""),
-                            "answer": qa_data.get("answer", ""),
-                            "qa_pair_index": i
-                        }
-                        all_chunks.append(chunk_data)
+            all_chunks = []           
 
             # Extract transcript chunks
             if transcript_text:
@@ -3098,7 +3026,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
 
             if not all_chunks:
                 log_evaluation_skip(evaluation_id, "no_meaningful_content", template_name, 
-                                  {"total_content_length": len(evaluation_text + transcript_text)})
+                                  {"total_content_length": len(transcript_text)})
                 return {"status": "skipped", "reason": "no_meaningful_content"}
 
             comprehensive_metadata = extract_comprehensive_metadata(evaluation)
@@ -3135,7 +3063,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                         if i + batch_size < len(chunk_texts):
                             await asyncio.sleep(0.1)
                 except Exception as e:
-                    logger.warning(f"âš ï¸ Embedding failed for eval {evaluation_id}: {e}")
+                    logger.warning(f"⚠️ Embedding failed for eval {evaluation_id}: {e}")
 
             full_text = "\n\n".join([chunk["text"] for chunk in all_chunks])
 
@@ -3145,7 +3073,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 try:
                     document_embedding = np.mean(chunk_embeddings, axis=0).tolist()
                 except Exception as e:
-                    logger.warning(f"âš ï¸ Failed document embedding for eval {evaluation_id}: {e}")
+                    logger.warning(f"⚠️ Failed document embedding for eval {evaluation_id}: {e}")
 
             def normalize_datetime(val):
                 try:
@@ -3177,14 +3105,10 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 "created_on": created_on,
                 "call_duration": evaluation.get("call_duration"),
                 "language": evaluation.get("language"),
-                "evaluation": evaluation_text,
-                "transcript": transcript_text,
-                "evaluation_text": evaluation_text,
-                "transcript_text": transcript_text,
+                "transcript": transcript_text,                
                 "full_text": full_text,
                 "document_embedding": document_embedding,
-                "total_chunks": len(all_chunks),
-                "evaluation_chunks_count": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
+                "total_chunks": len(all_chunks),                
                 "transcript_chunks_count": len([c for c in all_chunks if c["content_type"] == "transcript"]),
                 "chunks": [
                     {**chunk, "embedding": chunk_embeddings[i]} if i < len(chunk_embeddings) else chunk
@@ -3195,7 +3119,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 "indexed_at": datetime.now().isoformat(),
                 "collection_name": collection,
                 "collection_source": f"template_id_{template_id}",
-                "version": "5.0.0_enhanced_logging"
+                "version": "6.1.0_enhanced_logging"
             }
 
             try:
@@ -3216,8 +3140,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 "template_name": evaluation.get("template_name"),
                 "agentName": evaluation.get("agentName"),
                 "agentId": evaluation.get("agentId"),
-                "subDisposition": evaluation.get("subDisposition"),
-                "weighted_score": evaluation.get("weighted_score"),
+                "subDisposition": evaluation.get("subDisposition"),               
                 "partner": evaluation.get("partner"),
                 "site": evaluation.get("site"),
                 "lob": evaluation.get("lob"),
@@ -3227,8 +3150,7 @@ async def process_evaluation(evaluation: Dict) -> Dict:
                 "language": evaluation.get("language"),
                 "program": comprehensive_metadata.get("program"),
                 "collection": collection,
-                "total_chunks": len(all_chunks),
-                "evaluation_chunks": len([c for c in all_chunks if c["content_type"] == "evaluation_qa"]),
+                "total_chunks": len(all_chunks),                
                 "transcript_chunks": len([c for c in all_chunks if c["content_type"] == "transcript"]),
                 "total_content_length": sum(len(chunk["text"]) for chunk in all_chunks),
                 "has_embeddings": bool(chunk_embeddings),
@@ -3258,34 +3180,31 @@ def log_import_summary():
         return
     
     logger.info("=" * 60)
-    logger.info("ðŸ“Š IMPORT SUMMARY")
+    logger.info("📊 IMPORT SUMMARY")
     logger.info("=" * 60)
     
     success_pct = (processing_stats["total_processed"] / total_attempted) * 100
     skip_pct = (processing_stats["total_skipped"] / total_attempted) * 100
     error_pct = (processing_stats["total_errors"] / total_attempted) * 100
     
-    logger.info(f"âœ… PROCESSED: {processing_stats['total_processed']} ({success_pct:.1f}%)")
-    logger.info(f"â­ï¸ SKIPPED: {processing_stats['total_skipped']} ({skip_pct:.1f}%)")
-    logger.info(f"âŒ ERRORS: {processing_stats['total_errors']} ({error_pct:.1f}%)")
-    logger.info(f"ðŸ“Š TOTAL: {total_attempted}")
+    logger.info(f"✅ PROCESSED: {processing_stats['total_processed']} ({success_pct:.1f}%)")
+    logger.info(f"⏭️ SKIPPED: {processing_stats['total_skipped']} ({skip_pct:.1f}%)")
+    logger.info(f"❌ ERRORS: {processing_stats['total_errors']} ({error_pct:.1f}%)")
+    logger.info(f"📊 TOTAL: {total_attempted}")
     
     if processing_stats["total_skipped"] > 0:
         logger.info("")
-        logger.info("ðŸ” SKIP BREAKDOWN:")
+        logger.info("🔍 SKIP BREAKDOWN:")
         if processing_stats["duplicates_found"] > 0:
-            logger.info(f"   ðŸ”„ Duplicates: {processing_stats['duplicates_found']}")
+            logger.info(f"   🔄 Duplicates: {processing_stats['duplicates_found']}")
         if processing_stats["empty_transcripts"] > 0:
-            logger.info(f"   ðŸ“ Empty Transcripts: {processing_stats['empty_transcripts']}")
+            logger.info(f"   📝 Empty Transcripts: {processing_stats['empty_transcripts']}")
         if processing_stats["empty_evaluations"] > 0:
-            logger.info(f"   ðŸ“‹ Empty Evaluations: {processing_stats['empty_evaluations']}")
+            logger.info(f"   📋 Empty Evaluations: {processing_stats['empty_evaluations']}")
         if processing_stats["missing_fields"] > 0:
-            logger.info(f"   ðŸ”‘ Missing Fields: {processing_stats['missing_fields']}")
+            logger.info(f"   🔑 Missing Fields: {processing_stats['missing_fields']}")
     
     logger.info("=" * 60)
-
-# Add this call at the very end of your import_evaluations function:
-# log_import_summary()
 
 # ============================================================================
 # PRODUCTION API FETCHING (Keeping existing)
@@ -3346,9 +3265,9 @@ async def fetch_evaluations(
                 start_date_obj = datetime.strptime(call_date_start, "%Y-%m-%d")
                 api_date_format = start_date_obj.strftime("%m/%d/%Y")
                 params["date"] = api_date_format
-                logger.info(f"ðŸ“… API DATE START: {call_date_start} â†’ {api_date_format}")
+                logger.info(f"📅 API DATE START: {call_date_start} → {api_date_format}")
             except ValueError as e:
-                logger.error(f"âŒ Invalid start date format: {call_date_start} (expected YYYY-MM-DD)")
+                logger.error(f"❌ Invalid start date format: {call_date_start} (expected YYYY-MM-DD)")
                 raise Exception(f"Invalid start date format: {call_date_start}")
 
         if call_date_end:
@@ -3362,21 +3281,21 @@ async def fetch_evaluations(
                 params["end_date"] = api_end_date_format  # Most common
                 # Note: If this doesn't work, we'll need to test others
                 
-                logger.info(f"ðŸ“… API END DATE: {call_date_end} â†’ {api_end_date_format}")
+                logger.info(f"📅 API END DATE: {call_date_end} → {api_end_date_format}")
             except ValueError as e:
-                logger.error(f"âŒ Invalid end date format: {call_date_end} (expected YYYY-MM-DD)")
+                logger.error(f"❌ Invalid end date format: {call_date_end} (expected YYYY-MM-DD)")
                 raise Exception(f"Invalid end date format: {call_date_end}")
         
         # API doesn't support limit, so we'll handle it client-side
         if max_docs:
-            logger.info(f"ðŸ“Š CLIENT-SIDE LIMIT: Will limit to {max_docs} after API returns results")
+            logger.info(f"📊 CLIENT-SIDE LIMIT: Will limit to {max_docs} after API returns results")
             logger.info(" API doesn't support 'limit' parameter - handling client-side")
         else:
-            logger.info("ðŸ“Š NO LIMIT: Will return all evaluations from API")
+            logger.info("📊 NO LIMIT: Will return all evaluations from API")
         
-        # âœ… LOG: The complete request with correct format
-        logger.info(f"ðŸŒ MetroCare API Request: {API_BASE_URL}")
-        logger.info(f"ðŸ“‹ Parameters (MetroCare format): {params}")
+        # ✅ LOG: The complete request with correct format
+        logger.info(f"🌐 MetroCare API Request: {API_BASE_URL}")
+        logger.info(f"📋 Parameters (MetroCare format): {params}")
         
         # Make request with retry logic
         max_retries = 3
@@ -3384,7 +3303,7 @@ async def fetch_evaluations(
 
         for attempt in range(max_retries):
             try:
-                logger.info(f"ðŸ”„ API request attempt {attempt + 1}/{max_retries}")
+                logger.info(f"🔄 API request attempt {attempt + 1}/{max_retries}")
                 response = requests.get(
                     API_BASE_URL, 
                     headers=headers, 
@@ -3396,7 +3315,7 @@ async def fetch_evaluations(
                     logger.info("API responded with HTTP 200")
                     break
                 elif response.status_code in [502, 503, 504] and attempt < max_retries - 1:
-                    logger.warning(f"âš ï¸ API returned {response.status_code}, retrying...")
+                    logger.warning(f"⚠️ API returned {response.status_code}, retrying...")
                     await asyncio.sleep(2 ** attempt)
                     continue
                 else:
@@ -3404,7 +3323,7 @@ async def fetch_evaluations(
                     
             except requests.exceptions.RequestException as e:
                 if attempt < max_retries - 1:
-                    logger.warning(f"âš ï¸ Request failed (attempt {attempt + 1}): {e}")
+                    logger.warning(f"⚠️ Request failed (attempt {attempt + 1}): {e}")
                     await asyncio.sleep(2 ** attempt)
                     continue
                 else:
@@ -3419,12 +3338,12 @@ async def fetch_evaluations(
         
         # ENHANCED: Log what we actually received from the API
         api_returned_count = len(evaluations)
-        logger.info(f"ðŸ“¥ API returned {api_returned_count} evaluations (after date filtering)")
+        logger.info(f"📥 API returned {api_returned_count} evaluations (after date filtering)")
 
         # NEW SECTION: Filter evaluations where updated > created_on
         
         if filter_updated_after_created and evaluations:
-            logger.info("ðŸ” APPLYING FILTER: Only evaluations where updated > created_on")
+            logger.info("🔍 APPLYING FILTER: Only evaluations where updated > created_on")
             
             filtered_evaluations = []
             skipped_count = 0
@@ -3451,15 +3370,15 @@ async def fetch_evaluations(
                     evaluation.get("modified_on")
                 )
 
-                # âœ… DEBUG LOGGING - Show exactly what we found
-                logger.info(f"ðŸ” Evaluation {eval_id}:")
+                # ✅ DEBUG LOGGING - Show exactly what we found
+                logger.info(f"🔍 Evaluation {eval_id}:")
                 logger.info(f"   created_on: {created_on}")
                 logger.info(f"   updated: {updated}")
                 
                 # Check if both dates exist
                 if not created_on or not updated:
                     missing_dates_count += 1
-                    logger.warning(f"âš ï¸ Missing dates for evaluation {eval_id}")
+                    logger.warning(f"⚠️ Missing dates for evaluation {eval_id}")
                     logger.warning(f"   created_on: {created_on}")
                     logger.warning(f"   updated: {updated}")
                     # Include evaluations with missing dates (safety fallback)
@@ -3495,41 +3414,41 @@ async def fetch_evaluations(
                     if updated_date > created_date:
                         filtered_evaluations.append(evaluation)
                         included_count += 1
-                        logger.info(f"âœ… Including evaluation {eval_id}: updated ({updated_date}) > created ({created_date})")
+                        logger.info(f"✅ Including evaluation {eval_id}: updated ({updated_date}) > created ({created_date})")
                     else:
                         skipped_count += 1
-                        logger.info(f"â­ Skipping evaluation {eval_id}: updated ({updated_date}) <= created ({created_date})")
+                        logger.info(f"⭐ Skipping evaluation {eval_id}: updated ({updated_date}) <= created ({created_date})")
                                 
                 except Exception as e:
                     parse_error_count += 1
-                    logger.warning(f"âŒ Could not parse dates for evaluation {eval_id}: {e}")
+                    logger.warning(f"❌ Could not parse dates for evaluation {eval_id}: {e}")
                     logger.warning(f"   created_on: {created_on}, updated: {updated}")
                     # Include if we can't parse dates (safety fallback)
                     filtered_evaluations.append(evaluation)
             
             # Log filtering summary
-            logger.info("ðŸ“Š FILTER SUMMARY:")
-            logger.info(f"   âœ… Included (updated > created): {included_count}")
-            logger.info(f"   â­ï¸ Skipped (updated <= created): {skipped_count}")
-            logger.info(f"   âš ï¸ Missing dates (included): {missing_dates_count}")
-            logger.info(f"   âŒ Parse errors (included): {parse_error_count}")
-            logger.info(f"   ðŸ“‹ Total before filter: {len(evaluations)}")
-            logger.info(f"   ðŸ“‹ Total after filter: {len(filtered_evaluations)}")
+            logger.info("📊 FILTER SUMMARY:")
+            logger.info(f"   ✅ Included (updated > created): {included_count}")
+            logger.info(f"   ⏭️ Skipped (updated <= created): {skipped_count}")
+            logger.info(f"   ⚠️ Missing dates (included): {missing_dates_count}")
+            logger.info(f"   ❌ Parse errors (included): {parse_error_count}")
+            logger.info(f"   📋 Total before filter: {len(evaluations)}")
+            logger.info(f"   📋 Total after filter: {len(filtered_evaluations)}")
             
             evaluations = filtered_evaluations
             
             # Log percentage filtered
             if api_returned_count > 0:
                 filter_percentage = (skipped_count / api_returned_count) * 100
-                logger.info(f"   ðŸ“ˆ Filter efficiency: {filter_percentage:.1f}% filtered out")
+                logger.info(f"   📈 Filter efficiency: {filter_percentage:.1f}% filtered out")
 
         # Apply max_docs limit if specified (after filtering)
         if max_docs and len(evaluations) > max_docs:
-            logger.info(f"ðŸ“Š CLIENT-SIDE LIMITING: {len(evaluations)} â†’ {max_docs} evaluations")
+            logger.info(f"📊 CLIENT-SIDE LIMITING: {len(evaluations)} → {max_docs} evaluations")
             evaluations = evaluations[:max_docs]
-            logger.info(f"âœ… Truncated to {len(evaluations)} evaluations")
+            logger.info(f"✅ Truncated to {len(evaluations)} evaluations")
         elif max_docs:
-            logger.info(f"ðŸ“Š NO LIMITING NEEDED: API returned {len(evaluations)} â‰¤ {max_docs} requested")
+            logger.info(f"📊 NO LIMITING NEEDED: API returned {len(evaluations)} ≤ {max_docs} requested")
 
         if evaluations:
             first_eval = evaluations[0]
@@ -3538,7 +3457,7 @@ async def fetch_evaluations(
             first_updated = first_eval.get("updated", "No updated date")
             first_created = first_eval.get("created_on", "No created date")
             
-            logger.info(f"ðŸ“… First evaluation: ID {first_id}, call_date: {first_date}")
+            logger.info(f"📅 First evaluation: ID {first_id}, call_date: {first_date}")
             logger.info(f"   - call_date: {first_date}")
             logger.info(f"   - created_on: {first_created}")
             logger.info(f"   - updated: {first_updated}")
@@ -3550,31 +3469,31 @@ async def fetch_evaluations(
                 last_updated = last_eval.get("updated", "No updated date")
                 last_created = last_eval.get("created_on", "No created date")
 
-                logger.info(f"ðŸ“… Last evaluation: ID {last_id}, call_date: {last_date}")
+                logger.info(f"📅 Last evaluation: ID {last_id}, call_date: {last_date}")
                 logger.info(f"   - call_date: {last_date}")
                 logger.info(f"   - created_on: {last_created}")
                 logger.info(f"   - updated: {last_updated}")
             
             # Verify date filtering worked
             if call_date_start:
-                logger.info(f"âœ… API DATE FILTERING WORKED: Results should be >= {call_date_start}")
+                logger.info(f"✅ API DATE FILTERING WORKED: Results should be >= {call_date_start}")
 
             if filter_updated_after_created:
-                logger.info("âœ… UPDATE FILTERING: Results include only modified evaluations")
+                logger.info("✅ UPDATE FILTERING: Results include only modified evaluations")
         else:
-            logger.warning("âŒ No evaluations returned by API")
+            logger.warning("❌ No evaluations returned by API")
             if call_date_start:
-                logger.info(f"ðŸ’¡ No evaluations found for date >= {params.get('date', 'N/A')}")
+                logger.info(f"💡 No evaluations found for date >= {params.get('date', 'N/A')}")
                 logger.info("   Try using an earlier date or check if evaluations exist for that period")
 
             if filter_updated_after_created:
-                logger.info("ðŸ’¡ No evaluations found where updated > created_on")
+                logger.info("💡 No evaluations found where updated > created_on")
                 logger.info("   This might mean no evaluations have been modified after creation")
 
         # Final success summary
         final_count = len(evaluations)
-        logger.info("ðŸŽ¯ HYBRID SUCCESS: API date filtering + client-side limiting")
-        logger.info(f"ðŸ“Š Final count: {final_count} evaluations")
+        logger.info("🎯 HYBRID SUCCESS: API date filtering + client-side limiting")
+        logger.info(f"📊 Final count: {final_count} evaluations")
 
         # Log applied filters summary
         filters_applied = []
@@ -3588,11 +3507,11 @@ async def fetch_evaluations(
             filters_applied.append(f"limit = {max_docs}")
         
         if filters_applied:
-            logger.info(f"ðŸ” Filters applied: {' | '.join(filters_applied)}")
+            logger.info(f"🔍 Filters applied: {' | '.join(filters_applied)}")
         
         return evaluations
     except Exception as e:
-        logger.error(f"âŒ FAILED to fetch evaluations from MetroCare API: {e}")
+        logger.error(f"❌ FAILED to fetch evaluations from MetroCare API: {e}")
         raise    
       
 
@@ -3604,19 +3523,19 @@ async def run_production_import(
     filter_updated_after_created: bool = True  # always filter for updated files
 ):
     """PRODUCTION: Import process with enhanced real data integration"""
-    log_import("ðŸ” Update filter: ALWAYS ON (only importing evaluations where updated_on > created_on)")
+    log_import("🔍 Update filter: ALWAYS ON (only importing evaluations where updated_on > created_on)")
     try:
         update_import_status("running", "Starting PRODUCTION import with real data integration")
-        log_import("ðŸš€ Starting PRODUCTION import: Real data filter system + Evaluation grouping")
+        log_import("🚀 Starting PRODUCTION import: Real data filter system + Evaluation grouping")
         
         # Log the new filter option
         if filter_updated_after_created:
-            log_import("ðŸ” Filter enabled: Only importing evaluations where updated > created_on")
+            log_import("🔍 Filter enabled: Only importing evaluations where updated > created_on")
 
         # Clear filter cache on import start
         _filter_metadata_cache["data"] = None
         _filter_metadata_cache["timestamp"] = None
-        log_import("ðŸ§¹ Cleared filter metadata cache for fresh import data")
+        log_import("🧹 Cleared filter metadata cache for fresh import data")
 
         # Memory management settings
         BATCH_SIZE = batch_size or int(os.getenv("IMPORT_BATCH_SIZE", "5"))
@@ -3624,12 +3543,12 @@ async def run_production_import(
         DELAY_BETWEEN_DOCS = float(os.getenv("DELAY_BETWEEN_DOCS", "0.5"))
         MEMORY_CLEANUP_INTERVAL = int(os.getenv("MEMORY_CLEANUP_INTERVAL", "1"))
 
-        log_import("ðŸ“Š PRODUCTION import configuration:")
-        log_import("   ðŸ”— Collections based on: template_ID")
-        log_import("   ðŸ“‹ Document grouping: evaluationID")
-        log_import(f"   ðŸ“¦ Batch size: {BATCH_SIZE}")
-        log_import(f"   â±ï¸ Delay between batches: {DELAY_BETWEEN_BATCHES}s")
-        log_import(f"   ðŸ§¹ Memory cleanup interval: {MEMORY_CLEANUP_INTERVAL} batches")
+        log_import("📊 PRODUCTION import configuration:")
+        log_import("   🔗 Collections based on: template_ID")
+        log_import("   📋 Document grouping: evaluationID")
+        log_import(f"   📦 Batch size: {BATCH_SIZE}")
+        log_import(f"   ⏱️ Delay between batches: {DELAY_BETWEEN_BATCHES}s")
+        log_import(f"   🧹 Memory cleanup interval: {MEMORY_CLEANUP_INTERVAL} batches")
        
        
         # Get initial memory usage
@@ -3638,9 +3557,9 @@ async def run_production_import(
             try:
                 process = psutil.Process(os.getpid())
                 initial_memory = process.memory_info().rss / 1024 / 1024  # MB
-                log_import(f"ðŸ’¾ Initial memory usage: {initial_memory:.1f} MB")
+                log_import(f"💾 Initial memory usage: {initial_memory:.1f} MB")
             except Exception as e:
-                log_import(f"âš ï¸ Memory monitoring failed: {e}")
+                log_import(f"⚠️ Memory monitoring failed: {e}")
 
         # Check OpenSearch connectivity
         update_import_status("running", "Checking OpenSearch connectivity")
@@ -3648,16 +3567,16 @@ async def run_production_import(
             from opensearch_client import test_connection
             
             if test_connection():
-                log_import("âœ… OpenSearch connection verified")
+                log_import("✅ OpenSearch connection verified")
             else:
                 error_msg = "OpenSearch connection failed - database may be unavailable"
-                log_import(f"âŒ {error_msg}")
+                log_import(f"❌ {error_msg}")
                 update_import_status("failed", error=error_msg)
                 return
                 
         except Exception as e:
             error_msg = f"OpenSearch connection check failed: {str(e)}"
-            log_import(f"âŒ {error_msg}")
+            log_import(f"❌ {error_msg}")
             update_import_status("failed", error=error_msg)        
             return
         
@@ -3667,25 +3586,25 @@ async def run_production_import(
             max_docs=max_docs,
             call_date_start=call_date_start,
             call_date_end=call_date_end,
-            filter_updated_after_created=filter_updated_after_created  # âœ… PASS THE NEW PARAMETER
+            filter_updated_after_created=filter_updated_after_created  # ✅ PASS THE NEW PARAMETER
         )
-        logger.info(f"ðŸ” DEBUG: fetch_evaluations returned {len(evaluations) if evaluations else 0} evaluations")
-        logger.info(f"ðŸ” DEBUG: evaluations is None: {evaluations is None}")
-        logger.info(f"ðŸ” DEBUG: evaluations is empty list: {evaluations == []}")    
+        logger.info(f"🔍 DEBUG: fetch_evaluations returned {len(evaluations) if evaluations else 0} evaluations")
+        logger.info(f"🔍 DEBUG: evaluations is None: {evaluations is None}")
+        logger.info(f"🔍 DEBUG: evaluations is empty list: {evaluations == []}")    
       
 
         if evaluations:
-            logger.info(f"ðŸ” DEBUG: First evaluation ID: {evaluations[0].get('evaluationId', 'NO_ID')}")
-            logger.info(f"ðŸ” DEBUG: First evaluation keys: {list(evaluations[0].keys())[:10]}")  # Show first 10 keys
+            logger.info(f"🔍 DEBUG: First evaluation ID: {evaluations[0].get('evaluationId', 'NO_ID')}")
+            logger.info(f"🔍 DEBUG: First evaluation keys: {list(evaluations[0].keys())[:10]}")  # Show first 10 keys
 
             # Check for updated field
             if evaluations[0].get('updated'):
-                logger.info("âœ… 'updated' field found in first evaluation")
+                logger.info("✅ 'updated' field found in first evaluation")
             else:
-                logger.warning("âš ï¸ 'updated' field NOT found in first evaluation")
+                logger.warning("⚠️ 'updated' field NOT found in first evaluation")
 
         if not evaluations:
-            log_import("âŒ No evaluations returned from API - nothing to process")
+            log_import("❌ No evaluations returned from API - nothing to process")
             results = {
                 "total_documents_processed": 0, 
                 "total_chunks_indexed": 0, 
@@ -3697,7 +3616,7 @@ async def run_production_import(
             update_import_status("completed", results=results)
             return   
         # Process evaluations with PRODUCTION structure
-        log_import(f"âœ… Processing {len(evaluations)} evaluations")
+        log_import(f"✅ Processing {len(evaluations)} evaluations")
         update_import_status("running", f"Processing {len(evaluations)} evaluations with PRODUCTION real data integration")
         
         total_processed = 0
@@ -3715,7 +3634,7 @@ async def run_production_import(
             batch = evaluations[batch_start:batch_end]
             batch_count += 1
             
-            log_import(f"ðŸ“¦ Processing batch {batch_count}/{(len(evaluations) + BATCH_SIZE - 1)//BATCH_SIZE} ({len(batch)} evaluations)")
+            log_import(f"📦 Processing batch {batch_count}/{(len(evaluations) + BATCH_SIZE - 1)//BATCH_SIZE} ({len(batch)} evaluations)")
             update_import_status("running", f"Processing batch {batch_count}: evaluations {batch_start + 1}-{batch_end}/{len(evaluations)}")
             
             # Memory check before batch
@@ -3724,7 +3643,7 @@ async def run_production_import(
                 try:
                     process = psutil.Process(os.getpid())
                     current_memory = process.memory_info().rss / 1024 / 1024  # MB
-                    log_import(f"ðŸ’¾ Memory before batch {batch_count}: {current_memory:.1f} MB")
+                    log_import(f"💾 Memory before batch {batch_count}: {current_memory:.1f} MB")
                 except Exception:
                     current_memory = None
             
@@ -3737,10 +3656,10 @@ async def run_production_import(
             for i, evaluation in enumerate(batch):
                 actual_index = batch_start + i
                 eval_id = evaluation.get('evaluationId', 'NO_ID')
-                log_import(f"ðŸ” Processing evaluation {actual_index + 1}/{len(evaluations)}: {eval_id}")
+                log_import(f"🔍 Processing evaluation {actual_index + 1}/{len(evaluations)}: {eval_id}")
 
                 if filter_updated_after_created and not _updated_after_created(evaluation):
-                    log_import(f"â­ï¸ Skipping evaluation {eval_id}: updated_on <= created_on or timestamps missing")
+                    log_import(f"⏭️ Skipping evaluation {eval_id}: updated_on <= created_on or timestamps missing")
                     continue
                 
                 try:
@@ -3758,7 +3677,7 @@ async def run_production_import(
                         if result.get("program"):
                             program_stats[result["program"]] += 1
                             
-                        log_import(f"âœ… Evaluation {result['evaluationId']}: {result['total_chunks']} chunks â†’ Collection '{result['collection']}' | Program: '{result['program']}'")
+                        log_import(f"✅ Evaluation {result['evaluationId']}: {result['total_chunks']} chunks → Collection '{result['collection']}' | Program: '{result['program']}'")
                         
                     elif result["status"] == "error":
                         errors += 1
@@ -3770,31 +3689,31 @@ async def run_production_import(
                             consecutive_opensearch_errors += 1
                             batch_opensearch_errors += 1
                             
-                            log_import(f"âš ï¸ OpenSearch error {opensearch_errors} (consecutive: {consecutive_opensearch_errors}): {error_msg[:100]}")
+                            log_import(f"⚠️ OpenSearch error {opensearch_errors} (consecutive: {consecutive_opensearch_errors}): {error_msg[:100]}")
                             
                             # If too many consecutive errors, increase delays
                             if consecutive_opensearch_errors >= 3:
                                 delay = min(consecutive_opensearch_errors * 2, 10)
-                                log_import(f"ðŸ”„ Increasing delay to {delay}s due to consecutive errors")
+                                log_import(f"🔄 Increasing delay to {delay}s due to consecutive errors")
                                 await asyncio.sleep(delay)
                         else:
-                            log_import(f"âš ï¸ Non-OpenSearch error: {error_msg[:100]}")
+                            log_import(f"⚠️ Non-OpenSearch error: {error_msg[:100]}")
                     
                     elif result["status"] == "skipped":
                         reason = result.get("reason", "unknown")
-                        log_import(f"â­ï¸ Skipped evaluation: {reason}")
+                        log_import(f"⏭️ Skipped evaluation: {reason}")
                     
                     # If too many OpenSearch errors total, stop the import
                     if opensearch_errors > 15:
                         error_msg = f"Too many OpenSearch connection errors ({opensearch_errors}). Stopping import."
-                        log_import(f"âŒ {error_msg}")
+                        log_import(f"❌ {error_msg}")
                         update_import_status("failed", error=error_msg)
                         return
                     
                     # If too many consecutive errors, stop the import
                     if consecutive_opensearch_errors >= 8:
                         error_msg = f"Too many consecutive OpenSearch errors ({consecutive_opensearch_errors}). Cluster may be unavailable."
-                        log_import(f"âŒ {error_msg}")
+                        log_import(f"❌ {error_msg}")
                         update_import_status("failed", error=error_msg)
                         return
                     
@@ -3804,18 +3723,18 @@ async def run_production_import(
                 
                 except Exception as e:
                     errors += 1
-                    log_import(f"âŒ Unexpected error processing evaluation {actual_index}: {str(e)[:100]}")
+                    log_import(f"❌ Unexpected error processing evaluation {actual_index}: {str(e)[:100]}")
             
             # Update totals after batch
             total_processed += batch_processed
             total_chunks += batch_chunks
             total_evaluations_indexed += batch_evaluations_indexed
             
-            log_import(f"ðŸ“Š Batch {batch_count} completed: {batch_processed}/{len(batch)} evaluations, {batch_chunks} total chunks, {batch_evaluations_indexed} documents indexed")
+            log_import(f"📊 Batch {batch_count} completed: {batch_processed}/{len(batch)} evaluations, {batch_chunks} total chunks, {batch_evaluations_indexed} documents indexed")
             
             # Memory cleanup after batch
             if batch_count % MEMORY_CLEANUP_INTERVAL == 0:
-                log_import(f"ðŸ§¹ Performing memory cleanup after batch {batch_count}")
+                log_import(f"🧹 Performing memory cleanup after batch {batch_count}")
                 await cleanup_memory_after_batch()
                 
                 # Check memory after cleanup
@@ -3824,14 +3743,14 @@ async def run_production_import(
                         process = psutil.Process(os.getpid())
                         memory_after_cleanup = process.memory_info().rss / 1024 / 1024  # MB
                         memory_saved = current_memory - memory_after_cleanup if current_memory else 0
-                        log_import(f"ðŸ’¾ Memory after cleanup: {memory_after_cleanup:.1f} MB (saved: {memory_saved:.1f} MB)")
+                        log_import(f"💾 Memory after cleanup: {memory_after_cleanup:.1f} MB (saved: {memory_saved:.1f} MB)")
                     except Exception:
                         pass
             
             # Adjust delay based on OpenSearch errors
             if batch_opensearch_errors >= 2:
                 extended_delay = DELAY_BETWEEN_BATCHES + (batch_opensearch_errors * 2)
-                log_import(f"ðŸ”„ Batch had {batch_opensearch_errors} OpenSearch errors, extending delay to {extended_delay}s")
+                log_import(f"🔄 Batch had {batch_opensearch_errors} OpenSearch errors, extending delay to {extended_delay}s")
                 await asyncio.sleep(extended_delay)
             else:
                 await asyncio.sleep(DELAY_BETWEEN_BATCHES)
@@ -3841,13 +3760,13 @@ async def run_production_import(
             del batch
         
         # Complete with final memory cleanup
-        log_import("ðŸ§¹ Performing final memory cleanup")
+        log_import("🧹 Performing final memory cleanup")
         await cleanup_memory_after_batch()
         
         # Clear filter cache after successful import to force refresh
         _filter_metadata_cache["data"] = None
         _filter_metadata_cache["timestamp"] = None
-        log_import("ðŸ§¹ Cleared filter metadata cache - will refresh on next request")
+        log_import("🧹 Cleared filter metadata cache - will refresh on next request")
         
         # Final memory check
         final_memory = None
@@ -3857,7 +3776,7 @@ async def run_production_import(
                 process = psutil.Process(os.getpid())
                 final_memory = process.memory_info().rss / 1024 / 1024  # MB
                 memory_change = final_memory - initial_memory if initial_memory else 0
-                log_import(f"ðŸ’¾ Final memory usage: {final_memory:.1f} MB (change: {memory_change:+.1f} MB)")
+                log_import(f"💾 Final memory usage: {final_memory:.1f} MB (change: {memory_change:+.1f} MB)")
             except Exception:
                 pass
 
@@ -3886,23 +3805,23 @@ async def run_production_import(
             "version": "5.2.0_production"
         }
         
-        log_import("ðŸŽ‰ PRODUCTION import completed:")
-        log_import(f"   ðŸ“„ Evaluations processed: {total_processed}/{len(evaluations)}")
-        log_import(f"   ðŸ“‹ Documents indexed: {total_evaluations_indexed} (1 per evaluation)")
-        log_import(f"   ðŸ§© Total chunks processed: {total_chunks} (grouped within documents)")
-        log_import(f"   ðŸ“ Template collections created: {len(template_collections)}")
-        log_import(f"   ðŸ¢ Program distribution: {dict(program_stats)}")
-        log_import(f"   âŒ Total errors: {errors}")
-        log_import(f"   ðŸ”Œ OpenSearch errors: {opensearch_errors}")
-        log_import(f"   ðŸ“Š Success rate: {results['success_rate']}")
-        log_import(f"   ðŸ’¾ Memory change: {memory_change:+.1f} MB")
+        log_import("🎉 PRODUCTION import completed:")
+        log_import(f"   📄 Evaluations processed: {total_processed}/{len(evaluations)}")
+        log_import(f"   📋 Documents indexed: {total_evaluations_indexed} (1 per evaluation)")
+        log_import(f"   🧩 Total chunks processed: {total_chunks} (grouped within documents)")
+        log_import(f"   📁 Template collections created: {len(template_collections)}")
+        log_import(f"   🏢 Program distribution: {dict(program_stats)}")
+        log_import(f"   ❌ Total errors: {errors}")
+        log_import(f"   🔌 OpenSearch errors: {opensearch_errors}")
+        log_import(f"   📊 Success rate: {results['success_rate']}")
+        log_import(f"   💾 Memory change: {memory_change:+.1f} MB")
 
         if filter_updated_after_created:
-            log_import("   ðŸ” Update filter: WAS ACTIVE (updated > created_on)")
+            log_import("   🔍 Update filter: WAS ACTIVE (updated > created_on)")
 
-        log_import("   ðŸ—ï¸ Document structure: Evaluation-grouped (chunks within documents)")
-        log_import("   ðŸ·ï¸ Collection strategy: Template_ID-based")
-        log_import("   ðŸŽ¯ Real data filters: Ready for production use")
+        log_import("   🏗️ Document structure: Evaluation-grouped (chunks within documents)")
+        log_import("   🏷️ Collection strategy: Template_ID-based")
+        log_import("   🎯 Real data filters: Ready for production use")
         
         update_import_status("completed", results=results)
         
@@ -3912,14 +3831,14 @@ async def run_production_import(
         # Check if it's an OpenSearch-related error
         if any(keyword in str(e).lower() for keyword in ["opensearch", "connection", "timeout", "unreachable"]):
             error_msg = f"OpenSearch connection issue: {str(e)}"
-            log_import(f"âŒ {error_msg}")
-            log_import("ðŸ’¡ PRODUCTION Suggestions:")
+            log_import(f"❌ {error_msg}")
+            log_import("💡 PRODUCTION Suggestions:")
             log_import("   - Check if OpenSearch cluster is healthy")
             log_import("   - Verify network connectivity")
             log_import("   - Consider scaling up the cluster")
             log_import("   - Try reducing import batch size")
         else:
-            log_import(f"âŒ {error_msg}")
+            log_import(f"❌ {error_msg}")
         
         update_import_status("failed", error=error_msg)
         raise
@@ -3952,7 +3871,7 @@ async def get_opensearch_statistics():
                 request_timeout=10
             )
             total_documents = count_response.get("count", 0)
-            logger.info(f"âœ… Document count: {total_documents}")
+            logger.info(f"✅ Document count: {total_documents}")
         except Exception as e:
             logger.warning(f"Count query failed: {e}")
             total_documents = 0
@@ -3981,7 +3900,7 @@ async def get_opensearch_statistics():
                 # Collect available metadata fields
                 for field_name in metadata_props.keys():
                     available_metadata_fields.add(field_name)
-            logger.info(f"âœ… Available metadata fields: {available_metadata_fields}")
+            logger.info(f"✅ Available metadata fields: {available_metadata_fields}")
 
         except Exception as e:
             logger.warning(f"Mapping query failed: {e}")
@@ -4043,7 +3962,7 @@ async def get_opensearch_statistics():
                 "missing_evaluations": total_documents - with_evaluation,
                 "transcript_coverage_pct": round((with_transcript / total_documents * 100), 1) if total_documents > 0 else 0,
                 "evaluation_coverage_pct": round((with_evaluation / total_documents * 100), 1) if total_documents > 0 else 0,
-                "status": "Complete" if with_transcript == total_documents else f"âš ï¸ {total_documents - with_transcript} missing"
+                "status": "Complete" if with_transcript == total_documents else f"⚠️ {total_documents - with_transcript} missing"
             }
             logger.info(f"Transcript coverage: {transcript_coverage['transcript_coverage_pct']}%")
             
@@ -4204,7 +4123,7 @@ async def get_opensearch_statistics():
                 "active_indices": active_indices,
                 "available_fields": sorted(list(available_metadata_fields)),
                 "cluster_status": cluster_status,
-                "content_coverage": transcript_coverage,  # â† NEW SECTION WITH TRANSCRIPT DATA
+                "content_coverage": transcript_coverage,  # ← NEW SECTION WITH TRANSCRIPT DATA
 
                 # NEW: Vector search capabilities
                 "vector_search": {
@@ -4379,7 +4298,7 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
             "import_type": request.import_type
         }
         # Log import start with new filter option
-        log_import("ðŸš€ PRODUCTION import request received:")
+        log_import("🚀 PRODUCTION import request received:")
         log_import(f"   Collection: {request.collection}")
         log_import(f"   Import Type: {request.import_type}")
         log_import(f"   Max Docs: {request.max_docs or 'All'}")
@@ -4392,9 +4311,9 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
         if request.max_docs is not None and request.max_docs <= 0:
             raise HTTPException(status_code=400, detail="max_docs must be a positive integer")
         
-        # âœ… NEW: Validate date range
+        # ✅ NEW: Validate date range
         if request.call_date_start and request.call_date_end:
-            log_import(f"   ðŸ“… Date Range: {request.call_date_start or 'unlimited'} to {request.call_date_end or 'unlimited'}")
+            log_import(f"   📅 Date Range: {request.call_date_start or 'unlimited'} to {request.call_date_end or 'unlimited'}")
             try:
                 start_date = datetime.strptime(request.call_date_start, "%Y-%m-%d")
                 end_date = datetime.strptime(request.call_date_end, "%Y-%m-%d")
@@ -4407,19 +4326,19 @@ async def start_import(request: ImportRequest, background_tasks: BackgroundTasks
             
         # NEW: Log the updated filter
         if request.updated:
-            log_import("   ðŸ” Filter: Only evaluations where updated > created_on")
+            log_import("   🔍 Filter: Only evaluations where updated > created_on")
 
 
         # Log import start
-        log_import("ðŸš€ PRODUCTION import request received:")
+        log_import("🚀 PRODUCTION import request received:")
         log_import(f"   Collection: {request.collection}")
         log_import(f"   Import Type: {request.import_type}")
         log_import(f"   Max Docs: {request.max_docs or 'All'}")
         log_import(f"   Batch Size: {request.batch_size or 'Default'}")
 
-        # âœ… NEW: Log date filtering
+        # ✅ NEW: Log date filtering
         if request.call_date_start or request.call_date_end:
-            log_import(f"   ðŸ“… Date Range: {request.call_date_start or 'unlimited'} to {request.call_date_end or 'unlimited'}")        
+            log_import(f"   📅 Date Range: {request.call_date_start or 'unlimited'} to {request.call_date_end or 'unlimited'}")        
         
         # Start background import
         background_tasks.add_task(
@@ -4562,7 +4481,7 @@ async def health():
                     "real_data_filters": True,
                     "efficient_metadata": True,
                     
-                    # âœ… NEW: Vector search status
+                    # ✅ NEW: Vector search status
                     "vector_search_support": vector_support,
                     "vector_fields_detected": vector_fields,
                     "hybrid_search_ready": vector_support and EMBEDDER_AVAILABLE
@@ -4645,7 +4564,7 @@ async def health():
                     "efficient_metadata_loading": True,
                     "filter_caching": True,
                     
-                    # âœ… NEW: Vector search features
+                    # ✅ NEW: Vector search features
                     "vector_search": VECTOR_SEARCH_READY,
                     "hybrid_search": VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE,
                     "semantic_similarity": VECTOR_SEARCH_READY and EMBEDDER_AVAILABLE,
@@ -4686,7 +4605,7 @@ async def analytics_stats(request: dict):
             return {
                 "status": "error", 
                 "error": "OpenSearch not available",
-                "total_results": 0  # ✅ Fixed: totalRecords → total_results
+                "totalRecords": 0
             }
         
         client = get_opensearch_client()
@@ -4716,8 +4635,8 @@ async def analytics_stats(request: dict):
                 logger.debug(f"Applied date filter: {date_range}")
             
             # Template filter (user selected from dropdown - HIGHEST PRIORITY)
-            if filters.get("template"):
-                template_name = str(filters["template"]).strip()
+            if filters.get("template_name"):
+                template_name = str(filters["template_name"]).strip()
                 template_filter = {
                     "bool": {
                         "should": [
@@ -4847,9 +4766,9 @@ async def analytics_stats(request: dict):
                         "filter": filter_clauses
                     }
                 }
-                logger.info(f"ðŸŽ¯ Applied {len(filter_clauses)} user-selected filters")
+                logger.info(f"🎯 Applied {len(filter_clauses)} user-selected filters")
             else:
-                logger.info("ðŸ“Š No filters applied - showing all evaluations")
+                logger.info("📊 No filters applied - showing all evaluations")
         
         # =============================================================================
         # EXECUTE SEARCH WITH ROBUST ERROR HANDLING
@@ -4875,11 +4794,11 @@ async def analytics_stats(request: dict):
                 total_evaluations = total_hits
                 
         except Exception as search_error:
-            logger.error(f"âŒ Search execution failed: {search_error}")
+            logger.error(f"❌ Search execution failed: {search_error}")
             return {
                 "status": "error",
                 "error": f"Search failed: {str(search_error)}",
-                "total_results": 0  # ✅ Fixed: totalRecords → total_results,
+                "totalRecords": 0,
                 "filters_applied": filters
             }
         
@@ -4887,13 +4806,13 @@ async def analytics_stats(request: dict):
         # RETURN RESULTS WITH DETAILED METADATA
         # =============================================================================
         
-        logger.info(f"ðŸ“Š ANALYTICS STATS: {total_evaluations} evaluations match filters: {filters}")
+        logger.info(f"📊 ANALYTICS STATS: {total_evaluations} evaluations match filters: {filters}")
         
         return {
             "status": "success",
-            "total_results": total_evaluations,  # ✅ Fixed: totalRecords → total_results
+            "totalRecords": total_evaluations,
             "filters_applied": filters,
-            "filter_count": len([v for v in filters.values() if v]) if filters else 0,
+            "filter_count": len(filter_clauses) if filters else 0,
             "timestamp": datetime.now().isoformat(),
             "data_type": "unique_evaluations",
             "search_strategy": "user_priority_filtering",
@@ -4901,11 +4820,11 @@ async def analytics_stats(request: dict):
         }
         
     except Exception as e:
-        logger.error(f"âŒ Analytics stats error: {e}")
+        logger.error(f"❌ Analytics stats error: {e}")
         return {
             "status": "error",
             "error": str(e),
-            "total_results": 0  # ✅ Fixed: totalRecords → total_results,
+            "totalRecords": 0,
             "filters_applied": filters,
             "timestamp": datetime.now().isoformat()
         }
@@ -4921,8 +4840,8 @@ async def test_metadata_extraction_new_fields():
         sample_evaluation = {
             "internalId": "686455bb08b81a355a14506e",
             "evaluationId": 316,
-            "weighted_score": 79,  # âœ… Test new field
-            "url": "https://innovai-demo.metrocare-agent.com/evaluation/view/316",  # âœ… Test new field
+            "weighted_score": 79,  # ✅ Test new field
+            "url": "https://innovai-demo.metrocare-agent.com/evaluation/view/316",  # ✅ Test new field
             "template_id": "685eed5f7e5fe29dc0b183e1",
             "template_name": "Ai Corporate SPTR - Haiku (working prompts)",
             "partner": "iQor",
@@ -4975,7 +4894,7 @@ async def debug_test_metadata_extraction():
         from chat_handlers import verify_metadata_alignment
         
         # Get some sample search results
-        logger.info("ðŸ” Testing metadata extraction with sample search...")
+        logger.info("🔍 Testing metadata extraction with sample search...")
         
         # Search for something that should return results
         results = search_opensearch("customer service", size=5)
@@ -4989,7 +4908,7 @@ async def debug_test_metadata_extraction():
             }
         
         # Test metadata extraction
-        logger.info(f"ðŸ“Š Testing metadata extraction on {len(results)} search results...")
+        logger.info(f"📊 Testing metadata extraction on {len(results)} search results...")
         metadata_summary = verify_metadata_alignment(results)
         
         # Analyze the first few results in detail
@@ -5206,7 +5125,7 @@ async def debug_opensearch_data():
         # Get basic stats
         simple_result = debug_search_simple()
         
-        # âœ… NEW: Check vector support
+        # ✅ NEW: Check vector support
         vector_support = detect_vector_support(client)
         
         # Get sample documents with vector field analysis
@@ -5230,16 +5149,12 @@ async def debug_opensearch_data():
                     "id": hit.get("_id"),
                     "evaluationId": source.get("evaluationId"),
                     "template_name": source.get("template_name"),
-                    "template_id": source.get("template_id"),
-                    "has_full_text": bool(source.get("full_text")),
-                    "has_evaluation_text": bool(source.get("evaluation_text")),
-                    "has_transcript_text": bool(source.get("transcript_text")),
-                    "has_evaluation": bool(source.get("evaluation")),
+                    "template_id": source.get("template_id"),                   
                     "has_transcript": bool(source.get("transcript")),
                     "total_chunks": source.get("total_chunks", 0),
                     "chunks_count": len(source.get("chunks", [])),
                     
-                    # âœ… NEW: Vector field analysis
+                    # ✅ NEW: Vector field analysis
                     "has_document_embedding": bool(source.get("document_embedding")),
                     "document_embedding_dimension": len(source.get("document_embedding", [])),
                     "has_chunk_embeddings": False,
@@ -5253,13 +5168,10 @@ async def debug_opensearch_data():
                         "lob": source.get("metadata", {}).get("lob"),
                         "agentName": source.get("metadata", {}).get("agentName"),
                         "disposition": source.get("metadata", {}).get("disposition"),
-                        "language": source.get("metadata", {}).get("language"),
-                        "weighted_score": source.get("metadata", {}).get("weighted_score"),
+                        "language": source.get("metadata", {}).get("language"),                        
                         "url": source.get("metadata", {}).get("url")
                     },
                     "content_preview": {
-                        "full_text": source.get("full_text", "")[:200],
-                        "evaluation": source.get("evaluation", "")[:200],
                         "transcript": source.get("transcript", "")[:200],
                         "first_chunk": source.get("chunks", [{}])[0].get("text", "")[:200] if source.get("chunks") else ""
                     }
@@ -5298,11 +5210,11 @@ async def debug_opensearch_data():
                     "vector_search_ready": VECTOR_SEARCH_READY,
                     "embedder_available": EMBEDDER_AVAILABLE
                 },
-                "version": "4.8.0_vector_enabled"
+                "version": "6.1.0"
             }
             
     except Exception as e:
-        return {"error": str(e), "version": "4.8.0_vector_enabled"}
+        return {"error": str(e), "version": ""}
 
 @app.get("/debug/test_search")
 async def debug_test_search(q: str = "customer service", filters: str = "{}"):
@@ -5317,7 +5229,7 @@ async def debug_test_search(q: str = "customer service", filters: str = "{}"):
         except Exception:
            parsed_filters = {}
         
-        logger.info(f"ðŸ” DEBUG SEARCH: query='{q}', filters={parsed_filters}")
+        logger.info(f"🔍 DEBUG SEARCH: query='{q}', filters={parsed_filters}")
         
         # Perform search
         results = search_opensearch(q, filters=parsed_filters, size=5)
@@ -5350,7 +5262,7 @@ async def debug_test_search(q: str = "customer service", filters: str = "{}"):
         }
         
     except Exception as e:
-        logger.error(f"âŒ DEBUG SEARCH FAILED: {e}")
+        logger.error(f"❌ DEBUG SEARCH FAILED: {e}")
         return {
             "status": "error",
             "error": str(e),
@@ -5362,14 +5274,14 @@ async def debug_test_search(q: str = "customer service", filters: str = "{}"):
 async def debug_test_chat_simple():
     """Simple test to isolate the 500 error"""
     try:
-        logger.info("ðŸ§ª Testing basic chat function...")
+        logger.info("🧪 Testing basic chat function...")
         
         # Test 1: Basic imports
         try:
             from chat_handlers import ChatRequest
-            logger.info("âœ… ChatRequest import works")
+            logger.info("✅ ChatRequest import works")
         except Exception as e:
-            logger.error(f"âŒ ChatRequest import failed: {e}")
+            logger.error(f"❌ ChatRequest import failed: {e}")
             return {"error": f"Import failed: {e}"}
         
         # Test 2: Environment variables
@@ -5391,20 +5303,20 @@ async def debug_test_chat_simple():
             analytics=True
         )
         
-        logger.info("âœ… ChatRequest creation works")
+        logger.info("✅ ChatRequest creation works")
        
         # Test 4: Check imports that might be missing
         missing_imports = []
         
         try:
             from opensearch_client import get_opensearch_client
-            logger.info("âœ… OpenSearch client import works")
+            logger.info("✅ OpenSearch client import works")
         except Exception as e:
             missing_imports.append(f"opensearch_client: {e}")
         
         try:
             import requests
-            logger.info("âœ… Requests import works")
+            logger.info("✅ Requests import works")
         except Exception as e:
             missing_imports.append(f"requests: {e}")
         
@@ -5417,7 +5329,7 @@ async def debug_test_chat_simple():
         }
         
     except Exception as e:
-        logger.error(f"âŒ Debug test failed: {e}")
+        logger.error(f"❌ Debug test failed: {e}")
         import traceback
         return {
             "status": "error",
@@ -5459,7 +5371,7 @@ async def debug_test_filters():
         test_cases = [
             {"description": "No filters", "filters": {}},
             {"description": "Program filter", "filters": {"program": "Metro"}},
-            {"description": "Partner filter", "filters": {"partner": "Advanced Solutions"}},
+            {"description": "Partner filter", "filters": {"partner": "All"}},
             {"description": "LOB filter", "filters": {"lob": "Customer Service"}},
             {"description": "Template filter", "filters": {"template_name": "CSR Quality"}},
             {"description": "Multiple filters", "filters": {"program": "Metro", "lob": "Customer Service"}}
@@ -5516,7 +5428,7 @@ async def debug_test_chat_full(request: dict):
         message = request.get("message", "What are the most common call dispositions?")
         filters = request.get("filters", {})
         
-        logger.info(f"ðŸ” DEBUG FULL CHAT: message='{message}', filters={filters}")
+        logger.info(f"🔍 DEBUG FULL CHAT: message='{message}', filters={filters}")
         
         # Step 1: Test search context
         from chat_handlers import build_search_context
@@ -5559,7 +5471,7 @@ async def debug_test_chat_full(request: dict):
         }
         
     except Exception as e:
-        logger.error(f"âŒ DEBUG FULL CHAT FAILED: {e}")
+        logger.error(f"❌ DEBUG FULL CHAT FAILED: {e}")
         return {
             "status": "error",
             "error": str(e),
@@ -5651,7 +5563,7 @@ async def debug_dashboard():
         </style>
     </head>
     <body>
-        <h1>ðŸ” Ask InnovAI Debug Dashboard</h1>
+        <h1>🔍 Ask InnovAI Debug Dashboard</h1>
         
         <div class="section">
             <h2>Data Verification</h2>
@@ -6282,50 +6194,50 @@ async def serve_metadata_debug_dashboard():
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>ðŸ” Metro AI - Metadata Verification Dashboard</h1>
+                    <h1>🔍 Metro AI - Metadata Verification Dashboard</h1>
                     <p>Verify that your agent uses ONLY real evaluation data</p>
                 </div>
                 
                 <div class="section">
-                    <h2>ðŸš¨ Critical Tests (Run in Order)</h2>
+                    <h2>🚨 Critical Tests (Run in Order)</h2>
                     <a href="/debug/verify_metadata_alignment" class="test-button critical">
-                        1. âœ… Verify Real Metadata Structure
+                        1. ✅ Verify Real Metadata Structure
                     </a>
                     <br>
                     <a href="/debug/test_disposition_search?query=call dispositions" class="test-button critical">
-                        2. ðŸŽ¯ Test Disposition Search
+                        2. 🎯 Test Disposition Search
                     </a>
                     <br>
                     <a href="/debug/simulate_disposition_query" class="test-button critical">
-                        3. ðŸ¤– Simulate Complete Flow
+                        3. 🤖 Simulate Complete Flow
                     </a>
                     <br>
                     <small style="color: #666;">These test the metadata alignment fix step by step</small>
                 </div>
                 
                 <div class="section">
-                    <h2>ðŸ“Š Database Verification</h2>
+                    <h2>📊 Database Verification</h2>
                     <a href="/debug/opensearch_data" class="test-button">Check Sample Data</a>
                     <a href="/debug/check_indices" class="test-button">Check Indices</a>
                     <a href="/opensearch_statistics" class="test-button">Database Stats</a>
                 </div>
                 
                 <div class="section">
-                    <h2>ðŸ” Search Testing</h2>
+                    <h2>🔍 Search Testing</h2>
                     <a href="/debug/test_search?q=customer service" class="test-button">Test Basic Search</a>
                     <a href="/debug/test_filters" class="test-button">Test All Filters</a>
                 </div>
                 
                 <div class="section">
-                    <h2>ðŸŽ¯ Expected Results</h2>
-                    <p><strong>âœ… Success:</strong> Test 1 shows your actual call dispositions (not empty)</p>
-                    <p><strong>âœ… Success:</strong> Test 2 shows "has_verified_data: true"</p>
-                    <p><strong>âœ… Success:</strong> Test 3 shows "test_result: PASS"</p>
-                    <p><strong>âŒ Failure:</strong> Empty dispositions or "FAIL" results mean data import issues</p>
+                    <h2>🎯 Expected Results</h2>
+                    <p><strong>✅ Success:</strong> Test 1 shows your actual call dispositions (not empty)</p>
+                    <p><strong>✅ Success:</strong> Test 2 shows "has_verified_data: true"</p>
+                    <p><strong>✅ Success:</strong> Test 3 shows "test_result: PASS"</p>
+                    <p><strong>❌ Failure:</strong> Empty dispositions or "FAIL" results mean data import issues</p>
                 </div>
                 
                 <div class="section">
-                    <h2>ðŸ’¬ Test Actual Chat</h2>
+                    <h2>💬 Test Actual Chat</h2>
                     <p>After the above tests pass, test your actual chat interface:</p>
                     <a href="/chat" class="test-button" target="_blank">Open Chat Interface</a>
                     <p><small>Ask: "What are the most common call dispositions?" and verify it uses your real data</small></p>
