@@ -43,10 +43,10 @@ GENAI_MODEL = os.getenv("GENAI_MODEL", "n/a")
 GENAI_TEMPERATURE = float(os.getenv("GENAI_TEMPERATURE", "0.7"))
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 
-CHAT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "800"))  
-HYBRID_SEARCH_LIMIT = int(os.getenv("HYBRID_SEARCH_LIMIT", "400"))  
-VECTOR_SEARCH_LIMIT = int(os.getenv("VECTOR_SEARCH_LIMIT", "400"))  
-TEXT_SEARCH_LIMIT = int(os.getenv("TEXT_SEARCH_LIMIT", "400"))   
+CHAT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "10000"))  
+HYBRID_SEARCH_LIMIT = int(os.getenv("HYBRID_SEARCH_LIMIT", "1000"))  
+VECTOR_SEARCH_LIMIT = int(os.getenv("VECTOR_SEARCH_LIMIT", "1000"))  
+TEXT_SEARCH_LIMIT = int(os.getenv("TEXT_SEARCH_LIMIT", "1000"))   
 
 
 
@@ -567,30 +567,6 @@ def extract_actual_metadata_values(sources: List[dict]) -> Dict[str, List[str]]:
     return {k: sorted(list(v)) for k, v in actual_values.items()}
 
 # Add intelligent routing functions
-def is_heavy_query(message: str) -> bool:
-    """Detect queries that need extra performance optimization"""
-    heavy_indicators = [
-        "weekly", "monthly", "compare", "comparison", "versus", "vs",
-        "comprehensive", "detailed", "complete", "all calls", "entire",
-        "breakdown", "trends over", "performance across"
-    ]
-    return any(indicator in message.lower() for indicator in heavy_indicators)
-
-def get_limits_for_query(message: str) -> dict:
-    """Get appropriate limits based on query complexity"""
-    if is_heavy_query(message):
-        return {
-            "max_sources": 3,           # Very focused
-            "transcript_chars": 300,    # Minimal transcript  
-            "max_results": 200          # Small sample
-        }
-    else:
-        return {
-            "max_sources": 5,           # Standard (matches current [:5])
-            "transcript_chars": 600,    # Current setting
-            "max_results": 800          # Current CHAT_MAX_RESULTS
-        }
-
 def detect_analysis_type(message):
     """Simple detection: Report vs Pattern Search vs General"""
     message_lower = message.lower()
@@ -940,15 +916,8 @@ EVALUATION DETAILS:
             
             # Add evaluation details WITHOUT scores or types
             transcripts_added = 0  # Track how many transcripts we add
-            
-            # Get dynamic limits based on query complexity
-            query_limits = get_limits_for_query(query)
-            max_sources = query_limits["max_sources"]
-            transcript_chars = query_limits["transcript_chars"]
-            
-            logger.info(f"⚡ Dynamic processing limits: {max_sources} sources, {transcript_chars} chars per transcript")
 
-            for i, source in enumerate(processed_sources[:max_sources], 1):
+            for i, source in enumerate(processed_sources[:10], 1):
                 eval_str = f"\n[Evaluation {i}] ID: {source.get('evaluationId', 'Unknown')}\n"
                 
                 # Only display allowed fields
@@ -984,9 +953,8 @@ EVALUATION DETAILS:
                     transcript = _extract_transcript_text(source)
                     
                     if transcript and len(transcript) > 100:  # Only add if substantial
-                        eval_str += "\nTRANSCRIPT:\n"
-                        eval_str += f"{transcript[:transcript_chars]}\n"   # DYNAMIC limit
-                        eval_str += f"[Performance optimized: showing {transcript_chars} of {len(transcript)} chars]\n"
+                        eval_str += f"\n📝 TRANSCRIPT:\n"
+                        eval_str += f"{transcript[:4000]}\n"  # Include up to 4000 chars
                         eval_str += f"\n[Full transcript length: {len(transcript)} characters]\n"
                         
                         # Mark this source as having a transcript
@@ -996,12 +964,12 @@ EVALUATION DETAILS:
                         
                         logger.debug(f"✅ Added transcript for eval {source.get('evaluationId')}: {len(transcript)} chars")
                     else:
-                        eval_str += "\n[No transcript available for this evaluation]\n"
+                        eval_str += f"\n[No transcript available for this evaluation]\n"
                         source['has_transcript'] = False
                         
                 except Exception as e:
                     logger.error(f"Failed to extract transcript for eval {source.get('evaluationId')}: {e}")
-                    eval_str += "\n[Transcript extraction error]\n"
+                    eval_str += f"\n[Transcript extraction error]\n"
                     source['has_transcript'] = False
                 # ===== END OF NEW TRANSCRIPT SECTION =====
                 
@@ -1068,15 +1036,11 @@ async def relay_chat_rag(request: Request):
         analysis_type = detect_analysis_type(req.message)
         logger.info(f"🎯 Analysis type detected: {analysis_type}")
         
-        # ADD: Get performance limits based on query complexity
-        query_limits = get_limits_for_query(req.message)
-        logger.info(f"⚡ Query limits: {query_limits}")
-        
         is_report_request = detect_report_query(req.message)
         logger.info(f"📊 REPORT REQUEST DETECTED: {is_report_request}")
 
-        # STEP 1: Build context with VECTOR SEARCH integration and dynamic limits
-        context, sources = build_search_context(req.message, req.filters, max_results=query_limits["max_results"])
+        # STEP 1: Build context with VECTOR SEARCH integration
+        context, sources = build_search_context(req.message, req.filters, max_results=CHAT_MAX_RESULTS)
 
         logger.info(f"📋 ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 
