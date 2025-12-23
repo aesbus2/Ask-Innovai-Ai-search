@@ -36,10 +36,16 @@
                 <span class="tab-text">FILTERS</span>
             </div>
 
-            <!-- Apply Filters Tab - Below Filter Tab -->
-            <div class="apply-tab" onclick="applyFilters()" id="applyTab">
+            <!-- Apply Filters Tab - Applies filters and closes sidebar -->
+            <div class="apply-tab" onclick="applyFiltersAndClose()" id="applyTab">
                 <span class="material-icons">check</span>
                 <span class="tab-text">APPLY</span>
+            </div>
+
+            <!-- Cancel Filters Tab - Closes sidebar without applying -->
+            <div class="cancel-tab" onclick="cancelFilters()" id="cancelTab">
+                <span class="material-icons">close</span>
+                <span class="tab-text">CANCEL</span>
             </div>
 
             <!-- Sidebar -->
@@ -317,10 +323,11 @@
                                     enhancement</p>
                             </div>
                             <div class="example-card"
-                                onclick="askQuestion('Identify calls with a High Sales Risk where a successful sale was made')">
+                                onclick="askQuestion('Identify calls with a High Sales Risk where a successful sale was made. Focus is on identifying turnover risks from bad pitch practices (cancel/chargeback exposure) and incomplete sale processes (order fulfillment failures). cancel/chargeback exposure: - Implying/advising that they could call back and cancel - No clear mention of Add a Line without stating the customer is adding a new line - Misrepresenting Add a line as device replacement program instead of new line addition - Positioned device as \"Device Upgrade Eligible\" - Customer believes they\'re upgrading existing line, not adding new line - Advised customer to keep service active for 31+ days and cancel after - Coaching customers to game the system, guaranteed chargeback. order fulfillment failures: - Advised customer of their New Monthly recurrence amount - Advised customer of Activation email and activation steps - Advised customer of Order Ship Out/Tracking email - Verified shipping address and billing info - Advised delivery timeframe - Advised customer of Order Confirmation email - Confirmed Device Model ordered - Advised order total - Reviewed Service Agreement')">
                                 <h4>Sales Risk Analysis</h4>
-                                <p>Focus is on identifying turnover risks from bad pitch practices (cancel/chargeback exposure) and incomplete sale processes (order fulfillment failures).
-                                    </p>
+                                <p>Identify turnover risks from bad pitch practices and incomplete sale processes including cancel/chargeback exposure and order fulfillment failures.
+                                    <span class="card-more-indicator">• Click for detailed criteria</span>
+                                </p>
                             </div>
                            </div>
                     </div>
@@ -396,6 +403,48 @@
             createBackdrop();
             console.log('Sidebar toggled: OPEN');
         }
+    }
+    
+    // Apply filters and close sidebar automatically
+    function applyFiltersAndClose() {
+        console.log('🔄 Apply filters and close sidebar...');
+        
+        // First apply the filters (this function comes from chat.js)
+        if (typeof window.applyFilters === 'function') {
+            window.applyFilters();
+        } else {
+            console.warn('⚠️ applyFilters function not yet loaded');
+        }
+        
+        // Then close the sidebar
+        const sidebar = document.getElementById('sidebar');
+        const tab = document.getElementById('sidebarTab');
+        
+        if (sidebar && sidebar.classList.contains('open')) {
+            sidebar.classList.remove('open');
+            if (tab) tab.classList.remove('active');
+            removeBackdrop();
+            console.log('✅ Filters applied and sidebar closed');
+        }
+    }
+    
+    // Cancel filters and close sidebar without applying changes
+    function cancelFilters() {
+        console.log('❌ Cancel filters - closing sidebar without applying changes...');
+        
+        // Close the sidebar without applying changes
+        const sidebar = document.getElementById('sidebar');
+        const tab = document.getElementById('sidebarTab');
+        
+        if (sidebar && sidebar.classList.contains('open')) {
+            sidebar.classList.remove('open');
+            if (tab) tab.classList.remove('active');
+            removeBackdrop();
+            console.log('✅ Sidebar closed without applying changes');
+        }
+        
+        // Optional: Reset form to previous state
+        // (You can add logic here to reset filter form if needed)
     }
     
     // SIMPLE manual filter enhancement - NO automatic monitoring
@@ -554,6 +603,13 @@
             // Apply tab doesn't have active states, it's action-based
         }
         
+        // Initialize cancel tab
+        const cancelTab = document.getElementById('cancelTab');
+        if (cancelTab) {
+            console.log('✅ Cancel tab initialized');
+            // Cancel tab doesn't have active states, it's action-based
+        }
+        
         removeBackdrop(); // Clean up any existing backdrop
         
         // Ensure applyFilters function is available
@@ -597,7 +653,8 @@
         };
     };
     
-    window.simulateBasicDisplay = function(filterCount, resultCount) {
+    // Manual enhancement function
+    window.enhanceNow = function() {
         console.log(`🧪 Setting basic display: ${filterCount} filters with ${resultCount} results`);
         
         const activeElement = document.getElementById('activeFiltersCount');
@@ -619,25 +676,6 @@
         };
     };
     
-    window.simulateFilterUpdate = function(filterCount, resultCount) {
-        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
-        const totalRecordsElement = document.getElementById('totalRecords');
-        
-        if (activeFiltersCountElement) {
-            activeFiltersCountElement.textContent = `${filterCount} filters`;
-        }
-        if (totalRecordsElement) {
-            totalRecordsElement.textContent = `${resultCount.toLocaleString()} evaluations`;
-        }
-        
-        // Trigger enhancement immediately and with delays
-        enhanceFilterCountDisplay();
-        setTimeout(() => enhanceFilterCountDisplay(), 100);
-        setTimeout(() => enhanceFilterCountDisplay(), 500);
-        
-        console.log(`🧪 Simulated: ${filterCount} filters with ${resultCount} results`);
-    };
-    
     // Force enhancement function reference
     window.forceEnhanceDisplay = forceUpdateFilterDisplay;
     
@@ -646,6 +684,63 @@
         if (activeElement) {
             console.log('🧪 Testing interceptor by setting "2 filters"...');
             activeElement.textContent = '2 filters';
+        }
+    };
+    
+    // Test function to manually set visible content and verify elements exist
+    window.testElementsVisibility = function() {
+        console.log('🧪 Testing element visibility...');
+        
+        const totalElement = document.getElementById('totalRecords');
+        const activeElement = document.getElementById('activeFiltersCount');
+        
+        if (totalElement) {
+            totalElement.textContent = 'TEST: 9,999 evaluations';
+            totalElement.style.color = 'red';
+            totalElement.style.fontSize = '16px';
+            totalElement.style.fontWeight = 'bold';
+            console.log('✅ totalRecords element found and updated');
+        } else {
+            console.error('❌ totalRecords element NOT FOUND');
+        }
+        
+        if (activeElement) {
+            activeElement.textContent = 'TEST: 5 filters';
+            activeElement.style.color = 'red';
+            activeElement.style.fontSize = '16px';
+            activeElement.style.fontWeight = 'bold';
+            console.log('✅ activeFiltersCount element found and updated');
+        } else {
+            console.error('❌ activeFiltersCount element NOT FOUND');
+        }
+        
+        // Also test the parent containers
+        const chatStats = document.querySelector('.chat-stats');
+        if (chatStats) {
+            console.log('✅ .chat-stats container found');
+            console.log('Chat stats display style:', window.getComputedStyle(chatStats).display);
+            console.log('Chat stats visibility:', window.getComputedStyle(chatStats).visibility);
+            console.log('Chat stats dimensions:', {
+                width: chatStats.offsetWidth,
+                height: chatStats.offsetHeight,
+                top: chatStats.offsetTop,
+                left: chatStats.offsetLeft
+            });
+        } else {
+            console.error('❌ .chat-stats container NOT FOUND');
+        }
+        
+        const chatHeader = document.querySelector('.chat-header');
+        if (chatHeader) {
+            console.log('✅ .chat-header container found');
+            console.log('Chat header dimensions:', {
+                width: chatHeader.offsetWidth,
+                height: chatHeader.offsetHeight,
+                top: chatHeader.offsetTop,
+                left: chatHeader.offsetLeft
+            });
+        } else {
+            console.error('❌ .chat-header container NOT FOUND');
         }
     };
     
@@ -666,11 +761,13 @@
         const sidebar = document.getElementById('sidebar');
         const sidebarTab = document.getElementById('sidebarTab');
         const applyTab = document.getElementById('applyTab');
+        const cancelTab = document.getElementById('cancelTab');
         
         console.log('Elements found:', {
             sidebar: !!sidebar,
             sidebarTab: !!sidebarTab, 
-            applyTab: !!applyTab
+            applyTab: !!applyTab,
+            cancelTab: !!cancelTab
         });
         
         if (sidebar) {

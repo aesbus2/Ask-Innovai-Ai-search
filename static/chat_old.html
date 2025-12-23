@@ -30,10 +30,16 @@
         </div>
 
         <div class="main-layout">
-            <!-- Filter Toggle Tab - Always Visible -->
+            <!-- Filter Toggle Tab - Smaller and moves with panel -->
             <div class="sidebar-tab" onclick="toggleSidebar()" id="sidebarTab">
                 <span class="material-icons">tune</span>
                 <span class="tab-text">FILTERS</span>
+            </div>
+
+            <!-- Apply Filters Tab - Below Filter Tab -->
+            <div class="apply-tab" onclick="applyFilters()" id="applyTab">
+                <span class="material-icons">check</span>
+                <span class="tab-text">APPLY</span>
             </div>
 
             <!-- Sidebar -->
@@ -249,10 +255,6 @@
 
                     <!-- Action Buttons -->
                     <div class="filter-actions">
-                        <button class="apply-btn" onclick="applyFilters()">
-                            <span class="material-icons">search</span>
-                            Apply Filters
-                        </button>
                         <button class="clear-btn" onclick="clearFilters()">
                             <span class="material-icons">clear</span>
                             Clear All
@@ -318,23 +320,7 @@
                                 onclick="askQuestion('Identify calls with a High Sales Risk where a successful sale was made')">
                                 <h4>Sales Risk Analysis</h4>
                                 <p>Focus is on identifying turnover risks from bad pitch practices (cancel/chargeback exposure) and incomplete sale processes (order fulfillment failures).
-                                    cancel/chargeback exposure:
-                                    - Implying/advising that they could call back and cancel
-                                    - No clear mention of Add a Line without stating the customer is adding a new line
-                                    - Misrepresenting Add a line as device replacement program instead of new line addition
-                                    - Positioned device as "Device Upgrade Eligible" - Customer believes they're upgrading existing line, not adding new line
-                                    - Advised customer to keep service active for 31+ days and cancel after - Coaching customers to game the system, guaranteed chargeback
-
-                                    order fulfillment failures:
-                                    - Advised customer of their New Monthly recurrence amount
-                                    - Advised customer of Activation email and activation steps
-                                    - Advised customer of Order Ship Out/Tracking email 
-                                    - Verified shipping address and billing info
-                                    - Advised delivery timeframe
-                                    - Advised customer of Order Confirmation email
-                                    - Confirmed Device Model ordered
-                                    - Advised order total
-                                    - Reviewed Service Agreement</p>
+                                    </p>
                             </div>
                            </div>
                     </div>
@@ -412,59 +398,97 @@
         }
     }
     
-    // Enhancement: Improve filter count display to show results
-    function enhanceFilterCountDisplay() {
-        // This enhances the existing chat.js functionality
-        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
+    // SIMPLE manual filter enhancement - NO automatic monitoring
+    function enhanceFilterDisplay() {
+        const activeFiltersElement = document.getElementById('activeFiltersCount');
         const totalRecordsElement = document.getElementById('totalRecords');
         
-        if (activeFiltersCountElement && totalRecordsElement) {
-            // Extract numbers from the existing displays
-            const totalText = totalRecordsElement.textContent || '';
-            const filterText = activeFiltersCountElement.textContent || '';
-            
-            // Extract total count (e.g., "1,234 evaluations" -> 1234)
+        if (!activeFiltersElement || !totalRecordsElement) {
+            console.log('❌ Elements not found');
+            return false;
+        }
+        
+        const totalText = totalRecordsElement.textContent || '';
+        const filterText = activeFiltersElement.textContent || '';
+        
+        console.log('📊 Current display values:', { totalText, filterText });
+        
+        // Only enhance if it's basic format and not already enhanced
+        if (filterText.match(/^\d+ filters?$/) && !filterText.includes('results') && !filterText.includes('total')) {
             const totalMatch = totalText.match(/([0-9,]+)/);
-            const totalCount = totalMatch ? totalMatch[1] : '0';
-            
-            // Extract filter count (e.g., "2 filters" -> 2)
             const filterMatch = filterText.match(/^(\d+)/);
-            const filterCount = filterMatch ? parseInt(filterMatch[1]) : 0;
             
-            // Enhance the display to show results count too
-            if (filterCount > 0 && totalCount !== '0') {
-                activeFiltersCountElement.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${totalCount} results)`;
-            } else if (totalCount !== '0') {
-                activeFiltersCountElement.textContent = `0 filters (${totalCount} total)`;
+            if (totalMatch && filterMatch) {
+                const totalCount = totalMatch[1];
+                const filterCount = parseInt(filterMatch[1]);
+                
+                let enhancedText;
+                if (filterCount > 0) {
+                    enhancedText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${totalCount} results)`;
+                } else {
+                    enhancedText = `0 filters (${totalCount} total)`;
+                }
+                
+                activeFiltersElement.textContent = enhancedText;
+                console.log(`✅ Enhanced: "${filterText}" → "${enhancedText}"`);
+                return true;
             }
-            
-            console.log(`✅ Enhanced filter display: ${activeFiltersCountElement.textContent}`);
+        } else {
+            console.log('📊 Display already enhanced or no data available');
+            return false;
         }
     }
     
     // Monitor for changes to the analytics display and enhance them
     function monitorAnalyticsUpdates() {
-        const targetNode = document.getElementById('activeFiltersCount');
-        if (!targetNode) return;
+        const totalRecordsElement = document.getElementById('totalRecords');
+        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
         
-        // Create observer to watch for changes
+        if (!totalRecordsElement || !activeFiltersCountElement) {
+            console.error('❌ Cannot monitor - required elements not found');
+            return;
+        }
+        
+        // Create observer for both elements
         const observer = new MutationObserver(function(mutations) {
+            let shouldEnhance = false;
+            
             mutations.forEach(function(mutation) {
                 if (mutation.type === 'childList' || mutation.type === 'characterData') {
-                    // Wait a moment for both elements to be updated, then enhance
-                    setTimeout(enhanceFilterCountDisplay, 100);
+                    console.log('🔄 Analytics update detected on:', mutation.target.id || mutation.target.className);
+                    shouldEnhance = true;
                 }
             });
+            
+            if (shouldEnhance) {
+                // Multiple timeouts to catch different update patterns
+                setTimeout(() => enhanceFilterCountDisplay(), 50);
+                setTimeout(() => enhanceFilterCountDisplay(), 200);
+                setTimeout(() => enhanceFilterCountDisplay(), 500);
+            }
         });
         
-        // Start observing
-        observer.observe(targetNode, {
+        // Observe both elements
+        const observeConfig = {
             childList: true,
             subtree: true,
-            characterData: true
-        });
+            characterData: true,
+            attributes: false
+        };
         
-        console.log('📊 Analytics display monitor activated');
+        observer.observe(totalRecordsElement, observeConfig);
+        observer.observe(activeFiltersCountElement, observeConfig);
+        
+        // Also set up periodic enhancement (fallback)
+        setInterval(() => {
+            const current = activeFiltersCountElement.textContent || '';
+            if (current.includes('filters') && !current.includes('results') && !current.includes('total')) {
+                console.log('🔄 Periodic enhancement check - needs update');
+                enhanceFilterCountDisplay();
+            }
+        }, 3000);
+        
+        console.log('📊 Advanced analytics display monitor activated');
     }
     
     // Create backdrop overlay
@@ -523,23 +547,76 @@
             console.log('✅ Sidebar tab initialized: INACTIVE');
         }
         
+        // Initialize apply tab
+        const applyTab = document.getElementById('applyTab');
+        if (applyTab) {
+            console.log('✅ Apply tab initialized');
+            // Apply tab doesn't have active states, it's action-based
+        }
+        
         removeBackdrop(); // Clean up any existing backdrop
         
-        // Activate analytics display enhancement
-        setTimeout(() => {
-            monitorAnalyticsUpdates();
-            // Also enhance any existing display immediately
-            enhanceFilterCountDisplay();
-        }, 2000); // Wait for existing chat.js to load and update first
+        // Ensure applyFilters function is available
+        if (typeof window.applyFilters !== 'function') {
+            console.warn('⚠️ applyFilters function not yet loaded, will be available when chat.js loads');
+        }
+        
+        // NO automatic monitoring - manual enhancement only
+        console.log('📊 Filter enhancement available via manual functions only');
+        console.log('💡 Use enhanceNow() or testEnhancedDisplay() to enhance filter display');
+        
+        // Note: No automatic monitoring to prevent loops
         
         // Note: Analytics stats are handled by the main chat.js file
         console.log('📊 Filter counts will be enhanced to show results by monitor system');
     });
     
-    // Debug functions for testing (accessible via browser console)
+    // MANUAL ONLY debug functions - no automatic monitoring
     window.testEnhancedDisplay = function() {
-        enhanceFilterCountDisplay();
-        console.log('🧪 Enhanced display test completed');
+        console.log('🧪 Manual enhancement test...');
+        const result = enhanceFilterDisplay();
+        console.log('🧪 Enhancement result:', result);
+    };
+    
+    window.enhanceNow = function() {
+        console.log('🔧 Manual enhancement triggered...');
+        return enhanceFilterDisplay();
+    };
+    
+    window.checkFilterDisplay = function() {
+        const activeElement = document.getElementById('activeFiltersCount');
+        const totalElement = document.getElementById('totalRecords');
+        
+        console.log('🔍 Current display state:');
+        console.log('  activeFiltersCount:', activeElement ? `"${activeElement.textContent}"` : 'NOT FOUND');
+        console.log('  totalRecords:', totalElement ? `"${totalElement.textContent}"` : 'NOT FOUND');
+        
+        return {
+            activeFilters: activeElement ? activeElement.textContent : null,
+            totalRecords: totalElement ? totalElement.textContent : null
+        };
+    };
+    
+    window.simulateBasicDisplay = function(filterCount, resultCount) {
+        console.log(`🧪 Setting basic display: ${filterCount} filters with ${resultCount} results`);
+        
+        const activeElement = document.getElementById('activeFiltersCount');
+        const totalElement = document.getElementById('totalRecords');
+        
+        if (totalElement) {
+            totalElement.textContent = `${resultCount.toLocaleString()} evaluations`;
+        }
+        if (activeElement) {
+            // Set basic format that can be manually enhanced
+            activeElement.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
+        }
+        
+        console.log('💡 Now call enhanceNow() to enhance the display');
+        
+        return {
+            activeFilters: activeElement ? activeElement.textContent : null,
+            totalRecords: totalElement ? totalElement.textContent : null
+        };
     };
     
     window.simulateFilterUpdate = function(filterCount, resultCount) {
@@ -553,9 +630,52 @@
             totalRecordsElement.textContent = `${resultCount.toLocaleString()} evaluations`;
         }
         
-        // Trigger enhancement
-        setTimeout(enhanceFilterCountDisplay, 100);
+        // Trigger enhancement immediately and with delays
+        enhanceFilterCountDisplay();
+        setTimeout(() => enhanceFilterCountDisplay(), 100);
+        setTimeout(() => enhanceFilterCountDisplay(), 500);
+        
         console.log(`🧪 Simulated: ${filterCount} filters with ${resultCount} results`);
+    };
+    
+    // Force enhancement function reference
+    window.forceEnhanceDisplay = forceUpdateFilterDisplay;
+    
+    window.testInterceptor = function() {
+        const activeElement = document.getElementById('activeFiltersCount');
+        if (activeElement) {
+            console.log('🧪 Testing interceptor by setting "2 filters"...');
+            activeElement.textContent = '2 filters';
+        }
+    };
+    
+    // Fallback applyFilters function (will be replaced by chat.js when it loads)
+    if (typeof window.applyFilters !== 'function') {
+        window.applyFilters = function() {
+            console.log('🔄 Apply filters called (fallback) - waiting for chat.js to load...');
+            // The real applyFilters will be available once chat.js loads
+            if (window.applyFilters && window.applyFilters !== arguments.callee) {
+                window.applyFilters();
+            }
+        };
+    }
+    
+    // Debug function to test tabs
+    window.testTabs = function() {
+        console.log('🧪 Testing tab functionality...');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarTab = document.getElementById('sidebarTab');
+        const applyTab = document.getElementById('applyTab');
+        
+        console.log('Elements found:', {
+            sidebar: !!sidebar,
+            sidebarTab: !!sidebarTab, 
+            applyTab: !!applyTab
+        });
+        
+        if (sidebar) {
+            console.log('Sidebar classes:', sidebar.className);
+        }
     };
     </script>
 

@@ -105,10 +105,10 @@ body {
     visibility: visible;
 }
 
-/* Sidebar toggle tab - Smaller and always visible at left edge */
+/* Sidebar toggle tab - Always at left edge */
 .sidebar-tab {
     position: fixed; /* Fixed to viewport */
-    left: 0px; /* Always visible at left edge */
+    left: 0px; /* Always at left edge */
     top: 170px; /* Position below header with some spacing */
     width: 35px; /* Smaller: was 45px */
     height: 90px; /* Smaller: was 120px */
@@ -152,10 +152,10 @@ body {
     letter-spacing: 1px;
 }
 
-/* Apply Filters Tab - Below Filter Tab and always visible */
+/* Apply Filters Tab - Always at left edge, positioned below filter tab */
 .apply-tab {
     position: fixed;
-    left: 0px; /* Always visible at left edge */
+    left: 0px; /* Always at left edge */
     top: 275px; /* Position below filter tab (170 + 90 + 15px spacing) */
     width: 35px;
     height: 90px;
@@ -185,6 +185,46 @@ body {
 }
 
 .apply-tab .tab-text {
+    font-size: 9px;
+    font-weight: 600;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    letter-spacing: 1px;
+}
+
+/* Cancel Filters Tab - Red/orange gradient for cancel action */
+.cancel-tab {
+    position: fixed;
+    left: 0px; /* Always at left edge - no moving */
+    top: 380px; /* Position below apply tab (275 + 90 + 15px spacing) */
+    width: 35px;
+    height: 90px;
+    background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%); /* Red to orange gradient */
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 0 6px 6px 0;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
+    transition: all 0.3s ease;
+    z-index: 1001;
+    user-select: none;
+}
+
+.cancel-tab:hover {
+    background: linear-gradient(135deg, #c82333 0%, #e8590c 100%);
+    transform: translateX(3px);
+    box-shadow: 4px 4px 12px rgba(0,0,0,0.3);
+}
+
+.cancel-tab .material-icons {
+    font-size: 16px;
+    margin-bottom: 6px;
+}
+
+.cancel-tab .tab-text {
     font-size: 9px;
     font-weight: 600;
     writing-mode: vertical-rl;
@@ -256,7 +296,7 @@ body {
         transform: translateX(0);
     }
     
-    /* Adjust both tabs on mobile - always visible at left edge */
+    /* Adjust all three tabs on mobile */
     .sidebar-tab {
         top: 140px; /* Higher up on mobile */
         width: 30px; /* Even smaller on mobile */
@@ -271,14 +311,23 @@ body {
         left: 0px; /* Always at left edge */
     }
     
+    .cancel-tab {
+        top: 330px; /* Adjust position relative to apply tab (235 + 80 + 15px spacing) */
+        width: 30px;
+        height: 80px;
+        left: 0px; /* Always at left edge */
+    }
+    
     .sidebar-tab .material-icons,
-    .apply-tab .material-icons {
+    .apply-tab .material-icons,
+    .cancel-tab .material-icons {
         font-size: 14px;
         margin-bottom: 4px;
     }
     
     .sidebar-tab .tab-text,
-    .apply-tab .tab-text {
+    .apply-tab .tab-text,
+    .cancel-tab .tab-text {
         font-size: 8px;
     }
 }
@@ -682,6 +731,23 @@ body {
     color: #666;
     font-size: 14px;
     line-height: 1.4;
+}
+
+.card-more-indicator {
+    font-size: 12px;
+    color: #6e32a0;
+    font-style: italic;
+    opacity: 0.8;
+    display: block;
+    margin-top: 8px;
+    border-top: 1px solid #f0f0f0;
+    padding-top: 8px;
+}
+
+.example-card:hover .card-more-indicator {
+    opacity: 1;
+    font-weight: 500;
+    color: #5a2980;
 }
 
 /* Chat Messages */
