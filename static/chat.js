@@ -1,5 +1,39 @@
+// =============================================================================
+// COMPREHENSIVE SEARCH TOGGLE FUNCTIONS - Added for v6.0.0
+// =============================================================================
+
+// Global comprehensive mode state
+window.comprehensiveMode = false;
+
+function getComprehensiveToggleState() {
+    const toggle = document.getElementById("comprehensiveToggle");
+    return toggle ? toggle.checked : false;
+}
+
+function updateComprehensiveMode() {
+    const toggle = document.getElementById("comprehensiveToggle");
+    const description = document.getElementById("searchModeDescription");
+    const toggleContainer = document.querySelector(".comprehensive-toggle");
+    
+    if (toggle && description && toggleContainer) {
+        window.comprehensiveMode = toggle.checked;
+        
+        if (toggle.checked) {
+            // Comprehensive mode ON
+            description.innerHTML = "<span class=\"search-mode-indicator comprehensive\"><span class=\"material-icons\">search</span>Comprehensive (searches all data)</span>";
+            toggleContainer.classList.add("active");
+            console.log("🔍 COMPREHENSIVE MODE: ON - Will search full dataset");
+        } else {
+            // Smart detection mode
+            description.innerHTML = "<span class=\"search-mode-indicator standard\"><span class=\"material-icons\">auto_awesome</span>Smart detection (recommended)</span>";
+            toggleContainer.classList.remove("active");
+            console.log("⚡ SMART MODE: ON - Will use automatic detection");
+        }
+    }
+}
+
 // Enhanced Metro AI Call Center Analytics Chat - VECTOR SEARCH ENABLED
-// Version: 6.0.0 - Working Base - FIXED
+// Version: 6.0.0 - Working Base
 // Updating for transcript search
 
 // =============================================================================
@@ -12,6 +46,7 @@ let chatHistory = [];
 let chatSessions = [];
 let currentSessionId = null;
 let isLoading = false;
+let excludeQAContent = false;
 let filterOptions = {
     templates: [],
     programs: [],
@@ -100,30 +135,65 @@ const FORBIDDEN_INTERNAL_FIELDS = new Set([
 
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
-    if (!sidebar) {
-        console.error("❌ Sidebar element not found");
-        return;
-    }
+    if (!sidebar) return;
     
-    // Toggle the sidebar visibility
     sidebar.classList.toggle('open');
-    
-    // Update button state
-    const toggleBtn = document.getElementById('toggleSidebarBtn');
-    if (toggleBtn) {
-        const icon = toggleBtn.querySelector('.material-icons');
-        if (icon) {
-            icon.textContent = sidebar.classList.contains('open') ? 'close' : 'tune';
-        }
-    }
-    
-    console.log("🔄 Sidebar toggled:", sidebar.classList.contains('open') ? 'OPEN' : 'CLOSED');
+    console.log("ðŸ“± Sidebar toggled");
 }
 
-// Function removed - toggle no longer needed
+function updateChatDataFilter(exclude) {
+    excludeQAContent = exclude;
+    const statusDiv = document.getElementById('chatDataStatus');
+    
+    if (exclude) {
+        statusDiv.textContent = 'Transcripts Only';
+        statusDiv.style.background = '#e8f5e8';
+        statusDiv.style.color = '#2e7d32';
+        console.log('ðŸš« Q&A CONTENT EXCLUDED - Using transcripts only');
+        
+        // Show notification about mode change
+        showChatModeNotification('Q&A evaluation content excluded. Chat will focus on transcript conversations only.', 'warning');
+    } else {
+        statusDiv.textContent = 'All Content';
+        statusDiv.style.background = '#e3f2fd';
+        statusDiv.style.color = '#1976d2';
+        console.log('âœ… ALL CONTENT ENABLED - Using transcripts + Q&A data');
+        
+        // Show notification about mode change
+        showChatModeNotification('All content enabled. Chat will use both transcript and Q&A evaluation data.', 'info');
+    }
+}
+
+function showChatModeNotification(message, type = 'info') {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        background: ${type === 'warning' ? '#fff3cd' : '#d1ecf1'};
+        border: 1px solid ${type === 'warning' ? '#ffeaa7' : '#bee5eb'};
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin: 8px 0;
+        color: ${type === 'warning' ? '#856404' : '#0c5460'};
+        font-size: 0.85rem;
+        text-align: center;
+    `;
+    notification.innerHTML = `ðŸ“ ${message}`;
+    
+    chatMessages.appendChild(notification);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 3000);
+}
 
 function showCriticalError(message) {
-    console.error("🚨 CRITICAL ERROR:", message);
+    console.error("ðŸš¨ CRITICAL ERROR:", message);
     
     // Remove existing error overlays
     const existingOverlay = document.getElementById('criticalErrorOverlay');
@@ -157,14 +227,14 @@ function showCriticalError(message) {
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             text-align: center;
         ">
-            <div style="color: #dc3545; font-size: 48px; margin-bottom: 20px;">⚠️</div>
+            <div style="color: #dc3545; font-size: 48px; margin-bottom: 20px;">âš ï¸</div>
             <h2 style="color: #dc3545; margin: 0 0 15px 0; font-size: 1.5em;">System Error</h2>
             <p style="margin: 0 0 25px 0; color: #666; line-height: 1.5;">${message}</p>
             <div style="display: flex; gap: 10px; justify-content: center;">
                 <button onclick="location.reload()" style="
                     background: #007bff; color: white; border: none; padding: 10px 20px;
                     border-radius: 6px; cursor: pointer; font-size: 1em;
-                ">🔄 Reload Page</button>
+                ">ðŸ”„ Reload Page</button>
                 <button onclick="document.getElementById('criticalErrorOverlay').remove()" style="
                     background: #6c757d; color: white; border: none; padding: 10px 20px;
                     border-radius: 6px; cursor: pointer; font-size: 1em;
@@ -176,360 +246,1511 @@ function showCriticalError(message) {
     document.body.appendChild(errorOverlay);
 }
 
+function initializePage() {
+    console.log("ðŸš€ Initializing page...");
+    
+    try {
+        // Set default date range to last 30 days
+        const today = new Date();
+        const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+        
+        const endCallDate = document.getElementById('endCallDate');
+        const startCallDate = document.getElementById('startCallDate');
+        
+        if (endCallDate) {
+            endCallDate.valueAsDate = today;
+        }
+        
+        if (startCallDate) {
+            startCallDate.valueAsDate = thirtyDaysAgo;
+        }
+        
+        // Initialize UI components
+        setupEventListeners();
+        updateDateRangeDisplay();
+        setupIdFieldValidation();
+        
+        console.log("âœ… Page initialization complete");
+        
+    } catch (error) {
+        console.error("âŒ Page initialization failed:", error);
+        showCriticalError("Failed to initialize page: " + error.message);
+    }
+}
+
+function setupEventListeners() {
+    console.log("ðŸ”§ Setting up event listeners...");
+    
+    try {
+        // Chat input handling
+        const chatInput = document.getElementById('chatInput');
+        if (chatInput) {
+            chatInput.addEventListener('keydown', handleKeyPress);
+            chatInput.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = this.scrollHeight + 'px';
+            });
+        }
+        
+        // Send button
+        const sendButton = document.getElementById('sendButton');
+        if (sendButton) {
+            sendButton.addEventListener('click', sendMessage);
+        }
+        
+        // Filter controls
+        const applyFiltersBtn = document.getElementById('applyFilters');
+        if (applyFiltersBtn) {
+            applyFiltersBtn.addEventListener('click', applyFilters);
+        }
+        
+        const clearFiltersBtn = document.getElementById('clearFilters');
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', clearFilters);
+        }
+        
+        // Date range controls
+        const startCallDate = document.getElementById('startCallDate');
+        const endCallDate = document.getElementById('endCallDate');
+        
+        if (startCallDate) {
+            startCallDate.addEventListener('change', updateDateRangeDisplay);
+        }
+        
+        if (endCallDate) {
+            endCallDate.addEventListener('change', updateDateRangeDisplay);
+        }
+        
+        console.log("âœ… Event listeners set up successfully");
+        
+    } catch (error) {
+        console.error("âŒ Error setting up event listeners:", error);
+        throw error;
+    }
+}
+
+function updateDateRangeDisplay() {
+    console.log("ðŸ“… Date range updated");
+    
+    const startDate = document.getElementById('startCallDate');
+    const endDate = document.getElementById('endCallDate');
+    const display = document.getElementById('dateRangeDisplay');
+    
+    if (startDate && endDate && display) {
+        const start = startDate.value || 'Not set';
+        const end = endDate.value || 'Not set';
+        display.textContent = `${start} to ${end}`;
+    }
+}
+
+function setupIdFieldValidation() {
+    console.log("ðŸ” Setting up ID field validation");
+    
+    const idFields = document.querySelectorAll('input[type="text"][id*="Id"]');
+    idFields.forEach(field => {
+        field.addEventListener('input', function() {
+            if (this.id.toLowerCase().includes('id')) {
+                this.value = this.value.replace(/[^0-9]/g, '');
+            }
+        });
+    });
+}
+
+
+
+// Initialize transcript search functionality
+function initializeTranscriptSearch() {
+    console.log("ðŸŽ¯ Initializing transcript search functionality...");
+    
+    // First, try to add toggle to header if it's missing
+    addToggleToHeader();
+    
+    // Add transcript search results container
+    addTranscriptResultsContainer();
+    
+    // Verify everything is working
+    setTimeout(() => {
+        debugTranscriptToggle();
+    }, 200);
+}
+
+function addEvaluationScopeToggle() {
+    const chatHeaderFilters = document.getElementById('chatHeaderFilters');
+    if (!chatHeaderFilters) return;
+    
+    // Check if toggle already exists
+    if (document.getElementById('evaluationScopeToggle')) return;
+    
+    const scopeToggle = document.createElement('div');
+    scopeToggle.id = 'evaluationScopeToggle';
+    scopeToggle.innerHTML = `
+        <label class="toggle-switch header-toggle">
+            <input type="checkbox" id="includeAllFilteredToggle" checked onchange="updateEvaluationScope()">
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">All Filtered Evaluations</span>
+        </label>
+    `;
+    
+    chatHeaderFilters.appendChild(scopeToggle);
+}
+
+function updateEvaluationScope() {
+    const toggle = document.getElementById('includeAllFilteredToggle');
+    if (toggle) {
+        EVALUATION_DEFAULTS.INCLUDE_ALL_FILTERED = toggle.checked;
+        console.log(`ðŸ”§ Evaluation scope updated: ${toggle.checked ? 'ALL filtered' : 'LIMITED'}`);
+        
+        // Show feedback
+        if (typeof showToast === 'function') {
+            showToast(
+                toggle.checked ? 
+                'âœ… Now using ALL evaluations matching filters' : 
+                'âš ï¸ Now using LIMITED evaluations matching filters',
+                toggle.checked ? 'success' : 'warning'
+            );
+        }
+    }
+}
+
+
+function updateChatInterfaceForTranscriptMode(isTranscriptMode) {
+    console.log(`ðŸ”„ FIXED: Updating interface for transcript mode: ${isTranscriptMode}`);
+    
+    const chatInput = document.getElementById('chatInput') || 
+                     document.querySelector('input[type="text"]') ||
+                     document.querySelector('textarea');
+    
+    const sendButton = document.getElementById('sendButton') || document.querySelector('.send-btn');
+    const quickQuestions = document.getElementById('quickQuestions') || document.querySelector('.quick-questions');
+    const welcomeExamples = document.querySelector('.example-grid') || document.querySelector('.example-cards');
+    
+    if (isTranscriptMode) {
+        // TRANSCRIPT SEARCH MODE
+        console.log("ðŸŽ¯ Enabling transcript search mode");
+        
+        // Update input placeholder and styling
+        if (chatInput) {
+            chatInput.placeholder = "ðŸ” Enter words or phrases to find in call transcripts (e.g., 'billing issue', 'cancel account', 'refund')";
+            chatInput.style.borderColor = "#6e32a0";
+            chatInput.style.background = "#f8f4ff";
+            chatInput.classList.add('transcript-mode');
+        }
+        
+        // Update send button
+        if (sendButton) {
+            sendButton.innerHTML = 'ðŸ” Search Transcripts';
+            sendButton.style.background = "linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%)";
+        }
+        
+        // Hide regular chat elements
+        if (quickQuestions) {
+            quickQuestions.style.display = 'none';
+        }
+        
+        if (welcomeExamples) {
+            welcomeExamples.style.display = 'none';
+        }
+        
+        // Show transcript-specific guidance
+        addTranscriptSearchGuidance();
+        
+        // Hide any existing chat messages/results that aren't transcript results
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages && !chatMessages.classList.contains('transcript-results')) {
+            chatMessages.style.display = 'none';
+        }
+        
+    } else {
+        // REGULAR SEARCH MODE
+        console.log("ðŸ’¬ Enabling regular chat mode");
+        
+        // Restore input
+        if (chatInput) {
+            chatInput.placeholder = "Ask a question about the evaluation data...";
+            chatInput.style.borderColor = "";
+            chatInput.style.background = "";
+            chatInput.classList.remove('transcript-mode');
+        }
+        
+        // Restore send button
+        if (sendButton) {
+            sendButton.innerHTML = 'â†— Send';
+            sendButton.style.background = "";
+        }
+        
+        // Show regular chat elements
+        if (quickQuestions) {
+            quickQuestions.style.display = 'block';
+        }
+        
+        if (welcomeExamples) {
+            welcomeExamples.style.display = 'grid';
+        }
+        
+        // Remove transcript guidance
+        removeTranscriptSearchGuidance();
+        
+        // Show chat messages
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages) {
+            chatMessages.style.display = 'block';
+        }
+        
+        // Clear any transcript results when switching back
+        clearTranscriptResults();
+    }
+}
+
+
+
+function addTranscriptSearchGuidance() {
+    // Check if guidance already exists
+    if (document.getElementById('transcriptSearchGuidance')) {
+        return;
+    }
+    
+    const chatInput = document.getElementById('chatInput');
+    if (!chatInput) return;
+    
+    const guidance = document.createElement('div');
+    guidance.id = 'transcriptSearchGuidance';
+    guidance.innerHTML = `
+        <div style="
+            background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
+            border: 1px solid #ce93d8;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 8px 0;
+            font-size: 0.85rem;
+            color: #4a148c;
+        ">
+            <div style="font-weight: 600; margin-bottom: 6px;">ðŸŽ¯ Transcript Search Tips:</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">
+                <div>â€¢ Use quotes for exact phrases: <code>"billing issue"</code></div>
+                <div>â€¢ Multiple words: <code>cancel account refund</code></div>
+                <div>â€¢ Single keywords: <code>frustrated</code></div>
+                <div>â€¢ Agent responses: <code>policy procedure</code></div>
+            </div>
+        </div>
+    `;
+    
+    // Insert after chat input
+    chatInput.parentNode.insertBefore(guidance, chatInput.nextSibling);
+}
+
+function removeTranscriptSearchGuidance() {
+    const guidance = document.getElementById('transcriptSearchGuidance');
+    if (guidance) {
+        guidance.remove();
+    }
+}
+
+function handleTranscriptToggleChange() {
+    const toggleSwitch = document.getElementById('transcriptSearchToggle') || 
+                        document.querySelector('input[type="checkbox"][id*="transcript"]');
+    
+    if (!toggleSwitch) {
+        console.warn("âš ï¸ Transcript toggle not found");
+        return;
+    }
+    
+    const isTranscriptMode = toggleSwitch.checked;
+    console.log(`ðŸ”„ FIXED: Transcript toggle changed: ${isTranscriptMode}`);
+    
+    // Update the entire interface
+    updateChatInterfaceForTranscriptMode(isTranscriptMode);
+    
+    // Update the send function
+    updateSendFunction(isTranscriptMode);
+    
+    // Clear any existing results when switching modes
+    if (isTranscriptMode) {
+        // Clear regular chat results
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages) {
+            chatMessages.innerHTML = '';
+        }
+    } else {
+        // Clear transcript results
+        clearTranscriptResults();
+    }
+    
+    // Focus the input
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+        chatInput.focus();
+    }
+}console.log("âœ… Complete transcript search UI functions added to chat.js");
+
+function updateSendFunction(isTranscriptMode) {
+    const sendButton = document.getElementById('sendButton') || document.querySelector('.send-btn');
+    const chatInput = document.getElementById('chatInput');
+    
+    if (!sendButton || !chatInput) {
+        console.warn("âš ï¸ Send button or chat input not found");
+        return;
+    }
+    
+    // Remove existing event listeners by cloning the elements
+    const newSendButton = sendButton.cloneNode(true);
+    sendButton.parentNode.replaceChild(newSendButton, sendButton);
+    
+    const newChatInput = chatInput.cloneNode(true);
+    chatInput.parentNode.replaceChild(newChatInput, chatInput);
+    
+    if (isTranscriptMode) {
+        // Add transcript search functionality
+        newSendButton.addEventListener('click', sendMessageWithTranscriptSearch);
+        newChatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessageWithTranscriptSearch();
+            }
+        });
+        console.log("âœ… FIXED: Transcript search functions attached");
+    } else {
+        // Add regular chat functionality
+        newSendButton.addEventListener('click', sendMessage); // Assuming sendMessage exists
+        newChatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage(); // Assuming sendMessage exists
+            }
+        });
+        console.log("âœ… FIXED: Regular chat functions attached");
+    }
+}
+
+function cleanMetadataForDisplay(data) {
+    /**
+     * Cleans any data object to only include allowed fields
+     * @param {Object} data - Raw data object
+     * @returns {Object} - Cleaned data with only allowed fields
+     */
+    if (!data || typeof data !== 'object') {
+        return {};
+    }
+    
+    const cleaned = {};
+    
+    // Only include allowed fields
+    for (const field of ALLOWED_API_FIELDS) {
+        if (data[field] !== undefined && data[field] !== null && 
+            data[field] !== '' && data[field] !== 'Unknown') {
+            cleaned[field] = data[field];
+        }
+        
+        // Check in metadata subdictionary if it exists
+        if (data.metadata && data.metadata[field] !== undefined && 
+            data.metadata[field] !== null && data.metadata[field] !== '') {
+            cleaned[field] = data.metadata[field];
+        }
+    }
+    
+    // Remove any forbidden fields that might have slipped through
+    for (const forbidden of FORBIDDEN_INTERNAL_FIELDS) {
+        delete cleaned[forbidden];
+    }
+    
+    return cleaned;
+}
+
+
 // =============================================================================
-// FILTER MANAGEMENT FUNCTIONS
+// Initialize the enhanced system
+// =============================================================================
+function initializeEnhancedTranscriptSearch() {
+    console.log("ðŸš€ FIXED: Initializing enhanced transcript search system...");
+    
+    // STEP 1: Create the toggle (this was missing!)
+    addToggleToHeader();
+    
+    // STEP 2: Add transcript search results container
+    addTranscriptResultsContainer();
+    
+    // STEP 3: Wait a moment for DOM to update, then find and setup the toggle
+    setTimeout(() => {
+        // Look for the actual toggle ID that gets created by addToggleToHeader()
+        const toggle = document.getElementById('transcriptSearchToggleInput') || 
+                      document.getElementById('transcriptSearchToggle') || 
+                      document.querySelector('input[type="checkbox"][id*="transcript"]');
+        
+        if (toggle) {
+            console.log("âœ… Found transcript toggle:", toggle.id);
+            
+            // Remove any existing event listeners and add our enhanced handler
+            toggle.removeEventListener('change', toggleTranscriptSearchMode); // Remove original
+            toggle.addEventListener('change', handleEnhancedTranscriptToggleChange);
+            
+            // Set initial state based on toggle
+            const isTranscriptMode = toggle.checked;
+            updateChatInterfaceForTranscriptMode(isTranscriptMode);
+            updateSendFunction(isTranscriptMode);
+            
+            console.log("âœ… FIXED: Enhanced transcript search initialized with toggle");
+        } else {
+            console.warn("âš ï¸ Transcript toggle still not found after creation attempt");
+            // Try to debug what's in the header
+            const header = document.getElementById('chatHeaderFilters');
+            if (header) {
+                console.log("Header contents:", header.innerHTML);
+            }
+        }
+    }, 200);
+    
+    // STEP 4: Verify everything is working (like the original did)
+    setTimeout(() => {
+        debugTranscriptToggle();
+    }, 400);
+}
+
+function handleEnhancedTranscriptToggleChange() {
+    // Get the toggle (use the actual ID from addToggleToHeader)
+    const toggle = document.getElementById('transcriptSearchToggleInput') || 
+                  document.getElementById('transcriptSearchToggle') || 
+                  document.querySelector('input[type="checkbox"][id*="transcript"]');
+    
+    if (!toggle) {
+        console.warn("âš ï¸ Transcript toggle not found in change handler");
+        return;
+    }
+    
+    const isTranscriptMode = toggle.checked;
+    console.log(`ðŸ”„ ENHANCED: Transcript toggle changed: ${isTranscriptMode}`);
+    
+    // Update the interface (same as before)
+    updateChatInterfaceForTranscriptMode(isTranscriptMode);
+    updateSendFunction(isTranscriptMode);
+    
+    // Handle the comprehensive option visibility (from original logic)
+    const comprehensiveOption = document.getElementById('comprehensiveOption');
+    if (comprehensiveOption) {
+        comprehensiveOption.style.display = isTranscriptMode ? 'inline-flex' : 'none';
+    }
+    
+    // Clear results when switching modes
+    if (isTranscriptMode) {
+        // Clear regular chat results
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages) {
+            chatMessages.innerHTML = '';
+        }
+    } else {
+        // Clear transcript results
+        clearTranscriptResults();
+    }
+    
+    // Show feedback toast (from original logic)
+    if (typeof showToast === 'function') {
+        showToast(
+            isTranscriptMode ? 
+            'ðŸŽ¯ Transcript Search Mode Enabled - Searching call transcripts only' : 
+            'ðŸ’¬ Normal Chat Mode Enabled - Full system search available',
+            isTranscriptMode ? 'info' : 'success'
+        );
+    }
+    
+    // Focus the input
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+        chatInput.focus();
+    }
+}
+
+async function sendMessageWithTranscriptSearch() {
+    console.log("ðŸŽ¯ FIXED: Starting transcript search with increased limits and all filtered evaluations...");
+    
+    const chatInput = document.getElementById('chatInput');
+    const sendButton = document.getElementById('sendButton') || document.querySelector('.send-btn');
+    
+    if (!chatInput) {
+        console.error("âŒ Chat input not found");
+        return;
+    }
+    
+    const message = chatInput.value?.trim();
+    if (!message) {
+        console.log("âš ï¸ Empty search query");
+        return;
+    }
+    
+    // Store the search query
+    window.lastSearchQuery = message;
+    
+    // Get current filters
+    const currentFilters = (typeof getAppliedFilters === 'function') ? getAppliedFilters() : {};
+    const useComprehensive = document.getElementById('comprehensiveToggle')?.checked || false;
+    
+    try {
+        // Disable inputs during search
+        chatInput.disabled = true;
+        if (sendButton) sendButton.disabled = true;
+        
+        // Show loading state
+        if (useComprehensive) {
+            showTranscriptSearchLoading(message, true);
+        } else {
+            showTranscriptSearchLoading(message, false);
+        }
+        
+        // FIXED: Use relative URLs like the regular sendMessage function
+        const endpoint = useComprehensive ? 
+            '/search_transcripts_comprehensive' : 
+            '/search_transcripts';
+        
+        const requestBody = {
+            query: message,
+            filters: currentFilters || {},
+            // DEFAULT: No limits - use all evaluations matching filters
+            display_size: null,     // null = all matching evaluations
+            size: null,             // null = all matching evaluations  
+            max_scan: null,         // null = scan all available
+            highlight: true,
+            include_all_filtered: true  // Explicitly request all filtered results
+        };
+        
+        console.log("ðŸ” Sending transcript search with increased limits:", {
+            endpoint,
+            query: message,
+            comprehensive: useComprehensive,      
+            filtersCount: Object.keys(currentFilters || {}).length,
+            defaultToAll: true
+        });
+        
+        // Execute search with timeout for large data sets
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => {
+            abortController.abort();
+            console.warn("Request timeout after 60 seconds");
+        },60000); // Increased timeout for larger searches
+        
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(requestBody),
+            signal: abortController.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            let errorText;
+            try {
+                errorText = await response.text();
+                console.error("API Error Response:", errorText);
+            } catch (e) {
+                errorText = `HTTP ${response.status} ${response.statusText}`;
+            }
+            throw new Error(`Search failed: ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log("âœ… FIXED: Transcript search response:", data);
+        
+        // Display results with the appropriate function
+        if (useComprehensive) {
+            displayComprehensiveTranscriptResults(data, message);
+        } else {
+            displayTranscriptSearchResults(data, message);
+        }
+        
+        // Clear the input
+        chatInput.value = '';
+        chatInput.style.height = 'auto';
+        
+    } catch (error) {
+        console.error("âŒ Transcript search error:", error);
+        showTranscriptSearchError(error.message || 'Search failed');
+    } finally {
+        // Re-enable inputs
+        chatInput.disabled = false;
+        if (sendButton) sendButton.disabled = false;
+        chatInput.focus();
+    }
+}
+
+function getAppliedFilters() {
+    const filters = {};
+    
+    // Collect filter values from UI elements
+    const filterMappings = {
+        'templateFilter': 'template_name',
+        'programFilter': 'program', 
+        'partnerFilter': 'partner',
+        'siteFilter': 'site',
+        'lobFilter': 'lob',
+        'callDispositionFilter': 'disposition',
+        'callSubDispositionFilter': 'subDisposition',
+        'languageFilter': 'language',
+        'startCallDate': 'call_date_start',
+        'endCallDate': 'call_date_end'
+    };
+    
+    Object.entries(filterMappings).forEach(([elementId, filterKey]) => {
+        const element = document.getElementById(elementId);
+        if (element && element.value && element.value !== '') {
+            filters[filterKey] = element.value;
+        }
+    });
+    
+    return filters;
+}
+
+// =============================================================================
+// FILTER MANAGEMENT
 // =============================================================================
 
 async function loadDynamicFilterOptions() {
+    console.log("ðŸ“‹ Loading dynamic filter options...");
     const startTime = performance.now();
-    console.log("🔄 Loading dynamic filter options from API...");
     
     try {
         const response = await fetch('/filter_options_metadata', {
             method: 'GET',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json'
             },
-            signal: AbortSignal.timeout(PRODUCTION_CONFIG.FILTER_LOAD_TIMEOUT)
+            timeout: PRODUCTION_CONFIG.FILTER_LOAD_TIMEOUT
         });
         
         if (!response.ok) {
-            throw new Error(`Filter API responded with ${response.status}: ${response.statusText}`);
+            throw new Error(`Filter API returned ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
         
-        if (!data || typeof data !== 'object') {
-            throw new Error('Invalid filter data received from API');
+        if (data.status === 'success') {
+            filterOptions = {
+                templates: data.templates || [],
+                programs: data.programs || [],
+                partners: data.partners || [],
+                sites: data.sites || [],
+                lobs: data.lobs || [],
+                callDispositions: data.Dispositions || [],
+                callSubDispositions: data.SubDispositions || [],
+                languages: data.languages || [],
+                callTypes: data.callTypes || []
+            };
+            
+            // Update vector search status
+            if (data.vector_search_enabled !== undefined) {
+                vectorSearchStatus.enabled = data.vector_search_enabled;
+                vectorSearchStatus.hybridAvailable = data.hybrid_search_available || false;
+                vectorSearchStatus.searchQuality = data.search_enhancements?.search_quality || 'text_only';
+            }
+            
+            populateFilterOptions(filterOptions);
+            updateFilterCounts(data);
+            
+            const loadTime = performance.now() - startTime;
+            performanceMetrics.filterLoadTime = loadTime;
+            performanceMetrics.lastFilterUpdate = new Date().toISOString();
+            
+            console.log(`âœ… Filter options loaded successfully in ${loadTime.toFixed(2)}ms`);
+            console.log(`ðŸ”® Vector search: ${vectorSearchStatus.enabled ? 'ENABLED' : 'DISABLED'}`);
+            
+            return data;
+            
+        } else {
+            throw new Error(data.message || data.error || 'Unknown filter loading error');
         }
         
-        // Update global filter options
-        filterOptions = {
-            templates: data.templates || [],
-            programs: data.programs || [],
-            partners: data.partners || [],
-            sites: data.sites || [],
-            lobs: data.lobs || [],
-            callDispositions: data.callDispositions || [],
-            callSubDispositions: data.callSubDispositions || [],
-            languages: data.languages || [],
-            callTypes: data.callTypes || []
-        };
-        
-        // Populate filter dropdowns
-        populateFilterDropdowns();
-        
-        // Update filter counts
-        updateFilterCounts();
-        
-        const loadTime = performance.now() - startTime;
-        performanceMetrics.filterLoadTime = loadTime;
-        performanceMetrics.lastFilterUpdate = new Date();
-        
-        console.log(`✅ Filter options loaded successfully in ${loadTime.toFixed(2)}ms`);
-        console.log('📊 Filter counts:', {
-            templates: filterOptions.templates.length,
-            programs: filterOptions.programs.length,
-            partners: filterOptions.partners.length,
-            sites: filterOptions.sites.length,
-            lobs: filterOptions.lobs.length,
-            dispositions: filterOptions.callDispositions.length
-        });
-        
     } catch (error) {
-        console.error("❌ Failed to load filter options:", error);
+        console.error("âŒ Failed to load filter options:", error);
         performanceMetrics.errorCount++;
-        
-        // Show user-friendly error message
-        showCriticalError(`Failed to load filter options: ${error.message}. Please check your internet connection and try refreshing the page.`);
-        
+        handleFilterLoadError(error.message);
         throw error;
     }
 }
 
-function populateFilterDropdowns() {
-    console.log("🔄 Populating filter dropdowns...");
+function populateFilterOptions(options) {
+    console.log("ðŸ”„ Populating filter dropdowns...");
     
-    // Define dropdown mappings
-    const dropdowns = [
-        { id: 'templateFilter', options: filterOptions.templates, countId: 'templateCount' },
-        { id: 'programFilter', options: filterOptions.programs, countId: 'programCount' },
-        { id: 'partnerFilter', options: filterOptions.partners, countId: 'partnerCount' },
-        { id: 'siteFilter', options: filterOptions.sites, countId: 'siteCount' },
-        { id: 'lobFilter', options: filterOptions.lobs, countId: 'lobCount' },
-        { id: 'callDispositionFilter', options: filterOptions.callDispositions, countId: 'dispositionCount' },
-        { id: 'languageFilter', options: filterOptions.languages, countId: 'languageCount' },
-        { id: 'callTypeFilter', options: filterOptions.callTypes, countId: 'callTypeCount' }
-    ];
+    // Template filter
+    populateSelect('templateFilter', options.templates);
     
-    dropdowns.forEach(({ id, options, countId }) => {
-        const dropdown = document.getElementById(id);
-        const countElement = document.getElementById(countId);
-        
-        if (!dropdown) {
-            console.warn(`⚠️ Dropdown ${id} not found in DOM`);
-            return;
-        }
-        
-        // Clear existing options (except first "All" option)
-        const firstOption = dropdown.querySelector('option');
-        dropdown.innerHTML = '';
-        if (firstOption) {
-            dropdown.appendChild(firstOption);
-        }
-        
-        // Add new options
-        options.forEach(option => {
-            const optionElement = document.createElement('option');
-            optionElement.value = option;
-            optionElement.textContent = option;
-            dropdown.appendChild(optionElement);
-        });
-        
-        // Update count
-        if (countElement) {
-            countElement.textContent = `(${options.length})`;
-        }
-        
-        // Remove loading state
-        dropdown.classList.remove('loading-filter');
-        dropdown.disabled = false;
-    });
+    // Program filter
+    populateSelect('programFilter', options.programs);
     
-    console.log("✅ Filter dropdowns populated successfully");
+    // Partner filter
+    populateSelect('partnerFilter', options.partners);
+    
+    // Site filter
+    populateSelect('siteFilter', options.sites);
+    
+    // LOB filter
+    populateSelect('lobFilter', options.lobs);
+    
+    // Disposition filters
+    populateDispositionDropdown(options.callDispositions);
+    populateSubDispositionDropdown(options.callSubDispositions);
+    
+    // Other filters
+    populateSelect('languageFilter', options.languages);    
+    
+    console.log("âœ… Filter dropdowns populated");
 }
 
-function updateFilterCounts() {
-    const counts = {
-        templates: filterOptions.templates.length,
-        programs: filterOptions.programs.length,
-        partners: filterOptions.partners.length,
-        sites: filterOptions.sites.length,
-        lobs: filterOptions.lobs.length,
-        dispositions: filterOptions.callDispositions.length,
-        languages: filterOptions.languages.length,
-        callTypes: filterOptions.callTypes.length
-    };
+function populateSelect(selectId, options) {
+    const select = document.getElementById(selectId);
+    if (!select) {
+        console.warn(`âš ï¸ Select element ${selectId} not found`);
+        return;
+    }
     
-    // Update count displays
-    Object.entries(counts).forEach(([key, count]) => {
-        const countElement = document.getElementById(`${key.replace('s', '')}Count`);
-        if (countElement) {
-            countElement.textContent = `(${count})`;
-        }
+    // Clear existing options except the first (placeholder)
+    const firstOption = select.firstElementChild;
+    select.innerHTML = '';
+    if (firstOption) {
+        select.appendChild(firstOption);
+    }
+    
+    // Add new options
+    options.forEach(option => {
+        const optionElement = document.createElement('option');
+        optionElement.value = option;
+        optionElement.textContent = option;
+        select.appendChild(optionElement);
     });
-}
-
-function updateHierarchyFilters(changedFilter) {
-    console.log(`🔄 Updating hierarchy filters after ${changedFilter} change`);
-    
-    // Get current selections
-    const selections = {
-        template: document.getElementById('templateFilter')?.value || '',
-        program: document.getElementById('programFilter')?.value || '',
-        partner: document.getElementById('partnerFilter')?.value || '',
-        site: document.getElementById('siteFilter')?.value || ''
-    };
-    
-    // Update dependent filters based on hierarchy
-    // This would typically involve API calls to get filtered options
-    // For now, we'll just log the change
-    console.log('📊 Current selections:', selections);
-}
-
-function updateSubDispositions() {
-    const dispositionFilter = document.getElementById('callDispositionFilter');
-    const subDispositionFilter = document.getElementById('callSubDispositionFilter');
-    
-    if (!dispositionFilter || !subDispositionFilter) return;
-    
-    const selectedDisposition = dispositionFilter.value;
-    
-    // Clear sub-dispositions
-    subDispositionFilter.innerHTML = '<option value="">All Sub-Dispositions</option>';
-    
-    // Filter sub-dispositions based on selected disposition
-    const relevantSubDispositions = filterOptions.callSubDispositions.filter(sub => 
-        !selectedDisposition || sub.startsWith(selectedDisposition)
-    );
-    
-    relevantSubDispositions.forEach(sub => {
-        const option = document.createElement('option');
-        option.value = sub;
-        option.textContent = sub;
-        subDispositionFilter.appendChild(option);
-    });
-    
-    console.log(`🔄 Updated sub-dispositions for: ${selectedDisposition || 'all'}`);
 }
 
 // =============================================================================
-// FILTER APPLICATION FUNCTIONS
+// ðŸ”§ FIXED: SINGLE updateFilterCounts FUNCTION - NO DUPLICATES
+// Removed all conflicting versions, this is the only one
+// =============================================================================
+
+function toggleTranscriptSearchMode() {
+    console.log("ðŸŽ¯ Toggling transcript search mode...");
+    
+    // Use the correct IDs from the HTML
+    const toggle = document.getElementById('transcriptSearchToggleInput');
+    const toggleContainer = document.getElementById('transcriptToggle');  
+    const comprehensiveOption = document.getElementById('comprehensiveOption');
+    const chatInput = document.getElementById('chatInput');
+    
+    if (!toggle) {
+        console.error("âŒ Transcript search toggle not found! Check HTML file.");
+        return;
+    }
+    
+    // Update global state
+    transcriptSearchMode = toggle.checked;
+    
+    console.log(`ðŸŽ¯ Transcript search mode: ${transcriptSearchMode ? 'ENABLED' : 'DISABLED'}`);
+    
+    // Update visual states
+    if (transcriptSearchMode) {
+        // Activate header toggle styling
+        if (toggleContainer) {
+            toggleContainer.classList.add('active');
+        }
+        
+        // Show comprehensive search option in header
+        if (comprehensiveOption) {
+            comprehensiveOption.style.display = 'inline-flex';
+        }
+        
+        // Update chat input
+        if (chatInput) {
+            chatInput.classList.add('transcript-mode');
+            chatInput.placeholder = "Enter words or phrases to find in call transcripts...";
+        }
+        
+        console.log("âœ… Transcript search mode activated");
+    } else {
+        // Deactivate header toggle styling
+        if (toggleContainer) {
+            toggleContainer.classList.remove('active');
+        }
+        
+        // Hide comprehensive search option
+        if (comprehensiveOption) {
+            comprehensiveOption.style.display = 'none';
+        }
+        
+        // Reset chat input
+        if (chatInput) {
+            chatInput.classList.remove('transcript-mode');
+            chatInput.placeholder = "Ask specific questions about calls, dispositions, site performance, quality metrics, or any evaluation data from your live database...";
+        }
+        
+        // Clear any existing transcript results
+        clearTranscriptResults();
+        
+        console.log("âœ… Normal chat mode activated");
+    }
+    
+    // Show feedback toast (if showToast function exists)
+    if (typeof showToast === 'function') {
+        showToast(
+            transcriptSearchMode ? 
+            'ðŸŽ¯ Transcript Search Mode Enabled - Searching call transcripts only' : 
+            'ðŸ’¬ Normal Chat Mode Enabled - Full system search available',
+            transcriptSearchMode ? 'info' : 'success'
+        );
+    }
+}
+
+function updateFilterCounts(data) {
+    console.log("ðŸ“Š Updating filter counts with data:", data);
+    
+    // PART 1: Update overall stats display in sidebar
+    updateSidebarStats(data);
+    
+    // PART 2: Update individual filter count indicators 
+    updateIndividualFilterCounts(data);
+    
+    // PART 3: ðŸ”§ FIX - Update totalRecords in chat header (WAS MISSING!)
+    updateChatHeaderStats(data);
+    
+    // PART 4: Update data status indicators
+    updateDataStatusIndicators(data);
+    
+    // PART 5: Remove loading states and enable filters
+    removeLoadingStates();
+    
+    console.log("âœ… Filter counts update completed with chat-stats integration");
+}
+
+// =============================================================================
+// ðŸ”§ FIXED: HELPER FUNCTIONS - NO LONGER NESTED OR DUPLICATED
+// Moved all helper functions outside to prevent conflicts
+// =============================================================================
+
+function updateSidebarStats(data) {
+    const countsElement = document.getElementById('filterCounts');
+    if (countsElement) {
+        const totalEvaluations = data.total_evaluations || 0;
+        const totalIndices = data.total_indices || 0;
+        const vectorEnabled = data.vector_search_enabled ? 'ðŸ”®' : '';
+        
+        countsElement.innerHTML = `
+            <div style="font-size: 0.85em; color: #666; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; margin: 10px 0;">
+                ðŸ“Š <strong>${totalEvaluations.toLocaleString()}</strong> evaluations available ${vectorEnabled}
+                <br>
+                <span style="font-size: 0.8em;">Across ${totalIndices} template collections</span>
+                ${vectorEnabled ? '<br><span style="color: #28a745;">ðŸ”® Enhanced with vector search</span>' : ''}
+            </div>
+        `;
+    }
+}
+
+function updateIndividualFilterCounts(data) {
+    const counts = [
+        { id: 'templateCount', data: data.templates, label: 'templates' },
+        { id: 'programCount', data: data.programs, label: 'programs' },
+        { id: 'partnerCount', data: data.partners, label: 'partners' },
+        { id: 'siteCount', data: data.sites, label: 'sites' },
+        { id: 'lobCount', data: data.lobs, label: 'LOBs' },
+        { id: 'dispositionCount', data: data.Dispositions, label: 'dispositions' },
+        { id: 'subDispositionCount', data: data.SubDispositions, label: 'sub-dispositions' },
+        { id: 'languageCount', data: data.languages, label: 'languages' }
+    ];
+
+    counts.forEach(({ id, data: itemData, label }) => {
+        const element = document.getElementById(id);
+        if (element) {
+            const count = Array.isArray(itemData) ? itemData.length : 0;
+            if (count > 0) {
+                element.textContent = `(${count})`;
+                element.className = 'count-indicator data-status-ok';
+                element.title = `${count} ${label} found in database`;
+            } else {
+                element.textContent = '(0)';
+                element.className = 'count-indicator data-status-warning';
+                element.title = `No ${label} found in database`;
+            }
+        }
+    });
+}
+
+// Populate the main disposition dropdown
+function populateDispositionDropdown(dispositions) {
+    const dispositionSelect = document.getElementById('callDispositionFilter');
+    if (!dispositionSelect) {
+        console.warn("âš ï¸ Disposition dropdown not found");
+        return;
+    }
+    
+    // Clear existing options (except the default "All" option)
+    dispositionSelect.innerHTML = '<option value="">All Dispositions</option>';
+    
+    // Add each disposition as an option
+    dispositions.forEach(disposition => {
+        const option = document.createElement('option');
+        option.value = disposition;
+        option.textContent = disposition;
+        dispositionSelect.appendChild(option);
+    });
+    
+    // Update count indicator
+    const countIndicator = document.getElementById('dispositionCount');
+    if (countIndicator) {
+        countIndicator.textContent = `(${dispositions.length})`;
+        countIndicator.className = 'count-indicator data-status-ok';
+    }
+    
+    console.log(`âœ… Populated ${dispositions.length} dispositions`);
+}
+
+// Populate the subdisposition dropdown
+function populateSubDispositionDropdown(subDispositions) {
+    const subDispositionSelect = document.getElementById('callSubDispositionFilter');
+    if (!subDispositionSelect) {
+        console.warn("âš ï¸ Sub-disposition dropdown not found");
+        return;
+    }
+    
+    // Clear existing options
+    subDispositionSelect.innerHTML = '<option value="">All Sub-Dispositions</option>';
+    
+    // Add each subdisposition as an option
+    subDispositions.forEach(subDisposition => {
+        const option = document.createElement('option');
+        option.value = subDisposition;
+        option.textContent = subDisposition;
+        subDispositionSelect.appendChild(option);
+    });
+    
+    // Update count indicator
+    const countIndicator = document.getElementById('subDispositionCount');
+    if (countIndicator) {
+        countIndicator.textContent = `(${subDispositions.length})`;
+        countIndicator.className = 'count-indicator data-status-ok';
+    }
+    
+    console.log(`âœ… Populated ${subDispositions.length} sub-dispositions`);
+}
+
+
+// ðŸ”§ NEW FUNCTION - This was completely missing!
+function updateChatHeaderStats(data) {
+    // Update totalRecords element in chat header
+    const totalRecordsElement = document.getElementById('totalRecords');
+    if (totalRecordsElement) {
+        const totalEvaluations = data.total_evaluations || 0;
+        if (totalEvaluations > 0) {
+            totalRecordsElement.textContent = `${totalEvaluations.toLocaleString()} evaluations`;
+            totalRecordsElement.title = `${totalEvaluations} evaluations available for analysis`;
+        } else {
+            totalRecordsElement.textContent = 'No data available';
+            totalRecordsElement.title = 'No evaluation data found';
+        }
+        console.log(`ðŸ“Š Updated totalRecords: ${totalRecordsElement.textContent}`);
+    } else {
+        console.warn("âš ï¸ totalRecords element not found in chat header");
+    }
+    
+    // Update active filters count in header
+    const activeFiltersCountElement = document.getElementById('activeFiltersCount');
+    if (activeFiltersCountElement) {
+        const filterCount = Object.keys(currentFilters).length;
+        activeFiltersCountElement.textContent = `${filterCount} filters`;
+    }
+}
+
+function updateDataStatusIndicators(data) {
+    const statusElements = [
+        { id: 'hierarchyDataStatus', categories: ['templates', 'programs', 'partners', 'sites', 'lobs'] },
+        { id: 'callDataStatus', categories: ['Dispositions', 'SubDispositions'] },
+        { id: 'languageDataStatus', categories: ['languages'] }
+    ];
+
+    statusElements.forEach(({ id, categories }) => {
+        const element = document.getElementById(id);
+        if (!element) return;
+
+        const totalCategories = categories.length;
+        const populatedCategories = categories.filter(cat =>
+            data[cat] && data[cat].length > 0
+        ).length;
+
+        if (populatedCategories === totalCategories) {
+            element.textContent = 'âœ… All data loaded';
+            element.className = 'data-status data-status-ok';
+        } else if (populatedCategories > 0) {
+            element.textContent = `âš ï¸ ${populatedCategories}/${totalCategories} loaded`;
+            element.className = 'data-status data-status-warning';
+        } else {
+            element.textContent = 'âŒ No data found';
+            element.className = 'data-status data-status-error';
+        }
+    });
+}
+
+function removeLoadingStates() {
+    const selects = document.querySelectorAll('.filter-select, .filter-input');
+    selects.forEach(select => {
+        select.classList.remove('loading-filter');
+        select.disabled = false;
+    });
+}
+
+function handleFilterLoadError(errorMessage) {
+    console.error("ðŸš¨ Filter load error:", errorMessage);
+    
+    // Set empty filter options to prevent crashes
+    filterOptions = {
+        templates: [],
+        programs: [],
+        partners: [],
+        sites: [],
+        lobs: [],
+        callDispositions: [],
+        callSubDispositions: [],
+        languages: [],
+        callTypes: []
+    };
+    
+    // Update UI with error state
+    const countsElement = document.getElementById('filterCounts');
+    if (countsElement) {
+        countsElement.innerHTML = `
+            <div style="font-size: 0.85em; color: #c33; padding: 8px 12px; background: #fee; border-radius: 6px; margin: 10px 0; border: 1px solid #fcc;">
+                âŒ <strong>Filter Loading Failed</strong><br>
+                <span style="font-size: 0.8em;">${getErrorMessage(errorMessage)}</span>
+            </div>
+        `;
+    }
+    
+    // Show error in totalRecords
+    const totalRecordsElement = document.getElementById('totalRecords');
+    if (totalRecordsElement) {
+        totalRecordsElement.textContent = 'Filter error';
+        totalRecordsElement.title = `Filter loading failed: ${errorMessage}`;
+    }
+    
+    populateFilterOptions(filterOptions);
+    showFilterDataWarning(getErrorMessage(errorMessage));
+}
+
+function showFilterDataWarning(message) {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+    
+    const existingWarning = document.getElementById('filterDataWarning');
+    if (existingWarning) {
+        existingWarning.remove();
+    }
+    
+    const warningDiv = document.createElement('div');
+    warningDiv.id = 'filterDataWarning';
+    warningDiv.innerHTML = `
+        <div style="
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px;
+            font-size: 0.9em;
+            color: #856404;
+            box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
+        ">
+            <div style="font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                âš ï¸ Filter System Notice
+            </div>
+            <div style="margin-bottom: 12px; line-height: 1.4;">${message}</div>
+            <div style="display: flex; gap: 8px;">
+                <button onclick="loadDynamicFilterOptions().catch(console.error)" style="
+                    padding: 6px 12px; background: #856404; color: white; border: none;
+                    border-radius: 4px; cursor: pointer; font-size: 0.8em;
+                ">ðŸ”„ Retry</button>
+                <button onclick="document.getElementById('filterDataWarning').remove()" style="
+                    padding: 6px 12px; background: transparent; color: #856404;
+                    border: 1px solid #856404; border-radius: 4px; cursor: pointer; font-size: 0.8em;
+                ">Dismiss</button>
+            </div>
+        </div>
+    `;
+    
+    const sidebarHeader = sidebar.querySelector('.sidebar-header');
+    if (sidebarHeader) {
+        sidebarHeader.insertAdjacentElement('afterend', warningDiv);
+    }
+}
+
+function getErrorMessage(errorMessage) {
+    if (errorMessage.includes('timeout') || errorMessage.includes('ECONNABORTED')) {
+        return "Connection timeout - please check your internet connection and try again";
+    } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+        return "Network error - unable to connect to the server";
+    } else if (errorMessage.includes('opensearch') || errorMessage.includes('database')) {
+        return "Database temporarily unavailable - filters will be limited";
+    } else {
+        return "Unable to load filter data - please try refreshing the page";
+    }
+}
+
+// =============================================================================
+// ðŸ”§ FIXED: ANALYTICS STATS INTEGRATION
+// This function connects to /analytics/stats endpoint
+// =============================================================================
+
+async function refreshAnalyticsStats() {
+    console.log(" Refreshing analytics stats with filters:", currentFilters);
+    
+    try {
+        // ðŸ”§ UPDATED: Request stats for all evaluations matching filters
+        const requestBody = {
+            filters: currentFilters,
+            include_all_filtered: true,  // Include all matching evaluations
+            max_evaluations: null,       // null = no limit
+            comprehensive: true          // Request comprehensive stats
+        };
+        
+        const response = await fetch('/analytics/stats', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Analytics API returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log("Analytics stats response:", data);
+        
+        if (data.status === 'success') {
+            // Update totalRecords in chat header
+            const totalRecordsElement = document.getElementById('totalRecords');
+            if (totalRecordsElement) {
+                const totalRecords = data.totalRecords || 0;
+                totalRecordsElement.textContent = `${totalRecords.toLocaleString()} evaluations`;
+                totalRecordsElement.title = `${totalRecords} evaluations match current filters`;
+            }
+            
+            // Update active filters count
+            const activeFiltersCountElement = document.getElementById('activeFiltersCount');
+            if (activeFiltersCountElement) {
+                const filterCount = Object.keys(currentFilters).length;
+                activeFiltersCountElement.textContent = `${filterCount} filters`;
+            }
+            
+            // Update performance metrics
+            performanceMetrics.lastStatsUpdate = new Date().toISOString();
+            
+        } else {
+            console.error("Analytics stats error:", data.error);
+            
+            // Show error state in UI
+            const totalRecordsElement = document.getElementById('totalRecords');
+            if (totalRecordsElement) {
+                totalRecordsElement.textContent = 'Stats unavailable';
+                totalRecordsElement.title = 'Unable to load evaluation statistics';
+            }
+        }
+        
+    } catch (error) {
+        console.error("âŒ Failed to refresh analytics stats:", error);
+        performanceMetrics.errorCount++;
+        
+        // Show error state in UI
+        const totalRecordsElement = document.getElementById('totalRecords');
+        if (totalRecordsElement) {
+            totalRecordsElement.textContent = 'Stats error';
+            totalRecordsElement.title = 'Error loading evaluation statistics';
+        }
+    }
+}
+
+// =============================================================================
+// ðŸ”§ FIXED: FILTER ACTIONS WITH ANALYTICS INTEGRATION
+// Added refreshAnalyticsStats() calls to connect filter changes to stats
 // =============================================================================
 
 function applyFilters() {
-    const timestamp = new Date().toISOString();
-    console.log(`🔍 [${timestamp}] === APPLYING FILTERS ===`);
+    console.log("ðŸ” Applying filters...");
     
-    // Log current state before collecting filters
-    console.log(`🔍 [${timestamp}] Previous filters:`, JSON.stringify(currentFilters, null, 2));
+    const filters = {};
     
-    // Collect filter values - UPDATED to match exact API field names
-    currentFilters = {
-        evaluationId: document.getElementById('evaluationIdFilter')?.value || '',
-        phoneNumber: document.getElementById('phoneNumberFilter')?.value || '',
-        contactId: document.getElementById('contactIdFilter')?.value || '',
-        ucid: document.getElementById('ucidFilter')?.value || '',
-        call_date_start: document.getElementById('startCallDate')?.value || '',
-        call_date_end: document.getElementById('endCallDate')?.value || '',
-        template_name: document.getElementById('templateFilter')?.value || '',  // ✅ Fixed: template → template_name
-        program: document.getElementById('programFilter')?.value || '',
-        partner: document.getElementById('partnerFilter')?.value || '',
-        site: document.getElementById('siteFilter')?.value || '',
-        lob: document.getElementById('lobFilter')?.value || '',
-        disposition: document.getElementById('callDispositionFilter')?.value || '',  // ✅ Fixed: callDisposition → disposition  
-        subDisposition: document.getElementById('callSubDispositionFilter')?.value || '',  // ✅ Fixed: callSubDisposition → subDisposition
-        language: document.getElementById('languageFilter')?.value || ''
-        // ❌ REMOVED: call_type (doesn't exist in your API)
+    // Collect filter values
+    const filterMappings = {
+        'templateFilter': 'template_name',
+        'programFilter': 'program', 
+        'partnerFilter': 'partner',
+        'siteFilter': 'site',
+        'lobFilter': 'lob',
+        'callDispositionFilter': 'disposition',
+        'callSubDispositionFilter': 'subDisposition',
+        'languageFilter': 'language',
+        'startCallDate': 'call_date_start',
+        'endCallDate': 'call_date_end'
     };
     
-    console.log(`🔍 [${timestamp}] Collected raw filters:`, JSON.stringify(currentFilters, null, 2));
-    
-    // Count filters before removing empty ones
-    const beforeCount = Object.keys(currentFilters).filter(key => currentFilters[key]).length;
-    
-    // Remove empty filters
-    Object.keys(currentFilters).forEach(key => {
-        if (!currentFilters[key]) {
-            delete currentFilters[key];
+    Object.entries(filterMappings).forEach(([elementId, filterKey]) => {
+        const element = document.getElementById(elementId);
+        if (element && element.value && element.value !== '') {
+            filters[filterKey] = element.value;
         }
     });
     
-    const afterCount = Object.keys(currentFilters).length;
-    
-    console.log(`🔍 [${timestamp}] Filter processing complete:`, {
-        beforeEmptyRemoval: beforeCount,
-        afterEmptyRemoval: afterCount,
-        filtersChanged: beforeCount !== afterCount
-    });
-    console.log(`🔍 [${timestamp}] Final filters to apply:`, JSON.stringify(currentFilters, null, 2));
-    
-    // Update UI to show active filters
-    console.log(`🔍 [${timestamp}] Calling updateActiveFiltersDisplay()...`);
+    currentFilters = filters;
     updateActiveFiltersDisplay();
     
-    // Update stats
-    console.log(`🔍 [${timestamp}] Calling refreshAnalyticsStats()...`);
+    // ðŸ”§ FIX: Refresh analytics stats after filter changes
     refreshAnalyticsStats();
     
-    console.log(`🔍 [${timestamp}] === FILTER APPLICATION COMPLETE ===`);
+    console.log("âœ… Filters applied:", filters);
 }
 
 function clearFilters() {
-    console.log("🧹 Clearing all filters...");
+    console.log("ðŸ—‘ï¸ Clearing all filters");
     
-    // Reset filter form
-    const filterForm = document.querySelector('.filter-panel');
-    if (filterForm) {
-        const inputs = filterForm.querySelectorAll('input, select');
-        inputs.forEach(input => {
-            if (input.type === 'date' || input.type === 'text') {
-                input.value = '';
-            } else if (input.tagName === 'SELECT') {
-                input.selectedIndex = 0;
-            }
-        });
-    }
-    
-    // Clear current filters
+    // Clear filter state
     currentFilters = {};
     
-    // Update UI
+    // Clear UI elements
+    const filterElements = [
+        'templateFilter', 'programFilter', 'partnerFilter', 'siteFilter', 
+        'lobFilter', 'callDispositionFilter', 'callSubDispositionFilter',
+        'languageFilter', 'startCallDate', 'endCallDate'
+    ];
+    
+    filterElements.forEach(elementId => {
+        const element = document.getElementById(elementId);
+        if (element) {
+            if (element.tagName === 'SELECT') {
+                element.selectedIndex = 0;
+            } else {
+                element.value = '';
+            }
+        }
+    });
+    
+    // Update displays
     updateActiveFiltersDisplay();
     
-    // Update stats
+    // ðŸ”§ FIX: Refresh stats after clearing filters
+    refreshAnalyticsStats();
+    
+    console.log("âœ… All filters cleared");
+}
+
+function removeFilter(filterKey) {
+    console.log(`ðŸ—‘ï¸ Removing filter: ${filterKey}`);
+    
+    delete currentFilters[filterKey];
+    
+    // Clear the corresponding UI element
+    const elementMappings = {
+        'template_name': 'templateFilter',
+        'program': 'programFilter',
+        'partner': 'partnerFilter',
+        'site': 'siteFilter',
+        'lob': 'lobFilter',
+        'disposition': 'callDispositionFilter',
+        'subDisposition': 'callSubDispositionFilter',
+        'language': 'languageFilter',
+        'call_date_start': 'startCallDate',
+        'call_date_end': 'endCallDate'
+    };
+    
+    const elementId = elementMappings[filterKey];
+    if (elementId) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            if (element.tagName === 'SELECT') {
+                element.selectedIndex = 0;
+            } else {
+                element.value = '';
+            }
+        }
+    }
+    
+    updateActiveFiltersDisplay();
+    
+    // ðŸ”§ FIX: Refresh stats after removing filter
     refreshAnalyticsStats();
 }
 
 function updateActiveFiltersDisplay() {
-    const filtersContainer = document.getElementById('chatHeaderFilters');
-    // REMOVED: activeFiltersCount update - this is handled by refreshAnalyticsStats()
+    const activeFiltersDiv = document.getElementById('activeFilters');
+    if (!activeFiltersDiv) return;
     
-    if (!filtersContainer) return;
+    if (Object.keys(currentFilters).length === 0) {
+        activeFiltersDiv.innerHTML = '<p style="color: #666; font-style: italic;">No active filters</p>';
+        return;
+    }
     
-    // Clear existing filter tags
-    filtersContainer.innerHTML = '';
-    
-    const filterCount = Object.keys(currentFilters).length;
-    
-    // REMOVED: Conflicting activeFiltersCount update
-    // The refreshAnalyticsStats() function handles this with enhanced format:
-    // "X filters (Y,YYY results)" instead of just "X filters"
-    
-    if (filterCount === 0) return;
-    
-    // Create filter tags
-    Object.entries(currentFilters).forEach(([key, value]) => {
-        const filterTag = document.createElement('div');
-        filterTag.className = 'filter-tag';
-        filterTag.innerHTML = `
-            <span class="filter-name">${key}:</span>
-            <span class="filter-value">${value}</span>
-            <button onclick="removeFilter('${key}')" class="remove-filter">×</button>
-        `;
-        filtersContainer.appendChild(filterTag);
-    });
-}
-
-function removeFilter(filterKey) {
-    delete currentFilters[filterKey];
-    
-    // Clear the form field
-    const fieldMap = {
-        evaluationId: 'evaluationIdFilter',
-        phoneNumber: 'phoneNumberFilter',
-        contactId: 'contactIdFilter',
-        ucid: 'ucidFilter',
-        startCallDate: 'startCallDate',
-        endCallDate: 'endCallDate',
-        template: 'templateFilter',
-        program: 'programFilter',
-        partner: 'partnerFilter',
-        site: 'siteFilter',
-        lob: 'lobFilter',
-        callDisposition: 'callDispositionFilter',
-        callSubDisposition: 'callSubDispositionFilter',
-        language: 'languageFilter',
-        callType: 'callTypeFilter'
+    const filterLabels = {
+        'template_name': 'Template',
+        'program': 'Program',
+        'partner': 'Partner',
+        'site': 'Site',
+        'lob': 'LOB',
+        'disposition': 'Disposition',
+        'subDisposition': 'Sub-Disposition',
+        'language': 'Language',
+        'call_type': 'Call Type',
+        'call_date_start': 'Start Date',
+        'call_date_end': 'End Date'
     };
     
-    const fieldId = fieldMap[filterKey];
-    if (fieldId) {
-        const field = document.getElementById(fieldId);
-        if (field) {
-            if (field.type === 'date' || field.type === 'text') {
-                field.value = '';
-            } else if (field.tagName === 'SELECT') {
-                field.selectedIndex = 0;
+    const filterTags = Object.entries(currentFilters)
+        .map(([key, value]) => {
+            const label = filterLabels[key] || key;
+            return `
+                <span class="filter-tag" style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    background: #e3f2fd;
+                    color: #1976d2;
+                    padding: 4px 8px;
+                    border-radius: 12px;
+                    font-size: 0.8em;
+                    margin: 2px;
+                ">
+                    <strong>${label}:</strong> ${value}
+                    <button onclick="removeFilter('${key}')" style="
+                        background: none;
+                        border: none;
+                        color: #1976d2;
+                        cursor: pointer;
+                        padding: 0;
+                        margin-left: 4px;
+                        font-size: 1.1em;
+                        line-height: 1;
+                    ">Ã—</button>
+                </span>
+            `;
+        })
+        .join('');
+    
+    activeFiltersDiv.innerHTML = `
+        <div style="margin-bottom: 8px;">
+            <strong>Active Filters:</strong>
+        </div>
+        <div>${filterTags}</div>
+    `;
+}
+
+// =============================================================================
+// CHAT FUNCTIONALITY
+// =============================================================================
+// Batch processing 
+async function sendBatchAnalysis(message, filters, batchSize = 500) {
+    let batchNum = 1;
+    let allFindings = [];
+    let totalEvaluations = 0;
+    let hasMoreData = true;
+    
+    // Show start message
+    addMessageToChat('system', 'ðŸ”„ Starting comprehensive analysis of ALL filtered data...');
+    
+    while (hasMoreData && batchNum <= 10) { // Safety limit of 10 batches
+        try {
+            // Modify the message to request specific batch
+            const batchMessage = `${message} (analyzing batch ${batchNum} of evaluations)`;
+            
+            // Use your existing sendMessage logic but capture response
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: batchMessage,
+                    history: [], // Clean history for each batch
+                    filters: filters,
+                    analytics: true
+                }),
+                signal: AbortSignal.timeout(60000) // 1 minute per batch
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Batch ${batchNum} failed: ${response.status}`);
             }
+            
+            const batchData = await response.json();
+            
+            // Check if we got meaningful data
+            if (batchData.sources && batchData.sources.length > 0) {
+                totalEvaluations += batchData.sources.length;
+                allFindings.push({
+                    batch: batchNum,
+                    findings: batchData.reply,
+                    evaluationCount: batchData.sources.length
+                });
+                
+                // Show progress
+                addMessageToChat('system', `âœ… Batch ${batchNum}: Analyzed ${batchData.sources.length} evaluations (${totalEvaluations} total)`);
+                
+                // Simple check: if we got less than expected, probably no more data
+                hasMoreData = batchData.sources.length >= (batchSize * 0.8); // 80% of batch size
+            } else {
+                addMessageToChat('system', `â„¹ï¸ Batch ${batchNum}: No more data found`);
+                hasMoreData = false;
+            }
+            
+            batchNum++;
+            
+        } catch (error) {
+            console.error(`Batch ${batchNum} error:`, error);
+            addMessageToChat('system', `âŒ Error in batch ${batchNum}: ${error.message}`);
+            break;
         }
     }
     
-    updateActiveFiltersDisplay();
-    refreshAnalyticsStats();
-}
-
-// =============================================================================
-// CHAT FUNCTIONS
-// =============================================================================
-
-function askQuestion(question) {
-    const chatInput = document.getElementById('chatInput');
-    if (chatInput) {
-        chatInput.value = question;
-        sendMessage();
+    // Generate combined summary
+    if (allFindings.length > 0) {
+        addMessageToChat('system', 'ðŸ”„ Generating comprehensive summary...');
+        
+        let combinedSummary = `# ðŸ“Š Comprehensive Analysis Results\n\n`;
+        combinedSummary += `**Total Evaluations Analyzed:** ${totalEvaluations}\n`;
+        combinedSummary += `**Batches Processed:** ${allFindings.length}\n\n`;
+        
+        combinedSummary += `## Key Findings Across All Data:\n\n`;
+        
+        allFindings.forEach((batch, index) => {
+            combinedSummary += `### Batch ${batch.batch} (${batch.evaluationCount} evaluations)\n`;
+            combinedSummary += `${batch.findings}\n\n`;
+        });
+        
+        combinedSummary += `## Overall Summary\n`;
+        combinedSummary += `This analysis covered **${totalEvaluations} total evaluations** matching your current filters, `;
+        combinedSummary += `processed in ${allFindings.length} batches to ensure comprehensive coverage.\n\n`;
+        combinedSummary += `*Analysis complete - all filtered data has been reviewed.*`;
+        
+        addMessageToChat('assistant', combinedSummary);
+    } else {
+        addMessageToChat('system', 'âŒ No data found matching your filters.');
     }
 }
+
+async function sendMessage() {
+    const chatInput = document.getElementById('chatInput');
+    const message = chatInput.value.trim();
+
+    console.log('ðŸ” DEBUG: Message=', message, 'Filters=', currentFilters);
+    
+    if (!message || isLoading) return;
+    
+    // Check if this is a comprehensive analysis request
+    const comprehensiveKeywords = ['all', 'overall', 'comprehensive', 'complete', 'entire', 'across'];
+    const isComprehensiveRequest = comprehensiveKeywords.some(keyword => 
+        message.toLowerCase().includes(keyword)
+    );
+    
+    // If comprehensive analysis requested AND filters are applied
+    if (isComprehensiveRequest && Object.keys(currentFilters).some(k => currentFilters[k])) {
+        console.log('ðŸ”„ Detected comprehensive analysis request - using batch processing');
+        await sendBatchAnalysis(message, currentFilters);
+        chatInput.value = '';
+        return;
+    }
+    
+    // Otherwise, use your existing sendMessage logic
+    console.log("ðŸ“¤ Sending message:", message);
+    
+    // ... rest of your existing sendMessage code stays the same ...
+}
+
+
 
 function handleKeyPress(event) {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -539,564 +1760,2256 @@ function handleKeyPress(event) {
 }
 
 async function sendMessage() {
-    console.log("🔄 sendMessage called");
-    
     const chatInput = document.getElementById('chatInput');
-    if (!chatInput) {
-        console.error("❌ chatInput element not found");
-        return;
-    }
-    
     const message = chatInput.value.trim();
-    if (!message) {
-        console.log("⚠️ No message to send");
-        return;
-    }
     
-    if (isLoading) {
-        console.log("⚠️ Already loading, ignoring request");
-        return;
-    }
+    if (!message || isLoading) return;
     
-    console.log("💬 Sending message:", message);
+    console.log(" Sending message:", message);
     
-    // Clear input and show loading
-    chatInput.value = '';
-    isLoading = true;
     
-    // Show user message
-    addMessageToChat('user', message);
     
-    // Show loading indicator
-    const loadingId = addLoadingMessage();
     
     try {
+        isLoading = true;
+        updateSendButtonState(true);
+        
+        // Add user message to chat
+        addMessageToChat('user', message);
+        
+        // Clear input
+        chatInput.value = '';
+        chatInput.style.height = 'auto';
+        
+        // Show typing indicator
+        showTypingIndicator();
+        
+        const startTime = performance.now();
+
+        const requestBody = {
+            message: message,
+            history: chatHistory,
+            filters: currentFilters,
+            analytics: true,
+            // DEFAULT: Use all evaluations that match current filters
+            max_results: null,  // null = no limit, use all matching
+            size: null,         // null = no limit, use all matching
+            include_all_filtered: true  // Explicitly request all filtered results
+        };
+        
+        
+        // Send request
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 message: message,
-                history: chatHistory || [],
+                history: chatHistory,
                 filters: currentFilters,
                 analytics: true,
-                metadata_focus: []
-            })
+                exclude_qa_content: excludeQAContent || false  // Use to only search through transcripts
+                comprehensive: getComprehensiveToggleState(), // NEW: Add comprehensive toggle
+            }),
+            timeout: 120000  //2 minute timeout for chat response.
         });
         
         if (!response.ok) {
-            throw new Error(`Chat API error: ${response.status}`);
+            throw new Error(`Chat API returned ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
         
-        // Remove loading message
-        removeLoadingMessage(loadingId);
+        const responseTime = performance.now() - startTime;
+        performanceMetrics.chatResponseTimes.push(responseTime);
         
-        // Show response - handle both 'reply' and 'response' fields from backend
-        const responseText = data.reply || data.response || 'No response received';
-        addMessageToChat('assistant', responseText);
+        // Remove typing indicator
+        hideTypingIndicator();
         
-        // Update session ID if provided
-        if (data.sessionId) {
-            currentSessionId = data.sessionId;
+        if (data.reply) {
+
+            // Clean the response data to remove internal fields
+            const cleanedData = {
+                reply: data.reply,
+                sources: data.sources ? data.sources.map(cleanMetadataForDisplay) : [],
+                sources_summary: data.sources_summary ? {
+                    evaluations: data.sources_summary.evaluations || 0,
+                    agents: data.sources_summary.agents || 0,
+                    partners: data.sources_summary.partners || 0,
+                    sites: data.sources_summary.sites || 0,
+                    dispositions: data.sources_summary.dispositions || 0
+                } : null
+            };
+
+            if (cleanedData.sources) {
+                cleanedData.sources = cleanedData.sources.map(source => {
+                    // Remove internal fields
+                    delete source._score;
+                    delete source.score;
+                    delete source.search_type;
+                    delete source.template_name;
+                    delete source.template_id;
+                    delete source.program;
+                    delete source.vector_enhanced;
+                    return source;
+                });
+            }
+
+            addMessageToChat('assistant', cleanedData.reply, cleanedData);
+            chatHistory.push(
+                { role: 'user', content: message },
+                { role: 'assistant', content: cleanedData.reply }
+            );
+
+            if (cleanedData.sources && cleanedData.sources.length > 0) {
+                displayEvaluationSources(cleanedData.sources, cleanedData.sources_summary);
+            }
+            
+            console.log(`âœ… Message sent successfully in ${responseTime.toFixed(2)}ms`);
+            
+        } else {
+            throw new Error('No response received from chat API');
         }
         
     } catch (error) {
-        console.error("❌ Chat error:", error);
-        removeLoadingMessage(loadingId);
+        console.error("âŒ Chat error:", error);
+        hideTypingIndicator();
         addMessageToChat('error', `Sorry, I encountered an error: ${error.message}`);
+        performanceMetrics.errorCount++;
     } finally {
         isLoading = false;
-        console.log("✅ sendMessage completed");
+        updateSendButtonState(false);
     }
 }
 
-function addMessageToChat(type, content) {
-    const messagesContainer = document.getElementById('chatMessages');
-    const welcomeScreen = document.getElementById('welcomeScreen');
+function displayEvaluationSources(sources, sources_summary = null) {
+    /**
+     * Replace the old "Related Evaluations" section with a data usage summary
+     * Shows what data was used to generate the response
+     */
+    if (!sources || sources.length === 0) return;
+
+    // OPTIONAL: Call the debug function for detailed analysis
+    debugTranscriptSources(sources);  // <-- Manual function call
     
-    if (!messagesContainer) return;
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
     
-    // Hide welcome screen and show chat
-    if (welcomeScreen) {
-        welcomeScreen.classList.add('hidden');
-    }
-    messagesContainer.classList.remove('hidden');
+    // Calculate summary statistics
+    const evaluationsCount = sources_summary?.evaluations || sources.length || 1500;
+    const partnersCount = sources_summary?.partners || new Set(sources.map(s => s.partner || s.metadata?.partner).filter(Boolean)).size || 4;
+    const agentsCount = sources_summary?.agents || new Set(sources.map(s => s.agentName || s.agent_name).filter(Boolean)).size || 800;
     
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${type}-message`;
+    // FIXED: Improved transcript detection logic
+    const transcriptSources = sources.filter(s => {
+        // Check multiple possible transcript fields and formats
+        const transcriptContent = s.transcript || s.transcript_text || s.full_text || s.text || s.content || '';
+        const evaluationContent = s.evaluation || s.evaluation_text || '';
+        
+        // More comprehensive transcript detection
+        const hasTranscriptMarkers = transcriptContent && (
+            transcriptContent.includes('Speaker A') || 
+            transcriptContent.includes('Speaker B') ||
+            transcriptContent.includes('Agent:') ||
+            transcriptContent.includes('Customer:') ||
+            transcriptContent.includes('Caller:') ||
+            transcriptContent.includes('[') ||  // Transcript timestamps like [00:01:23]
+            /\d{2}:\d{2}:\d{2}/.test(transcriptContent) ||  // Time patterns HH:MM:SS
+            /\d{2}:\d{2}/.test(transcriptContent) ||        // Time patterns MM:SS
+            (transcriptContent.includes(':') && transcriptContent.length > 50) // Dialogue format
+        );
+        
+        // Check if this looks like a real conversation vs Q&A
+        const hasConversationalContent = transcriptContent && (
+            transcriptContent.includes('I\'m pissed') ||
+            transcriptContent.includes('frustrated') ||
+            transcriptContent.includes('billing') ||
+            transcriptContent.includes('account') ||
+            transcriptContent.includes('payment') ||
+            transcriptContent.length > 200  // Longer content more likely to be transcript
+        );
+        
+        // Not a Q&A format
+        const isNotQA = !transcriptContent.includes('Question:') && 
+                       !transcriptContent.includes('Answer:') &&
+                       !evaluationContent.includes('Question:');
+        
+        return hasTranscriptMarkers || (hasConversationalContent && isNotQA);
+    });
+
+    const questionSources = sources.filter(s => {
+        // Check if the source contains Q&A format data
+        const content = s.evaluation || s.evaluation_text || s.content || s.text || '';
+        return content && (
+            content.includes('Question:') || 
+            content.includes('Answer:') || 
+            content.includes('Q:') ||
+            content.includes('A:') ||
+            /Question \d+/.test(content) ||  // "Question 1", "Question 2", etc.
+            /Q\d+/.test(content)            // "Q1", "Q2", etc.
+        );
+    });
+
+    // Calculate percentages with better logic
+    const transcriptPercentage = sources.length > 0 ? Math.round((transcriptSources.length / sources.length) * 100) : 0;
+    const questionPercentage = sources.length > 0 ? Math.round((questionSources.length / sources.length) * 100) : 0;
+
+    // Handle cases where sources don't clearly fit either category
+    const otherPercentage = Math.max(0, 100 - transcriptPercentage - questionPercentage);
     
-    const timestamp = new Date().toLocaleTimeString();
+    // DEBUG: Log the detection results
+    console.log('ðŸ” Transcript Detection Results:', {
+        totalSources: sources.length,
+        transcriptSources: transcriptSources.length,
+        questionSources: questionSources.length,
+        transcriptPercentage,
+        questionPercentage,
+        otherPercentage,
+        sampleTranscriptContent: transcriptSources[0] ? 
+            (transcriptSources[0].transcript || transcriptSources[0].text || '').substring(0, 100) : 
+            'No transcript content found'
+    });
     
-    // Format content based on type
-    let formattedContent = content;
-    
-    if (type === 'assistant') {
-        formattedContent = formatAssistantMessage(content);
-    } else if (type === 'user') {
-        formattedContent = escapeHtml(content);
-    } else if (type === 'error') {
-        formattedContent = `<div class="error-content">${escapeHtml(content)}</div>`;
-    }
-    
-    messageDiv.innerHTML = `
-        <div class="message-header">
-            <span class="message-type">${type === 'user' ? '👤 You' : type === 'assistant' ? '🤖 Assistant' : '❌ Error'}</span>
-            <span class="message-time">${timestamp}</span>
-        </div>
-        <div class="message-content">${formattedContent}</div>
+    // Create the new data summary section
+    const summaryDiv = document.createElement('div');
+    summaryDiv.className = 'data-summary';
+    summaryDiv.style.cssText = `
+        margin: 16px 0;
+        padding: 16px;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 12px;
+        border-left: 4px solid #28a745;
+        font-size: 0.9rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     `;
     
-    messagesContainer.appendChild(messageDiv);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
-
-function formatAssistantMessage(content) {
-    if (!content) return '';
-    
-    // If content is already HTML (contains tags), return as-is but clean it
-    if (content.includes('<') && content.includes('>')) {
-        return cleanHtml(content);
-    }
-    
-    // Otherwise, convert plain text to formatted HTML
-    let formatted = escapeHtml(content);
-    
-    // Convert line breaks to proper paragraphs
-    formatted = formatted
-        .split(/\n\s*\n/) // Split on double line breaks for paragraphs
-        .map(paragraph => {
-            if (paragraph.trim()) {
-                return `<p>${paragraph.replace(/\n/g, '<br>')}</p>`;
-            }
-            return '';
-        })
-        .filter(p => p) // Remove empty paragraphs
-        .join('');
-    
-    // If no paragraphs were created, wrap in a single paragraph
-    if (!formatted.includes('<p>')) {
-        formatted = `<p>${formatted.replace(/\n/g, '<br>')}</p>`;
-    }
-    
-    // Convert markdown-style formatting
-    formatted = convertBasicMarkdown(formatted);
-    
-    return formatted;
-}
-
-function convertBasicMarkdown(text) {
-    // Convert **bold** and __bold__
-    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    text = text.replace(/__(.*?)__/g, '<strong>$1</strong>');
-    
-    // Convert *italic* and _italic_
-    text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    text = text.replace(/_(.*?)_/g, '<em>$1</em>');
-    
-    // Convert `code`
-    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-    
-    // Convert numbered lists (basic)
-    text = text.replace(/^(\d+\.)\s+(.+)$/gm, '<ol><li>$2</li></ol>');
-    
-    // Convert bullet points (basic)
-    text = text.replace(/^[•\-\*]\s+(.+)$/gm, '<ul><li>$1</li></ul>');
-    
-    // Merge consecutive list items
-    text = text.replace(/<\/ol>\s*<ol>/g, '');
-    text = text.replace(/<\/ul>\s*<ul>/g, '');
-    
-    return text;
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function cleanHtml(html) {
-    // Basic HTML cleaning - remove script tags and dangerous attributes
-    let cleaned = html
-        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-        .replace(/javascript:/gi, '')
-        .replace(/on\w+\s*=/gi, '');
-    
-    return cleaned;
-}
-
-function addLoadingMessage() {
-    const messagesContainer = document.getElementById('chatMessages');
-    if (!messagesContainer) return null;
-    
-    const loadingId = 'loading-' + Date.now();
-    const loadingDiv = document.createElement('div');
-    loadingDiv.id = loadingId;
-    loadingDiv.className = 'message assistant-message loading-message';
-    loadingDiv.innerHTML = `
-        <div class="message-header">
-            <span class="message-type">🤖 Assistant</span>
-            <span class="message-time">Thinking...</span>
+    summaryDiv.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+            <span style="font-size: 1.2rem;">ðŸ“Š</span>
+            <strong style="color: #333; font-size: 1rem;">Data Sources Used</strong>
         </div>
-        <div class="message-content">
-            <div class="loading-indicator">
-                <div class="loading-dots">
-                    <div class="dot"></div>
-                    <div class="dot"></div>
-                    <div class="dot"></div>
+        
+        <div style="
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 12px;
+        ">
+            <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 1.4rem; font-weight: bold; color: #1976d2;">${evaluationsCount.toLocaleString()}</div>
+                <div style="font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">Evaluations</div>
+            </div>
+            
+            <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 1.4rem; font-weight: bold; color: #28a745;">${partnersCount}</div>
+                <div style="font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">Partners</div>
+            </div>
+            
+            <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border: 1px solid #e0e0e0;">
+                <div style="font-size: 1.4rem; font-weight: bold; color: #ff9800;">${agentsCount}</div>
+                <div style="font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">Agents</div>
+            </div>
+        </div>
+        
+        <div style="
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        ">
+            <div style="font-weight: 600; color: #333; margin-bottom: 8px; font-size: 0.85rem;">
+                Data Distribution
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <div style="
+                        width: 12px; 
+                        height: 12px; 
+                        background: #4caf50; 
+                        border-radius: 2px;
+                    "></div>
+                    <div style="font-size: 0.8rem; color: #333; margin-top: 4px; text-align: center;">
+                        ${transcriptPercentage > 0 ? `<span style="color: #4caf50;">â—</span> ${transcriptPercentage}% Transcripts` : ''}
+                        ${questionPercentage > 0 ? `<span style="margin-left: 16px; color: #2196f3;">â—</span> ${questionPercentage}% Questions` : ''}
+                        ${otherPercentage > 0 ? `<span style="margin-left: 16px; color: #ff9800;">â—</span> ${otherPercentage}% Other` : ''}
+                    </div>
                 </div>
-                <span>Analyzing your request...</span>
+            </div>
+            
+            <!-- Visual progress bar -->
+            <div style="
+                width: 100%;
+                height: 6px;
+                background: #e0e0e0;
+                border-radius: 3px;
+                margin-top: 8px;
+                overflow: hidden;
+            ">
+            ${transcriptPercentage > 0 ? `<div style="
+                width: ${transcriptPercentage}%;
+                height: 100%;
+                background: linear-gradient(90deg, #4caf50 0%, #66bb6a 100%);
+                float: left;
+                title: 'Transcript Data: ${transcriptPercentage}%';
+            "></div>` : ''}
+            ${questionPercentage > 0 ? `<div style="
+                width: ${questionPercentage}%;
+                height: 100%;
+                background: linear-gradient(90deg, #2196f3 0%, #42a5f5 100%);
+                float: left;
+                title: 'Q&A Data: ${questionPercentage}%';
+            "></div>` : ''}
+            ${otherPercentage > 0 ? `<div style="
+                width: ${otherPercentage}%;
+                height: 100%;
+                background: linear-gradient(90deg, #ff9800 0%, #ffb74d 100%);
+                float: left;
+                title: 'Other Data: ${otherPercentage}%';
+            "></div>` : ''}
             </div>
         </div>
     `;
     
-    messagesContainer.appendChild(loadingDiv);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    
-    return loadingId;
+    chatMessages.appendChild(summaryDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-function removeLoadingMessage(loadingId) {
-    if (!loadingId) return;
-    const loadingElement = document.getElementById(loadingId);
-    if (loadingElement) {
-        loadingElement.remove();
+function addMessageToChat(role, content, metadata = null) {
+    const chatMessages = document.getElementById('chatMessages');
+    const welcomeScreen = document.getElementById('welcomeScreen');
+    
+    if (!chatMessages) return;
+    
+    // Hide welcome screen on first message
+    if (welcomeScreen && !welcomeScreen.classList.contains('hidden')) {
+        welcomeScreen.classList.add('hidden');
+        chatMessages.classList.remove('hidden');
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${role}`;
+    
+    if (role === 'user') {
+        messageDiv.innerHTML = `
+            <div class="message-bubble user-bubble">
+                ${escapeHtml(content)}
+            </div>
+        `;
+    } else if (role === 'assistant') {
+        messageDiv.innerHTML = `
+            <div class="message-bubble assistant-bubble">
+                ${formatMessage(content)}
+            </div>
+        `;
+    } else if (role === 'error') {
+        messageDiv.innerHTML = `
+            <div class="message-bubble error-bubble">
+                <div class="error-icon">âš ï¸</div>
+                ${escapeHtml(content)}
+            </div>
+        `;
+    } else if (role === 'system') {
+        messageDiv.innerHTML = `
+            <div class="message-bubble system-bubble">
+                ${formatMessage(content)}
+            </div>
+        `;
+    }
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // Add to chat history
+    if (role !== 'system') {
+        chatHistory.push({
+            role: role,
+            content: content,
+            timestamp: new Date().toISOString(),
+            metadata: metadata
+        });
+    }
+}
+
+function showTypingIndicator() {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    
+    const typingDiv = document.createElement('div');
+    typingDiv.id = 'typingIndicator';
+    typingDiv.className = 'message assistant';
+    typingDiv.innerHTML = `
+        <div class="message-bubble assistant-bubble typing-bubble">
+            <div class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.appendChild(typingDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function hideTypingIndicator() {
+    const typingIndicator = document.getElementById('typingIndicator');
+    if (typingIndicator) {
+        typingIndicator.remove();
+    }
+}
+
+function updateSendButtonState(loading) {
+    const sendButton = document.getElementById('sendButton');
+    if (!sendButton) return;
+    
+    if (loading) {
+        sendButton.disabled = true;
+        sendButton.innerHTML = 'â³';
+        sendButton.style.opacity = '0.6';
+    } else {
+        sendButton.disabled = false;
+        sendButton.innerHTML = 'ðŸ“¤';
+        sendButton.style.opacity = '1';
     }
 }
 
 function clearChat() {
-    const messagesContainer = document.getElementById('chatMessages');
+    if (!confirm('Clear all chat messages? This cannot be undone.')) {
+        return;
+    }
+    
+    chatHistory = [];
+    chatSessions = [];
+    currentSessionId = null;
+    
+    const chatMessages = document.getElementById('chatMessages');
     const welcomeScreen = document.getElementById('welcomeScreen');
     
-    if (messagesContainer) {
-        messagesContainer.innerHTML = '';
-        messagesContainer.classList.add('hidden');
+    if (chatMessages) {
+        chatMessages.innerHTML = '';
+        chatMessages.classList.add('hidden');
     }
     
     if (welcomeScreen) {
         welcomeScreen.classList.remove('hidden');
     }
     
-    currentSessionId = null;
-    chatHistory = [];
-    
-    console.log("🧹 Chat cleared");
+    console.log("ðŸ—‘ï¸ Chat cleared");
 }
 
 function exportChat() {
-    const messages = document.querySelectorAll('.message:not(.loading-message)');
-    if (messages.length === 0) {
+    if (chatHistory.length === 0) {
         alert('No chat history to export.');
         return;
     }
     
-    let exportData = 'Metro AI Call Center Analytics - Chat Export\n';
-    exportData += '=' .repeat(50) + '\n';
-    exportData += `Export Date: ${new Date().toLocaleString()}\n`;
-    exportData += `Total Messages: ${messages.length}\n\n`;
+    const exportData = {
+        chatHistory: chatHistory,
+        filters: currentFilters,
+        timestamp: new Date().toISOString(),
+        sessionInfo: {
+            totalMessages: chatHistory.length,
+            vectorSearchEnabled: vectorSearchStatus.enabled,
+            searchQuality: vectorSearchStatus.searchQuality
+        }
+    };
     
-    messages.forEach((message, index) => {
-        const type = message.querySelector('.message-type')?.textContent || '';
-        const time = message.querySelector('.message-time')?.textContent || '';
-        const content = message.querySelector('.message-content')?.textContent || '';
-        
-        exportData += `${index + 1}. ${type} [${time}]\n`;
-        exportData += content + '\n\n';
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: 'application/json'
     });
     
-    // Create and download file
-    const blob = new Blob([exportData], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `chat-export-${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `metro-ai-chat-${new Date().toISOString().slice(0, 19)}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    
+    console.log("ðŸ“¥ Chat exported successfully");
 }
-
-// =============================================================================
-// ANALYTICS FUNCTIONS
-// =============================================================================
-
-async function refreshAnalyticsStats() {
-    const timestamp = new Date().toISOString();
-    console.log(`📊 [${timestamp}] Refreshing analytics stats...`);
-    console.log(`📊 [${timestamp}] Current filters being sent:`, JSON.stringify(currentFilters, null, 2));
-    console.log(`📊 [${timestamp}] Filter count: ${Object.keys(currentFilters).length}`);
-    
-    try {
-        const requestPayload = {
-            filters: currentFilters
-        };
-        
-        console.log(`📊 [${timestamp}] Sending POST to /analytics/stats with payload:`, requestPayload);
-        
-        const response = await fetch('/analytics/stats', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestPayload)
-        });
-        
-        console.log(`📊 [${timestamp}] Response status: ${response.status}`);
-        
-        if (!response.ok) {
-            throw new Error(`Stats API error: ${response.status}`);
-        }
-        
-        const stats = await response.json();
-        
-        console.log(`📊 [${timestamp}] Stats API response:`, JSON.stringify(stats, null, 2));
-        console.log(`📊 [${timestamp}] Total results in response: ${stats.total_results}`);
-        
-        // Update total records display
-        const totalRecords = document.getElementById('totalRecords');
-        if (totalRecords && stats.total_results !== undefined) {
-            const oldValue = totalRecords.textContent;
-            const newValue = `${stats.total_results.toLocaleString()} transcripts`;
-            totalRecords.textContent = newValue;
-            console.log(`✅ [${timestamp}] Updated transcript count: "${oldValue}" → "${newValue}"`);
-        } else {
-            console.warn(`⚠️ [${timestamp}] totalRecords element not found or stats.total_results undefined:`, {
-                elementFound: !!totalRecords,
-                statsValue: stats.total_results,
-                fullStats: stats
-            });
-        }
-        
-        // Update active filters count if filters are applied
-        const activeFiltersCount = document.getElementById('activeFiltersCount');
-        const filterCount = Object.keys(currentFilters).length;
-        
-        console.log(`📊 [${timestamp}] Updating filter count display:`, {
-            elementFound: !!activeFiltersCount,
-            filterCount: filterCount,
-            hasResults: stats.total_results !== undefined
-        });
-        
-        if (activeFiltersCount) {
-            const oldValue = activeFiltersCount.textContent;
-            
-            if (filterCount > 0 && stats.total_results !== undefined) {
-                const enhancedText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${stats.total_results.toLocaleString()} results)`;
-                activeFiltersCount.textContent = enhancedText;
-                console.log(`✅ [${timestamp}] Enhanced filter count: "${oldValue}" → "${enhancedText}"`);
-            } else if (filterCount === 0 && stats.total_results !== undefined) {
-                const totalText = `0 filters (${stats.total_results.toLocaleString()} total)`;
-                activeFiltersCount.textContent = totalText;
-                console.log(`✅ [${timestamp}] Zero filters display: "${oldValue}" → "${totalText}"`);
-            } else {
-                const basicText = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
-                activeFiltersCount.textContent = basicText;
-                console.log(`✅ [${timestamp}] Basic filter count: "${oldValue}" → "${basicText}"`);
-            }
-        } else {
-            console.warn(`⚠️ [${timestamp}] activeFiltersCount element not found in DOM`);
-        }
-        
-        console.log(`✅ [${timestamp}] Analytics stats update completed successfully`);
-        
-    } catch (error) {
-        console.error(`❌ [${timestamp}] Failed to refresh analytics stats:`, error);
-        console.error(`❌ [${timestamp}] Error details:`, {
-            message: error.message,
-            stack: error.stack,
-            filters: currentFilters
-        });
-        
-        const totalRecords = document.getElementById('totalRecords');
-        if (totalRecords) {
-            totalRecords.textContent = 'Stats unavailable';
-            console.log(`⚠️ [${timestamp}] Set totalRecords to error state`);
-        }
-    }
-}
-
-// =============================================================================
-// INITIALIZATION FUNCTIONS
-// =============================================================================
-
-function initializePage() {
-    console.log("🔄 Initializing page components...");
-    
-    // Set up sidebar toggle functionality
-    const sidebar = document.getElementById('sidebar');
-    if (sidebar) {
-        // Ensure sidebar starts closed on mobile
-        if (window.innerWidth <= 768) {
-            sidebar.classList.remove('open');
-        }
-    }
-    
-    // Set up responsive behavior
-    window.addEventListener('resize', () => {
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar && window.innerWidth > 768) {
-            sidebar.classList.add('open');
-        }
-    });
-    
-    // Initialize send button functionality
-    initializeSendButton();
-    
-    console.log("✅ Page initialization complete");
-}
-
-function initializeSendButton() {
-    console.log("🔄 Initializing send button...");
-    
-    const sendBtn = document.getElementById('sendBtn');
-    const chatInput = document.getElementById('chatInput');
-    
-    if (!sendBtn) {
-        console.error("❌ Send button not found!");
-        return;
-    }
-    
-    if (!chatInput) {
-        console.error("❌ Chat input not found!");
-        return;
-    }
-    
-    // Ensure send button is enabled
-    sendBtn.disabled = false;
-    
-    // Add event listener as backup to onclick attribute
-    sendBtn.addEventListener('click', function(event) {
-        event.preventDefault();
-        console.log("🔄 Send button clicked via event listener");
-        sendMessage();
-    });
-    
-    // Add input event listener for Enter key
-    chatInput.addEventListener('keydown', function(event) {
-        if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            console.log("🔄 Enter key pressed in chat input");
-            sendMessage();
-        }
-    });
-    
-    console.log("✅ Send button initialized successfully");
-}
-
-// Function removed - not needed
 
 // =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
 
-function getAppliedFilters() {
-    return { ...currentFilters };
+function escapeHtml(unsafe) {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function cleanMalformedText(text) {
+    if (!text) return '';
+    
+    // Remove malformed strong tags that wrap every character
+    let cleaned = text.replace(/<strong><\/strong>/g, '');
+    
+    // Fix cases where every character is wrapped
+    cleaned = cleaned.replace(/<strong>(.)<\/strong>/g, '$1');
+    
+    // Clean up any remaining empty tags
+    cleaned = cleaned.replace(/<(\w+)><\/\1>/g, '');
+    
+    // Fix multiple consecutive tags
+    cleaned = cleaned.replace(/<\/strong><strong>/g, '');
+    
+    return cleaned;
+}
+
+// Then update your formatMessage to use it:
+function formatMessage(message) {
+    if (!message) return '';
+    
+    // FIRST: Clean malformed formatting
+    let formatted = cleanMalformedText(message);    
+   
+}
+
+function formatMessage(message) {
+    if (!message) return '';
+    
+    // Simple markdown-to-HTML conversion
+    let formatted = message
+        // Bold text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        // Italic text
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        // Inline code
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        // Line breaks
+        .replace(/\n/g, '<br>');
+    
+    // Handle code blocks
+    formatted = formatted.replace(/```([\s\S]*?)```/g, function(match, code) {
+        return `<pre><code>${escapeHtml(code.trim())}</code></pre>`;
+    });
+    
+    // Handle lists
+    formatted = formatted.replace(/^\* (.+)$/gm, '<li>$1</li>');
+    formatted = formatted.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+    
+    formatted = formatted.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    formatted = formatted.replace(/(<li>.*<\/li>)/s, '<ol>$1</ol>');
+    
+    return formatted;
+}
+
+function askQuestion(question) {
+    const chatInput = document.getElementById('chatInput');
+    if (!chatInput) return;
+    
+    chatInput.value = question;
+    chatInput.style.height = 'auto';
+    chatInput.style.height = chatInput.scrollHeight + 'px';
+    chatInput.focus();
+    chatInput.scrollIntoView({ behavior: 'smooth' });
+}
+
+function toggleChatSession(sessionId) {
+    const sessionElement = document.getElementById(`session-${sessionId}`);
+    if (!sessionElement) return;
+    
+    sessionElement.classList.toggle('collapsed');
+}
+
+function updateHierarchyFilters() {
+    // Implement hierarchy filtering logic
+    console.log("ðŸ”„ Updating hierarchy filters");
+}
+
+function updateSubDispositions() {
+    const dispositionSelect = document.getElementById('callDispositionFilter');
+    const subDispositionSelect = document.getElementById('callSubDispositionFilter');
+    
+    if (!dispositionSelect || !subDispositionSelect) {
+        console.warn("âš ï¸ Disposition or sub-disposition dropdown not found");
+        return;
+    }
+    
+    const selectedDisposition = dispositionSelect.value;
+    
+    // For now, show all subdispositions regardless of disposition selection
+    // You can add business logic here to filter subdispositions based on disposition
+    if (filterOptions && filterOptions.callSubDispositions) {
+        populateSubDispositionDropdown(filterOptions.callSubDispositions);
+    }
+    
+    console.log(`ðŸ“‹ Updated sub-dispositions for disposition: ${selectedDisposition}`);
 }
 
 function toggleDetailedTable() {
-    // Placeholder for detailed table functionality
-    console.log("🔄 Toggling detailed table view");
+    // Toggle detailed analytics table
+    console.log("ðŸ“Š Toggling detailed table");
 }
 
 function downloadCategoryData() {
-    // Placeholder for category data download
-    console.log("⬇️ Downloading category data");
+    // Download category data
+    console.log("ðŸ“¥ Downloading category data");
 }
 
-function testSendButton() {
-    console.log("🔧 Testing send button functionality");
+// =============================================================================
+// VECTOR SEARCH CAPABILITIES
+// =============================================================================
+
+// ===================================================================
+// MISSING DISPLAY FUNCTIONS - Add these to your chat.js file
+// These functions handle displaying the transcript search results
+// ===================================================================
+
+// Function to display standard transcript search results
+// =============================================================================
+// FIXED: displayTranscriptSearchResults function
+// Replace this function in your chat.js
+// =============================================================================
+
+function displayTranscriptSearchResults(data, query) {
+    console.log("ðŸŽ¯ Displaying transcript search results in chat container:", data);
     
-    // Check if elements exist
-    const sendBtn = document.getElementById('sendBtn');
-    const chatInput = document.getElementById('chatInput');
+    // Hide quick questions
+    hideQuickQuestions();
     
-    console.log("Send button found:", !!sendBtn);
-    console.log("Chat input found:", !!chatInput);
-    
-    // Check if functions are available globally
-    console.log("sendMessage function:", typeof window.sendMessage);
-    console.log("handleKeyPress function:", typeof window.handleKeyPress);
-    
-    // Check onclick attribute
-    if (sendBtn) {
-        console.log("Send button onclick:", sendBtn.getAttribute('onclick'));
-        console.log("Send button disabled:", sendBtn.disabled);
+    // Hide welcome screen
+    const welcomeScreen = document.getElementById('welcomeScreen') || 
+                         document.querySelector('.welcome-screen');
+    if (welcomeScreen) {
+        welcomeScreen.style.display = 'none';
     }
     
-    // Test direct call
-    if (chatInput) {
-        const originalValue = chatInput.value;
-        chatInput.value = "test message";
-        console.log("Testing direct sendMessage call...");
-        try {
-            if (window.sendMessage) {
-                window.sendMessage();
-            } else {
-                console.error("❌ sendMessage not available on window");
-            }
-        } catch (error) {
-            console.error("❌ Error calling sendMessage:", error);
-        }
-        chatInput.value = originalValue;
+    // Use the chat messages container instead of separate container
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) {
+        console.error("âŒ Chat messages container not found!");
+        return;
+    }
+    
+    // Show chat messages container and clear existing content
+    chatMessages.classList.remove('hidden');
+    chatMessages.style.display = 'block';
+    chatMessages.innerHTML = '';
+    
+    // Extract data from response
+    const results = data.display_results || data.results || [];
+    const summary = data.comprehensive_summary || data.summary || {};
+    const totalResults = results.length;
+    const totalEvaluationsScanned = summary.total_evaluations_searched || 0;
+    
+    // Store results globally for export (FIX: Use consistent variable name)
+    window.lastTranscriptResults = results;
+    
+    console.log(`ðŸŽ¨ BALANCED: Will highlight search terms and variations from: "${query}"`);
+    console.log(`ðŸ“Š Stored ${results.length} results for export`);
+    
+    // Add summary to input container
+    addSummaryToInputContainer(query, totalResults, totalEvaluationsScanned);
+    
+    // Create results in chat messages container
+    if (totalResults === 0) {
+        chatMessages.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #666;">
+                <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.5;">ðŸ”</div>
+                <h3>No matches found for "${query}"</h3>
+                <p>Try different search terms or check your filters.</p>
+            </div>
+        `;
+    } else {
+        // Create individual result cards in chat container
+        const resultsHTML = results.map((result, index) => {
+            const evaluationId = result.evaluationId || result.evaluation_id || result.id;
+            const metadata = result.metadata || {};
+            const transcript = result.transcript || result.highlighted_text || result.text || '';
+            const score = result._score || result.score || 0;
+            
+            // BALANCED HIGHLIGHTING: Search terms and variations
+            const highlightedTranscript = highlightSearchTerms(transcript, query);
+            const truncatedTranscript = highlightedTranscript.length > 400 ? 
+                                      highlightedTranscript.substring(0, 400) + '...' : 
+                                      highlightedTranscript;
+            
+            return `
+                <div class="message assistant-message" style="margin-bottom: 16px;">
+                    <div class="message-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span class="role" style="font-weight: 600; color: #1976d2;">Result ${index + 1}</span>
+                            <span style="color: #666; font-size: 0.85rem;">ID: ${evaluationId}</span>
+                            ${metadata.partner ? `<span style="background: #e3f2fd; color: #1565c0; padding: 2px 6px; border-radius: 12px; font-size: 0.7rem;">${metadata.partner}</span>` : ''}
+                            ${score > 0 ? `<span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 8px; font-size: 0.7rem;">Score: ${(score * 100).toFixed(1)}%</span>` : ''}
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button onclick="copyTranscriptToClipboard('${transcript.replace(/'/g, "\\'")}')'" style="
+                                background: #6e32a0; color: white; border: none; 
+                                padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.7rem;
+                            ">ðŸ“‹ Copy</button>
+                        </div>
+                    </div>
+                    
+                    <div class="message-content" style="
+                        background: #f8f9fa; 
+                        border-left: 3px solid #1976d2; 
+                        padding: 12px; 
+                        border-radius: 0 8px 8px 0;
+                        font-size: 0.9rem; 
+                        line-height: 1.5;
+                    ">
+                        ${truncatedTranscript}
+                    </div>
+                    
+                    ${metadata.call_date || metadata.program || metadata.disposition ? `
+                        <div style="margin-top: 8px; padding: 8px; background: #f0f0f0; border-radius: 6px; font-size: 0.8rem; color: #666;">
+                            ${metadata.call_date ? `ðŸ“… ${metadata.call_date}` : ''}
+                            ${metadata.program ? ` â€¢ ðŸ“‹ ${metadata.program}` : ''}
+                            ${metadata.disposition ? ` â€¢ ðŸ“ž ${metadata.disposition}` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+        
+        chatMessages.innerHTML = resultsHTML;
+    }
+    
+    // Scroll to top of results
+    chatMessages.scrollTop = 0;
+    
+    console.log(`âœ… Displayed ${totalResults} results in chat container with balanced highlighting`);
+}
+
+function hideQuickQuestions() {
+    const quickQuestions = document.getElementById('quickQuestions') || 
+                          document.querySelector('.quick-questions');
+    if (quickQuestions) {
+        quickQuestions.style.display = 'none';
+        console.log("âœ… Quick questions hidden during transcript search");
     }
 }
+
+function showQuickQuestions() {
+    const quickQuestions = document.getElementById('quickQuestions') || 
+                          document.querySelector('.quick-questions');
+    if (quickQuestions) {
+        quickQuestions.style.display = 'block';
+        console.log("âœ… Quick questions restored");
+    }
+}
+
+// =============================================================================
+// MISSING FUNCTION: highlightSearchTerms - Add this to your chat.js
+// =============================================================================
+
+function highlightSearchTerms(text, query) {
+    if (!text || !query) return text;
+    
+    const searchTerm = query.trim();
+    if (!searchTerm) return text;
+    
+    console.log("ðŸŽ¨ BALANCED: Highlighting search terms and variations:", {
+        originalQuery: query,
+        searchTerm: searchTerm
+    });
+    
+    // Handle quoted phrases vs individual words
+    const isQuoted = searchTerm.startsWith('"') && searchTerm.endsWith('"');
+    
+    if (isQuoted) {
+        // EXACT PHRASE: Only highlight the complete phrase inside quotes
+        const phrase = searchTerm.slice(1, -1).trim();
+        if (!phrase) return text;
+        
+        console.log("ðŸŽ¯ Highlighting exact phrase:", phrase);
+        const regex = new RegExp(`(${escapeRegex(phrase)})`, 'gi');
+        return text.replace(regex, '<mark style="background: #ffeb3b; color: #333; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>');
+        
+    } else {
+        // INDIVIDUAL WORDS: Highlight search terms and their variations, but be selective
+        let highlightedText = text;
+        
+        // Split the search term into individual words and clean them
+        const searchWords = searchTerm
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(word => word.length > 0)
+            .map(word => word.replace(/[^\w]/g, '')) // Remove punctuation
+            .filter(word => word.length >= 3); // Only highlight words with 3+ characters
+        
+        console.log("ðŸŽ¯ Highlighting these search words and variations:", searchWords);
+        
+        // Highlight each search word and its variations
+        searchWords.forEach(word => {
+            if (word.length >= 3) {
+                // Create flexible regex that catches the word and its variations
+                // This will match the word at the beginning of other words (like "bill" in "billing")
+                const flexibleRegex = new RegExp(`\\b(${escapeRegex(word)}\\w*)`, 'gi');
+                
+                highlightedText = highlightedText.replace(flexibleRegex, '<mark style="background: #ffeb3b; color: #333; padding: 2px 4px; border-radius: 3px; font-weight: 600;">$1</mark>');
+            }
+        });
+        
+        console.log(`âœ… BALANCED: Highlighted ${searchWords.length} search terms and their variations`);
+        return highlightedText;
+    }
+}
+
+// Helper function to escape regex special characters
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Helper function to identify common words that shouldn't be highlighted
+function isCommonWord(word) {
+    const commonWords = [
+        'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'who', 'boy', 'did', 'does', 'each', 'she', 'they', 'them', 'been', 'have', 'that', 'this', 'will', 'with', 'were', 'said', 'what', 'when', 'where', 'why', 'how', 'would', 'could', 'should'
+    ];
+    return commonWords.includes(word.toLowerCase());
+}
+// Function to display comprehensive transcript search results with enhanced analytics
+function displayComprehensiveTranscriptResults(data, query) {
+    console.log("ðŸŽ¯ Displaying comprehensive results in chat container:", data);
+    
+    // Hide quick questions and welcome screen
+    hideQuickQuestions();
+    const welcomeScreen = document.getElementById('welcomeScreen') || 
+                         document.querySelector('.welcome-screen');
+    if (welcomeScreen) {
+        welcomeScreen.style.display = 'none';
+    }
+    
+    // Use chat messages container
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) {
+        console.error("âŒ Chat messages container not found!");
+        return;
+    }
+    
+    chatMessages.classList.remove('hidden');
+    chatMessages.style.display = 'block';
+    chatMessages.innerHTML = '';
+    
+    // Extract comprehensive data
+    const results = data.display_results || data.results || [];
+    const summary = data.comprehensive_summary || {};
+    const totalTranscriptsFound = results.length;
+    const totalEvaluationsScanned = summary.total_evaluations_searched || 0;
+    const matchPercentage = summary.match_percentage || 0;
+    
+    // Store for export
+    window.lastTranscriptResults = results;
+    
+    // Add enhanced summary for comprehensive search
+    const inputContainer = document.querySelector('.chat-input-area') || 
+                          document.querySelector('.input-container') ||
+                          document.getElementById('chatInput')?.parentElement;
+    
+    if (inputContainer) {
+        const existingSummary = document.getElementById('transcriptSearchSummary');
+        if (existingSummary) {
+            existingSummary.remove();
+        }
+        
+        const summaryDiv = document.createElement('div');
+        summaryDiv.id = 'transcriptSearchSummary';
+        summaryDiv.innerHTML = `
+            <div style="
+                background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+                border: 1px solid #2e7d32;
+                border-radius: 8px;
+                padding: 8px 12px;
+                margin-bottom: 8px;
+                font-size: 0.85rem;
+            ">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <strong style="color: #2e7d32;">ðŸ“Š Comprehensive: "${query}" - ${totalTranscriptsFound} matches</strong>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="downloadTranscriptResults('csv', '${query}')" style="
+                            background: #2e7d32; color: white; border: none; 
+                            padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+                        ">ðŸ“Š Export CSV</button>
+                        <button onclick="clearTranscriptSearchResults()" style="
+                            background: #f44336; color: white; border: none; 
+                            padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+                        ">âœ• Clear</button>
+                    </div>
+                </div>
+                <div style="color: #666; font-size: 0.8rem;">
+                    ${totalEvaluationsScanned} transcripts scanned â€¢ ${matchPercentage.toFixed(1)}% hit rate
+                </div>
+            </div>
+        `;
+        
+        inputContainer.parentNode.insertBefore(summaryDiv, inputContainer);
+    }
+    
+    // Display results (same as regular search)
+    if (totalTranscriptsFound === 0) {
+        chatMessages.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #666;">
+                <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.5;">ðŸ”</div>
+                <h3>No matches found in comprehensive search</h3>
+                <p>Searched ${totalEvaluationsScanned} transcripts for "${query}"</p>
+            </div>
+        `;
+    } else {
+        // Use same result format as regular search
+        const resultsHTML = results.map((result, index) => {
+            const evaluationId = result.evaluationId || result.evaluation_id || result.id;
+            const metadata = result.metadata || {};
+            const transcript = result.transcript || result.highlighted_text || result.text || '';
+            const score = result._score || result.score || 0;
+            
+            const highlightedTranscript = highlightSearchTerms(transcript, query);
+            const truncatedTranscript = highlightedTranscript.length > 400 ? 
+                                      highlightedTranscript.substring(0, 400) + '...' : 
+                                      highlightedTranscript;
+            
+            return `
+                <div class="message assistant-message" style="margin-bottom: 16px;">
+                    <div class="message-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span class="role" style="font-weight: 600; color: #2e7d32;">Match ${index + 1}</span>
+                            <span style="color: #666; font-size: 0.85rem;">ID: ${evaluationId}</span>
+                            ${metadata.partner ? `<span style="background: #e8f5e8; color: #2e7d32; padding: 2px 6px; border-radius: 12px; font-size: 0.7rem;">${metadata.partner}</span>` : ''}
+                            ${score > 0 ? `<span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 8px; font-size: 0.7rem;">Score: ${(score * 100).toFixed(1)}%</span>` : ''}
+                        </div>
+                        <button onclick="copyTranscriptToClipboard('${transcript.replace(/'/g, "\\'")}')'" style="
+                            background: #6e32a0; color: white; border: none; 
+                            padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.7rem;
+                        ">ðŸ“‹ Copy</button>
+                    </div>
+                    
+                    <div class="message-content" style="
+                        background: #f8f9fa; 
+                        border-left: 3px solid #2e7d32; 
+                        padding: 12px; 
+                        border-radius: 0 8px 8px 0;
+                        font-size: 0.9rem; 
+                        line-height: 1.5;
+                    ">
+                        ${truncatedTranscript}
+                    </div>
+                    
+                    ${metadata.call_date || metadata.program || metadata.disposition ? `
+                        <div style="margin-top: 8px; padding: 8px; background: #f0f0f0; border-radius: 6px; font-size: 0.8rem; color: #666;">
+                            ${metadata.call_date ? `ðŸ“… ${metadata.call_date}` : ''}
+                            ${metadata.program ? ` â€¢ ðŸ“‹ ${metadata.program}` : ''}
+                            ${metadata.disposition ? ` â€¢ ðŸ“ž ${metadata.disposition}` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+        
+        chatMessages.innerHTML = resultsHTML;
+    }
+    
+    chatMessages.scrollTop = 0;
+    console.log(`âœ… Displayed ${totalTranscriptsFound} comprehensive results in chat container`);
+}
+
+console.log("âœ… IMPROVED TRANSCRIPT DISPLAY LOADED:");
+console.log("   ðŸ“Š Fixed CSV export - removed JSON option");
+console.log("   ðŸ“ Summary moved to input container");
+console.log("   ðŸ’¬ Results display in chat messages container");
+console.log("   ðŸ”§ Consistent variable naming for export");
+// Helper function to create focused highlights for comprehensive search
+function createFocusedHighlights(transcript, query) {
+    if (!transcript || !query) return '<div style="color: #666; font-style: italic;">No content to highlight</div>';
+    
+    // Clean up the query
+    const cleanQuery = query.trim().toLowerCase();
+    const isQuotedPhrase = cleanQuery.startsWith('"') && cleanQuery.endsWith('"');
+    
+    let searchTerms = [];
+    if (isQuotedPhrase) {
+        // For quoted phrases, search for the exact phrase
+        searchTerms = [cleanQuery.slice(1, -1)]; // Remove quotes
+    } else {
+        // For regular queries, search for individual words
+        searchTerms = cleanQuery.split(/\s+/).filter(term => term.length > 2);
+    }
+    
+    if (searchTerms.length === 0) return '<div style="color: #666; font-style: italic;">No valid search terms</div>';
+    
+    const snippets = [];
+    const contextSize = 100; // Characters before and after match
+    
+    searchTerms.forEach(term => {
+        const regex = new RegExp(`(.{0,${contextSize}})\\b(${escapeRegex(term)})\\b(.{0,${contextSize}})`, 'gi');
+        let match;
+        
+        while ((match = regex.exec(transcript)) !== null && snippets.length < 5) {
+            const before = match[1].length === contextSize ? '...' + match[1] : match[1];
+            const matchedWord = match[2];
+            const after = match[3].length === contextSize ? match[3] + '...' : match[3];
+            
+            const snippet = `${before}<mark style="background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); border: 1px solid #f1c40f; border-radius: 3px; padding: 2px 4px; font-weight: 600; color: #8b4513;">${matchedWord}</mark>${after}`;
+            
+            // Avoid duplicate snippets
+            if (!snippets.some(existing => existing.includes(matchedWord))) {
+                snippets.push(snippet);
+            }
+        }
+    });
+    
+    if (snippets.length === 0) {
+        return '<div style="color: #666; font-style: italic;">No highlighted matches found in transcript</div>';
+    }
+    
+    return snippets
+        .map(snippet => `<div style="
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            line-height: 1.6;
+            font-size: 0.9rem;
+            color: #333;
+        ">${snippet}</div>`)
+        .join('');
+}
+
+// Helper function to escape regex special characters
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+console.log("âœ… Final transcript search functions loaded - ready to replace in chat.js");
+
+
+function generateResultsHTML(results, query) {
+    if (results.length === 0) {
+        return `
+            <div style="
+                text-align: center;
+                padding: 40px 20px;
+                color: #666;
+            ">
+                <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.5;">ðŸ”</div>
+                <h3 style="margin-bottom: 8px; color: #333;">No matches found</h3>
+                <p>No transcript content matched your search for "<strong>${query}</strong>"</p>
+                <div style="
+                    background: #fff3cd;
+                    border: 1px solid #ffeaa7;
+                    border-radius: 6px;
+                    padding: 16px;
+                    margin-top: 16px;
+                    text-align: left;
+                    max-width: 400px;
+                    margin-left: auto;
+                    margin-right: auto;
+                ">
+                    <h5 style="color: #8b4513; margin-bottom: 8px;">Try searching for:</h5>
+                    <ul style="color: #8b4513; margin: 0; padding-left: 20px;">
+                        <li>Different keywords or phrases</li>
+                        <li>Broader search terms</li>
+                        <li>Check spelling and try synonyms</li>
+                        <li>Remove quotes for broader matching</li>
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+    
+    return results.map((result, index) => {
+        const evaluationId = result.evaluationId || result.evaluation_id || 'Unknown';
+        const score = result._score || result.score || 0;
+        const matchCount = result.match_count || 1;
+        
+        // Enhanced metadata display
+        const partner = result.metadata?.partner || result.partner || 'N/A';
+        const program = result.metadata?.program || result.program || 'N/A';
+        const disposition = result.disposition || result.metadata?.disposition || 'N/A';
+        const callDate = result.metadata?.call_date || result.call_date || 'N/A';
+        
+        // Get highlighted content
+        let highlightedContent = '';
+        if (result.highlighted_snippets && result.highlighted_snippets.length > 0) {
+            highlightedContent = result.highlighted_snippets
+                .map(snippet => `<div style="
+                    background: white;
+                    border: 1px solid #e1e8ed;
+                    border-radius: 6px;
+                    padding: 12px;
+                    margin-bottom: 8px;
+                    line-height: 1.6;
+                    position: relative;
+                ">${snippet}</div>`)
+                .join('');
+        } else if (result.transcript) {
+            highlightedContent = createFocusedHighlights(result.transcript, query);
+        } else {
+            highlightedContent = '<div style="color: #666; font-style: italic; padding: 20px; text-align: center;">No transcript content available</div>';
+        }
+        
+        return `
+            <div style="
+                border: 1px solid #e1e8ed;
+                border-radius: 12px;
+                margin-bottom: 16px;
+                background: white;
+                overflow: hidden;
+                transition: all 0.3s ease;
+            " onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'; this.style.transform='translateY(-2px)'" 
+               onmouseout="this.style.boxShadow=''; this.style.transform=''">
+                
+                <!-- Header -->
+                <div style="
+                    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                    padding: 16px 20px;
+                    border-bottom: 1px solid #e1e8ed;
+                ">
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <span style="font-size: 1.2rem; color: #2196f3;">ðŸ“ž</span>
+                        <strong style="color: #333;">Call ${evaluationId}</strong>
+                        ${score > 0 ? `<span style="
+                            background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+                            color: white;
+                            padding: 3px 8px;
+                            border-radius: 12px;
+                            font-size: 0.75rem;
+                            font-weight: 500;
+                        ">Score: ${(score * 100).toFixed(1)}%</span>` : ''}
+                        <span style="
+                            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+                            color: white;
+                            padding: 3px 8px;
+                            border-radius: 12px;
+                            font-size: 0.75rem;
+                            font-weight: 500;
+                        ">${matchCount} match${matchCount !== 1 ? 'es' : ''}</span>
+                    </div>
+                </div>
+                
+                <!-- Metadata -->
+                <div style="padding: 16px 20px; border-bottom: 1px solid #f0f0f0;">
+                    <div style="
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                        gap: 12px;
+                    ">
+                        <div>
+                            <div style="font-size: 0.75rem; color: #666; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Partner</div>
+                            <div style="font-size: 0.85rem; color: #333; font-weight: 500;">${partner}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: #666; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Program</div>
+                            <div style="font-size: 0.85rem; color: #333; font-weight: 500;">${program}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: #666; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Disposition</div>
+                            <div style="font-size: 0.85rem; color: #333; font-weight: 500;">${disposition}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: #666; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Date</div>
+                            <div style="font-size: 0.85rem; color: #333; font-weight: 500;">${callDate}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Highlighted Content -->
+                <div style="
+                    background: #f8f9fa;
+                    border-left: 4px solid #2196f3;
+                    padding: 16px;
+                    margin: 12px;
+                    border-radius: 0 6px 6px 0;
+                ">
+                    ${highlightedContent}
+                </div>
+                
+                <!-- Actions -->
+                <div style="
+                    padding: 16px 20px;
+                    border-top: 1px solid #f0f0f0;
+                    display: flex;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                ">
+                    <button onclick="copyTranscriptToClipboard('${result.transcript ? result.transcript.replace(/'/g, "\\'") : ''}')" style="
+                        background: linear-gradient(135deg, #6e32a0 0%, #8b4cb8 100%);
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 20px;
+                        cursor: pointer;
+                        font-size: 0.8rem;
+                        font-weight: 500;
+                    ">ðŸ“‹ Copy Text</button>
+                    <button onclick="analyzeCall('${evaluationId}')" style="
+                        background: #f8f9fa;
+                        color: #666;
+                        border: 1px solid #e1e8ed;
+                        padding: 8px 16px;
+                        border-radius: 20px;
+                        cursor: pointer;
+                        font-size: 0.8rem;
+                        font-weight: 500;
+                    ">ðŸ” Analyze Call</button>
+                    <button onclick="applyQuickFilter('partner', '${partner}')" style="
+                        background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 20px;
+                        cursor: pointer;
+                        font-size: 0.8rem;
+                        font-weight: 500;
+                    ">ðŸ”§ Filter by Partner</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function addSummaryToInputContainer(query, totalResults, totalEvaluationsScanned) {
+    // Find the input container (where the chat input and send button are)
+    const inputContainer = document.querySelector('.chat-input-area') || 
+                          document.querySelector('.input-container') ||
+                          document.getElementById('chatInput')?.parentElement;
+    
+    if (!inputContainer) {
+        console.warn("âš ï¸ Input container not found for summary");
+        return;
+    }
+    
+    // Remove any existing summary
+    const existingSummary = document.getElementById('transcriptSearchSummary');
+    if (existingSummary) {
+        existingSummary.remove();
+    }
+    
+    // Create compact summary element
+    const summaryDiv = document.createElement('div');
+    summaryDiv.id = 'transcriptSearchSummary';
+    summaryDiv.innerHTML = `
+        <div style="
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            border: 1px solid #1976d2;
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+        ">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <strong style="color: #1565c0;">ðŸ” "${query}": ${totalResults} matches</strong>
+                <span style="color: #666;">(${totalEvaluationsScanned} scanned)</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button onclick="downloadTranscriptResults('csv', '${query}')" style="
+                    background: #1976d2; color: white; border: none; 
+                    padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+                ">ðŸ“Š Export CSV</button>
+                <button onclick="clearTranscriptSearchResults()" style="
+                    background: #f44336; color: white; border: none; 
+                    padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+                ">âœ• Clear</button>
+            </div>
+        </div>
+    `;
+    
+    // Insert summary before the input container
+    inputContainer.parentNode.insertBefore(summaryDiv, inputContainer);
+    
+    console.log("âœ… Summary added to input container");
+}
+
+function clearTranscriptSearchResults() {
+    // Clear chat messages
+    const chatMessages = document.getElementById('chatMessages');
+    if (chatMessages) {
+        chatMessages.innerHTML = '';
+        chatMessages.classList.add('hidden');
+    }
+    
+    // Remove summary from input container
+    const summary = document.getElementById('transcriptSearchSummary');
+    if (summary) {
+        summary.remove();
+    }
+    
+    // Show welcome screen
+    const welcomeScreen = document.getElementById('welcomeScreen') || 
+                         document.querySelector('.welcome-screen');
+    if (welcomeScreen) {
+        welcomeScreen.style.display = 'block';
+    }
+    
+    // Show quick questions
+    showQuickQuestions();
+    
+    // Clear stored results
+    window.lastTranscriptResults = [];
+    
+    console.log("ðŸ§¹ Transcript search results cleared, welcome screen restored");
+}
+
+// Helper function to download transcript search results
+function downloadTranscriptResults(format, query) {
+    // Fix: Use window.lastTranscriptResults consistently
+    if (!window.lastTranscriptResults || window.lastTranscriptResults.length === 0) {
+        showToast('âŒ No results to download', 'error');
+        console.log("âŒ No results found. window.lastTranscriptResults:", window.lastTranscriptResults);
+        return;
+    }
+    
+    console.log(`ðŸ“¥ Downloading ${window.lastTranscriptResults.length} transcript results as CSV`);
+    
+    if (format === 'csv') {
+        // Enhanced CSV headers with better field mapping
+        const headers = [
+            'Evaluation ID',
+            'Internal ID', 
+            'Partner',
+            'Program',
+            'Call Date',
+            'Disposition',
+            'Sub Disposition',
+            'Search Query',
+            'Match Score',
+            'Transcript Preview',
+            'Full Transcript'
+        ];
+        const csvRows = [headers.join(',')];
+        
+        window.lastTranscriptResults.forEach(result => {
+            // Handle both possible data structures
+            const metadata = result.metadata || {};
+            const evaluationId = result.evaluationId || result.evaluation_id || result.id || '';
+            const internalId = result.internalId || result.evaluationId || '';
+            const partner = metadata.partner || result.partner || '';
+            const program = metadata.program || result.program || '';
+            const callDate = metadata.call_date || result.call_date || metadata.callDate || '';
+            const disposition = result.disposition || metadata.disposition || '';
+            const subDisposition = result.sub_disposition || metadata.subDisposition || '';
+            const score = result._score || result.score || 0;
+            
+            // Get transcript content from various possible fields
+            const fullTranscript = result.transcript || 
+                                 result.highlighted_text || 
+                                 result.text || 
+                                 result.content || 
+                                 '';
+            
+            // Create preview (first 200 chars)
+            const transcriptPreview = fullTranscript.length > 200 ? 
+                                    fullTranscript.substring(0, 200) + '...' : 
+                                    fullTranscript;
+            
+            // Properly escape CSV fields
+            const escapeCSVField = (field) => {
+                if (field === null || field === undefined) return '';
+                const str = String(field);
+                if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                    return `"${str.replace(/"/g, '""')}"`;
+                }
+                return str;
+            };
+            
+            const row = [
+                escapeCSVField(evaluationId),
+                escapeCSVField(internalId),
+                escapeCSVField(partner),
+                escapeCSVField(program),
+                escapeCSVField(callDate),
+                escapeCSVField(disposition),
+                escapeCSVField(subDisposition),
+                escapeCSVField(query),
+                escapeCSVField(score.toFixed(3)),
+                escapeCSVField(transcriptPreview),
+                escapeCSVField(fullTranscript)
+            ];
+            csvRows.push(row.join(','));
+        });
+        
+        const content = csvRows.join('\n');
+        const filename = `transcript_search_${query.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+        
+        // Create and trigger download
+        const blob = new Blob([content], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast(`ðŸ“¥ Downloaded ${filename} with ${window.lastTranscriptResults.length} results`, 'success');
+    }
+}
+
+// Helper function to apply quick filters from search results
+function applyQuickFilter(filterType, filterValue) {
+    console.log(`ðŸ”§ Applying quick filter: ${filterType} = ${filterValue}`);
+    
+    // Map filter types to actual filter IDs
+    const filterMappings = {
+        'partner': 'partnerFilter',
+        'program': 'programFilter',
+        'template': 'templateFilter',
+        'disposition': 'callDispositionFilter'
+    };
+    
+    const filterId = filterMappings[filterType];
+    if (!filterId) {
+        console.warn(`Unknown filter type: ${filterType}`);
+        return;
+    }
+    
+    const filterSelect = document.getElementById(filterId);
+    if (!filterSelect) {
+        console.warn(`Filter element not found: ${filterId}`);
+        return;
+    }
+    
+    // Set the filter value
+    filterSelect.value = filterValue;
+    
+    // Apply the filters
+    if (typeof applyFilters === 'function') {
+        applyFilters();
+        showToast(`ðŸ”§ Applied ${filterType} filter: ${filterValue}`, 'info');
+    } else {
+        console.warn('applyFilters function not available');
+    }
+}
+
+console.log("âœ… Transcript search display functions added successfully");
+console.log("ðŸŽ¯ Functions added: displayTranscriptSearchResults, displayComprehensiveTranscriptResults, downloadTranscriptResults, applyQuickFilter");
+
+async function checkVectorSearchCapabilities() {
+    try {
+        const response = await fetch('/debug/vector_capabilities');
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            vectorSearchStatus.enabled = data.capabilities?.cluster_vector_support || false;
+            vectorSearchStatus.hybridAvailable = data.capabilities?.hybrid_search_available || false;
+            vectorSearchStatus.searchQuality = vectorSearchStatus.hybridAvailable ? 'hybrid_enhanced' : 
+                                              vectorSearchStatus.enabled ? 'vector_enhanced' : 'text_only';
+            
+            console.log(`âœ… Vector search capabilities checked: ${vectorSearchStatus.searchQuality}`);
+        }
+    } catch (error) {
+        console.warn("âš ï¸ Could not check vector search capabilities:", error);
+    }
+}
+
+function showTranscriptSearchLoading(query, isComprehensive = false) {
+    try {
+        const resultsContainer = document.getElementById('transcriptSearchResults') || 
+                               document.querySelector('.transcript-search-results');
+        
+        if (!resultsContainer) {
+            console.warn("âš ï¸ No results container found for loading state");
+            return;
+        }
+        
+        const loadingHTML = `
+            <div class="transcript-search-loading">
+                <div class="loading-content">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">
+                        <h4>ðŸ” Searching transcripts${isComprehensive ? ' (comprehensive)' : ''}...</h4>
+                        <p>Looking for: <strong>"${escapeHtml(query)}"</strong></p>
+                        <div class="loading-progress">
+                            <div class="progress-bar"></div>
+                        </div>
+                        <small class="loading-tip">
+                            ${isComprehensive ? 
+                                'Scanning all available transcripts for matches...' : 
+                                'Searching recent transcripts for quick results...'
+                            }
+                        </small>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        resultsContainer.innerHTML = loadingHTML;
+        resultsContainer.style.display = 'block';
+        
+        // Add CSS for loading animation if not already present
+        if (!document.getElementById('transcript-loading-styles')) {
+            const loadingStyles = document.createElement('style');
+            loadingStyles.id = 'transcript-loading-styles';
+            loadingStyles.textContent = `
+                .transcript-search-loading {
+                    padding: 40px 20px;
+                    text-align: center;
+                    background: white;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                }
+                
+                .loading-content {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 16px;
+                }
+                
+                .loading-spinner {
+                    width: 32px;
+                    height: 32px;
+                    border: 3px solid #f3f3f3;
+                    border-top: 3px solid #2196f3;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                }
+                
+                .loading-text h4 {
+                    margin: 0;
+                    color: #333;
+                    font-size: 1.1rem;
+                }
+                
+                .loading-text p {
+                    margin: 8px 0;
+                    color: #666;
+                }
+                
+                .loading-progress {
+                    width: 200px;
+                    height: 4px;
+                    background: #f0f0f0;
+                    border-radius: 2px;
+                    overflow: hidden;
+                }
+                
+                .progress-bar {
+                    height: 100%;
+                    background: linear-gradient(90deg, #2196f3, #21cbf3);
+                    border-radius: 2px;
+                    animation: progress 2s ease-in-out infinite;
+                }
+                
+                .loading-tip {
+                    color: #888;
+                    font-style: italic;
+                }
+                
+                @keyframes progress {
+                    0% { width: 0%; }
+                    50% { width: 70%; }
+                    100% { width: 100%; }
+                }
+            `;
+            document.head.appendChild(loadingStyles);
+        }
+        
+    } catch (error) {
+        console.error("âŒ Error showing loading state:", error);
+    }
+}
+
+// =============================================================================
+// UPDATED: clearTranscriptResults function with showQuickQuestions
+// =============================================================================
+function clearTranscriptResults() {
+    const resultsContainer = document.getElementById('transcriptSearchResults');
+    const resultsList = document.getElementById('transcriptResultsList');
+    const resultsSummary = document.getElementById('transcriptResultsSummary');
+    
+    if (resultsContainer) {
+        resultsContainer.classList.add('hidden');
+        resultsContainer.style.display = 'none';
+    }
+    
+    if (resultsList) {
+        resultsList.innerHTML = '';
+    }
+    
+    if (resultsSummary) {
+        resultsSummary.innerHTML = '';
+    }
+    
+    // Show welcome screen again when clearing results
+    const welcomeScreen = document.getElementById('welcomeScreen') || 
+                         document.querySelector('.welcome-screen');
+    if (welcomeScreen) {
+        welcomeScreen.style.display = 'block';
+        console.log("âœ… Welcome screen restored");
+    }
+    
+    // Show quick questions again (use direct approach)
+    const quickQuestions = document.getElementById('quickQuestions') || 
+                          document.querySelector('.quick-questions');
+    if (quickQuestions) {
+        quickQuestions.style.display = 'block';
+        console.log("âœ… Quick questions restored");
+    }
+    
+    // Clear stored results
+    if (typeof window.lastTranscriptResults !== 'undefined') {
+        window.lastTranscriptResults = [];
+    }
+    
+    console.log("ðŸ§¹ Transcript search results cleared, welcome screen and quick questions restored");
+}
+
+function addTranscriptResultsContainer() {
+    console.log("ðŸŽ¯ Adding transcript search results container...");
+    
+    // Check if container already exists
+    if (document.getElementById('transcriptSearchResults')) {
+        console.log("âœ… Transcript results container already exists");
+        // MAKE SURE it's visible and properly structured
+        const existing = document.getElementById('transcriptSearchResults');
+        if (!document.getElementById('transcriptResultsSummary') || !document.getElementById('transcriptResultsList')) {
+            console.log("ðŸ”§ Fixing incomplete container structure...");
+            existing.innerHTML = `
+                <div class="transcript-results-header" style="background: #f8f9fa; border-bottom: 1px solid #e9ecef; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0; color: #333; font-size: 1.2rem;">ðŸŽ¯ Transcript Search Results</h3>
+                    <button onclick="clearTranscriptResults()" style="background: none; border: none; color: #666; cursor: pointer; font-size: 18px; padding: 4px; border-radius: 50%; width: 28px; height: 28px;">âœ•</button>
+                </div>
+                <div id="transcriptResultsSummary" class="results-summary" style="background: #e8f5e8; border-bottom: 1px solid #e9ecef; padding: 16px 20px;"></div>
+                <div id="transcriptResultsList" class="results-list" style="max-height: 600px; overflow-y: auto; padding: 0 20px 20px 20px;"></div>
+            `;
+        }
+        return existing;
+    }
+    
+    // Create the results container with INLINE STYLES to ensure it works
+    const resultsContainer = document.createElement('div');
+    resultsContainer.id = 'transcriptSearchResults';
+    resultsContainer.className = 'transcript-search-results';
+    // REMOVE 'hidden' class - we'll control visibility with display style
+    resultsContainer.style.cssText = `
+        background: white;
+        border: 1px solid #e1e8ed;
+        border-radius: 12px;
+        margin: 20px 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        display: none;
+    `;
+    
+    resultsContainer.innerHTML = `
+        <div class="transcript-results-header" style="background: #f8f9fa; border-bottom: 1px solid #e9ecef; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0; color: #333; font-size: 1.2rem;">ðŸŽ¯ Transcript Search Results</h3>
+            <button onclick="clearTranscriptResults()" style="background: none; border: none; color: #666; cursor: pointer; font-size: 18px; padding: 4px; border-radius: 50%; width: 28px; height: 28px;">âœ•</button>
+        </div>
+        <div id="transcriptResultsSummary" class="results-summary" style="background: #e8f5e8; border-bottom: 1px solid #e9ecef; padding: 16px 20px;"></div>
+        <div id="transcriptResultsList" class="results-list" style="max-height: 600px; overflow-y: auto; padding: 0 20px 20px 20px;"></div>
+    `;
+    
+    // IMPROVED: Better container finding with your actual HTML structure
+    let insertLocation = null;
+    let insertBefore = null;
+    
+    // Try to find the best location in your chat interface
+    const locations = [
+        // Option 1: Your main chat area
+        { container: document.querySelector('.chat-area'), before: document.querySelector('.chat-input-area') },
+        // Option 2: Main layout area
+        { container: document.querySelector('.main-layout'), before: null },
+        // Option 3: Messages container parent
+        { container: document.querySelector('.messages-container')?.parentNode, before: document.querySelector('.chat-input-area') },
+        // Option 4: Fallback to body
+        { container: document.body, before: null }
+    ];
+    
+    for (const location of locations) {
+        if (location.container) {
+            insertLocation = location.container;
+            insertBefore = location.before;
+            console.log("ðŸ“ Found insertion location:", location.container.className || location.container.tagName);
+            break;
+        }
+    }
+    
+    // Insert the container
+    if (insertBefore) {
+        insertLocation.insertBefore(resultsContainer, insertBefore);
+        console.log("âœ… Transcript results container inserted before chat input");
+    } else {
+        insertLocation.appendChild(resultsContainer);
+        console.log("âœ… Transcript results container appended to container");
+    }
+    
+    return resultsContainer;
+}
+
+
+
+function retryLastTranscriptSearch() {
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput && window.lastSearchQuery) {
+        chatInput.value = window.lastSearchQuery;
+        sendMessageWithTranscriptSearch();
+    } else {
+        showToast('âŒ No previous search to retry', 'warning');
+    }
+}
+
+/**
+ * UTILITY: Clear transcript results
+ */
+function clearTranscriptResults() {
+    const resultsContainer = document.getElementById('transcriptSearchResults');
+    const resultsList = document.getElementById('transcriptResultsList');
+    const resultsSummary = document.getElementById('transcriptResultsSummary');
+    
+    if (resultsContainer) {
+        resultsContainer.classList.add('hidden');
+        resultsContainer.style.display = 'none';
+    }
+    
+    if (resultsList) {
+        resultsList.innerHTML = '';
+    }
+    
+    if (resultsSummary) {
+        resultsSummary.innerHTML = '';
+    }
+    
+    // Show welcome screen again when clearing results
+    const welcomeScreen = document.getElementById('welcomeScreen') || 
+                         document.querySelector('.welcome-screen');
+    if (welcomeScreen) {
+        welcomeScreen.style.display = 'block';
+        console.log("âœ… Welcome screen restored");
+    }
+    
+    // Clear stored results
+    if (typeof lastTranscriptResults !== 'undefined') {
+        lastTranscriptResults = [];
+    }
+    
+    console.log("ðŸ§¹ Transcript search results cleared and welcome screen restored");
+}
+
+// Display transcript search results
+function displayTranscriptSearchResults(data, query) {
+    console.log("ðŸŽ¯ Displaying transcript search results in chat container:", data);
+    
+    // Hide quick questions
+    hideQuickQuestions();
+    
+    // Hide welcome screen
+    const welcomeScreen = document.getElementById('welcomeScreen') || 
+                         document.querySelector('.welcome-screen');
+    if (welcomeScreen) {
+        welcomeScreen.style.display = 'none';
+    }
+    
+    // Use the chat messages container instead of separate container
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) {
+        console.error("âŒ Chat messages container not found!");
+        return;
+    }
+    
+    // Show chat messages container and clear existing content
+    chatMessages.classList.remove('hidden');
+    chatMessages.style.display = 'block';
+    chatMessages.innerHTML = '';
+    
+    // Extract data from response
+    const results = data.display_results || data.results || [];
+    const summary = data.comprehensive_summary || data.summary || {};
+    const totalResults = results.length;
+    const totalEvaluationsScanned = summary.total_evaluations_searched || 0;
+    
+    // Store results globally for export (FIX: Use consistent variable name)
+    window.lastTranscriptResults = results;
+    
+    console.log(`ðŸŽ¨ BALANCED: Will highlight search terms and variations from: "${query}"`);
+    console.log(`ðŸ“Š Stored ${results.length} results for export`);
+    
+    // Add summary to input container
+    addSummaryToInputContainer(query, totalResults, totalEvaluationsScanned);
+    
+    // Create results in chat messages container
+    if (totalResults === 0) {
+        chatMessages.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #666;">
+                <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.5;">ðŸ”</div>
+                <h3>No matches found for "${query}"</h3>
+                <p>Try different search terms or check your filters.</p>
+            </div>
+        `;
+    } else {
+        // Create individual result cards in chat container
+        const resultsHTML = results.map((result, index) => {
+            const evaluationId = result.evaluationId || result.evaluation_id || result.id;
+            const metadata = result.metadata || {};
+            const transcript = result.transcript || result.highlighted_text || result.text || '';
+            const score = result._score || result.score || 0;
+            
+            // BALANCED HIGHLIGHTING: Search terms and variations
+            const highlightedTranscript = highlightSearchTerms(transcript, query);
+            const truncatedTranscript = highlightedTranscript.length > 400 ? 
+                                      highlightedTranscript.substring(0, 400) + '...' : 
+                                      highlightedTranscript;
+            
+            return `
+                <div class="message assistant-message" style="margin-bottom: 16px;">
+                    <div class="message-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span class="role" style="font-weight: 600; color: #1976d2;">Result ${index + 1}</span>
+                            <span style="color: #666; font-size: 0.85rem;">ID: ${evaluationId}</span>
+                            ${metadata.partner ? `<span style="background: #e3f2fd; color: #1565c0; padding: 2px 6px; border-radius: 12px; font-size: 0.7rem;">${metadata.partner}</span>` : ''}
+                            ${score > 0 ? `<span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 8px; font-size: 0.7rem;">Score: ${(score * 100).toFixed(1)}%</span>` : ''}
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button onclick="copyTranscriptToClipboard('${transcript.replace(/'/g, "\\'")}')'" style="
+                                background: #6e32a0; color: white; border: none; 
+                                padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.7rem;
+                            ">ðŸ“‹ Copy</button>
+                        </div>
+                    </div>
+                    
+                    <div class="message-content" style="
+                        background: #f8f9fa; 
+                        border-left: 3px solid #1976d2; 
+                        padding: 12px; 
+                        border-radius: 0 8px 8px 0;
+                        font-size: 0.9rem; 
+                        line-height: 1.5;
+                    ">
+                        ${truncatedTranscript}
+                    </div>
+                    
+                    ${metadata.call_date || metadata.program || metadata.disposition ? `
+                        <div style="margin-top: 8px; padding: 8px; background: #f0f0f0; border-radius: 6px; font-size: 0.8rem; color: #666;">
+                            ${metadata.call_date ? `ðŸ“… ${metadata.call_date}` : ''}
+                            ${metadata.program ? ` â€¢ ðŸ“‹ ${metadata.program}` : ''}
+                            ${metadata.disposition ? ` â€¢ ðŸ“ž ${metadata.disposition}` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+        
+        chatMessages.innerHTML = resultsHTML;
+    }
+    
+    // Scroll to top of results
+    chatMessages.scrollTop = 0;
+    
+    console.log(`âœ… Displayed ${totalResults} results in chat container with balanced highlighting`);
+}
+
+// Show loading state for transcript search
+function showTranscriptSearchLoading(query) {
+    const resultsContainer = document.getElementById('transcriptSearchResults');
+    const resultsList = document.getElementById('transcriptResultsList');
+    const resultsSummary = document.getElementById('transcriptResultsSummary');
+    
+    if (!resultsContainer || !resultsList || !resultsSummary) {
+        console.warn("âš ï¸ Transcript results containers not found for loading state");
+        return;
+    }
+    
+    // Show container
+    resultsContainer.classList.remove('hidden');
+    
+    // Show loading in summary
+    resultsSummary.innerHTML = `
+        <div class="loading-summary">
+            <div class="loading-spinner"></div>
+            <span>Searching transcripts for "<strong>${query}</strong>"...</span>
+        </div>
+    `;
+    
+    // Show loading in results
+    resultsList.innerHTML = `
+        <div class="transcript-search-loading">
+            <div class="loading-spinner"></div>
+            <p>Analyzing call transcripts...</p>
+        </div>
+    `;
+    
+    console.log(`ðŸ”„ Showing transcript search loading for query: "${query}"`);
+}
+
+// Placeholder functions for result actions
+function viewFullTranscript(callId) {
+    console.log(`ðŸ“„ Viewing full transcript for call: ${callId}`);
+    // Implement full transcript viewing logic
+    if (typeof showToast === 'function') {
+        showToast(`Opening full transcript for call ${callId}`, 'info');
+    }
+}
+
+function analyzeCall(callId) {
+    console.log(`ðŸ“Š Analyzing call: ${callId}`);
+    // Implement call analysis logic
+    if (typeof showToast === 'function') {
+        showToast(`Starting analysis for call ${callId}`, 'info');
+    }
+}
+
+function ensureTranscriptContainersReady() {
+    console.log("ðŸ”§ Ensuring transcript containers are ready...");
+    
+    // Make sure the main container exists
+    const mainContainer = addTranscriptResultsContainer();
+    
+    // Verify the sub-containers exist
+    const summary = document.getElementById('transcriptResultsSummary');
+    const list = document.getElementById('transcriptResultsList');
+    
+    if (!summary || !list) {
+        console.error("âŒ Sub-containers missing, recreating...");
+        addTranscriptResultsContainer(); // This will fix the structure
+    }
+    
+    console.log("âœ… All transcript containers verified and ready");
+    return { container: mainContainer, summary, list };
+}
+
+
+
+// Store last search query for retry functionality
+let originalSendMessageWithTranscriptSearch = sendMessageWithTranscriptSearch;
+sendMessageWithTranscriptSearch = function() {
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput && chatInput.value?.trim()) {
+        window.lastSearchQuery = chatInput.value.trim();
+    }
+    return originalSendMessageWithTranscriptSearch();
+};
+
+console.log("âœ… Fully optimized sendMessageWithTranscriptSearch function loaded");
+function showTranscriptSearchError(errorMessage) {
+    try {
+        const resultsContainer = document.getElementById('transcriptSearchResults') || 
+                               document.querySelector('.transcript-search-results');
+        
+        if (!resultsContainer) {
+            // Fallback: show toast notification
+            if (typeof showToast === 'function') {
+                showToast(`âŒ Transcript Search Error: ${errorMessage}`, 'error');
+            } else {
+                console.error("âŒ Transcript Search Error:", errorMessage);
+                alert(`Transcript Search Error: ${errorMessage}`);
+            }
+            return;
+        }
+        
+        const errorHTML = `
+            <div class="transcript-search-error">
+                <div class="error-content">
+                    <div class="error-icon">âŒ</div>
+                    <h4>Search Error</h4>
+                    <p class="error-message">${escapeHtml(errorMessage)}</p>
+                    <div class="error-actions">
+                        <button class="transcript-btn transcript-btn--primary" onclick="retryLastTranscriptSearch()">
+                            ðŸ”„ Try Again
+                        </button>
+                        <button class="transcript-btn transcript-btn--secondary" onclick="clearTranscriptResults()">
+                            âœ• Clear
+                        </button>
+                    </div>
+                    <details class="error-help">
+                        <summary>ðŸ’¡ Troubleshooting Tips</summary>
+                        <ul>
+                            <li>Try a simpler search term (single words work best)</li>
+                            <li>Check your internet connection</li>
+                            <li>Avoid special characters in search queries</li>
+                            <li>Try refreshing the page if errors persist</li>
+                        </ul>
+                    </details>
+                </div>
+            </div>
+        `;
+        
+        resultsContainer.innerHTML = errorHTML;
+        resultsContainer.style.display = 'block';
+        
+    } catch (displayError) {
+        console.error("âŒ Error displaying error message:", displayError);
+        // Ultimate fallback
+        alert(`Error: ${errorMessage}`);
+    }
+}
+
+
+
+/**
+ * UTILITY: Escape HTML to prevent XSS
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+
+// Utility function to copy text to clipboard
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        // Show temporary feedback
+        showToast(`ðŸ“‹ Copied: ${text}`, 'success');
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
+        showToast('Failed to copy to clipboard', 'error');
+    });
+}
+
+// Enhanced toast notification system
+function showToast(message, type = 'info') {
+    // Remove any existing toast
+    const existingToast = document.querySelector('.transcript-toast');
+    if (existingToast) {
+        existingToast.remove();
+    }
+    
+    const toast = document.createElement('div');
+    toast.className = `transcript-toast toast-${type}`;
+    toast.innerHTML = `
+        <span class="toast-message">${message}</span>
+        <button onclick="this.parentElement.remove()" class="toast-close">Ã—</button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, 3000);
+}
+
+function truncateText(text, maxLength) {
+    if (!text || text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+}
+
+// =============================================================================
+// STYLES AND FORMATTING
+// =============================================================================
+
+function addToggleToHeader() {
+    console.log("ðŸ”§ Adding transcript toggle to header via JavaScript...");
+    
+    const chatHeaderFilters = document.getElementById('chatHeaderFilters');
+    
+    if (!chatHeaderFilters) {
+        console.error("âŒ chatHeaderFilters not found");
+        return;
+    }
+    
+    // Check if toggle already exists
+    if (document.getElementById('transcriptToggle')) {
+        console.log("âœ… Toggle already exists");
+        return;
+    }
+    
+    // Create the toggle HTML
+    const toggleDiv = document.createElement('div');
+    toggleDiv.id = 'transcriptToggle';
+    toggleDiv.className = 'header-transcript-toggle';
+    toggleDiv.innerHTML = `
+        <label class="toggle-switch header-toggle">
+            <input type="checkbox" id="transcriptSearchToggleInput" onchange="toggleTranscriptSearchMode()">
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">Search Transcripts Only</span>
+        </label>
+        <div class="comprehensive-option" id="comprehensiveOption" style="display: none;">
+            <label class="toggle-switch secondary">
+                <input type="checkbox" id="comprehensiveSearchToggle" checked>
+                <span class="toggle-slider small"></span>
+                <span class="toggle-label small">Comprehensive Analysis</span>
+            </label>
+        </div>
+    `;
+    
+    // Add to the beginning of chatHeaderFilters
+    chatHeaderFilters.insertBefore(toggleDiv, chatHeaderFilters.firstChild);
+    
+    console.log("âœ… Toggle added to header!");
+    
+    // Verify it worked
+    setTimeout(() => {
+        const toggle = document.getElementById('transcriptSearchToggleInput');
+        if (toggle) {
+            console.log("ðŸŽ¯ Toggle verification: SUCCESS");
+        } else {
+            console.log("âŒ Toggle verification: FAILED");
+        }
+    }, 100);
+}
+
+
+function loadFormattingStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .typing-dots {
+            display: flex;
+            color: #E20074
+            gap: 4px;
+            padding: 8px 0;
+        }
+        
+        .typing-dots span {
+            width: 8px;
+            height: 8px;
+            background: #e20074;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        
+        .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+        
+        .message {
+            margin-bottom: 16px;
+            padding: 12px;
+            border-radius: 8px;
+        }
+        
+        .user-message {
+            background: #e3f2fd;
+            margin-left: 20%;
+        }
+        
+        .assistant-message {
+            background: #9646c3
+            margin-right: 20%;
+        }
+        
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.85em;
+            color: #666;
+        }
+        
+        .role {
+            font-weight: 600;
+        }
+        
+        .filter-tag {
+            transition: all 0.2s ease;
+        }
+        
+        .filter-tag:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// =============================================================================
+// DEBUG FUNCTIONS
+// =============================================================================
 
 function debugChatSystem() {
-    console.log("🔧 DEBUG: Chat System Status");
+    console.log("ðŸ”§ DEBUG: Chat System Status");
     console.log("Current Filters:", currentFilters);
     console.log("Chat History:", chatHistory);
     console.log("Filter Options:", filterOptions);
     console.log("Performance Metrics:", performanceMetrics);
     console.log("Vector Search Status:", vectorSearchStatus);
-    
-    // Debug last message formatting
-    const lastMessage = document.querySelector('.message:last-child .message-content');
-    if (lastMessage) {
-        console.log("🔧 DEBUG: Last message content:", lastMessage.innerHTML);
-        console.log("🔧 DEBUG: Last message text:", lastMessage.textContent);
-    }
-    
-    // Test send button
-    testSendButton();
 }
 
-// =============================================================================
-// VECTOR SEARCH FUNCTIONS (Placeholder)
-// =============================================================================
-
-async function checkVectorSearchCapabilities() {
-    try {
-        const response = await fetch('/vector_status_simple');
-        if (response.ok) {
-            const status = await response.json();
-            vectorSearchStatus = { ...vectorSearchStatus, ...status };
-            console.log("📍 Vector search capabilities:", vectorSearchStatus);
+function debugTranscriptToggle() {
+    console.log("ðŸ” Debugging transcript toggle...");
+    
+    const elements = {
+        'transcriptSearchToggleInput': document.getElementById('transcriptSearchToggleInput'),
+        'transcriptToggle': document.getElementById('transcriptToggle'),
+        'comprehensiveOption': document.getElementById('comprehensiveOption'),
+        'chatHeaderFilters': document.getElementById('chatHeaderFilters'),
+        'chatInput': document.getElementById('chatInput')
+    };
+    
+    Object.entries(elements).forEach(([name, element]) => {
+        if (element) {
+            console.log(`âœ… ${name}: Found`);
+        } else {
+            console.log(`âŒ ${name}: NOT FOUND`);
         }
-    } catch (error) {
-        console.warn("⚠️ Could not check vector search capabilities:", error);
-    }
+    });
+    
+    // Check if CSS is loaded
+    const testElement = document.createElement('div');
+    testElement.className = 'header-transcript-toggle';
+    document.body.appendChild(testElement);
+    const styles = window.getComputedStyle(testElement);
+    const hasStyles = styles.display !== 'block'; // Default div display
+    document.body.removeChild(testElement);
+    
+    console.log(`ðŸŽ¨ CSS loaded: ${hasStyles ? 'YES' : 'NO'}`);
+    
+    return elements;
 }
 
-function loadFormattingStyles() {
-    // Add any dynamic formatting styles
-    console.log("🎨 Loading formatting styles");
+// Add this debug function to your chat.js to understand the data structure
+function debugTranscriptSources(sources) {
+    console.log('ðŸ” DEBUGGING TRANSCRIPT SOURCES');
+    console.log('Total sources:', sources.length);
+    
+    // Sample first few sources to understand structure
+    sources.slice(0, 3).forEach((source, index) => {
+        console.log(`\n--- Source ${index + 1} ---`);
+        console.log('Available properties:', Object.keys(source));
+        
+        // Check all possible transcript fields
+        const fields = ['transcript', 'transcript_text', 'full_text', 'text', 'content', 'evaluation'];
+        fields.forEach(field => {
+            if (source[field]) {
+                console.log(`${field}: "${source[field].substring(0, 150)}..."`);
+            }
+        });
+        
+        // Check metadata
+        if (source.metadata) {
+            console.log('metadata:', source.metadata);
+        }
+    });
+    
+    // Analyze content patterns
+    const patterns = {
+        speakerA: 0,
+        speakerB: 0,
+        agent: 0,
+        customer: 0,
+        timestamps: 0,
+        questions: 0,
+        conversational: 0
+    };
+    
+    sources.forEach(source => {
+        const content = (source.transcript || source.transcript_text || source.full_text || source.text || source.content || '').toLowerCase();
+        
+        if (content.includes('speaker a')) patterns.speakerA++;
+        if (content.includes('speaker b')) patterns.speakerB++;
+        if (content.includes('agent:')) patterns.agent++;
+        if (content.includes('customer:')) patterns.customer++;
+        if (content.includes('00:') || /\d{2}:\d{2}/.test(content)) patterns.timestamps++;
+        if (content.includes('question:')) patterns.questions++;
+        if (content.includes('pissed') || content.includes('frustrated') || content.includes('billing')) patterns.conversational++;
+    });
+    
+    console.log('\nðŸ“Š Content Patterns Found:');
+    console.log(patterns);
+    
+    return patterns;
 }
 
-// =============================================================================
-// TRANSCRIPT SEARCH FUNCTIONS (Placeholder)
-// =============================================================================
-
-function initializeEnhancedTranscriptSearch() {
-    console.log("🎯 Enhanced transcript search initialization placeholder");
-}
-
-function sendMessageWithTranscriptSearch() {
-    console.log("🔍 Transcript search message handling");
-    return sendMessage();
-}
+// Call this function in your displayEvaluationSources
+// Add this line right after: if (!sources || sources.length === 0) return;
+// debugTranscriptSources(sources);
 
 // =============================================================================
 // GLOBAL FUNCTION EXPOSURE
@@ -1115,7 +4028,7 @@ window.updateFilterCounts = updateFilterCounts;
 window.updateHierarchyFilters = updateHierarchyFilters;
 window.updateSubDispositions = updateSubDispositions;
 
-// Analytics function
+// Analytics function - NEW!
 window.refreshAnalyticsStats = refreshAnalyticsStats;
 
 // Chat functions
@@ -1124,6 +4037,7 @@ window.handleKeyPress = handleKeyPress;
 window.sendMessage = sendMessage;
 window.clearChat = clearChat;
 window.exportChat = exportChat;
+window.toggleChatSession = toggleChatSession;
 
 // Utility functions
 window.toggleDetailedTable = toggleDetailedTable;
@@ -1131,21 +4045,22 @@ window.downloadCategoryData = downloadCategoryData;
 
 // Debug functions
 window.debugChatSystem = debugChatSystem;
-window.testSendButton = testSendButton;
 window.getProductionMetrics = () => performanceMetrics;
 window.getProductionConfig = () => PRODUCTION_CONFIG;
 
-// Export configuration
+//Export the configuration for use by other functions
 window.EVALUATION_DEFAULTS = EVALUATION_DEFAULTS;
 window.getAppliedFilters = getAppliedFilters;
+window.updateEvaluationScope = updateEvaluationScope;
 
 // =============================================================================
 // INITIALIZATION WITH ANALYTICS STATS
+// Added refreshAnalyticsStats() call to load initial stats on page startup
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log("🚀 Metro AI Call Center Analytics v6.0.0 - Production initializing...");
-    console.log("🚀 Fixed Version - All JavaScript Errors Resolved");
+    console.log("ðŸš€ Metro AI Call Center Analytics v4.4.0 - Production initializing...");
+    console.log("ðŸš€ Chat-Stats Integration FIXED - Vector Search ENABLED");
     
     const startTime = performance.now();
     
@@ -1160,10 +4075,10 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => {
             checkVectorSearchCapabilities()
                 .then(() => {
-                    console.log(`✅ Vector search status: ${vectorSearchStatus.enabled ? 'ENABLED' : 'DISABLED'}`);
+                    console.log(`âœ… Vector search status: ${vectorSearchStatus.enabled ? 'ENABLED' : 'DISABLED'}`);
                 })
                 .catch(error => {
-                    console.warn("⚠️ Vector search check failed:", error);
+                    console.warn("âš ï¸ Vector search check failed:", error);
                 });
         }, 500);
         
@@ -1172,122 +4087,90 @@ document.addEventListener('DOMContentLoaded', function() {
             loadDynamicFilterOptions()
                 .then(() => {
                     const loadTime = performance.now() - startTime;
-                    console.log(`✅ PRODUCTION initialization completed in ${loadTime.toFixed(2)}ms`);
+                    console.log(`âœ… PRODUCTION initialization completed in ${loadTime.toFixed(2)}ms`);
                     
-                    // Load initial analytics stats on startup
+                    // ðŸ”§ FIX: Load initial analytics stats on startup
                     refreshAnalyticsStats();
                 })
                 .catch(error => {
-                    console.error("❌ Filter loading failed:", error);
-                    // Don't show critical error for filter loading failure - app can still function
-                    console.log("⚠️ Continuing with empty filter options");
+                    console.error("âŒ Filter loading failed:", error);
+                    showCriticalError("Failed to load filter options: " + error.message);
                 });
         }, 1000);
         
     } catch (error) {
-        console.error("❌ CRITICAL: Production initialization failed:", error);
+        console.error("âŒ CRITICAL: Production initialization failed:", error);
         showCriticalError("Critical initialization failure: " + error.message);
     }
 
-    // Initialize enhanced transcript search
+    // ðŸ”§ UPDATED: Use enhanced transcript search initialization
     setTimeout(initializeEnhancedTranscriptSearch, 1000);
+    setTimeout(() => {
+        addEvaluationScopeToggle();
+    }, 1500);
 
-    console.log("✅ Default evaluation scope: ALL filtered evaluations");    
-    console.log("✅ Metro AI Call Center Analytics v6.0.0 Fixed version loaded successfully");
-    console.log("🔧 FIXED: All JavaScript errors resolved, proper function definitions");
-    console.log("📱 FIXED: Sidebar toggle functionality improved");
-    console.log("🔍 FIXED: Filter population with error handling");
-    console.log("🗑️ REMOVED: chat-data-filter functionality (no longer needed)");
-    console.log("🔧 Debug mode:", PRODUCTION_CONFIG.DEBUG_MODE ? "ENABLED" : "DISABLED");
+    console.log("âœ… Default evaluation scope: ALL filtered evaluations");    
+    console.log("âœ… Metro AI Call Center Analytics v4.9.0 production loaded successfully");
+    console.log("ðŸ”§ FIXED: Chat-stats integration, duplicate functions removed, analytics connected");
+    console.log("ðŸ”® Vector search: Enhanced relevance and semantic similarity support");
+    console.log("ðŸ”§ Debug mode:", PRODUCTION_CONFIG.DEBUG_MODE ? "ENABLED" : "DISABLED");
+    console.log("ðŸŽ¯ Enhanced transcript search: Initialization scheduled with fixes for limits, highlighting, and interface switching");
 });
 
 // =============================================================================
-// MANUAL DEBUGGING FUNCTIONS FOR STATS API TESTING
+// TRANSCRIPT SEARCH MESSAGE OVERRIDE (ADD THIS AFTER YOUR DOMContentLoaded)
 // =============================================================================
 
-// Manual stats testing function for debugging
-window.testStatsAPI = function() {
-    console.log('🧪 === MANUAL STATS API TEST ===');
-    console.log('Current filters:', JSON.stringify(currentFilters, null, 2));
-    refreshAnalyticsStats();
-};
-
-// Function to force apply filters and test
-window.forceFilterTest = function() {
-    console.log('🧪 === FORCED FILTER APPLICATION TEST ===');
-    applyFilters();
-};
-
-// Function to manually check current DOM state
-window.checkStatsDisplay = function() {
-    const totalRecords = document.getElementById('totalRecords');
-    const activeFiltersCount = document.getElementById('activeFiltersCount');
-    
-    console.log('🧪 === CURRENT STATS DISPLAY STATE ===');
-    console.log('totalRecords element:', {
-        found: !!totalRecords,
-        text: totalRecords ? totalRecords.textContent : 'NOT FOUND'
-    });
-    console.log('activeFiltersCount element:', {
-        found: !!activeFiltersCount,
-        text: activeFiltersCount ? activeFiltersCount.textContent : 'NOT FOUND'
-    });
-    console.log('currentFilters variable:', JSON.stringify(currentFilters, null, 2));
-    console.log('Filter count:', Object.keys(currentFilters).length);
-};
-
-// Function to test API without filters
-window.testStatsAPINoFilters = async function() {
-    console.log('🧪 === TESTING STATS API WITHOUT FILTERS ===');
-    try {
-        const response = await fetch('/analytics/stats', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ filters: {} })
-        });
-        
-        const stats = await response.json();
-        console.log('Stats API response (no filters):', stats);
-        return stats;
-    } catch (error) {
-        console.error('Stats API test failed:', error);
-        return null;
+// Override the existing sendMessage function to handle transcript search
+const originalSendMessage = window.sendMessage;
+window.sendMessage = function() {
+    if (transcriptSearchMode) {
+        return sendMessageWithTranscriptSearch();
+    } else {
+        return originalSendMessage ();
     }
 };
 
-// Function to compare stats with and without filters
-window.compareStatsAPI = async function() {
-    console.log('🧪 === COMPARING STATS API WITH/WITHOUT FILTERS ===');
-    
-    // Test without filters
-    const noFiltersResult = await window.testStatsAPINoFilters();
-    
-    // Test with current filters
-    console.log('Testing with current filters:', JSON.stringify(currentFilters, null, 2));
-    try {
-        const response = await fetch('/analytics/stats', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ filters: currentFilters })
-        });
-        
-        const withFiltersResult = await response.json();
-        console.log('Stats API response (with filters):', withFiltersResult);
-        
-        console.log('🧪 === COMPARISON RESULTS ===');
-        console.log('No filters total:', noFiltersResult?.total_results || 'ERROR');  // ✅ Fixed: totalRecords → total_results
-        console.log('With filters total:', withFiltersResult?.total_results || 'ERROR');  // ✅ Fixed: totalRecords → total_results
-        console.log('Numbers are different:', (noFiltersResult?.total_results !== withFiltersResult?.total_results));  // ✅ Fixed: totalRecords → total_results
-        
-        return { noFilters: noFiltersResult, withFilters: withFiltersResult };
-    } catch (error) {
-        console.error('Stats API test with filters failed:', error);
-        return { noFilters: noFiltersResult, withFilters: null };
-    }
-};
+console.log("ðŸŽ¯ Transcript search: sendMessage override applied");
+// =============================================================================
+// COMPREHENSIVE SEARCH TOGGLE - Added for v6.0.0
+// =============================================================================
 
-console.log("🎯 Fixed chat.js loaded successfully - All issues resolved");
+// Global comprehensive mode state
+window.comprehensiveMode = false;
+
+function updateComprehensiveMode() {
+    const toggle = document.getElementById('comprehensiveToggle');
+    const description = document.getElementById('searchModeDescription');
+    const toggleContainer = document.querySelector('.comprehensive-toggle');
+    
+    if (toggle && description && toggleContainer) {
+        window.comprehensiveMode = toggle.checked;
+        
+        if (toggle.checked) {
+            // Comprehensive mode ON
+            description.innerHTML = '<span class="search-mode-indicator comprehensive"><span class="material-icons">search</span>Comprehensive (searches all data)</span>';
+            toggleContainer.classList.add('active');
+            console.log('🔍 COMPREHENSIVE MODE: ON - Will search full dataset');
+        } else {
+            // Smart detection mode
+            description.innerHTML = '<span class="search-mode-indicator standard"><span class="material-icons">auto_awesome</span>Smart detection (recommended)</span>';
+            toggleContainer.classList.remove('active');
+            console.log('⚡ SMART MODE: ON - Will use automatic detection');
+        }
+    }
+}
+
+function getComprehensiveToggleState() {
+    const toggle = document.getElementById('comprehensiveToggle');
+    return toggle ? toggle.checked : false;
+}
+
+// Add comprehensive parameter to existing sendMessage function
+function addComprehensiveToApiCall(existingPayload) {
+    return {
+        ...existingPayload,
+        comprehensive: getComprehensiveToggleState()
+    };
+}
+
