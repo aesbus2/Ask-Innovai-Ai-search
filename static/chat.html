@@ -221,21 +221,13 @@
 
                 <!-- Chat Input -->
                 <div class="chat-input-area">
-                    <!-- NEW: Search Options Bar -->
-                    <div class="search-options-bar">
-                        <div class="search-option">
-                            <label class="comprehensive-toggle">
-                                <input type="checkbox" id="comprehensiveToggle" onchange="updateComprehensiveMode()">
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">
-                                    <span class="material-icons">search</span>
-                                    Comprehensive Search
-                                </span>
-                            </label>
-                            <div class="option-description">
-                                <span id="searchModeDescription">Smart detection (recommended)</span>
-                            </div>
-                        </div>
+                    <!-- SIMPLE: Minimal comprehensive toggle -->
+                    <div style="margin-bottom: 8px;">
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; color: #666;">
+                            <input type="checkbox" id="comprehensiveToggle" onchange="updateComprehensiveMode()" style="margin: 0;">
+                            <span>🔍 Comprehensive Search</span>
+                            <span id="searchModeDescription" style="font-size: 0.8rem; color: #999; font-style: italic;">(Smart detection)</span>
+                        </label>
                     </div>
                     
                     <div class="input-container">

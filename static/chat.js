@@ -1809,8 +1809,8 @@ async function sendMessage() {
                 history: chatHistory,
                 filters: currentFilters,
                 analytics: true,
-                exclude_qa_content: excludeQAContent || false  // Use to only search through transcripts
-                comprehensive: getComprehensiveToggleState(), // NEW: Add comprehensive toggle
+                exclude_qa_content: excludeQAContent || false,  // Use to only search through transcripts
+                comprehensive: getComprehensiveToggleState()  // NEW: Add comprehensive toggle
             }),
             timeout: 120000  //2 minute timeout for chat response.
         });
@@ -4142,20 +4142,21 @@ window.comprehensiveMode = false;
 function updateComprehensiveMode() {
     const toggle = document.getElementById('comprehensiveToggle');
     const description = document.getElementById('searchModeDescription');
-    const toggleContainer = document.querySelector('.comprehensive-toggle');
     
-    if (toggle && description && toggleContainer) {
+    if (toggle && description) {
         window.comprehensiveMode = toggle.checked;
         
         if (toggle.checked) {
             // Comprehensive mode ON
-            description.innerHTML = '<span class="search-mode-indicator comprehensive"><span class="material-icons">search</span>Comprehensive (searches all data)</span>';
-            toggleContainer.classList.add('active');
+            description.textContent = '(Comprehensive - searches all data)';
+            description.style.color = '#6e32a0';
+            description.style.fontWeight = 'bold';
             console.log('🔍 COMPREHENSIVE MODE: ON - Will search full dataset');
         } else {
             // Smart detection mode
-            description.innerHTML = '<span class="search-mode-indicator standard"><span class="material-icons">auto_awesome</span>Smart detection (recommended)</span>';
-            toggleContainer.classList.remove('active');
+            description.textContent = '(Smart detection)';
+            description.style.color = '#999';
+            description.style.fontWeight = 'normal';
             console.log('⚡ SMART MODE: ON - Will use automatic detection');
         }
     }
