@@ -1,5 +1,5 @@
 // =============================================================================
-// COMPREHENSIVE SEARCH TOGGLE FUNCTIONS - Added for v6.0.0
+// COMPREHENSIVE SEARCH TOGGLE FUNCTIONS - Added V12-29.1
 // =============================================================================
 
 // Global comprehensive mode state
