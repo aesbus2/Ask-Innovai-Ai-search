@@ -1,36 +1,3 @@
-// =============================================================================
-// COMPREHENSIVE SEARCH TOGGLE FUNCTIONS - Added V12-29.1
-// =============================================================================
-
-// Global comprehensive mode state
-window.comprehensiveMode = false;
-
-function getComprehensiveToggleState() {
-    const toggle = document.getElementById("comprehensiveToggle");
-    return toggle ? toggle.checked : false;
-}
-
-function updateComprehensiveMode() {
-    const toggle = document.getElementById("comprehensiveToggle");
-    const description = document.getElementById("searchModeDescription");
-    const toggleContainer = document.querySelector(".comprehensive-toggle");
-    
-    if (toggle && description && toggleContainer) {
-        window.comprehensiveMode = toggle.checked;
-        
-        if (toggle.checked) {
-            // Comprehensive mode ON
-            description.innerHTML = "<span class=\"search-mode-indicator comprehensive\"><span class=\"material-icons\">search</span>Comprehensive (searches all data)</span>";
-            toggleContainer.classList.add("active");
-            console.log("🔍 COMPREHENSIVE MODE: ON - Will search full dataset");
-        } else {
-            // Smart detection mode
-            description.innerHTML = "<span class=\"search-mode-indicator standard\"><span class=\"material-icons\">auto_awesome</span>Smart detection (recommended)</span>";
-            toggleContainer.classList.remove("active");
-            console.log("⚡ SMART MODE: ON - Will use automatic detection");
-        }
-    }
-}
 
 // Enhanced Metro AI Call Center Analytics Chat - VECTOR SEARCH ENABLED
 // Version: 6.0.0 - Working Base
