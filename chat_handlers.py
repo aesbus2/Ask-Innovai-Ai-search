@@ -1,4 +1,4 @@
-# chat_handlers.py - VERSION 5.1.1 - VECTOR SEARCH ENABLED
+# chat_handlers.py - V 12-29-25.1 - VECTOR SEARCH ENABLED
 # updated ensure_vector_mapping_exists to not try and update KNN if it already exists 7-23-25
 #updated  build_search_context to use a new function to remove viloations in search filters
 # added strict metadata verification to ensure all results comply with filters
@@ -868,7 +868,7 @@ EVALUATION DETAILS:
                     transcript = _extract_transcript_text(source)
                     
                     if transcript and len(transcript) > 100:  # Only add if substantial
-                        eval_str += f"\nðŸ“ TRANSCRIPT:\n"
+                        eval_str += "\TRANSCRIPT:\n"
                         eval_str += f"{transcript[:4000]}\n"  # Include up to 4000 chars
                         eval_str += f"\n[Full transcript length: {len(transcript)} characters]\n"
                         
@@ -879,12 +879,12 @@ EVALUATION DETAILS:
                         
                         logger.debug(f"âœ… Added transcript for eval {source.get('evaluationId')}: {len(transcript)} chars")
                     else:
-                        eval_str += f"\n[No transcript available for this evaluation]\n"
+                        eval_str += "\n[No transcript available for this evaluation]\n"
                         source['has_transcript'] = False
                         
                 except Exception as e:
                     logger.error(f"Failed to extract transcript for eval {source.get('evaluationId')}: {e}")
-                    eval_str += f"\n[Transcript extraction error]\n"
+                    eval_str += "\n[Transcript extraction error]\n"
                     source['has_transcript'] = False
                 # ===== END OF NEW TRANSCRIPT SECTION =====
                 
@@ -910,12 +910,11 @@ CRITICAL INSTRUCTIONS:
 - If asked about data not in these evaluations, say it's not available
 
 Example evaluation display format:
-Evaluation ID: 3476
-- Partner: iQor
-- Site: Manila
-- Disposition: Account
-- SubDisposition: Device Activation
-
+Evaluation ID: [evaluationId]
+- Partner: [partner]
+- Site: [site]
+- Disposition: [disposition]
+- SubDisposition: [subDisposition]
 Remember: You are showing actual evaluation records, not search results.
 """
             
@@ -1468,7 +1467,7 @@ def build_sources_summary_with_details(sources, filters=None):
             if metadata.get("weighted_score"):
                 try:
                     agents_details[agent]["average_score"].append(float(metadata.get("weighted_score")))
-                except:
+                except:  # noqa: E722
                     pass
         
         # Track programs details
