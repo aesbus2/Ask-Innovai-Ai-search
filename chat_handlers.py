@@ -786,7 +786,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
 
             # TEXT SEARCH FIRST (exact matches) - NO SPECIAL QUERY NEEDED
             try:
-                logger.info(f"🔍 Searching for exact matches of: "{query}"")
+                logger.info(f"🔍 Searching for exact matches of: '{query}'")
                 text_results = search_opensearch(
                     query=query,  # Use the raw query as-is
                     filters=filters,
@@ -846,98 +846,98 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
         # Only use standard search strategies if NOT in comprehensive mode
         if not is_comprehensive_search:
 
-        # Strategy 1: Hybrid search (text + vector) if vector available
-        if query_vector:
-            try:
-                logger.info("Trying hybrid text+vector search...")
-                hybrid_results = hybrid_search(
-                    query=query,
-                    query_vector=query_vector,
-                    filters=filters,
-                    size=min(max_results, HYBRID_SEARCH_LIMIT),
-                    vector_weight=0.6  # 60% vector, 40% text
-                )
-                
-                logger.info(f"Hybrid search returned {len(hybrid_results)} hits")
-                
-                # VALIDATE FILTERS BEFORE PROCESSING
-                validated_hybrid = validate_filter_compliance(hybrid_results, "hybrid_search")
-                validated_hybrid = clean_all_sources(validated_hybrid)
-                
-                for hit in validated_hybrid:
-                    hit["search_method"] = "hybrid"  # For internal tracking only
-                    all_sources.append(hit)
-                
-                search_methods_used.append("hybrid")               
-                
-                
-            except Exception as e:
-                logger.error(f"âŒ Hybrid search failed: {e}")
-        
-        # Strategy 2: Pure vector search as fallback/supplement
-        if query_vector and len(all_sources) < max_results:  
-            try:  
-                logger.info("Trying vector search...")
-                vector_results = search_vector(
-                    query_vector=query_vector,
-                    filters=filters,
-                    size=max_results - len(all_sources)  
-                )
-                
-                logger.info(f" Vector search returned {len(vector_results)} hits")
-                
-                #  VALIDATE FILTERS BEFORE PROCESSING
-                validated_vector = validate_filter_compliance(vector_results, "vector")
-                #  CLEAN RESULTS IMMEDIATELY
-                validated_vector = clean_all_sources(validated_vector)
-                
-                # Add vector results that aren't already in all_sources
-                existing_ids = {s.get("evaluationId") for s in all_sources}
-                
-                for hit in validated_vector:
-                    if hit.get("evaluationId") not in existing_ids:
-                        hit["search_method"] = "vector"  # For internal tracking only
+            # Strategy 1: Hybrid search (text + vector) if vector available
+            if query_vector:
+                try:
+                    logger.info("Trying hybrid text+vector search...")
+                    hybrid_results = hybrid_search(
+                        query=query,
+                        query_vector=query_vector,
+                        filters=filters,
+                        size=min(max_results, HYBRID_SEARCH_LIMIT),
+                        vector_weight=0.6  # 60% vector, 40% text
+                    )
+                    
+                    logger.info(f"Hybrid search returned {len(hybrid_results)} hits")
+                    
+                    # VALIDATE FILTERS BEFORE PROCESSING
+                    validated_hybrid = validate_filter_compliance(hybrid_results, "hybrid_search")
+                    validated_hybrid = clean_all_sources(validated_hybrid)
+                    
+                    for hit in validated_hybrid:
+                        hit["search_method"] = "hybrid"  # For internal tracking only
                         all_sources.append(hit)
-                        existing_ids.add(hit.get("evaluationId"))
-                
-                search_methods_used.append("vector")
-                
-            except Exception as e:
-                logger.error(f"âŒ Vector search failed: {e}")
-        
-        # Strategy 3: Text search as fallback - WITH STRICT VALIDATION
-        if len(all_sources) < max_results:
-            try: 
-                logger.info(" Supplementing with enhanced text search...")
-                text_results = search_opensearch(
-                    query=query,
-                    filters=filters,
-                    size=max_results - len(all_sources)  # Direct calculation, no remaining_slots
-                )
-                
-                logger.info(f" Text search returned {len(text_results)} hits")
-                
-                # VALIDATE FILTERS - BEFORE PROCESSING
-                validated_text = validate_filter_compliance(text_results, "text")
-                
-                # CLEAN RESULTS IMMEDIATELY
-                validated_text = clean_all_sources(validated_text)
-                # Add unique results only
-                existing_ids = {s.get("evaluationId") for s in all_sources}
-                
-                for hit in validated_text:
-                    if hit.get("evaluationId") not in existing_ids:
-                        hit["search_method"] = "text"  # For internal tracking only
-                        all_sources.append(hit)
-                        existing_ids.add(hit.get("evaluationId"))
-                
-                search_methods_used.append("text")
-                
-            except Exception as e:
-                logger.error(f"Text search failed: {e}")                
-               
+                    
+                    search_methods_used.append("hybrid")               
+                    
+                    
+                except Exception as e:
+                    logger.error(f"âŒ Hybrid search failed: {e}")
+            
+            # Strategy 2: Pure vector search as fallback/supplement
+            if query_vector and len(all_sources) < max_results:  
+                try:  
+                    logger.info("Trying vector search...")
+                    vector_results = search_vector(
+                        query_vector=query_vector,
+                        filters=filters,
+                        size=max_results - len(all_sources)  
+                    )
+                    
+                    logger.info(f" Vector search returned {len(vector_results)} hits")
+                    
+                    #  VALIDATE FILTERS BEFORE PROCESSING
+                    validated_vector = validate_filter_compliance(vector_results, "vector")
+                    #  CLEAN RESULTS IMMEDIATELY
+                    validated_vector = clean_all_sources(validated_vector)
+                    
+                    # Add vector results that aren't already in all_sources
+                    existing_ids = {s.get("evaluationId") for s in all_sources}
+                    
+                    for hit in validated_vector:
+                        if hit.get("evaluationId") not in existing_ids:
+                            hit["search_method"] = "vector"  # For internal tracking only
+                            all_sources.append(hit)
+                            existing_ids.add(hit.get("evaluationId"))
+                    
+                    search_methods_used.append("vector")
+                    
+                except Exception as e:
+                    logger.error(f"âŒ Vector search failed: {e}")
+            
+            # Strategy 3: Text search as fallback - WITH STRICT VALIDATION
+            if len(all_sources) < max_results:
+                try: 
+                    logger.info(" Supplementing with enhanced text search...")
+                    text_results = search_opensearch(
+                        query=query,
+                        filters=filters,
+                        size=max_results - len(all_sources)  # Direct calculation, no remaining_slots
+                    )
+                    
+                    logger.info(f" Text search returned {len(text_results)} hits")
+                    
+                    # VALIDATE FILTERS - BEFORE PROCESSING
+                    validated_text = validate_filter_compliance(text_results, "text")
+                    
+                    # CLEAN RESULTS IMMEDIATELY
+                    validated_text = clean_all_sources(validated_text)
+                    # Add unique results only
+                    existing_ids = {s.get("evaluationId") for s in all_sources}
+                    
+                    for hit in validated_text:
+                        if hit.get("evaluationId") not in existing_ids:
+                            hit["search_method"] = "text"  # For internal tracking only
+                            all_sources.append(hit)
+                            existing_ids.add(hit.get("evaluationId"))
+                    
+                    search_methods_used.append("text")
+                    
+                except Exception as e:
+                    logger.error(f"Text search failed: {e}")                
+                   
 
-        # End of standard search strategies block
+            # End of standard search strategies block
         # (comprehensive search results are already in all_sources)
 
         # Final filter validation on combined results
