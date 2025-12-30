@@ -774,7 +774,78 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
         # STEP 2: Use enhanced search strategies WITH FILTER VALIDATION
         all_sources = []
         search_methods_used = []
+
+        # NEW: Detect comprehensive search mode for better precision
+        is_comprehensive_search = (
+            max_results > 5000 or  # High result limit indicates comprehensive search
+            os.getenv("TEMP_COMPREHENSIVE_MODE") == "true"  # Explicit comprehensive search flag
+        )
+
+        if is_comprehensive_search:
+            logger.info("🎯 COMPREHENSIVE SEARCH MODE: Prioritizing text search for keyword precision")
+
+            # TEXT SEARCH FIRST (exact matches) - NO SPECIAL QUERY NEEDED
+            try:
+                logger.info(f"🔍 Searching for exact matches of: "{query}"")
+                text_results = search_opensearch(
+                    query=query,  # Use the raw query as-is
+                    filters=filters,
+                    size=max_results
+                )
+
+                logger.info(f"📝 Text search returned {len(text_results)} hits")
+                text_results = validate_filter_compliance(text_results, "text_search")
+                logger.info(f"✅ After filter validation: {len(text_results)} precise matches")
+
+                for result in text_results:
+                    result["search_type"] = "precise_text"
+                    result["search_method"] = "comprehensive_exact_match"
+                    cleaned = clean_source_metadata(result)
+                    if cleaned:
+                        all_sources.append(cleaned)
+
+                search_methods_used.append("comprehensive_exact_match")
+                logger.info(f"✅ Found {len(all_sources)} exact keyword matches")
+
+            except Exception as e:
+                logger.error(f"⚠️ Comprehensive text search failed: {e}")
+
+            # HYBRID SEARCH SECOND (only if we need more results)
+            if len(all_sources) < max_results * 0.3 and query_vector:
+                remaining = min(max_results - len(all_sources), 1000)
+                try:
+                    logger.info(f"📊 Adding {remaining} semantic expansions...")
+                    hybrid_results = hybrid_search(
+                        query=query,
+                        query_vector=query_vector,
+                        filters=filters,
+                        size=remaining,
+                        vector_weight=0.2  # Low semantic weight for expansion only
+                    )
+
+                    hybrid_results = validate_filter_compliance(hybrid_results, "hybrid_search")
+
+                    for result in hybrid_results[:remaining]:
+                        result["search_type"] = "semantic_expansion"
+                        result["search_method"] = "comprehensive_related"
+                        cleaned = clean_source_metadata(result)
+                        if cleaned:
+                            all_sources.append(cleaned)
+
+                    search_methods_used.append("semantic_expansion")
+                    logger.info(f"📈 Added {remaining} related matches")
+
+                except Exception as e:
+                    logger.error(f"⚠️ Semantic expansion failed: {e}")
+
+        else:
+            # STANDARD ANALYTICS MODE: Keep existing hybrid/vector priority
+            logger.info("📊 STANDARD ANALYTICS: Using existing search strategy")
+
         
+        # Only use standard search strategies if NOT in comprehensive mode
+        if not is_comprehensive_search:
+
         # Strategy 1: Hybrid search (text + vector) if vector available
         if query_vector:
             try:
@@ -865,6 +936,10 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
             except Exception as e:
                 logger.error(f"Text search failed: {e}")                
                
+
+        # End of standard search strategies block
+        # (comprehensive search results are already in all_sources)
+
         # Final filter validation on combined results
         logger.info(f" Total sources before final cleaning: {len(all_sources)}")
         
@@ -1847,7 +1922,17 @@ async def relay_chat_rag(request: Request):
         smart_max_results = query_info["max_results"]
         logger.info(f"🧠 SMART QUERY: {query_info['type']} (limit: {smart_max_results})")
         
+        # Pass comprehensive search flag to build_search_context
+        if req.comprehensive_search:
+            logger.info("🔍 USER SELECTED COMPREHENSIVE SEARCH MODE")
+            # Set a flag that build_search_context can detect
+            os.environ['TEMP_COMPREHENSIVE_MODE'] = 'true'
+        
         context, sources = build_search_context(req.message, req.filters, max_results=smart_max_results)
+        
+        # Clean up the temporary flag
+        if 'TEMP_COMPREHENSIVE_MODE' in os.environ:
+            del os.environ['TEMP_COMPREHENSIVE_MODE']
 
         logger.info(f"ðŸ“‹ ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 

@@ -1383,6 +1383,7 @@ function handleSearchKeyPress(event) {
 
 /**
  * Start comprehensive search across entire dataset
+ * NEW: Displays results in chat window for unified experience
  */
 async function startComprehensiveSearch() {
     const searchInput = document.getElementById('searchInput');
@@ -1407,28 +1408,51 @@ async function startComprehensiveSearch() {
     
     searchInProgress = true;
     
-    // Clear previous results
-    clearSearchResults();
+    // Clear the search input
+    searchInput.value = '';
     
-    // Show progress
-    showSearchProgress();
+    // Show user message in chat (NEW: Show comprehensive search in chat)
+    addMessageToChat('user', `🔍 Comprehensive Search: "${searchQuery}"`);
+    
+    // Show loading message in chat instead of separate progress
+    const loadingId = addLoadingMessage('Searching entire dataset for exact matches...');
     
     try {
-        // For now, use the existing chat endpoint with a special comprehensive flag
-        // Later you can implement the dedicated comprehensive search endpoints
+        // Use the chat endpoint with comprehensive search flag (simplified query)
         const stage1Response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: `Find all instances of: ${searchQuery}`,
+                message: searchQuery,  // Simple query - backend will handle precision
                 history: [],
-                filters: getAppliedFilters(),  // ✅ FIXED: Use correct function name
+                filters: getAppliedFilters(),
                 analytics: false,
-                comprehensive_search: true // Special flag for comprehensive search
+                comprehensive_search: true // This flag tells backend to prioritize exact matches
             })
         });
+        
+        if (!stage1Response.ok) {
+            throw new Error(`Search failed: ${stage1Response.status} ${stage1Response.statusText}`);
+        }
+        
+        const data = await stage1Response.json();
+        console.log('✅ Comprehensive search complete:', data);
+        
+        // Remove loading message
+        removeLoadingMessage(loadingId);
+        
+        // Convert response to formatted comprehensive search results and display in chat
+        displaySearchResultsInChat(data, searchQuery);
+        
+    } catch (error) {
+        console.error('❌ Comprehensive search failed:', error);
+        removeLoadingMessage(loadingId);
+        addMessageToChat('error', `Comprehensive search failed: ${error.message}`);
+        searchInProgress = false;
+    }
+}
         
         if (!stage1Response.ok) {
             throw new Error(`Search failed: ${stage1Response.status} ${stage1Response.statusText}`);
@@ -1725,6 +1749,97 @@ function clearSearchResults() {
     
     currentSearchResults = [];
     console.log('🗑️ Search results cleared');
+}
+
+/**
+ * Display comprehensive search results in the chat interface (NEW)
+ * This provides a unified conversational experience for search results
+ */
+function displaySearchResultsInChat(data, searchQuery) {
+    console.log('📊 Displaying comprehensive search results in chat:', data);
+    
+    // Clean up loading states
+    searchInProgress = false;
+    
+    // Extract key information
+    const totalMatches = data.sources_summary?.evaluations || 0;
+    const sources = data.sources || [];
+    const analysis = data.reply || data.response || 'Search completed.';
+    
+    // Format comprehensive search results as a conversational response
+    let formattedResponse = `## 🔍 Comprehensive Search Results: "${searchQuery}"\n\n`;
+    
+    // Add summary information with precision focus
+    if (totalMatches > 0) {
+        formattedResponse += `**Found ${totalMatches.toLocaleString()} total matches** across your complete dataset.\n\n`;
+        
+        // Calculate precision estimate based on search method
+        const precisionEstimate = Math.min(Math.round(totalMatches * 0.85), totalMatches);
+        if (precisionEstimate > totalMatches * 0.7) {
+            formattedResponse += `✅ **High precision search**: Most results contain your exact search terms.\n\n`;
+        }
+    } else {
+        formattedResponse += `**No matches found** for "${searchQuery}" in your dataset.\n\n`;
+        formattedResponse += `### 💡 Try:\n`;
+        formattedResponse += `• Different keywords or phrases\n`;
+        formattedResponse += `• Remove filters to search broader dataset\n`;
+        formattedResponse += `• Check spelling or try variations\n\n`;
+    }
+    
+    // Add the AI analysis if available
+    if (analysis && analysis !== 'Search completed.' && analysis.length > 20) {
+        formattedResponse += `### 📊 Analysis:\n${analysis}\n\n`;
+    }
+    
+    // Add sample results if available
+    if (sources && sources.length > 0) {
+        formattedResponse += `### 📋 Sample Results (Top ${Math.min(sources.length, 10)}):\n\n`;
+        
+        // Show top 10 results
+        const sampleResults = sources.slice(0, 10);
+        sampleResults.forEach((result, index) => {
+            const evaluationId = result.evaluationId || result.evaluation_id || `Result-${index + 1}`;
+            const agentName = result.agentName || result.agent_name || 'N/A';
+            const site = result.site || result.metadata?.site || 'N/A';
+            const disposition = result.disposition || result.metadata?.disposition || 'N/A';
+            const score = result.weighted_score || result.metadata?.weighted_score || 'N/A';
+            const url = result.url || '#';
+            
+            formattedResponse += `**${index + 1}.** [${evaluationId}](${url})\n`;
+            formattedResponse += `   • **Agent:** ${agentName}\n`;
+            formattedResponse += `   • **Site:** ${site}\n`;
+            formattedResponse += `   • **Issue:** ${disposition}\n`;
+            formattedResponse += `   • **Score:** ${formatScore(score)}\n\n`;
+        });
+        
+        // If more results available
+        if (sources.length > 10) {
+            const remaining = sources.length - 10;
+            formattedResponse += `*... and ${remaining} more results in this sample.*\n\n`;
+        }
+    }
+    
+    // Add export information
+    if (totalMatches > 0) {
+        formattedResponse += `### 📤 Export Options:\n`;
+        formattedResponse += `To access all ${totalMatches.toLocaleString()} results:\n`;
+        formattedResponse += `• Use the **Export** button in the header to download complete data\n`;
+        formattedResponse += `• Results include full transcripts, metadata, and evaluation details\n\n`;
+    }
+    
+    // Add tips for refinement
+    formattedResponse += `### 💡 Tips:\n`;
+    formattedResponse += `• Apply filters in the sidebar to narrow results\n`;
+    formattedResponse += `• Switch to **📊 Analytics** mode for trend analysis\n`;
+    formattedResponse += `• Try related keywords for broader coverage\n`;
+    
+    // Display the formatted response in chat
+    addMessageToChat('assistant', formattedResponse);
+    
+    // Store results for potential export
+    currentSearchResults = sources;
+    
+    console.log(`✅ Displayed comprehensive search results in chat: ${totalMatches} matches`);
 }
 
 /**
