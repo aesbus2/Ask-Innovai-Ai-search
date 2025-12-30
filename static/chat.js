@@ -1416,7 +1416,7 @@ async function startComprehensiveSearch() {
     try {
         // For now, use the existing chat endpoint with a special comprehensive flag
         // Later you can implement the dedicated comprehensive search endpoints
-        const response = await fetch('/api/chat', {
+        const stage1Response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json'
@@ -1424,17 +1424,17 @@ async function startComprehensiveSearch() {
             body: JSON.stringify({
                 message: `Find all instances of: ${searchQuery}`,
                 history: [],
-                filters: getCurrentFilters(),
+                filters: getAppliedFilters(),  // ✅ FIXED: Use correct function name
                 analytics: false,
                 comprehensive_search: true // Special flag for comprehensive search
             })
         });
         
-        if (!response.ok) {
-            throw new Error(`Search failed: ${response.status} ${response.statusText}`);
+        if (!stage1Response.ok) {
+            throw new Error(`Search failed: ${stage1Response.status} ${stage1Response.statusText}`);
         }
         
-        const data = await response.json();
+        const data = await stage1Response.json();
         console.log('✅ Comprehensive search complete:', data);
         
         updateProgress(100, `Complete: Found results for "${searchQuery}"`);
