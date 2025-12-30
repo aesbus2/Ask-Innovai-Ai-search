@@ -361,25 +361,118 @@
                         </div>
                 </div>
 
-                <!-- Chat Input -->
-                <div class="chat-input-area">
-                    <!-- Comprehensive Search Toggle - Minimal -->
-                    <div style="margin-bottom: 8px; font-size: 0.85rem;">
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #666;">
-                            <input type="checkbox" id="comprehensiveToggle" onchange="updateComprehensiveMode()" style="margin: 0;">
-                            <span>🔍 Comprehensive Search</span>
-                            <span id="searchModeDescription" style="font-size: 0.8rem; color: #999; font-style: italic;">(Smart detection)</span>
-                        </label>
+                <!-- Mode Selection Interface -->
+                <div class="mode-selector">
+                    <div class="mode-toggle">
+                        <button id="standardChatBtn" class="mode-btn active" onclick="switchMode('standard')">
+                            📊 Standard Chat
+                            <small>Fast insights & analysis</small>
+                        </button>
+                        
+                        <button id="comprehensiveSearchBtn" class="mode-btn" onclick="switchMode('comprehensive')">
+                            🔍 Comprehensive Search
+                            <small>Complete dataset exploration</small>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Standard Chat Interface (Current Interface) -->
+                <div id="standardChatInterface" class="interface-panel active">
+                    <div class="chat-input-area">
+                        <div class="input-container">
+                            <textarea id="chatInput" class="chat-input"
+                                placeholder="Ask about performance, trends, or generate analytical reports from your evaluation data..."
+                                rows="1" onkeydown="handleKeyPress(event)"></textarea>
+                            <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                                <span class="material-icons">analytics</span>
+                                Analyze
+                            </button>
+                        </div>
+                        <div class="examples">
+                            <small>Try: "Show trending issues by site" • "Generate executive report" • "Analyze outliers by agent"</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Comprehensive Search Interface (New) -->
+                <div id="comprehensiveSearchInterface" class="interface-panel hidden">
+                    <div class="search-input-area">
+                        <div class="input-container">
+                            <textarea id="searchInput" class="chat-input"
+                                placeholder="Search entire dataset for keywords, phrases, or patterns..."
+                                rows="1" onkeydown="handleSearchKeyPress(event)"></textarea>
+                            <button class="send-btn" id="searchBtn" onclick="startComprehensiveSearch()">
+                                <span class="material-icons">search</span>
+                                Search All
+                            </button>
+                        </div>
+                        <div class="examples">
+                            <small>Try: "home internet" • "billing dispute" • "technical support issues" • "compliance violations"</small>
+                        </div>
                     </div>
                     
-                    <div class="input-container">
-                        <textarea id="chatInput" class="chat-input"
-                            placeholder="Ask specific questions about calls, dispositions, site performance, quality metrics, or any evaluation data from your live database..."
-                            rows="1" onkeydown="handleKeyPress(event)"></textarea>
-                        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
-                            <span class="material-icons">analytics</span>
-                            Analyze
-                        </button>
+                    <!-- Progress indicator -->
+                    <div id="searchProgress" class="progress-container hidden">
+                        <div class="progress-header">
+                            <h4 id="progressTitle">Searching entire dataset...</h4>
+                            <button class="cancel-search-btn" id="cancelSearchBtn" onclick="cancelSearch()">
+                                <span class="material-icons">close</span>
+                            </button>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <div class="progress-text" id="progressText">Preparing search...</div>
+                    </div>
+                    
+                    <!-- Results container -->
+                    <div id="searchResults" class="results-container hidden">
+                        <div class="results-header">
+                            <h3 id="resultsTitle">Search Results</h3>
+                            <div class="results-actions">
+                                <div class="export-buttons">
+                                    <button class="export-btn" onclick="exportResults('csv')">
+                                        <span class="material-icons">file_download</span>
+                                        CSV
+                                    </button>
+                                    <button class="export-btn" onclick="exportResults('excel')">
+                                        <span class="material-icons">table_chart</span>
+                                        Excel
+                                    </button>
+                                </div>
+                                <button class="clear-results-btn" onclick="clearSearchResults()">
+                                    <span class="material-icons">clear_all</span>
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="results-analysis" id="resultsAnalysis">
+                            <!-- AI analysis of search results will go here -->
+                        </div>
+                        
+                        <div class="results-table-container">
+                            <table class="results-table" id="resultsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Evaluation ID</th>
+                                        <th>Agent</th>
+                                        <th>Site</th>
+                                        <th>Issue Summary</th>
+                                        <th>Date</th>
+                                        <th>Score</th>
+                                        <th>Relevance</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="resultsTableBody">
+                                    <!-- Results populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="pagination" id="pagination">
+                            <!-- Pagination controls -->
+                        </div>
                     </div>
                 </div>
             </div>

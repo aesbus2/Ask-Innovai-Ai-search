@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 # chat_handlers.py - V 12-29-25.1 - VECTOR SEARCH ENABLED
 # updated ensure_vector_mapping_exists to not try and update KNN if it already exists 7-23-25
 #updated  build_search_context to use a new function to remove viloations in search filters
@@ -33,6 +33,7 @@ class ChatRequest(BaseModel):
     filters: Dict[str, Any] = {}
     analytics: bool = True
     metadata_focus: List[str] = []
+    comprehensive_search: bool = False  # NEW: Flag for comprehensive search mode
 
 # =============================================================================
 # CONFIGURATION
@@ -548,6 +549,138 @@ def detect_report_query(message: str) -> bool:
         "performance", "trends", "statistics", "metrics", "insights"
     ]
     return any(keyword in message.lower() for keyword in report_keywords)
+
+def detect_query_type_with_limits(message: str, comprehensive_search_flag: bool = False) -> dict:
+    """
+    Enhanced query detection for different analysis types with appropriate limits
+    Supports both automatic detection and explicit comprehensive search mode
+    """
+    message_lower = message.lower()
+    
+    # If comprehensive_search flag is explicitly set, use comprehensive limits
+    if comprehensive_search_flag:
+        return {
+            "type": "comprehensive_search",
+            "max_results": 15000,  # Very high limit for comprehensive search
+            "requires_stats": False,
+            "search_type": "comprehensive",
+            "explicit_mode": True
+        }
+    
+    # Define query types and their characteristics for automatic detection
+    query_types = {
+        "keyword_search": {
+            "keywords": [
+                # Direct search language
+                "find all", "search for", "look for", "show me all", "list all",
+                "find calls", "search calls", "find evaluations", "search evaluations",
+                # Content-specific searches
+                "mentions", "mentioning", "about", "regarding", "calls about",
+                "conversations about", "discussions about", "references to",
+                # Product/topic searches that often need comprehensive coverage
+                "home internet", "internet", "phone", "device", "plan", "billing", 
+                "account", "technical support", "customer service", "troubleshooting"
+            ],
+            "max_results": 5000,  # HIGH LIMIT - Need good coverage for keyword searches
+            "requires_stats": False,
+            "search_type": "comprehensive"
+        },
+        "outlier_analysis": {
+            "keywords": ["outlier", "outliers", "anomal", "unusual", "exception", "extreme", "deviation"],
+            "max_results": 500,  # Reduced for statistical analysis - prevents timeouts
+            "requires_stats": True,
+            "search_type": "statistical"
+        },
+        "site_breakdown": {
+            "keywords": ["by site", "each site", "site breakdown", "site analysis", "per site"],
+            "max_results": 1000,  # Moderate for site grouping
+            "requires_stats": True,
+            "search_type": "analytical"
+        },
+        "comprehensive_report": {
+            "keywords": ["report", "executive", "summary", "overview", "breakdown", "performance"],
+            "max_results": 2000,  # Higher for comprehensive analysis
+            "requires_stats": True,
+            "search_type": "analytical"
+        },
+        "trends_analysis": {
+            "keywords": ["trend", "trending", "pattern", "over time", "improvement", "decline"],
+            "max_results": 1500,  # Moderate for trend analysis
+            "requires_stats": True,
+            "search_type": "statistical"
+        },
+        "compliance_search": {
+            "keywords": [
+                "compliance", "violation", "policy", "regulation", "guideline",
+                "procedure", "protocol", "requirement", "standard", "audit"
+            ],
+            "max_results": 8000,  # VERY HIGH - Compliance needs complete coverage
+            "requires_stats": False,
+            "search_type": "comprehensive"
+        },
+        "simple_query": {
+            "keywords": [],  # Default fallback
+            "max_results": 300,   # Fast for simple questions
+            "requires_stats": False,
+            "search_type": "simple"
+        }
+    }
+    
+    # Check for each query type with priority order
+    detected_type = "simple_query"  # Default
+    max_score = 0
+    
+    # Special priority check for keyword searches first
+    for query_type in ["keyword_search", "compliance_search"]:
+        config = query_types[query_type]
+        matches = sum(1 for keyword in config["keywords"] if keyword in message_lower)
+        if matches > 0:
+            detected_type = query_type
+            max_score = matches
+            break  # Priority given to comprehensive searches
+    
+    # If no keyword search detected, check analytical query types
+    if detected_type == "simple_query":
+        for query_type, config in query_types.items():
+            if query_type in ["simple_query", "keyword_search", "compliance_search"]:
+                continue
+                
+            # Count keyword matches
+            matches = sum(1 for keyword in config["keywords"] if keyword in message_lower)
+            
+            if matches > max_score:
+                max_score = matches
+                detected_type = query_type
+    
+    # Special case: Check if combining multiple analysis types - ONLY for outlier analysis
+    combined_analysis = False
+    if detected_type == "outlier_analysis" and ("outlier" in message_lower and any(kw in message_lower for kw in ["site", "each", "by"])):
+        combined_analysis = True
+        # Reduce limits further for combined outlier analysis only
+        query_types[detected_type]["max_results"] = min(query_types[detected_type]["max_results"], 300)
+    
+    # Check for quoted phrases or specific product mentions (indicates keyword search)
+    has_quotes = '"' in message_lower or "'" in message_lower
+    product_keywords = ["internet", "phone", "device", "plan", "service", "app", "wifi", "cable"]
+    has_product_focus = any(product in message_lower for product in product_keywords)
+    
+    # Override to keyword search if pattern suggests comprehensive search needed
+    if (has_quotes or has_product_focus) and detected_type == "simple_query":
+        detected_type = "keyword_search"
+        max_score = 1
+    
+    result = {
+        "type": detected_type,
+        "max_results": query_types[detected_type]["max_results"],
+        "requires_stats": query_types[detected_type]["requires_stats"],
+        "search_type": query_types[detected_type]["search_type"],
+        "combined_analysis": combined_analysis,
+        "confidence": max_score,
+        "explicit_mode": False
+    }
+    
+    return result
+
 
 def build_search_context(query: str, filters: dict, max_results: int = 100) -> Tuple[str, List[dict]]:
     """
@@ -1709,7 +1842,12 @@ async def relay_chat_rag(request: Request):
         logger.info(f"ðŸ“Š REPORT REQUEST DETECTED: {is_report_request}")
 
         # STEP 1: Build context with VECTOR SEARCH integration
-        context, sources = build_search_context(req.message, req.filters, max_results=CHAT_MAX_RESULTS)
+        # SMART QUERY DETECTION with appropriate limits
+        query_info = detect_query_type_with_limits(req.message, req.comprehensive_search)
+        smart_max_results = query_info["max_results"]
+        logger.info(f"🧠 SMART QUERY: {query_info['type']} (limit: {smart_max_results})")
+        
+        context, sources = build_search_context(req.message, req.filters, max_results=smart_max_results)
 
         logger.info(f"ðŸ“‹ ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 

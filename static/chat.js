@@ -1323,3 +1323,455 @@ function updateComprehensiveMode() {
     }
 }
 
+// =============================================================================
+// TWO-INTERFACE MODE SWITCHING FUNCTIONALITY
+// =============================================================================
+
+// Current interface mode
+let currentMode = 'standard';
+let searchInProgress = false;
+let currentSearchResults = [];
+
+/**
+ * Switch between standard chat and comprehensive search modes
+ */
+function switchMode(mode) {
+    console.log(`🔄 Switching to ${mode} mode`);
+    
+    currentMode = mode;
+    
+    // Update button states
+    const standardBtn = document.getElementById('standardChatBtn');
+    const comprehensiveBtn = document.getElementById('comprehensiveSearchBtn');
+    
+    if (standardBtn && comprehensiveBtn) {
+        standardBtn.classList.toggle('active', mode === 'standard');
+        comprehensiveBtn.classList.toggle('active', mode === 'comprehensive');
+    }
+    
+    // Show/hide interface panels
+    const standardInterface = document.getElementById('standardChatInterface');
+    const comprehensiveInterface = document.getElementById('comprehensiveSearchInterface');
+    
+    if (standardInterface) {
+        standardInterface.classList.toggle('active', mode === 'standard');
+        standardInterface.classList.toggle('hidden', mode !== 'standard');
+    }
+    
+    if (comprehensiveInterface) {
+        comprehensiveInterface.classList.toggle('active', mode === 'comprehensive');
+        comprehensiveInterface.classList.toggle('hidden', mode !== 'comprehensive');
+    }
+    
+    // Clear any ongoing searches when switching modes
+    if (mode === 'standard' && searchInProgress) {
+        cancelSearch();
+    }
+    
+    console.log(`✅ Switched to ${mode} mode`);
+}
+
+/**
+ * Handle key press in search input
+ */
+function handleSearchKeyPress(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        startComprehensiveSearch();
+    }
+}
+
+/**
+ * Start comprehensive search across entire dataset
+ */
+async function startComprehensiveSearch() {
+    const searchInput = document.getElementById('searchInput');
+    if (!searchInput) {
+        console.error('❌ Search input element not found');
+        return;
+    }
+    
+    const searchQuery = searchInput.value.trim();
+    if (!searchQuery) {
+        console.warn('⚠️ Empty search query');
+        return;
+    }
+    
+    console.log(`🔍 Starting comprehensive search for: "${searchQuery}"`);
+    
+    // Prevent multiple concurrent searches
+    if (searchInProgress) {
+        console.warn('⚠️ Search already in progress');
+        return;
+    }
+    
+    searchInProgress = true;
+    
+    // Clear previous results
+    clearSearchResults();
+    
+    // Show progress
+    showSearchProgress();
+    
+    try {
+        // For now, use the existing chat endpoint with a special comprehensive flag
+        // Later you can implement the dedicated comprehensive search endpoints
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: `Find all instances of: ${searchQuery}`,
+                history: [],
+                filters: getCurrentFilters(),
+                analytics: false,
+                comprehensive_search: true // Special flag for comprehensive search
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Search failed: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('✅ Comprehensive search complete:', data);
+        
+        updateProgress(100, `Complete: Found results for "${searchQuery}"`);
+        
+        // Convert chat response to search results format
+        const searchResults = {
+            analysis: data.reply || 'Search completed.',
+            results: {
+                total_matches: data.sources_summary?.evaluations || 0
+            },
+            matches: data.sources || []
+        };
+        
+        // Display results
+        setTimeout(() => {
+            displaySearchResults(searchResults);
+            searchInProgress = false;
+        }, 500);
+        
+    } catch (error) {
+        console.error('❌ Comprehensive search failed:', error);
+        hideSearchProgress();
+        showError(`Search failed: ${error.message}`);
+        searchInProgress = false;
+    }
+}
+
+/**
+ * Show search progress indicator
+ */
+function showSearchProgress() {
+    const progressContainer = document.getElementById('searchProgress');
+    const resultsContainer = document.getElementById('searchResults');
+    
+    if (progressContainer) {
+        progressContainer.classList.remove('hidden');
+        updateProgress(25, 'Searching entire dataset...');
+    }
+    if (resultsContainer) {
+        resultsContainer.classList.add('hidden');
+    }
+}
+
+/**
+ * Update progress bar and text
+ */
+function updateProgress(percent, text) {
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    
+    if (progressFill) {
+        progressFill.style.width = `${percent}%`;
+    }
+    if (progressText) {
+        progressText.textContent = text;
+    }
+    
+    console.log(`📊 Progress: ${percent}% - ${text}`);
+}
+
+/**
+ * Hide search progress indicator
+ */
+function hideSearchProgress() {
+    const progressContainer = document.getElementById('searchProgress');
+    if (progressContainer) {
+        progressContainer.classList.add('hidden');
+    }
+}
+
+/**
+ * Cancel ongoing search
+ */
+function cancelSearch() {
+    console.log('🛑 Cancelling search...');
+    searchInProgress = false;
+    hideSearchProgress();
+    
+    // Reset progress
+    updateProgress(0, 'Search cancelled');
+}
+
+/**
+ * Display comprehensive search results
+ */
+function displaySearchResults(data) {
+    hideSearchProgress();
+    
+    const resultsContainer = document.getElementById('searchResults');
+    const resultsTitle = document.getElementById('resultsTitle');
+    const resultsAnalysis = document.getElementById('resultsAnalysis');
+    
+    if (!resultsContainer) {
+        console.error('❌ Results container not found');
+        return;
+    }
+    
+    // Show results container
+    resultsContainer.classList.remove('hidden');
+    
+    // Update results title
+    const totalMatches = data.results?.total_matches || 0;
+    if (resultsTitle) {
+        resultsTitle.textContent = `${totalMatches.toLocaleString()} Results Found`;
+    }
+    
+    // Display AI analysis
+    if (resultsAnalysis && data.analysis) {
+        resultsAnalysis.innerHTML = `
+            <div class="analysis-content">
+                ${formatAnalysisText(data.analysis)}
+            </div>
+        `;
+    }
+    
+    // Store results for export
+    currentSearchResults = data.matches || [];
+    
+    // Populate results table
+    populateResultsTable(currentSearchResults);
+    
+    console.log(`✅ Displayed ${totalMatches} search results`);
+}
+
+/**
+ * Format analysis text with proper HTML
+ */
+function formatAnalysisText(analysis) {
+    if (!analysis) return '';
+    
+    return analysis
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **bold** -> <strong>
+        .replace(/\n\n/g, '</p><p>')                       // Double newlines -> paragraphs
+        .replace(/\n/g, '<br>')                            // Single newlines -> line breaks
+        .replace(/^/, '<p>')                               // Start with paragraph
+        .replace(/$/, '</p>');                             // End with paragraph
+}
+
+/**
+ * Populate the results table with search matches
+ */
+function populateResultsTable(results) {
+    const tableBody = document.getElementById('resultsTableBody');
+    if (!tableBody) {
+        console.error('❌ Results table body not found');
+        return;
+    }
+    
+    tableBody.innerHTML = '';
+    
+    if (!results || results.length === 0) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="no-results">
+                    No results found. Try different keywords or check your filters.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    // Display first 100 results in table for performance
+    const displayResults = results.slice(0, 100);
+    
+    displayResults.forEach((result, index) => {
+        const row = tableBody.insertRow();
+        
+        // Extract data safely - handle different response formats
+        const evaluationId = result.evaluationId || result.evaluation_id || `Unknown-${index}`;
+        const agentName = result.agentName || result.agent_name || 'N/A';
+        const site = result.site || 'N/A';
+        const disposition = result.disposition || 'N/A';
+        const callDate = formatDate(result.call_date || result.created_on);
+        const score = result.weighted_score || result.score || 'N/A';
+        const relevance = result._score || result.score || 0;
+        
+        row.innerHTML = `
+            <td class="eval-id-cell">
+                <a href="${result.url || '#'}" target="_blank" class="eval-link">
+                    ${evaluationId}
+                </a>
+            </td>
+            <td>${truncateText(agentName, 20)}</td>
+            <td>${truncateText(site, 15)}</td>
+            <td class="issue-cell">${truncateText(disposition, 30)}</td>
+            <td>${callDate}</td>
+            <td class="score-cell">${formatScore(score)}</td>
+            <td class="relevance-cell">${typeof relevance === 'number' ? relevance.toFixed(3) : 'N/A'}</td>
+        `;
+        
+        // Make row clickable for more details
+        row.onclick = () => showEvaluationDetails(result);
+        row.style.cursor = 'pointer';
+    });
+    
+    // Add pagination info if there are more results
+    if (results.length > 100) {
+        const remainingCount = results.length - 100;
+        const row = tableBody.insertRow();
+        row.className = 'more-results-row';
+        row.innerHTML = `
+            <td colspan="7" class="more-results">
+                <em>Showing first 100 results. ${remainingCount} more available via export.</em>
+            </td>
+        `;
+    }
+}
+
+/**
+ * Format score for display
+ */
+function formatScore(score) {
+    if (score === null || score === undefined || score === 'N/A') {
+        return 'N/A';
+    }
+    
+    const numScore = parseFloat(score);
+    if (isNaN(numScore)) {
+        return 'N/A';
+    }
+    
+    return numScore.toFixed(1);
+}
+
+/**
+ * Truncate text for table display
+ */
+function truncateText(text, maxLength) {
+    if (!text || typeof text !== 'string') {
+        return 'N/A';
+    }
+    
+    if (text.length <= maxLength) {
+        return text;
+    }
+    
+    return text.substring(0, maxLength - 3) + '...';
+}
+
+/**
+ * Show detailed evaluation information
+ */
+function showEvaluationDetails(result) {
+    console.log('📋 Showing evaluation details:', result);
+    
+    // For now, just open the URL if available
+    if (result.url) {
+        window.open(result.url, '_blank');
+    }
+}
+
+/**
+ * Export search results
+ */
+function exportResults(format) {
+    if (!currentSearchResults || currentSearchResults.length === 0) {
+        showError('No results to export');
+        return;
+    }
+    
+    const searchQuery = document.getElementById('searchInput')?.value || 'search_results';
+    console.log(`📤 Exporting ${currentSearchResults.length} results as ${format}`);
+    
+    // For now, just log the export request
+    // You can implement actual export functionality later
+    alert(`Export feature coming soon! Would export ${currentSearchResults.length} results as ${format.toUpperCase()}`);
+}
+
+/**
+ * Clear search results
+ */
+function clearSearchResults() {
+    const resultsContainer = document.getElementById('searchResults');
+    const resultsAnalysis = document.getElementById('resultsAnalysis');
+    const tableBody = document.getElementById('resultsTableBody');
+    
+    if (resultsContainer) {
+        resultsContainer.classList.add('hidden');
+    }
+    
+    if (resultsAnalysis) {
+        resultsAnalysis.innerHTML = '';
+    }
+    
+    if (tableBody) {
+        tableBody.innerHTML = '';
+    }
+    
+    currentSearchResults = [];
+    console.log('🗑️ Search results cleared');
+}
+
+/**
+ * Format date for display
+ */
+function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    } catch (error) {
+        return 'N/A';
+    }
+}
+
+/**
+ * Show error message
+ */
+function showError(message) {
+    console.error('❌ Error:', message);
+    alert(`Error: ${message}`);
+}
+
+// Export functions to global scope
+window.switchMode = switchMode;
+window.handleSearchKeyPress = handleSearchKeyPress;
+window.startComprehensiveSearch = startComprehensiveSearch;
+window.cancelSearch = cancelSearch;
+window.exportResults = exportResults;
+window.clearSearchResults = clearSearchResults;
+
+// Initialize mode switching on page load
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🎯 Two-interface mode system initialized');
+    
+    // Ensure standard mode is active by default
+    setTimeout(() => {
+        if (currentMode !== 'standard') {
+            switchMode('standard');
+        }
+    }, 100);
+});
+
+console.log("✅ Two-interface comprehensive search system loaded successfully");
+
