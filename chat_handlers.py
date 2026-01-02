@@ -873,7 +873,7 @@ EVALUATION DETAILS:
                     transcript = _extract_transcript_text(source)
                     
                     if transcript and len(transcript) > 100:  # Only add if substantial
-                        eval_str += "\TRANSCRIPT:\n"
+                        eval_str += "\\TRANSCRIPT:\\n"
                         eval_str += f"{transcript[:4000]}\n"  # Include up to 4000 chars
                         eval_str += f"\n[Full transcript length: {len(transcript)} characters]\n"
                         
