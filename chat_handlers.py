@@ -33,7 +33,6 @@ class ChatRequest(BaseModel):
     filters: Dict[str, Any] = {}
     analytics: bool = True
     metadata_focus: List[str] = []
-    comprehensive: bool = False  # Support for comprehensive search toggle
 
 # =============================================================================
 # CONFIGURATION
@@ -646,7 +645,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
         # Strategy 1: Hybrid search (text + vector) if vector available
         if query_vector:
             try:
-                # Log search mode for debugging
+                # Log search mode based on comprehensive flag
                 if comprehensive:
                     logger.info("🎯 COMPREHENSIVE SEARCH: Using text-focused search for better precision")
                 else:
@@ -1714,7 +1713,12 @@ async def relay_chat_rag(request: Request):
         logger.info(f"ðŸ“Š REPORT REQUEST DETECTED: {is_report_request}")
 
         # STEP 1: Build context with VECTOR SEARCH integration
-        context, sources = build_search_context(req.message, req.filters, max_results=CHAT_MAX_RESULTS, comprehensive=req.comprehensive)
+        context, sources = build_search_context(req.message, req.filters, max_results=CHAT_MAX_RESULTS, comprehensive=comprehensive_mode)
+        # Check for comprehensive mode manually (ultra-safe approach - no model changes)
+        comprehensive_mode = body.get("comprehensive", False)
+        if comprehensive_mode:
+            logger.info("🔍 COMPREHENSIVE SEARCH MODE DETECTED from request")
+
 
         logger.info(f"ðŸ“‹ ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 
