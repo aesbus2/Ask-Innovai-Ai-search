@@ -648,13 +648,15 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                 # Log search strategy based on comprehensive mode
                 if comprehensive:
                     logger.info("🎯 COMPREHENSIVE SEARCH: Using text-focused search for better precision")
+                    if max_results > 1500:
+                        logger.info("⚡ PERFORMANCE: Limited to 1500 results to prevent timeout")
                 else:
                     logger.info("Trying hybrid text+vector search...")
                 hybrid_results = hybrid_search(
                     query=query,
                     query_vector=query_vector,
                     filters=filters,
-                    size=min(max_results, HYBRID_SEARCH_LIMIT),
+                    size=min(max_results, HYBRID_SEARCH_LIMIT) if not comprehensive else min(1500, max_results, HYBRID_SEARCH_LIMIT),
                     vector_weight=0.3 if comprehensive else 0.6  # Lower semantic weight for comprehensive search precision
                 )
                 
@@ -1719,7 +1721,16 @@ async def relay_chat_rag(request: Request):
         logger.info(f"ðŸ“Š REPORT REQUEST DETECTED: {is_report_request}")
 
         # STEP 1: Build context with VECTOR SEARCH integration
-        context, sources = build_search_context(req.message, req.filters, max_results=CHAT_MAX_RESULTS, comprehensive=comprehensive_mode)
+        # Smart result limiting to prevent timeouts
+        if comprehensive_mode:
+            # For comprehensive search, use reasonable limits to prevent timeouts
+            smart_max_results = min(2000, CHAT_MAX_RESULTS)  # Cap at 2000 for performance
+            logger.info(f"🎯 COMPREHENSIVE SEARCH: Limited to {smart_max_results} results for performance")
+        else:
+            # For standard search, use normal limits
+            smart_max_results = CHAT_MAX_RESULTS
+
+        context, sources = build_search_context(req.message, req.filters, max_results=smart_max_results, comprehensive=comprehensive_mode)
 
         logger.info(f"ðŸ“‹ ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 
