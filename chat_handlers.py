@@ -33,7 +33,7 @@ class ChatRequest(BaseModel):
     filters: Dict[str, Any] = {}
     analytics: bool = True
     metadata_focus: List[str] = []
-    comprehensive_search: bool = False  # NEW: Flag for comprehensive search mode
+    comprehensive: bool = False  # Support for comprehensive search toggle
 
 # =============================================================================
 # CONFIGURATION
@@ -550,139 +550,7 @@ def detect_report_query(message: str) -> bool:
     ]
     return any(keyword in message.lower() for keyword in report_keywords)
 
-def detect_query_type_with_limits(message: str, comprehensive_search_flag: bool = False) -> dict:
-    """
-    Enhanced query detection for different analysis types with appropriate limits
-    Supports both automatic detection and explicit comprehensive search mode
-    """
-    message_lower = message.lower()
-    
-    # If comprehensive_search flag is explicitly set, use comprehensive limits
-    if comprehensive_search_flag:
-        return {
-            "type": "comprehensive_search",
-            "max_results": 15000,  # Very high limit for comprehensive search
-            "requires_stats": False,
-            "search_type": "comprehensive",
-            "explicit_mode": True
-        }
-    
-    # Define query types and their characteristics for automatic detection
-    query_types = {
-        "keyword_search": {
-            "keywords": [
-                # Direct search language
-                "find all", "search for", "look for", "show me all", "list all",
-                "find calls", "search calls", "find evaluations", "search evaluations",
-                # Content-specific searches
-                "mentions", "mentioning", "about", "regarding", "calls about",
-                "conversations about", "discussions about", "references to",
-                # Product/topic searches that often need comprehensive coverage
-                "home internet", "internet", "phone", "device", "plan", "billing", 
-                "account", "technical support", "customer service", "troubleshooting"
-            ],
-            "max_results": 5000,  # HIGH LIMIT - Need good coverage for keyword searches
-            "requires_stats": False,
-            "search_type": "comprehensive"
-        },
-        "outlier_analysis": {
-            "keywords": ["outlier", "outliers", "anomal", "unusual", "exception", "extreme", "deviation"],
-            "max_results": 500,  # Reduced for statistical analysis - prevents timeouts
-            "requires_stats": True,
-            "search_type": "statistical"
-        },
-        "site_breakdown": {
-            "keywords": ["by site", "each site", "site breakdown", "site analysis", "per site"],
-            "max_results": 1000,  # Moderate for site grouping
-            "requires_stats": True,
-            "search_type": "analytical"
-        },
-        "comprehensive_report": {
-            "keywords": ["report", "executive", "summary", "overview", "breakdown", "performance"],
-            "max_results": 2000,  # Higher for comprehensive analysis
-            "requires_stats": True,
-            "search_type": "analytical"
-        },
-        "trends_analysis": {
-            "keywords": ["trend", "trending", "pattern", "over time", "improvement", "decline"],
-            "max_results": 1500,  # Moderate for trend analysis
-            "requires_stats": True,
-            "search_type": "statistical"
-        },
-        "compliance_search": {
-            "keywords": [
-                "compliance", "violation", "policy", "regulation", "guideline",
-                "procedure", "protocol", "requirement", "standard", "audit"
-            ],
-            "max_results": 8000,  # VERY HIGH - Compliance needs complete coverage
-            "requires_stats": False,
-            "search_type": "comprehensive"
-        },
-        "simple_query": {
-            "keywords": [],  # Default fallback
-            "max_results": 300,   # Fast for simple questions
-            "requires_stats": False,
-            "search_type": "simple"
-        }
-    }
-    
-    # Check for each query type with priority order
-    detected_type = "simple_query"  # Default
-    max_score = 0
-    
-    # Special priority check for keyword searches first
-    for query_type in ["keyword_search", "compliance_search"]:
-        config = query_types[query_type]
-        matches = sum(1 for keyword in config["keywords"] if keyword in message_lower)
-        if matches > 0:
-            detected_type = query_type
-            max_score = matches
-            break  # Priority given to comprehensive searches
-    
-    # If no keyword search detected, check analytical query types
-    if detected_type == "simple_query":
-        for query_type, config in query_types.items():
-            if query_type in ["simple_query", "keyword_search", "compliance_search"]:
-                continue
-                
-            # Count keyword matches
-            matches = sum(1 for keyword in config["keywords"] if keyword in message_lower)
-            
-            if matches > max_score:
-                max_score = matches
-                detected_type = query_type
-    
-    # Special case: Check if combining multiple analysis types - ONLY for outlier analysis
-    combined_analysis = False
-    if detected_type == "outlier_analysis" and ("outlier" in message_lower and any(kw in message_lower for kw in ["site", "each", "by"])):
-        combined_analysis = True
-        # Reduce limits further for combined outlier analysis only
-        query_types[detected_type]["max_results"] = min(query_types[detected_type]["max_results"], 300)
-    
-    # Check for quoted phrases or specific product mentions (indicates keyword search)
-    has_quotes = '"' in message_lower or "'" in message_lower
-    product_keywords = ["internet", "phone", "device", "plan", "service", "app", "wifi", "cable"]
-    has_product_focus = any(product in message_lower for product in product_keywords)
-    
-    # Override to keyword search if pattern suggests comprehensive search needed
-    if (has_quotes or has_product_focus) and detected_type == "simple_query":
-        detected_type = "keyword_search"
-        max_score = 1
-    
-    result = {
-        "type": detected_type,
-        "max_results": query_types[detected_type]["max_results"],
-        "requires_stats": query_types[detected_type]["requires_stats"],
-        "search_type": query_types[detected_type]["search_type"],
-        "combined_analysis": combined_analysis,
-        "confidence": max_score,
-        "explicit_mode": False
-    }
-    
-    return result
-
-
-def build_search_context(query: str, filters: dict, max_results: int = 100) -> Tuple[str, List[dict]]:
+def build_search_context(query: str, filters: dict, max_results: int = 100, comprehensive: bool = False) -> Tuple[str, List[dict]]:
     """
     ENHANCED: Build search context with VECTOR SEARCH integration + FILTER VALIDATION
     UPDATED VERSION with strict metadata filtering AND TRANSCRIPT EXTRACTION
@@ -774,172 +642,101 @@ def build_search_context(query: str, filters: dict, max_results: int = 100) -> T
         # STEP 2: Use enhanced search strategies WITH FILTER VALIDATION
         all_sources = []
         search_methods_used = []
-
-        # NEW: Detect comprehensive search mode for better precision
-        is_comprehensive_search = (
-            max_results > 5000 or  # High result limit indicates comprehensive search
-            os.getenv("TEMP_COMPREHENSIVE_MODE") == "true"  # Explicit comprehensive search flag
-        )
-
-        if is_comprehensive_search:
-            logger.info("🎯 COMPREHENSIVE SEARCH MODE: Prioritizing text search for keyword precision")
-
-            # TEXT SEARCH FIRST (exact matches) - NO SPECIAL QUERY NEEDED
-            try:
-                logger.info(f"🔍 Searching for exact matches of: '{query}'")
-                text_results = search_opensearch(
-                    query=query,  # Use the raw query as-is
-                    filters=filters,
-                    size=max_results
-                )
-
-                logger.info(f"📝 Text search returned {len(text_results)} hits")
-                text_results = validate_filter_compliance(text_results, "text_search")
-                logger.info(f"✅ After filter validation: {len(text_results)} precise matches")
-
-                for result in text_results:
-                    result["search_type"] = "precise_text"
-                    result["search_method"] = "comprehensive_exact_match"
-                    cleaned = clean_source_metadata(result)
-                    if cleaned:
-                        all_sources.append(cleaned)
-
-                search_methods_used.append("comprehensive_exact_match")
-                logger.info(f"✅ Found {len(all_sources)} exact keyword matches")
-
-            except Exception as e:
-                logger.error(f"⚠️ Comprehensive text search failed: {e}")
-
-            # HYBRID SEARCH SECOND (only if we need more results)
-            if len(all_sources) < max_results * 0.3 and query_vector:
-                remaining = min(max_results - len(all_sources), 1000)
-                try:
-                    logger.info(f"📊 Adding {remaining} semantic expansions...")
-                    hybrid_results = hybrid_search(
-                        query=query,
-                        query_vector=query_vector,
-                        filters=filters,
-                        size=remaining,
-                        vector_weight=0.2  # Low semantic weight for expansion only
-                    )
-
-                    hybrid_results = validate_filter_compliance(hybrid_results, "hybrid_search")
-
-                    for result in hybrid_results[:remaining]:
-                        result["search_type"] = "semantic_expansion"
-                        result["search_method"] = "comprehensive_related"
-                        cleaned = clean_source_metadata(result)
-                        if cleaned:
-                            all_sources.append(cleaned)
-
-                    search_methods_used.append("semantic_expansion")
-                    logger.info(f"📈 Added {remaining} related matches")
-
-                except Exception as e:
-                    logger.error(f"⚠️ Semantic expansion failed: {e}")
-
-        else:
-            # STANDARD ANALYTICS MODE: Keep existing hybrid/vector priority
-            logger.info("📊 STANDARD ANALYTICS: Using existing search strategy")
-
         
-        # Only use standard search strategies if NOT in comprehensive mode
-        if not is_comprehensive_search:
-
-            # Strategy 1: Hybrid search (text + vector) if vector available
-            if query_vector:
-                try:
+        # Strategy 1: Hybrid search (text + vector) if vector available
+        if query_vector:
+            try:
+                # Log search mode for debugging
+                if comprehensive:
+                    logger.info("🎯 COMPREHENSIVE SEARCH: Using text-focused search for better precision")
+                else:
                     logger.info("Trying hybrid text+vector search...")
-                    hybrid_results = hybrid_search(
-                        query=query,
-                        query_vector=query_vector,
-                        filters=filters,
-                        size=min(max_results, HYBRID_SEARCH_LIMIT),
-                        vector_weight=0.6  # 60% vector, 40% text
-                    )
-                    
-                    logger.info(f"Hybrid search returned {len(hybrid_results)} hits")
-                    
-                    # VALIDATE FILTERS BEFORE PROCESSING
-                    validated_hybrid = validate_filter_compliance(hybrid_results, "hybrid_search")
-                    validated_hybrid = clean_all_sources(validated_hybrid)
-                    
-                    for hit in validated_hybrid:
-                        hit["search_method"] = "hybrid"  # For internal tracking only
+                hybrid_results = hybrid_search(
+                    query=query,
+                    query_vector=query_vector,
+                    filters=filters,
+                    size=min(max_results, HYBRID_SEARCH_LIMIT),
+                    vector_weight=0.3 if comprehensive else 0.6  # Lower semantic weight for comprehensive search precision
+                )
+                
+                logger.info(f"Hybrid search returned {len(hybrid_results)} hits")
+                
+                # VALIDATE FILTERS BEFORE PROCESSING
+                validated_hybrid = validate_filter_compliance(hybrid_results, "hybrid_search")
+                validated_hybrid = clean_all_sources(validated_hybrid)
+                
+                for hit in validated_hybrid:
+                    hit["search_method"] = "hybrid"  # For internal tracking only
+                    all_sources.append(hit)
+                
+                search_methods_used.append("hybrid")               
+                
+                
+            except Exception as e:
+                logger.error(f"âŒ Hybrid search failed: {e}")
+        
+        # Strategy 2: Pure vector search as fallback/supplement
+        if query_vector and len(all_sources) < max_results:  
+            try:  
+                logger.info("Trying vector search...")
+                vector_results = search_vector(
+                    query_vector=query_vector,
+                    filters=filters,
+                    size=max_results - len(all_sources)  
+                )
+                
+                logger.info(f" Vector search returned {len(vector_results)} hits")
+                
+                #  VALIDATE FILTERS BEFORE PROCESSING
+                validated_vector = validate_filter_compliance(vector_results, "vector")
+                #  CLEAN RESULTS IMMEDIATELY
+                validated_vector = clean_all_sources(validated_vector)
+                
+                # Add vector results that aren't already in all_sources
+                existing_ids = {s.get("evaluationId") for s in all_sources}
+                
+                for hit in validated_vector:
+                    if hit.get("evaluationId") not in existing_ids:
+                        hit["search_method"] = "vector"  # For internal tracking only
                         all_sources.append(hit)
-                    
-                    search_methods_used.append("hybrid")               
-                    
-                    
-                except Exception as e:
-                    logger.error(f"âŒ Hybrid search failed: {e}")
-            
-            # Strategy 2: Pure vector search as fallback/supplement
-            if query_vector and len(all_sources) < max_results:  
-                try:  
-                    logger.info("Trying vector search...")
-                    vector_results = search_vector(
-                        query_vector=query_vector,
-                        filters=filters,
-                        size=max_results - len(all_sources)  
-                    )
-                    
-                    logger.info(f" Vector search returned {len(vector_results)} hits")
-                    
-                    #  VALIDATE FILTERS BEFORE PROCESSING
-                    validated_vector = validate_filter_compliance(vector_results, "vector")
-                    #  CLEAN RESULTS IMMEDIATELY
-                    validated_vector = clean_all_sources(validated_vector)
-                    
-                    # Add vector results that aren't already in all_sources
-                    existing_ids = {s.get("evaluationId") for s in all_sources}
-                    
-                    for hit in validated_vector:
-                        if hit.get("evaluationId") not in existing_ids:
-                            hit["search_method"] = "vector"  # For internal tracking only
-                            all_sources.append(hit)
-                            existing_ids.add(hit.get("evaluationId"))
-                    
-                    search_methods_used.append("vector")
-                    
-                except Exception as e:
-                    logger.error(f"âŒ Vector search failed: {e}")
-            
-            # Strategy 3: Text search as fallback - WITH STRICT VALIDATION
-            if len(all_sources) < max_results:
-                try: 
-                    logger.info(" Supplementing with enhanced text search...")
-                    text_results = search_opensearch(
-                        query=query,
-                        filters=filters,
-                        size=max_results - len(all_sources)  # Direct calculation, no remaining_slots
-                    )
-                    
-                    logger.info(f" Text search returned {len(text_results)} hits")
-                    
-                    # VALIDATE FILTERS - BEFORE PROCESSING
-                    validated_text = validate_filter_compliance(text_results, "text")
-                    
-                    # CLEAN RESULTS IMMEDIATELY
-                    validated_text = clean_all_sources(validated_text)
-                    # Add unique results only
-                    existing_ids = {s.get("evaluationId") for s in all_sources}
-                    
-                    for hit in validated_text:
-                        if hit.get("evaluationId") not in existing_ids:
-                            hit["search_method"] = "text"  # For internal tracking only
-                            all_sources.append(hit)
-                            existing_ids.add(hit.get("evaluationId"))
-                    
-                    search_methods_used.append("text")
-                    
-                except Exception as e:
-                    logger.error(f"Text search failed: {e}")                
-                   
-
-            # End of standard search strategies block
-        # (comprehensive search results are already in all_sources)
-
+                        existing_ids.add(hit.get("evaluationId"))
+                
+                search_methods_used.append("vector")
+                
+            except Exception as e:
+                logger.error(f"âŒ Vector search failed: {e}")
+        
+        # Strategy 3: Text search as fallback - WITH STRICT VALIDATION
+        if len(all_sources) < max_results:
+            try: 
+                logger.info(" Supplementing with enhanced text search...")
+                text_results = search_opensearch(
+                    query=query,
+                    filters=filters,
+                    size=max_results - len(all_sources)  # Direct calculation, no remaining_slots
+                )
+                
+                logger.info(f" Text search returned {len(text_results)} hits")
+                
+                # VALIDATE FILTERS - BEFORE PROCESSING
+                validated_text = validate_filter_compliance(text_results, "text")
+                
+                # CLEAN RESULTS IMMEDIATELY
+                validated_text = clean_all_sources(validated_text)
+                # Add unique results only
+                existing_ids = {s.get("evaluationId") for s in all_sources}
+                
+                for hit in validated_text:
+                    if hit.get("evaluationId") not in existing_ids:
+                        hit["search_method"] = "text"  # For internal tracking only
+                        all_sources.append(hit)
+                        existing_ids.add(hit.get("evaluationId"))
+                
+                search_methods_used.append("text")
+                
+            except Exception as e:
+                logger.error(f"Text search failed: {e}")                
+               
         # Final filter validation on combined results
         logger.info(f" Total sources before final cleaning: {len(all_sources)}")
         
@@ -1917,22 +1714,7 @@ async def relay_chat_rag(request: Request):
         logger.info(f"ðŸ“Š REPORT REQUEST DETECTED: {is_report_request}")
 
         # STEP 1: Build context with VECTOR SEARCH integration
-        # SMART QUERY DETECTION with appropriate limits
-        query_info = detect_query_type_with_limits(req.message, req.comprehensive_search)
-        smart_max_results = query_info["max_results"]
-        logger.info(f"🧠 SMART QUERY: {query_info['type']} (limit: {smart_max_results})")
-        
-        # Pass comprehensive search flag to build_search_context
-        if req.comprehensive_search:
-            logger.info("🔍 USER SELECTED COMPREHENSIVE SEARCH MODE")
-            # Set a flag that build_search_context can detect
-            os.environ['TEMP_COMPREHENSIVE_MODE'] = 'true'
-        
-        context, sources = build_search_context(req.message, req.filters, max_results=smart_max_results)
-        
-        # Clean up the temporary flag
-        if 'TEMP_COMPREHENSIVE_MODE' in os.environ:
-            del os.environ['TEMP_COMPREHENSIVE_MODE']
+        context, sources = build_search_context(req.message, req.filters, max_results=CHAT_MAX_RESULTS, comprehensive=req.comprehensive)
 
         logger.info(f"ðŸ“‹ ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 
