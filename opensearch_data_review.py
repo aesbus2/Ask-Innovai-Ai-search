@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-OpenSearch Structure Inspector & Cleanup Tool
-Simple script to check OpenSearch indices, mappings, and document counts
-Includes safe cleanup functionality for your Ask InnovAI project
+OpenSearch Structure Inspector & Analytics Tool
+Comprehensive script to check OpenSearch indices, mappings, and document counts
+Includes detailed evaluation analytics: total evaluations, chunks, and templates
+Includes safe cleanup functionality for your Metro AI Call Center Analytics project
 """
 
 import os
@@ -136,7 +137,7 @@ def inspect_opensearch_structure(client: OpenSearch):
     
     # Process evaluation indices (most important)
     if eval_indices:
-        print("🎯 EVALUATION INDICES (Your Ask InnovAI Data):")
+        print("🎯 EVALUATION INDICES (Your Metro AI Call Center Analytics Data):")
         print("-" * 50)
         
         total_eval_docs = 0
@@ -191,6 +192,31 @@ def inspect_opensearch_structure(client: OpenSearch):
         print(f"   📄 Total documents: {total_eval_docs:,}")
         print(f"   💾 Total size: {format_size(total_eval_size)}")
         print()
+
+        # Get detailed analytics
+        analytics = get_detailed_evaluation_analytics(client, eval_indices)
+        
+        print("🔢 DETAILED ANALYTICS:")
+        print("-" * 30)
+        print(f"   📝 Total Evaluations: {analytics['total_evaluations']:,}")
+        print(f"   🧩 Total Chunks: {analytics['total_chunks']:,}")
+        print(f"   📋 Template Count: {len(analytics['template_names'])}")
+        print()
+        
+        if analytics['template_names']:
+            print("📋 TEMPLATE BREAKDOWN:")
+            print("-" * 25)
+            for template in analytics['template_names']:
+                eval_count = analytics['evaluations_by_template'].get(template, 0)
+                chunk_count = analytics['chunks_by_template'].get(template, 0)
+                print(f"   📄 {template}")
+                print(f"      🆔 Evaluations: {eval_count:,}")
+                print(f"      🧩 Chunks: {chunk_count:,}")
+                if eval_count > 0:
+                    avg_chunks = chunk_count / eval_count
+                    print(f"      📊 Avg chunks/eval: {avg_chunks:.1f}")
+                print()
+        print()
     
     # Process other user indices
     if user_indices:
@@ -217,6 +243,112 @@ def inspect_opensearch_structure(client: OpenSearch):
             print(f"   ... and {len(system_indices) - 3} more")
         print("   (System indices are preserved during cleanup)")
         print()
+
+def get_detailed_evaluation_analytics(client: OpenSearch, eval_indices: List[str]) -> Dict[str, Any]:
+    """Get comprehensive evaluation analytics: total evaluations, chunks, and templates"""
+    print("🔍 Gathering detailed evaluation analytics...")
+    
+    analytics = {
+        'total_evaluations': 0,
+        'total_chunks': 0,
+        'template_names': set(),
+        'evaluations_by_template': {},
+        'chunks_by_template': {},
+        'evaluation_ids': set()
+    }
+    
+    for index_name in eval_indices:
+        try:
+            # Get all documents from this index using scroll for large datasets
+            response = client.search(
+                index=index_name,
+                body={
+                    "size": 1000,  # Process in batches
+                    "query": {"match_all": {}},
+                    "_source": ["evaluationId", "template_name", "total_chunks", "chunks"]
+                },
+                scroll="2m"
+            )
+            
+            # Process first batch
+            hits = response.get("hits", {}).get("hits", [])
+            scroll_id = response.get("_scroll_id")
+            processed = 0
+            
+            while hits:
+                for hit in hits:
+                    source = hit.get("_source", {})
+                    
+                    # Count unique evaluations
+                    eval_id = source.get("evaluationId")
+                    if eval_id:
+                        analytics['evaluation_ids'].add(eval_id)
+                    
+                    # Count chunks
+                    total_chunks = source.get("total_chunks", 0)
+                    if isinstance(total_chunks, int) and total_chunks > 0:
+                        analytics['total_chunks'] += total_chunks
+                    elif isinstance(source.get("chunks"), list):
+                        analytics['total_chunks'] += len(source.get("chunks", []))
+                    
+                    # Collect template names
+                    template_name = source.get("template_name", "Unknown")
+                    if template_name and template_name != "Unknown":
+                        analytics['template_names'].add(template_name)
+                    
+                    # Track stats by template
+                    if template_name not in analytics['evaluations_by_template']:
+                        analytics['evaluations_by_template'][template_name] = set()
+                        analytics['chunks_by_template'][template_name] = 0
+                    
+                    if eval_id:
+                        analytics['evaluations_by_template'][template_name].add(eval_id)
+                    
+                    if isinstance(total_chunks, int) and total_chunks > 0:
+                        analytics['chunks_by_template'][template_name] += total_chunks
+                    elif isinstance(source.get("chunks"), list):
+                        analytics['chunks_by_template'][template_name] += len(source.get("chunks", []))
+                
+                processed += len(hits)
+                if processed % 1000 == 0:  # Show progress every 1000 docs
+                    print(f"   Processed {processed} documents from {index_name}...")
+                
+                # Get next batch if using scroll
+                if scroll_id:
+                    try:
+                        response = client.scroll(
+                            scroll_id=scroll_id,
+                            scroll="2m"
+                        )
+                        hits = response.get("hits", {}).get("hits", [])
+                    except Exception as e:
+                        print(f"   ⚠️ Scroll error: {e}")
+                        break
+                else:
+                    break
+            
+            print(f"   ✅ Completed {index_name}: {processed} documents processed")
+            
+            # Clean up scroll
+            if scroll_id:
+                try:
+                    client.clear_scroll(scroll_id=scroll_id)
+                except Exception:
+                    pass
+                    
+        except Exception as e:
+            print(f"   ⚠️ Error analyzing {index_name}: {e}")
+            continue
+    
+    analytics['total_evaluations'] = len(analytics['evaluation_ids'])
+    analytics['template_names'] = sorted(list(analytics['template_names']))
+    
+    # Convert sets to counts for template stats
+    for template in analytics['evaluations_by_template']:
+        analytics['evaluations_by_template'][template] = len(analytics['evaluations_by_template'][template])
+    
+    return analytics
+
 
 def sample_documents(client: OpenSearch, index_name: str, count: int = 2):
     """Show sample documents from an index"""
@@ -369,19 +501,55 @@ def main():
     
     while True:
         print("📋 MENU:")
-        print("   1. 🔍 Inspect OpenSearch structure")
-        print("   2. 📄 Sample documents from indices")
-        print("   3. 🗑️ Delete all user indices (DANGEROUS)")
-        print("   4. 🚪 Exit")
+        print("   1. 🔍 Inspect OpenSearch structure + detailed analytics")
+        print("   2. 🔢 Quick evaluation analytics only")
+        print("   3. 📄 Sample documents from indices")
+        print("   4. 🗑️ Delete all user indices (DANGEROUS)")
+        print("   5. 🚪 Exit")
         print()
         
-        choice = input("Select option (1-4): ").strip()
+        choice = input("Select option (1-5): ").strip()
         
         if choice == "1":
             print()
             inspect_opensearch_structure(client)
             
-        elif choice == "2":
+
+        elif choice == "3":
+            print()
+            print("🔢 QUICK EVALUATION ANALYTICS")
+            print("=" * 40)
+            
+            all_indices = get_all_indices(client)
+            eval_indices = [name for name in all_indices.keys() if name.startswith('eval-')]
+            
+            if not eval_indices:
+                print("📭 No evaluation indices found")
+            else:
+                analytics = get_detailed_evaluation_analytics(client, eval_indices)
+                
+                print("🔢 EVALUATION ANALYTICS:")
+                print("-" * 30)
+                print(f"   📝 Total Evaluations: {analytics['total_evaluations']:,}")
+                print(f"   🧩 Total Chunks: {analytics['total_chunks']:,}")
+                print(f"   📋 Template Count: {len(analytics['template_names'])}")
+                print()
+                
+                if analytics['template_names']:
+                    print("📋 TEMPLATE BREAKDOWN:")
+                    print("-" * 25)
+                    for template in analytics['template_names']:
+                        eval_count = analytics['evaluations_by_template'].get(template, 0)
+                        chunk_count = analytics['chunks_by_template'].get(template, 0)
+                        print(f"   📄 {template}")
+                        print(f"      🆔 Evaluations: {eval_count:,}")
+                        print(f"      🧩 Chunks: {chunk_count:,}")
+                        if eval_count > 0:
+                            avg_chunks = chunk_count / eval_count
+                            print(f"      📊 Avg chunks/eval: {avg_chunks:.1f}")
+                        print()
+
+        elif choice == "3":
             print()
             all_indices = get_all_indices(client)
             user_indices = [name for name in all_indices.keys() if not name.startswith('.')]
@@ -409,16 +577,16 @@ def main():
                 except ValueError:
                     print("❌ Invalid input")
             
-        elif choice == "3":
+        elif choice == "5":
             print()
             delete_user_indices(client)
             
-        elif choice == "4":
+        elif choice == "5":
             print("👋 Goodbye!")
             break
             
         else:
-            print("❌ Invalid choice, please select 1-4")
+            print("❌ Invalid choice, please select 1-5")
         
         print("\n" + "=" * 60 + "\n")
 
