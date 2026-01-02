@@ -56,52 +56,6 @@ logger.info(f"   Hybrid search limit: {HYBRID_SEARCH_LIMIT}")
 logger.info(f"   Vector search limit: {VECTOR_SEARCH_LIMIT}")
 logger.info(f"   Text search limit: {TEXT_SEARCH_LIMIT}")
 
-# =============================================================================
-# DYNAMIC SCALING FOR 10,000+ EVALUATIONS
-# =============================================================================
-
-def get_optimized_search_limits(max_results: int, comprehensive: bool = False) -> dict:
-    """
-    Calculate optimal search limits based on dataset size and search mode.
-    Prevents bottlenecks when processing 10,000+ evaluations.
-    """
-    if not comprehensive:
-        # Standard search uses default limits
-        return {
-            "hybrid_limit": HYBRID_SEARCH_LIMIT,
-            "vector_limit": VECTOR_SEARCH_LIMIT,
-            "text_limit": TEXT_SEARCH_LIMIT
-        }
-    
-    # For comprehensive search, scale limits based on dataset size
-    if max_results <= 5000:
-        # Small dataset - use enhanced limits
-        hybrid_limit = min(2000, max_results)
-        vector_limit = min(1500, max_results)
-        text_limit = min(3000, max_results)
-    elif max_results <= 10000:
-        # Medium dataset (5K-10K) - scale up for comprehensive coverage
-        hybrid_limit = min(4000, max_results)  # 4x increase for hybrid
-        vector_limit = min(2500, max_results)  # 2.5x increase for vector
-        text_limit = min(6000, max_results)    # 6x increase for text (fastest)
-    elif max_results <= 20000:
-        # Large dataset (10K-20K) - optimize for performance
-        hybrid_limit = min(6000, max_results)  # Scale hybrid processing
-        vector_limit = min(3500, max_results)  # Limit heavy semantic processing
-        text_limit = min(10000, max_results)   # Maximize fast text search
-    else:
-        # Very large dataset (20K+) - focus on text search efficiency
-        hybrid_limit = min(8000, max_results)
-        vector_limit = min(4000, max_results)
-        text_limit = min(15000, max_results)
-    
-    return {
-        "hybrid_limit": hybrid_limit,
-        "vector_limit": vector_limit,
-        "text_limit": text_limit
-    }
-
-
 def clean_source_metadata(source: dict) -> dict:
     """
     Clean a single source to only include allowed API fields
@@ -602,13 +556,6 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
     """
     if max_results is None:
         max_results = CHAT_MAX_RESULTS
-
-    # Get optimized search limits based on dataset size and mode
-    search_limits = get_optimized_search_limits(max_results, comprehensive)
-    
-    # Performance monitoring
-    search_start_time = time.time()
-
     
     logger.info(f"ðŸ“‹ Query: '{query}'")
     logger.info(f"ðŸ·ï¸ Filters: {filters}")
@@ -700,17 +647,15 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             try:
                 # Log search strategy based on comprehensive mode
                 if comprehensive:
-                    logger.info("🎯 COMPREHENSIVE SEARCH: Text-focused search with dynamic scaling")
-                    logger.info(f"📊 OPTIMIZED PROCESSING: Using limits H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']}")
-                    if max_results >= 10000:
-                        logger.info("🚀 LARGE DATASET: 10,000+ evaluation processing mode active")
+                    logger.info("🎯 COMPREHENSIVE SEARCH: Text-focused search across FULL dataset")
+                    logger.info("📊 COMPLETE COVERAGE: Processing all 5,082 evaluations for maximum recall")
                 else:
                     logger.info("Trying hybrid text+vector search...")
                 hybrid_results = hybrid_search(
                     query=query,
                     query_vector=query_vector,
                     filters=filters,
-                    size=min(max_results, search_limits['hybrid_limit']),  # Dynamic scaling for large datasets
+                    size=min(max_results, HYBRID_SEARCH_LIMIT),  # Full dataset processing for comprehensive search
                     vector_weight=0.3 if comprehensive else 0.6  # Lower semantic weight for comprehensive search precision
                 )
                 
@@ -737,7 +682,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                 vector_results = search_vector(
                     query_vector=query_vector,
                     filters=filters,
-                    size=min(max_results - len(all_sources), search_limits["vector_limit"])  # Dynamic vector limit
+                    size=max_results - len(all_sources)  
                 )
                 
                 logger.info(f" Vector search returned {len(vector_results)} hits")
@@ -768,7 +713,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                 text_results = search_opensearch(
                     query=query,
                     filters=filters,
-                    size=min(max_results - len(all_sources), search_limits["text_limit"])  # Dynamic text limit
+                    size=max_results - len(all_sources)  # Direct calculation, no remaining_slots
                 )
                 
                 logger.info(f" Text search returned {len(text_results)} hits")
@@ -988,15 +933,6 @@ Remember: You are showing actual evaluation records, not search results.
                 # Final removal of template_name before returning (was kept for filter checking)
                 source.pop("template_name", None)
             
-            # Performance monitoring
-            search_duration = time.time() - search_start_time
-            logger.info(f"⏱️ SEARCH COMPLETED: {search_duration:.2f} seconds for {len(processed_sources)} results")
-            
-            if comprehensive and search_duration > 25:
-                logger.warning(f"⚠️ PERFORMANCE: Query took {search_duration:.2f}s - consider using filters for faster results")
-            elif comprehensive and max_results >= 10000:
-                logger.info(f"🎯 LARGE DATASET PERFORMANCE: {search_duration:.2f}s for {max_results} max results")
-
             return context, processed_sources
             
         else:
@@ -1788,10 +1724,8 @@ async def relay_chat_rag(request: Request):
         if comprehensive_mode:
             # For comprehensive search, process full dataset with text-focused optimization
             smart_max_results = CHAT_MAX_RESULTS  # Remove artificial cap - search all data
-            logger.info(f"🔍 COMPREHENSIVE SEARCH: Processing up to {smart_max_results} evaluations")
-            logger.info("📊 DYNAMIC SCALING: Using optimized limits for large datasets")
-            if smart_max_results >= 10000:
-                logger.info("🚀 LARGE DATASET MODE: 10,000+ evaluation optimization active")
+            logger.info(f"🔍 COMPREHENSIVE SEARCH: Processing ALL evaluations (up to {smart_max_results})")
+            logger.info("📊 FULL COVERAGE: Text-focused strategy across entire 5,082 evaluation dataset")
         else:
             # For standard search, use normal limits
             smart_max_results = CHAT_MAX_RESULTS
