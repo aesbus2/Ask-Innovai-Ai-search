@@ -63,7 +63,7 @@ logger.info(f"   Text search limit: {TEXT_SEARCH_LIMIT}")
 def get_optimized_search_limits(max_results: int, comprehensive: bool = False) -> dict:
     """
     Calculate optimal search limits based on dataset size and search mode.
-    Prevents bottlenecks when processing 10,000+ evaluations.
+    TIMEOUT-PROOF VERSION: Prioritizes getting results over perfect coverage.
     """
     if not comprehensive:
         # Standard search uses default limits
@@ -73,27 +73,27 @@ def get_optimized_search_limits(max_results: int, comprehensive: bool = False) -
             "text_limit": TEXT_SEARCH_LIMIT
         }
     
-    # For comprehensive search, scale limits based on dataset size
-    if max_results <= 5000:
-        # Small dataset - use enhanced limits
-        hybrid_limit = min(2000, max_results)
-        vector_limit = min(1500, max_results)
-        text_limit = min(3000, max_results)
+    # AGGRESSIVE TIMEOUT PREVENTION: Much smaller limits for comprehensive search
+    if max_results <= 3000:
+        # Small dataset - conservative limits to ensure completion
+        hybrid_limit = min(800, max_results)
+        vector_limit = min(500, max_results)
+        text_limit = min(1200, max_results)
+    elif max_results <= 6000:
+        # Medium dataset (like yours: 5,082) - TIMEOUT-PROOF limits
+        hybrid_limit = min(1000, max_results)  # Very conservative
+        vector_limit = min(600, max_results)   # Minimal semantic processing
+        text_limit = min(1500, max_results)    # Focus on fast text search
     elif max_results <= 10000:
-        # Medium dataset (5K-10K) - scale up for comprehensive coverage
-        hybrid_limit = min(4000, max_results)  # 4x increase for hybrid
-        vector_limit = min(2500, max_results)  # 2.5x increase for vector
-        text_limit = min(6000, max_results)    # 6x increase for text (fastest)
-    elif max_results <= 20000:
-        # Large dataset (10K-20K) - optimize for performance
-        hybrid_limit = min(6000, max_results)  # Scale hybrid processing
-        vector_limit = min(3500, max_results)  # Limit heavy semantic processing
-        text_limit = min(10000, max_results)   # Maximize fast text search
+        # Large dataset - balanced but still timeout-safe
+        hybrid_limit = min(1200, max_results)
+        vector_limit = min(800, max_results)
+        text_limit = min(2000, max_results)
     else:
-        # Very large dataset (20K+) - focus on text search efficiency
-        hybrid_limit = min(8000, max_results)
-        vector_limit = min(4000, max_results)
-        text_limit = min(15000, max_results)
+        # Very large dataset - maximum timeout protection
+        hybrid_limit = min(1500, max_results)
+        vector_limit = min(1000, max_results)
+        text_limit = min(2500, max_results)
     
     return {
         "hybrid_limit": hybrid_limit,
@@ -700,10 +700,10 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             try:
                 # Log search strategy based on comprehensive mode
                 if comprehensive:
-                    logger.info("🎯 COMPREHENSIVE SEARCH: Text-focused search with dynamic scaling")
-                    logger.info(f"📊 OPTIMIZED PROCESSING: Using limits H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']}")
-                    if max_results >= 10000:
-                        logger.info("🚀 LARGE DATASET: 10,000+ evaluation processing mode active")
+                    logger.info("🎯 COMPREHENSIVE SEARCH: TIMEOUT-PROOF strategy for reliable results")
+                    logger.info(f"⚡ CONSERVATIVE LIMITS: H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']} - Prioritizing completion over coverage")
+                    if max_results >= 5000:
+                        logger.info("🛡️ TIMEOUT PROTECTION: Using reduced limits to ensure response within timeout")
                 else:
                     logger.info("Trying hybrid text+vector search...")
                 hybrid_results = hybrid_search(
@@ -988,14 +988,16 @@ Remember: You are showing actual evaluation records, not search results.
                 # Final removal of template_name before returning (was kept for filter checking)
                 source.pop("template_name", None)
             
-            # Performance monitoring
+            # Performance monitoring - TIMEOUT-PROOF version
             search_duration = time.time() - search_start_time
             logger.info(f"⏱️ SEARCH COMPLETED: {search_duration:.2f} seconds for {len(processed_sources)} results")
             
-            if comprehensive and search_duration > 25:
-                logger.warning(f"⚠️ PERFORMANCE: Query took {search_duration:.2f}s - consider using filters for faster results")
-            elif comprehensive and max_results >= 10000:
-                logger.info(f"🎯 LARGE DATASET PERFORMANCE: {search_duration:.2f}s for {max_results} max results")
+            if comprehensive and search_duration > 15:
+                logger.warning(f"⚠️ PERFORMANCE: Query took {search_duration:.2f}s - approaching timeout threshold")
+            elif comprehensive and search_duration > 20:
+                logger.error(f"🚨 TIMEOUT RISK: {search_duration:.2f}s - consider further optimization")
+            elif comprehensive and search_duration < 10:
+                logger.info(f"✅ OPTIMAL PERFORMANCE: {search_duration:.2f}s - well within timeout limits")
 
             return context, processed_sources
             
@@ -1786,12 +1788,14 @@ async def relay_chat_rag(request: Request):
         # STEP 1: Build context with VECTOR SEARCH integration
         # FULL DATASET PROCESSING: Search all 5,082 evaluations with optimized strategy
         if comprehensive_mode:
-            # For comprehensive search, process full dataset with text-focused optimization
-            smart_max_results = CHAT_MAX_RESULTS  # Remove artificial cap - search all data
-            logger.info(f"🔍 COMPREHENSIVE SEARCH: Processing up to {smart_max_results} evaluations")
-            logger.info("📊 DYNAMIC SCALING: Using optimized limits for large datasets")
-            if smart_max_results >= 10000:
-                logger.info("🚀 LARGE DATASET MODE: 10,000+ evaluation optimization active")
+            # For comprehensive search, use timeout-proof strategy
+            smart_max_results = CHAT_MAX_RESULTS  # Use full config but with conservative processing limits
+            logger.info(f"🔍 COMPREHENSIVE SEARCH: TIMEOUT-PROOF processing of dataset")
+            logger.info("🛡️ RELIABILITY FIRST: Conservative limits to prevent timeouts")
+            logger.info("📊 STRATEGY: High-quality subset over timeout risk")
+            
+            if smart_max_results >= 5000:
+                logger.info("⚡ TIMEOUT PREVENTION: Using proven limits for 5K+ dataset reliability")
         else:
             # For standard search, use normal limits
             smart_max_results = CHAT_MAX_RESULTS
