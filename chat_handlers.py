@@ -1882,10 +1882,35 @@ Keep formatting simple and readable.
 - List sub-disposition as bullet points and included trends and insights
 - list all partners included in metadata "partner" filters
 
+## CRITICAL: Weighted Score Usage Rules:
+
+**NEVER use weighted_score values to calculate percentages:**
+- The "weighted_score" field is a QUALITY METRIC, not a count or frequency
+- weighted_score values should ONLY be reported as scores (e.g., "average weighted score of 58.00")
+- NEVER convert weighted_score to percentages or use it in percentage calculations
+- WRONG: "58% of evaluations..." when 58 comes from weighted_score field
+- WRONG: "Device issues represent 67% of problems" when 67 is a weighted_score
+- CORRECT: "Average weighted score of 58.00"
+- CORRECT: "Quality score: 67.00"
+
+**When to use percentages (based on COUNTS only):**
+- Percentages represent proportions of the total evaluation count
+- Calculate as: (evaluation_count / total_evaluations) × 100
+- Always show: COUNT first, then percentage
+- CORRECT: "Device issues in 1,200 evaluations (24% of 5,000 total)"
+- CORRECT: "30% of agents (15 out of 50) had scores above 80"
+
+**The ONLY exception for weighted_score percentages:**
+- When calculating what percentage of evaluations fall into score ranges
+- CORRECT: "40% of evaluations (2,000 of 5,000) had weighted scores above 75"
+- CORRECT: "25% of evaluations scored between 60-70 on the weighted scale"
+- This is acceptable because you're counting evaluations, not using the score as a percentage
+
 ## Guidelines:
 - Base answers strictly on the provided context and data
 - Do not generate or estimate statistics not present in the context
-- provided evaluation counts along with other relevant metrics
+- Provide evaluation counts along with percentages and relevant metrics
+- Always show counts alongside percentages (e.g., "150 evaluations (30%)")
 - Be concise and professional - avoid lengthy excerpts
 - If information is not available, state that clearly
 - Focus on business insights rather than raw data dumps
