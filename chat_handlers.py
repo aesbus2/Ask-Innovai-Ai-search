@@ -189,46 +189,64 @@ def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
             metadata["evaluations"].add(eval_id)
         
         # Agent information
-        if meta.get("agentName"):
-            metadata["agents"].append(meta["agentName"])
+        # Agent - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
+        agentName_value = meta.get("agentName") or source.get("agentName")
+        if agentName_value:
+            metadata["agents"].append(agentName_value)
         
-        if meta.get("agentId"):
-            metadata["agent_ids"].add(meta["agentId"])
+        # AgentId - with fallback to both levels
+        agentId_value = meta.get("agentId") or source.get("agentId")
+        if agentId_value:
+            metadata["agent_ids"].add(agentId_value)
         
         # Disposition information
-        if meta.get("disposition"):
-            metadata["dispositions"].append(meta["disposition"])
+        # Disposition - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
+        disposition_value = meta.get("disposition") or source.get("disposition")
+        if disposition_value:
+            metadata["dispositions"].append(disposition_value)
         
-        if meta.get("subDisposition"):
-            metadata["subDispositions"].append(meta["subDisposition"])
+        # subDisposition - OPTIMIZED: ROOT level preferred per OpenSearch
+        subDisposition_value = source.get("subDisposition") or meta.get("subDisposition")
+        if subDisposition_value:
+            metadata["subDispositions"].append(subDisposition_value)
         
         # Program information
         if meta.get("program"):
             metadata["programs"].append(meta["program"])
         
         # Partner and site information
-        if meta.get("partner"):
-            metadata["partners"].append(meta["partner"])
+        # Partner - OPTIMIZED: ROOT level preferred per OpenSearch
+        partner_value = source.get("partner") or meta.get("partner")
+        if partner_value:
+            metadata["partners"].append(partner_value)
         
-        if meta.get("site"):
-            metadata["sites"].append(meta["site"])
+        # Site - OPTIMIZED: ROOT level preferred per OpenSearch
+        site_value = source.get("site") or meta.get("site")
+        if site_value:
+            metadata["sites"].append(site_value)
         
         # LOB (Line of Business) information
-        if meta.get("lob"):
-            metadata["lobs"].append(meta["lob"])
+        # LOB - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
+        lob_value = meta.get("lob") or source.get("lob")
+        if lob_value:
+            metadata["lobs"].append(lob_value)
         
         # Score information
-        if meta.get("weighted_score"):
+        # Weighted Score - with fallback to both levels
+        weighted_score_value = meta.get("weighted_score") or source.get("weighted_score")
+        if weighted_score_value:
             try:
-                score = float(meta["weighted_score"])
+                score = float(weighted_score_value)
                 metadata["weighted_scores"].append(score)
             except (ValueError, TypeError):
                 # Skip invalid scores
                 pass
         
         # URL information
-        if meta.get("url"):
-            metadata["urls"].append(meta["url"])
+        # URL - OPTIMIZED: ROOT level preferred per OpenSearch, with fallback
+        url_value = source.get("url") or meta.get("url")
+        if url_value:
+            metadata["urls"].append(url_value)
         
         # Call information
         if meta.get("call_duration"):
@@ -237,8 +255,10 @@ def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
         if meta.get("call_date"):
             metadata["call_dates"].append(meta["call_date"])
         
-        if meta.get("language"):
-            metadata["languages"].append(meta["language"])
+        # Language - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
+        language_value = meta.get("language") or source.get("language")
+        if language_value:
+            metadata["languages"].append(language_value)
         
         if meta.get("call_type"):
             metadata["call_types"].append(meta["call_type"])
@@ -1470,13 +1490,13 @@ def build_sources_summary_with_details(sources, filters=None):
         # Get metadata
         metadata = source.get("metadata", {})
         
-        # Extract basic fields with enhanced search info
-        agent = (metadata.get("agentName") or "Unknown").strip()        
-        program = (metadata.get("program") or "Unknown").strip()
+        # Extract basic fields with OPTIMIZED access patterns (based on OpenSearch structure)
+        agent = (metadata.get("agentName") or source.get("agentName") or "Unknown").strip()        
+        program = (metadata.get("program") or source.get("program") or "Unknown").strip()
         template = (source.get("template_name") or "Unknown").strip()
-        disposition = (metadata.get("disposition") or "Unknown").strip()
-        partner = (metadata.get("partner") or "Unknown").strip()
-        site = (metadata.get("site") or "Unknown").strip()
+        disposition = (metadata.get("disposition") or source.get("disposition") or "Unknown").strip()
+        partner = (source.get("partner") or metadata.get("partner") or "Unknown").strip()
+        site = (source.get("site") or metadata.get("site") or "Unknown").strip()
         
         # Extract date
         date_field = (source.get("created_on") or 
@@ -1611,31 +1631,31 @@ def build_sources_summary_with_details(sources, filters=None):
                 })
         
         # Track partners and sites details
-        if partner != "Unknown":
-            unique_partners.add(partner)
-            if partner not in partners_details:
-                partners_details[partner] = {
-                    "partner_name": partner,
-                    "evaluation_count": 0,
-                    "programs": set(),
-                    "agents": set()
-                }
-            partners_details[partner]["evaluation_count"] += 1
-            partners_details[partner]["programs"].add(program)
-            partners_details[partner]["agents"].add(agent)
+        # Include all partners, even "Unknown" ones:
+    unique_partners.add(partner)
+    if partner not in partners_details:
+        partners_details[partner] = {
+            "partner_name": partner,
+            "evaluation_count": 0,
+            "programs": set(),
+            "agents": set()
+        }
+    partners_details[partner]["evaluation_count"] += 1
+    partners_details[partner]["programs"].add(program)
+    partners_details[partner]["agents"].add(agent)
         
-        if site != "Unknown":
-            unique_sites.add(site)
-            if site not in sites_details:
-                sites_details[site] = {
-                    "site_name": site,
-                    "evaluation_count": 0,
-                    "programs": set(),
-                    "agents": set()
-                }
-            sites_details[site]["evaluation_count"] += 1
-            sites_details[site]["programs"].add(program)
-            sites_details[site]["agents"].add(agent)
+        # Include all sites, even "Unknown" ones:
+    unique_sites.add(site)
+    if site not in sites_details:
+        sites_details[site] = {
+            "site_name": site,
+            "evaluation_count": 0,
+            "programs": set(),
+            "agents": set()
+        }
+    sites_details[site]["evaluation_count"] += 1
+    sites_details[site]["programs"].add(program)
+    sites_details[site]["agents"].add(agent)
     
     # Calculate date range
     date_range = "No data"
