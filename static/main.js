@@ -384,9 +384,9 @@ async function loadOpenSearchStats() {
             <!-- Footer Info -->
             <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #6e32a0;">
                 <div style="font-size: 0.9em; color: #666;">
-                    Ã°Å¸â€œâ€¦ Last updated: ${ultraSafeTimestamp(data.timestamp || new Date())} | 
-                    Ã°Å¸ÂÂ¥ Cluster: <span style="color: ${actualData.cluster_status === 'green' ? '#28a745' : '#dc3545'};">${actualData.cluster_status || 'Unknown'}</span> |
-                    Ã°Å¸â€œÅ  Processing: ${data.processing_time || 'Unknown'}s
+                    Last updated: ${ultraSafeTimestamp(data.timestamp || new Date())} | 
+                    Cluster: <span style="color: ${actualData.cluster_status === 'green' ? '#28a745' : '#dc3545'};">${actualData.cluster_status || 'Unknown'}</span> |
+                    Processing: ${data.processing_time || 'Unknown'}s
                 </div>
                 ${actualData.available_fields ? `
                 <details style="margin-top: 10px;">
@@ -399,10 +399,10 @@ async function loadOpenSearchStats() {
         `;
         
         container.innerHTML = html;
-        console.log("Ã¢Å“â€¦ OpenSearch statistics loaded successfully with real data!");
+        console.log("OpenSearch statistics loaded successfully with real data!");
         
     } catch (error) {
-        console.error('Ã¢ÂÅ’ Failed to load OpenSearch statistics:', error);
+        console.error('Failed to load OpenSearch statistics:', error);
         
         // Enhanced error display
         const errorType = error.message.includes('fetch') ? 'network_error' : 
@@ -419,11 +419,11 @@ async function loadOpenSearchStats() {
                         Ã°Å¸â€â€ž Retry Loading
                     </button>
                     <button class="btn secondary" onclick="window.open('/opensearch_statistics', '_blank')" style="margin-left: 10px;">
-                        Ã°Å¸â€â€” View Raw Data
+                        View Raw Data
                     </button>
                 </div>
                 <div style="margin-top: 16px; font-size: 0.9em; color: #856404; background: #fff3cd; padding: 12px; border-radius: 4px;">
-                    Ã°Å¸â€™Â¡ <strong>Troubleshooting:</strong> Check if your OpenSearch cluster is running and accessible.
+                    <strong>Troubleshooting:</strong> Check if your OpenSearch cluster is running and accessible.
                     Try visiting <code>/opensearch_statistics</code> directly to see the raw response.
                 </div>
             </div>
@@ -498,9 +498,9 @@ function displayStatistics(response, timestamp) {
         
         <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #6e32a0;">
             <div style="font-size: 0.9em; color: #666;">
-                Ã°Å¸â€œâ€¦ Last updated: ${ultraSafeTimestamp(responseTimestamp)} | 
-                Ã°Å¸â€â€ž Processing: ${response.processing_time || 'Unknown'}s | 
-                Ã°Å¸ÂÂ·Ã¯Â¸Â Version: ${response.version || 'Unknown'}
+                Last updated: ${ultraSafeTimestamp(responseTimestamp)} | 
+                Processing: ${response.processing_time || 'Unknown'}s | 
+                Version: ${response.version || 'Unknown'}
             </div>
         </div>
     `;
@@ -1123,12 +1123,12 @@ function showResults(results) {
     
     // ENHANCED: Define key metrics with Evaluations Processed as priority #1
     const metrics = [
-        { key: 'total_evaluations_indexed', label: 'Evaluations Processed', class: 'success', icon: 'Ã°Å¸â€ â€', priority: 1 },
-        { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: 'Ã°Å¸â€œâ€ž', priority: 2 },
-        { key: 'total_chunks_processed', label: 'Chunks Processed', class: 'info', icon: 'Ã°Å¸Â§Â©', priority: 3 },
+        { key: 'total_evaluations_indexed', label: 'Evaluations Processed', class: 'success', icon: 'verified', priority: 1 },
+        { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: 'verified', priority: 2 },
+        { key: 'total_chunks_processed', label: 'Chunks Processed', class: 'info', icon: 'verified', priority: 3 },
         { key: 'errors', label: 'Errors', class: 'warning', icon: 'Ã¢ÂÅ’', priority: 4 },
-        { key: 'opensearch_errors', label: 'OpenSearch Errors', class: 'danger', icon: 'Ã°Å¸â€Â¥', priority: 5 },
-        { key: 'import_type', label: 'Import Type', class: 'info', icon: 'Ã°Å¸â€â€ž', priority: 6 }
+        { key: 'opensearch_errors', label: 'OpenSearch Errors', class: 'danger', icon: 'verified', priority: 5 },
+        { key: 'import_type', label: 'Import Type', class: 'info', icon: 'flag', priority: 6 }
     ];
     
     // Display key metrics (sorted by priority)
@@ -1285,10 +1285,10 @@ async function checkSystemHealth() {
             ${vectorSearchStatus}
         `;
         
-        console.log("Ã¢Å“â€¦ Health check completed successfully");
+        console.log("check¦ Health check completed successfully");
         
     } catch (error) {
-        console.error('Ã¢ÂÅ’ Health check failed:', error);
+        console.error('"error" Health check failed:', error);
         container.innerHTML = `
             <div class="health-item unhealthy">
                 <span class="health-label">System Status</span>
