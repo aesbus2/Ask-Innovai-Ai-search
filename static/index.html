@@ -9,7 +9,7 @@
     <link rel="preload" href="https://fonts.gstatic.com/s/materialicons/v140/flUhRq6tzZclQEJ-Vdg-IuiaDsNc.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/static/styles.css" />
     <!-- Add favicon to prevent 404 error -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>ðŸ¤–</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
 </head>
 <script>
         async function fetchEvaluationStats() {
@@ -47,15 +47,15 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1><span class="emoji">ðŸ¤–</span> Ask InnovAI Admin v6.0.0</h1>
+            <h1><span class="material-icons" style="vertical-align: middle; font-size: 1em;">psychology</span> Ask InnovAI Admin v6.0.0</h1>
             <p>Production Knowledge Base Management System with Enhanced Evaluation Tracking</p>
         </div>
         
         <div class="main-content">
             <!-- OpenSearch Database Statistics Section -->
             <div class="section">
-                <h2><span class="emoji">ðŸ“Š</span> OpenSearch Database Statistics</h2>
-                <button class="btn secondary" onclick="loadOpenSearchStats()">ðŸ”„ Refresh Statistics</button>
+                <h2><span class="material-icons" style="vertical-align: middle;">storage</span> OpenSearch Database Statistics</h2>
+                <button class="btn secondary" onclick="loadOpenSearchStats()"><span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">refresh</span> Refresh Statistics</button>
                 
                 <div id="statisticsContainer">
                     <div class="loading-stats">
@@ -63,11 +63,11 @@
                         Loading database statistics...
                     </div>
                     <div id="evalCountBox">
-                    <strong>ðŸ“Š Total Evaluations in OpenSearch:</strong>
+                    <strong><span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">description</span> Total Evaluations in OpenSearch:</strong>
                     <span id="eval-count">Loading...</span>
                 </div>
                     <div id="evalStatsBox" class="hidden">
-                        <strong>ðŸ“ˆ Evaluation Statistics:</strong>
+                        <strong><span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">analytics</span> Evaluation Statistics:</strong>
                         <ul id="evalStatsList"></ul>
                     </div>
                 </div>
@@ -75,7 +75,7 @@
             
             <!-- System Health Section -->
             <div class="section">
-                <h2><span class="emoji">ðŸ¥</span> System Health</h2>
+                <h2><span class="material-icons" style="vertical-align: middle;">favorite</span> System Health</h2>
                 <button class="btn secondary" onclick="checkSystemHealth()">Check Health Status</button>
                 
                 <div id="healthContainer" class="health-status">
@@ -88,7 +88,7 @@
             
             <!-- Import Management Section -->
             <div class="section">
-                <h2><span class="emoji">ðŸ“¥</span> Data Import Management</h2>                
+                <h2><span class="material-icons" style="vertical-align: middle;">cloud_upload</span> Data Import Management</h2>                
                 <div class="control-group">
                     <label for="importTypeSelect">Import Type:</label>
                     <select id="importTypeSelect">
@@ -103,7 +103,7 @@
                         <span class="checkbox-text">
                             Only import evaluations where updated date > created date
                             <small class="filter-help">
-                                ðŸ“ This will filter to only include evaluations that have been modified after their initial creation
+                                <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">info</span> This will filter to only include evaluations that have been modified after their initial creation
                             </small>
                         </span>
                     </label>
@@ -138,11 +138,11 @@
                 
                 <!-- Date range display -->
                 <div id="dateRangeInfo" class="date-range-info" style="display: none; margin-top: 8px; padding: 8px; background: #e3f2fd; border-radius: 4px; font-size: 0.9em; color: #1976d2;">
-                    <strong>ðŸ“… Date Filter:</strong> <span id="dateRangeDisplay">No date filter</span>
+                    <strong><span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">calendar_today</span> Date Filter:</strong> <span id="dateRangeDisplay">No date filter</span>
                 </div>
                 
                 <div style="font-size: 0.8em; color: #666; margin-top: 6px;">
-                    ðŸ’¡ <strong>Date Range Tips:</strong>
+                    <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">lightbulb</span> <strong>Date Range Tips:</strong>
                     <ul style="margin: 4px 0 0 16px; padding: 0;">
                         <li>Leave both empty to import all documents</li>
                         <li>Set only start date to import from that date forward</li>
@@ -183,10 +183,10 @@
                 
                 <div id="logsContainer" class="logs-container hidden">
                     <div class="logs-header">
-                        <h4>ðŸ“œ Import Logs</h4>
+                        <h4><span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">article</span> Import Logs</h4>
                         <div class="logs-meta">
-                            <span>ðŸ“… <span id="logsTimestamp">Loading...</span></span>
-                            <span>ðŸ“Š <span id="logsCount">0</span> entries</span>
+                            <span><span class="material-icons" style="vertical-align: middle; font-size: 0.8em;">access_time</span> <span id="logsTimestamp">Loading...</span></span>
+                            <span><span class="material-icons" style="vertical-align: middle; font-size: 0.8em;">format_list_numbered</span> <span id="logsCount">0</span> entries</span>
                         </div>
                     </div>
                     <div id="logsContent" class="logs-content">Loading logs...</div>
@@ -197,13 +197,13 @@
         
         <div class="control-group">
             <button class="btn" onclick="startImport()">
-                <span class="emoji">ðŸš€</span> Start Import
+                <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">play_arrow</span> Start Import
             </button>
             <button class="btn secondary" onclick="checkLastImportInfo()">
-                <span class="emoji">ðŸ“…</span> Last Import Info
+                <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">info</span> Last Import Info
             </button>
             <button class="btn danger" onclick="clearImportTimestamp()">
-                <span class="emoji">ðŸ”„</span> Reset Timestamp
+                <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">delete_sweep</span> Reset Timestamp
             </button>
         </div>
 
@@ -211,19 +211,19 @@
         
             <!-- Import preview -->
             <div id="importPreview" style="margin-top: 15px; padding: 12px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #6e32a0; display: none;">
-                <strong>ðŸ“‹ Import Preview:</strong>
+                <strong><span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">preview</span> Import Preview:</strong>
                 <div id="importPreviewText" style="margin-top: 6px; font-size: 0.9em; color: #333;"></div>
             </div>
         </div>
             
             <!-- Import Status Section -->
             <div class="section">
-                <h2><span class="emoji">ðŸ“Š</span> Import Status & Progress</h2>
+                <h2><span class="material-icons" style="vertical-align: middle;">timeline</span> Import Status & Progress</h2>
                 <button class="btn secondary" onclick="refreshStatus()">
-                    <span class="emoji">ðŸ”„</span> Refresh Status
+                    <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">refresh</span> Refresh Status
                 </button>
                 <button class="btn secondary" onclick="toggleLogs()">
-                    <span class="emoji">ðŸ“œ</span> View Logs
+                    <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">article</span> View Logs
                 </button>
                 
                 <div id="statusContainer" class="status-container">
@@ -243,15 +243,15 @@
             
             <!-- Import Results Section -->
                 <div id="resultsSection" class="section hidden">
-                    <h2><span class="emoji">ðŸ“ˆ</span> Import Results</h2>
+                    <h2><span class="material-icons" style="vertical-align: middle;">bar_chart</span> Import Results</h2>
                     <div id="resultsGrid" class="results-grid"></div>
                 </div>
 
                 <!-- Statistics Section -->
             <div class="section">
-                <h2><span class="emoji">ðŸ“Š</span> OpenSearch Statistics</h2>
+                <h2><span class="material-icons" style="vertical-align: middle;">analytics</span> OpenSearch Statistics</h2>
                 <button class="btn secondary" onclick="loadOpenSearchStats()">
-                    <span class="emoji">ðŸ”„</span> Refresh Statistics
+                    <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">refresh</span> Refresh Statistics
                 </button>
                 <div id="statisticsContainer" class="statistics-container">
                     Loading statistics...
@@ -260,7 +260,7 @@
 
                 <!-- Evaluation Lookup Section -->
             <div class="section">
-                <h2><span class="emoji">ðŸ”</span> Quick Evaluation Lookup</h2>
+                <h2><span class="material-icons" style="vertical-align: middle;">search</span> Quick Evaluation Lookup</h2>
                 <div class="control-group">
                     <label for="evaluationIdInput">Evaluation ID:</label>
                     <div style="display: flex; gap: 10px;">
@@ -270,7 +270,7 @@
                             placeholder="Enter evaluation ID (numbers only)"
                             oninput="this.value = this.value.replace(/[^0-9]/g, '')">
                         <button class="btn" onclick="lookupEvaluation()">
-                            <span class="emoji">ðŸ”</span> Lookup
+                            <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">search</span> Lookup
                         </button>
                     </div>
                 </div>
@@ -280,17 +280,17 @@
             
             <!-- Quick Actions Section -->
             <div class="section">
-                <h2><span class="emoji">ðŸ› ï¸</span> Quick Actions</h2>
+                <h2><span class="material-icons" style="vertical-align: middle;">bolt</span> Quick Actions</h2>
                 
                 <div class="control-group">
                     <button class="btn success" onclick="testSearch()">
-                        <span class="emoji">ðŸ”</span> Test Search
+                        <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">search</span> Test Search
                     </button>
                     <button class="btn secondary" onclick="openChatInterface()">
-                        <span class="emoji">ðŸ’¬</span> Open Chat Interface
+                        <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">chat</span> Open Chat Interface
                     </button>
                     <button class="btn info" onclick="window.open('/debug', '_blank')">
-                        <span class="emoji">ðŸ”§</span> Debug Tools
+                        <span class="material-icons" style="vertical-align: middle; font-size: 0.9em;">bug_report</span> Debug Tools
                     </button>
                 </div>
                 
