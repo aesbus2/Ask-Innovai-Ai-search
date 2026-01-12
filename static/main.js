@@ -1795,7 +1795,7 @@ function displayEvaluationResults(data, searchedId) {
        </div>
     
     resultsContainer.innerHTML = html;
-}
+`}
 
 // NEW: Function to switch between tabs
 function switchTab(tabId) {
@@ -1849,7 +1849,6 @@ function displayEvaluationError(message) {
     if (!resultsContainer) return;
     
     resultsContainer.innerHTML = `
-}
         <div class="evaluation-error">
             <h3>Evaluation Lookup Failed</h3>
             <p>${ultraSafeString(message)}</p>
