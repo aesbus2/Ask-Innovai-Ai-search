@@ -1,6 +1,5 @@
 // Enhanced Metro AI Call Center Analytics Chat - VECTOR SEARCH ENABLED
-// Version:1-13-26.2
-
+// Version: 6.0.0 - Working Base - FIXED
 // Updating for transcript search
 
 // =============================================================================
