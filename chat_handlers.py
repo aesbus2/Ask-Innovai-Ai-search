@@ -680,42 +680,54 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                 max_total_scan=scan_limit
             )
             
-            if result.get("results"):
-                found_sources = result["results"]
-                logger.info(f"✅ Complete search found {len(found_sources)} transcripts containing search terms")
-                logger.info(f"📊 Coverage: Searched {'filtered' if filters else 'all'} transcripts, returning every match")
-                
-                # Process and clean results
-                found_sources = clean_all_sources(found_sources)
-                
-                processed_sources = []
-                unique_evaluations = set()
-                
-                # Process ALL found sources for counting
-                for source in found_sources:
-                    evaluationId = source.get("evaluationId")
-                    if evaluationId and evaluationId not in unique_evaluations:
-                        unique_evaluations.add(evaluationId)
-                        processed_sources.append(source)
-                
-                total_matches = len(processed_sources)
-                logger.info(f"📊 Total unique matches found: {total_matches}")
-                
-                # CRITICAL: Limit results passed to AI to prevent server crash
-                # Pass maximum 200 results to AI, but report the accurate total
-                MAX_AI_RESULTS = 200
-                ai_sample = processed_sources[:MAX_AI_RESULTS]
-                ai_sample = clean_all_sources(ai_sample)
-                
-                if total_matches > MAX_AI_RESULTS:
-                    logger.warning(f"⚠️ Found {total_matches} matches - sending {MAX_AI_RESULTS} representative sample to AI to prevent timeout")
-                
-                if ai_sample:
-                    strict_metadata = extract_actual_metadata_values(ai_sample)
-                    
-                    sample_note = f"\n\nNOTE: {total_matches} total matches found. Analyzing representative sample of {len(ai_sample)} transcripts." if total_matches > MAX_AI_RESULTS else ""
-                    
-                    context = f"""
+            # CRITICAL: Check for results first - if none, raise exception to fall back
+            if not result.get("results"):
+                logger.warning("⚠️ Comprehensive search returned no results")
+                raise Exception("No results from comprehensive search")
+            
+            found_sources = result["results"]
+            logger.info(f"✅ Complete search found {len(found_sources)} transcripts containing search terms")
+            logger.info(f"📊 Coverage: Searched {'filtered' if filters else 'all'} transcripts, returning every match")
+            
+            # Process and clean results
+            found_sources = clean_all_sources(found_sources)
+            
+            processed_sources = []
+            unique_evaluations = set()
+            
+            # Process ALL found sources for counting
+            for source in found_sources:
+                evaluationId = source.get("evaluationId")
+                if evaluationId and evaluationId not in unique_evaluations:
+                    unique_evaluations.add(evaluationId)
+                    processed_sources.append(source)
+            
+            total_matches = len(processed_sources)
+            logger.info(f"📊 Total unique matches found: {total_matches}")
+            
+            # Check if we have matches
+            if total_matches == 0:
+                logger.warning("⚠️ No unique matches after processing")
+                raise Exception("No unique matches found")
+            
+            # CRITICAL: Limit results passed to AI to prevent server crash
+            MAX_AI_RESULTS = 200
+            ai_sample = processed_sources[:MAX_AI_RESULTS]
+            ai_sample = clean_all_sources(ai_sample)
+            
+            # Verify ai_sample is not empty
+            if not ai_sample:
+                logger.error("❌ AI sample empty after cleaning")
+                raise Exception("Empty AI sample")
+            
+            if total_matches > MAX_AI_RESULTS:
+                logger.warning(f"⚠️ Found {total_matches} matches - sending {MAX_AI_RESULTS} representative sample to AI to prevent timeout")
+            
+            strict_metadata = extract_actual_metadata_values(ai_sample)
+            
+            sample_note = f"\n\nNOTE: {total_matches} total matches found. Analyzing representative sample of {len(ai_sample)} transcripts." if total_matches > MAX_AI_RESULTS else ""
+            
+            context = f"""
 
 EVALUATION DATA: {total_matches} transcripts found containing your search terms
 
@@ -736,9 +748,10 @@ ALLOWED VALUES FROM DATA:
 EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
 {json.dumps(ai_sample, indent=2, default=str)}
 """
-                    
-                    logger.info(f"✅ Built context: {total_matches} total matches, {len(ai_sample)} sent to AI for analysis")
-                    return context, ai_sample  # Return sample to AI, not all results
+            
+            logger.info(f"✅ Built context: {total_matches} total matches, {len(ai_sample)} sent to AI for analysis")
+            logger.info("🎯 COMPREHENSIVE SEARCH COMPLETE - RETURNING NOW (NO FALLTHROUGH)")
+            return context, ai_sample  # CRITICAL: This MUST execute - we checked all conditions above
         
         except Exception as e:
             logger.warning(f"⚠️ Comprehensive transcript search failed ({e}), falling back to relevance search")
