@@ -645,25 +645,45 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
     
     # NEW: Detect specific search queries that need ALL matches (not just top-scoring)
     is_specific_search = is_specific_search_query(query)
-    if is_specific_search and (comprehensive or filters):
+    
+    # SAFETY: Only use comprehensive search for specific queries when:
+    # 1. Filters are applied (limited dataset), OR
+    # 2. User explicitly enabled comprehensive mode (respects user intent)
+    use_comprehensive_search = (
+        is_specific_search and 
+        (filters or comprehensive)  # REMOVED 2000 limit - allow full search when comprehensive enabled
+    )
+    
+    if use_comprehensive_search:
         logger.info("🔍 SPECIFIC SEARCH DETECTED: Finding ALL matches, not just highest-scoring")
-        logger.info("📊 Strategy: Complete coverage search to find every matching transcript")
+        
+        # Warn about long search times for large datasets
+        if not filters and max_results > 3000:
+            logger.warning(f"⚠️ Comprehensive search on large dataset ({max_results} records)")
+            logger.warning(f"⚠️ This may take 30-60 seconds - processing all transcripts...")
+        
+        logger.info(f"📊 Strategy: Complete coverage search (filters={'present' if filters else 'none'}, max={max_results})")
         
         try:
             from opensearch_client import search_transcripts_comprehensive
             
             logger.info("🎯 Using comprehensive transcript search for complete coverage...")
+            
+            # Allow larger scans for comprehensive mode
+            scan_limit = min(max_results, 5000)  # Up to 5000 records
+            display_limit = min(max_results, 2000)  # Display up to 2000
+            
             result = search_transcripts_comprehensive(
                 query=query,
                 filters=filters,
-                display_size=max_results,
-                max_total_scan=max_results
+                display_size=display_limit,
+                max_total_scan=scan_limit
             )
             
             if result.get("results"):
                 found_sources = result["results"]
                 logger.info(f"✅ Complete search found {len(found_sources)} transcripts containing search terms")
-                logger.info(f"📊 Coverage: Searched ALL filtered transcripts, returning every match")
+                logger.info(f"📊 Coverage: Searched {'filtered' if filters else 'all'} transcripts, returning every match")
                 
                 # Process and clean results
                 found_sources = clean_all_sources(found_sources)
@@ -687,11 +707,11 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
 EVALUATION DATA: {len(processed_sources)} transcripts found containing your search terms
 
 SEARCH METHOD: Complete Coverage - Found EVERY transcript matching "{query}"
-COVERAGE GUARANTEE: Searched all filtered transcripts, returned every match (not just highest-scoring)
-APPLIED FILTERS: {', '.join([f"{k}={v}" for k, v in filters.items()]) if filters else "None"}
+SEARCH SCOPE: {"Filtered dataset" if filters else "ALL transcripts in database (complete search)"}
+APPLIED FILTERS: {', '.join([f"{k}={v}" for k, v in filters.items()]) if filters else "None - searched entire database"}
 
 IMPORTANT: You are seeing ALL transcripts that contain these search terms.
-This is not a subset of "most relevant" results - this is the complete set of matches.
+This is not a subset of "most relevant" results - this is the complete set of matches across {"the filtered data" if filters else "your entire transcript database"}.
 
 STRICT DISPLAY RULES:
 - ONLY display: evaluationId, weighted_score, url, partner, site, lob, agentName, agentId, disposition, subDisposition, created_on, call_date, call_duration, language
