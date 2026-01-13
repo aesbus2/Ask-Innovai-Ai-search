@@ -277,8 +277,7 @@ body {
     flex-direction: column;
     overflow: hidden;
     box-shadow: 2px 0 10px rgba(0,0,0,0.05);
-    transition: transform 0.3s ease;
-    position: fixed; /* Fixed positioning so chat area can use full width */
+    transition: transform 0.3s ease;    
     left: 35px;
     top: 70px; /* Below header */
     height: calc(100vh - 70px);
