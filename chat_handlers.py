@@ -691,27 +691,40 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                 processed_sources = []
                 unique_evaluations = set()
                 
-                for source in found_sources[:max_results]:
+                # Process ALL found sources for counting
+                for source in found_sources:
                     evaluationId = source.get("evaluationId")
                     if evaluationId and evaluationId not in unique_evaluations:
                         unique_evaluations.add(evaluationId)
                         processed_sources.append(source)
                 
-                processed_sources = clean_all_sources(processed_sources)
+                total_matches = len(processed_sources)
+                logger.info(f"📊 Total unique matches found: {total_matches}")
                 
-                if processed_sources:
-                    strict_metadata = extract_actual_metadata_values(processed_sources)
+                # CRITICAL: Limit results passed to AI to prevent server crash
+                # Pass maximum 200 results to AI, but report the accurate total
+                MAX_AI_RESULTS = 200
+                ai_sample = processed_sources[:MAX_AI_RESULTS]
+                ai_sample = clean_all_sources(ai_sample)
+                
+                if total_matches > MAX_AI_RESULTS:
+                    logger.warning(f"⚠️ Found {total_matches} matches - sending {MAX_AI_RESULTS} representative sample to AI to prevent timeout")
+                
+                if ai_sample:
+                    strict_metadata = extract_actual_metadata_values(ai_sample)
+                    
+                    sample_note = f"\n\nNOTE: {total_matches} total matches found. Analyzing representative sample of {len(ai_sample)} transcripts." if total_matches > MAX_AI_RESULTS else ""
                     
                     context = f"""
 
-EVALUATION DATA: {len(processed_sources)} transcripts found containing your search terms
+EVALUATION DATA: {total_matches} transcripts found containing your search terms
 
 SEARCH METHOD: Complete Coverage - Found EVERY transcript matching "{query}"
 SEARCH SCOPE: {"Filtered dataset" if filters else "ALL transcripts in database (complete search)"}
 APPLIED FILTERS: {', '.join([f"{k}={v}" for k, v in filters.items()]) if filters else "None - searched entire database"}
 
 IMPORTANT: You are seeing ALL transcripts that contain these search terms.
-This is not a subset of "most relevant" results - this is the complete set of matches across {"the filtered data" if filters else "your entire transcript database"}.
+This is not a subset of "most relevant" results - this is the complete set of matches across {"the filtered data" if filters else "your entire transcript database"}.{sample_note}
 
 STRICT DISPLAY RULES:
 - ONLY display: evaluationId, weighted_score, url, partner, site, lob, agentName, agentId, disposition, subDisposition, created_on, call_date, call_duration, language
@@ -720,12 +733,12 @@ STRICT DISPLAY RULES:
 ALLOWED VALUES FROM DATA:
 {format_metadata_constraints(strict_metadata)}
 
-EVALUATION DETAILS:
-{json.dumps(processed_sources, indent=2, default=str)}
+EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
+{json.dumps(ai_sample, indent=2, default=str)}
 """
                     
-                    logger.info(f"✅ Built context from {len(processed_sources)} complete search results")
-                    return context, processed_sources
+                    logger.info(f"✅ Built context: {total_matches} total matches, {len(ai_sample)} sent to AI for analysis")
+                    return context, ai_sample  # Return sample to AI, not all results
         
         except Exception as e:
             logger.warning(f"⚠️ Comprehensive transcript search failed ({e}), falling back to relevance search")
