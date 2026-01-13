@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 # chat_handlers.py - V 12-29-25.1 - VECTOR SEARCH ENABLED
 # updated ensure_vector_mapping_exists to not try and update KNN if it already exists 7-23-25
 #updated  build_search_context to use a new function to remove viloations in search filters
@@ -63,26 +63,42 @@ logger.info(f"   Text search limit: {TEXT_SEARCH_LIMIT}")
 def get_optimized_search_limits(max_results: int, comprehensive: bool = False) -> dict:
     """
     Calculate optimal search limits based on dataset size and search mode.
-    
-    COMPREHENSIVE MODE: When enabled (via UI toggle), analyze ALL available results.
-    STANDARD MODE: Use conservative limits for fast, relevant results.
+    TIMEOUT-PROOF VERSION: Prioritizes getting results over perfect coverage.
     """
     if not comprehensive:
-        # Standard search uses default limits for fast, relevant results
+        # Standard search uses default limits
         return {
             "hybrid_limit": HYBRID_SEARCH_LIMIT,
             "vector_limit": VECTOR_SEARCH_LIMIT,
             "text_limit": TEXT_SEARCH_LIMIT
         }
     
-    # COMPREHENSIVE MODE: User explicitly wants ALL results analyzed
-    # Use max_results as the limit to ensure complete coverage
-    logger.info(f"🔍 COMPREHENSIVE MODE: Using max limits to analyze ALL results (up to {max_results})")
+    # AGGRESSIVE TIMEOUT PREVENTION: Much smaller limits for comprehensive search
+    if max_results <= 3000:
+        # Small dataset - conservative limits to ensure completion
+        hybrid_limit = min(800, max_results)
+        vector_limit = min(500, max_results)
+        text_limit = min(1200, max_results)
+    elif max_results <= 6000:
+        # Medium dataset (like yours: 5,082) - TIMEOUT-PROOF limits
+        hybrid_limit = min(1000, max_results)  # Very conservative
+        vector_limit = min(600, max_results)   # Minimal semantic processing
+        text_limit = min(1500, max_results)    # Focus on fast text search
+    elif max_results <= 10000:
+        # Large dataset - balanced but still timeout-safe
+        hybrid_limit = min(1200, max_results)
+        vector_limit = min(800, max_results)
+        text_limit = min(2000, max_results)
+    else:
+        # Very large dataset - maximum timeout protection
+        hybrid_limit = min(1500, max_results)
+        vector_limit = min(1000, max_results)
+        text_limit = min(2500, max_results)
     
     return {
-        "hybrid_limit": max_results,   # Get ALL results from hybrid search
-        "vector_limit": max_results,   # Get ALL results from vector search  
-        "text_limit": max_results      # Get ALL results from text search
+        "hybrid_limit": hybrid_limit,
+        "vector_limit": vector_limit,
+        "text_limit": text_limit
     }
 
 
@@ -173,64 +189,46 @@ def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
             metadata["evaluations"].add(eval_id)
         
         # Agent information
-        # Agent - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
-        agentName_value = meta.get("agentName") or source.get("agentName")
-        if agentName_value:
-            metadata["agents"].append(agentName_value)
+        if meta.get("agentName"):
+            metadata["agents"].append(meta["agentName"])
         
-        # AgentId - with fallback to both levels
-        agentId_value = meta.get("agentId") or source.get("agentId")
-        if agentId_value:
-            metadata["agent_ids"].add(agentId_value)
+        if meta.get("agentId"):
+            metadata["agent_ids"].add(meta["agentId"])
         
         # Disposition information
-        # Disposition - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
-        disposition_value = meta.get("disposition") or source.get("disposition")
-        if disposition_value:
-            metadata["dispositions"].append(disposition_value)
+        if meta.get("disposition"):
+            metadata["dispositions"].append(meta["disposition"])
         
-        # subDisposition - OPTIMIZED: ROOT level preferred per OpenSearch
-        subDisposition_value = source.get("subDisposition") or meta.get("subDisposition")
-        if subDisposition_value:
-            metadata["subDispositions"].append(subDisposition_value)
+        if meta.get("subDisposition"):
+            metadata["subDispositions"].append(meta["subDisposition"])
         
         # Program information
         if meta.get("program"):
             metadata["programs"].append(meta["program"])
         
         # Partner and site information
-        # Partner - OPTIMIZED: ROOT level preferred per OpenSearch
-        partner_value = source.get("partner") or meta.get("partner")
-        if partner_value:
-            metadata["partners"].append(partner_value)
+        if meta.get("partner"):
+            metadata["partners"].append(meta["partner"])
         
-        # Site - OPTIMIZED: ROOT level preferred per OpenSearch
-        site_value = source.get("site") or meta.get("site")
-        if site_value:
-            metadata["sites"].append(site_value)
+        if meta.get("site"):
+            metadata["sites"].append(meta["site"])
         
         # LOB (Line of Business) information
-        # LOB - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
-        lob_value = meta.get("lob") or source.get("lob")
-        if lob_value:
-            metadata["lobs"].append(lob_value)
+        if meta.get("lob"):
+            metadata["lobs"].append(meta["lob"])
         
         # Score information
-        # Weighted Score - with fallback to both levels
-        weighted_score_value = meta.get("weighted_score") or source.get("weighted_score")
-        if weighted_score_value:
+        if meta.get("weighted_score"):
             try:
-                score = float(weighted_score_value)
+                score = float(meta["weighted_score"])
                 metadata["weighted_scores"].append(score)
             except (ValueError, TypeError):
                 # Skip invalid scores
                 pass
         
         # URL information
-        # URL - OPTIMIZED: ROOT level preferred per OpenSearch, with fallback
-        url_value = source.get("url") or meta.get("url")
-        if url_value:
-            metadata["urls"].append(url_value)
+        if meta.get("url"):
+            metadata["urls"].append(meta["url"])
         
         # Call information
         if meta.get("call_duration"):
@@ -239,10 +237,8 @@ def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
         if meta.get("call_date"):
             metadata["call_dates"].append(meta["call_date"])
         
-        # Language - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
-        language_value = meta.get("language") or source.get("language")
-        if language_value:
-            metadata["languages"].append(language_value)
+        if meta.get("language"):
+            metadata["languages"].append(meta["language"])
         
         if meta.get("call_type"):
             metadata["call_types"].append(meta["call_type"])
@@ -704,11 +700,12 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             try:
                 # Log search strategy based on comprehensive mode
                 if comprehensive:
-                    logger.info("🔍 COMPREHENSIVE MODE: Analyzing ALL available results")
-                    logger.info(f"📊 Search limits: H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']}")
-                    logger.info("✅ Complete coverage - all matching results will be analyzed")
+                    logger.info("🎯 COMPREHENSIVE SEARCH: TIMEOUT-PROOF strategy for reliable results")
+                    logger.info(f"⚡ CONSERVATIVE LIMITS: H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']} - Prioritizing completion over coverage")
+                    if max_results >= 5000:
+                        logger.info("🛡️ TIMEOUT PROTECTION: Using reduced limits to ensure response within timeout")
                 else:
-                    logger.info("⚡ STANDARD MODE: Trying hybrid text+vector search for most relevant results...")
+                    logger.info("Trying hybrid text+vector search...")
                 hybrid_results = hybrid_search(
                     query=query,
                     query_vector=query_vector,
@@ -1473,13 +1470,13 @@ def build_sources_summary_with_details(sources, filters=None):
         # Get metadata
         metadata = source.get("metadata", {})
         
-        # Extract basic fields with OPTIMIZED access patterns (based on OpenSearch structure)
-        agent = (metadata.get("agentName") or source.get("agentName") or "Unknown").strip()        
-        program = (metadata.get("program") or source.get("program") or "Unknown").strip()
+        # Extract basic fields with enhanced search info
+        agent = (metadata.get("agentName") or "Unknown").strip()        
+        program = (metadata.get("program") or "Unknown").strip()
         template = (source.get("template_name") or "Unknown").strip()
-        disposition = (metadata.get("disposition") or source.get("disposition") or "Unknown").strip()
-        partner = (source.get("partner") or metadata.get("partner") or "Unknown").strip()
-        site = (source.get("site") or metadata.get("site") or "Unknown").strip()
+        disposition = (metadata.get("disposition") or "Unknown").strip()
+        partner = (metadata.get("partner") or "Unknown").strip()
+        site = (metadata.get("site") or "Unknown").strip()
         
         # Extract date
         date_field = (source.get("created_on") or 
@@ -1614,31 +1611,31 @@ def build_sources_summary_with_details(sources, filters=None):
                 })
         
         # Track partners and sites details
-        # Include all partners, even "Unknown" ones:
-    unique_partners.add(partner)
-    if partner not in partners_details:
-        partners_details[partner] = {
-            "partner_name": partner,
-            "evaluation_count": 0,
-            "programs": set(),
-            "agents": set()
-        }
-    partners_details[partner]["evaluation_count"] += 1
-    partners_details[partner]["programs"].add(program)
-    partners_details[partner]["agents"].add(agent)
+        if partner != "Unknown":
+            unique_partners.add(partner)
+            if partner not in partners_details:
+                partners_details[partner] = {
+                    "partner_name": partner,
+                    "evaluation_count": 0,
+                    "programs": set(),
+                    "agents": set()
+                }
+            partners_details[partner]["evaluation_count"] += 1
+            partners_details[partner]["programs"].add(program)
+            partners_details[partner]["agents"].add(agent)
         
-        # Include all sites, even "Unknown" ones:
-    unique_sites.add(site)
-    if site not in sites_details:
-        sites_details[site] = {
-            "site_name": site,
-            "evaluation_count": 0,
-            "programs": set(),
-            "agents": set()
-        }
-    sites_details[site]["evaluation_count"] += 1
-    sites_details[site]["programs"].add(program)
-    sites_details[site]["agents"].add(agent)
+        if site != "Unknown":
+            unique_sites.add(site)
+            if site not in sites_details:
+                sites_details[site] = {
+                    "site_name": site,
+                    "evaluation_count": 0,
+                    "programs": set(),
+                    "agents": set()
+                }
+            sites_details[site]["evaluation_count"] += 1
+            sites_details[site]["programs"].add(program)
+            sites_details[site]["agents"].add(agent)
     
     # Calculate date range
     date_range = "No data"
@@ -1789,35 +1786,21 @@ async def relay_chat_rag(request: Request):
         logger.info(f"ðŸ“Š REPORT REQUEST DETECTED: {is_report_request}")
 
         # STEP 1: Build context with VECTOR SEARCH integration
-        # COMPREHENSIVE MODE: Analyze ALL results when toggle enabled
+        # FULL DATASET PROCESSING: Search all 5,082 evaluations with optimized strategy
         if comprehensive_mode:
-            # User enabled comprehensive toggle - analyze COMPLETE dataset
-            smart_max_results = CHAT_MAX_RESULTS
-            logger.info(f"🔍 COMPREHENSIVE MODE ENABLED: Analyzing ALL available results")
-            logger.info(f"📊 Max results: {smart_max_results}")
-            logger.info(f"✅ User explicitly requested complete dataset analysis")
+            # For comprehensive search, use timeout-proof strategy
+            smart_max_results = CHAT_MAX_RESULTS  # Use full config but with conservative processing limits
+            logger.info(f"🔍 COMPREHENSIVE SEARCH: TIMEOUT-PROOF processing of dataset")
+            logger.info("🛡️ RELIABILITY FIRST: Conservative limits to prevent timeouts")
+            logger.info("📊 STRATEGY: High-quality subset over timeout risk")
+            
+            if smart_max_results >= 5000:
+                logger.info("⚡ TIMEOUT PREVENTION: Using proven limits for 5K+ dataset reliability")
         else:
-            # For standard search, use normal limits for fast, relevant results
+            # For standard search, use normal limits
             smart_max_results = CHAT_MAX_RESULTS
-            logger.info(f"⚡ STANDARD MODE: Using relevance-based search")
 
-        # FIX: When filters are applied, analyze ALL filtered results (not just most relevant)
-        # This ensures UI filter count matches AI analysis count
-        if req.filters:
-            # Filters applied - user wants analysis of ENTIRE filtered dataset
-            filter_aware_max = 10000  # Analyze all filtered results
-            logger.info(f"🎯 FILTERS APPLIED: Analyzing ENTIRE filtered dataset (max={filter_aware_max})")
-            logger.info(f"📊 Applied filters: {req.filters}")
-            logger.info(f"✅ This ensures AI sees ALL filtered results, not just most textually relevant")
-            context, sources = build_search_context(
-                req.message, 
-                req.filters, 
-                max_results=filter_aware_max, 
-                comprehensive=True  # Use comprehensive mode to maximize coverage
-            )
-        else:
-            # No filters - use text relevance to find most relevant results
-            context, sources = build_search_context(req.message, req.filters, max_results=smart_max_results, comprehensive=comprehensive_mode)
+        context, sources = build_search_context(req.message, req.filters, max_results=smart_max_results, comprehensive=comprehensive_mode)
 
         logger.info(f"ðŸ“‹ ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 

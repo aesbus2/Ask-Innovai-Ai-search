@@ -4686,7 +4686,7 @@ async def analytics_stats(request: dict):
             return {
                 "status": "error", 
                 "error": "OpenSearch not available",
-                "totalRecords": 0  # ✅ Fixed: Field name matches frontend expectation
+                "total_results": 0  # ✅ Fixed: totalRecords → total_results
             }
         
         client = get_opensearch_client()
@@ -4879,7 +4879,7 @@ async def analytics_stats(request: dict):
             return {
                 "status": "error",
                 "error": f"Search failed: {str(search_error)}",
-                "totalRecords": 0,  # ✅ Fixed: Field name matches frontend expectation
+                "total_results": 0,  # ✅ Fixed: totalRecords → total_results
                 "filters_applied": filters
             }
         
@@ -4891,7 +4891,7 @@ async def analytics_stats(request: dict):
         
         return {
             "status": "success",
-            "totalRecords": total_evaluations,  # ✅ Fixed: Field name matches frontend expectation
+            "total_results": total_evaluations,  # ✅ Fixed: totalRecords → total_results
             "filters_applied": filters,
             "filter_count": len([v for v in filters.values() if v]) if filters else 0,
             "timestamp": datetime.now().isoformat(),
@@ -4905,7 +4905,7 @@ async def analytics_stats(request: dict):
         return {
             "status": "error",
             "error": str(e),
-            "totalRecords": 0,  # ✅ Fixed: Field name matches frontend expectation
+            "total_results": 0,  # ✅ Fixed: totalRecords → total_results
             "filters_applied": filters,
             "timestamp": datetime.now().isoformat()
         }
@@ -5343,7 +5343,7 @@ async def debug_test_search(q: str = "customer service", filters: str = "{}"):
             "status": "success",
             "query": q,
             "filters_applied": parsed_filters,
-            "totalRecords": len(results),
+            "total_results": len(results),
             "results_summary": result_summary,
             "message": "Search test completed - check if results contain expected data",
             "version": "4.3.2_debug"

@@ -854,19 +854,19 @@ async function refreshAnalyticsStats() {
         const stats = await response.json();
         
         console.log(`📊 [${timestamp}] Stats API response:`, JSON.stringify(stats, null, 2));
-        console.log(`📊 [${timestamp}] Total results in response: ${stats.totalRecords}`);
+        console.log(`📊 [${timestamp}] Total results in response: ${stats.total_results}`);
         
         // Update total records display
         const totalRecords = document.getElementById('totalRecords');
-        if (totalRecords && stats.totalRecords !== undefined) {
+        if (totalRecords && stats.total_results !== undefined) {
             const oldValue = totalRecords.textContent;
-            const newValue = `${stats.totalRecords.toLocaleString()} transcripts`;
+            const newValue = `${stats.total_results.toLocaleString()} transcripts`;
             totalRecords.textContent = newValue;
             console.log(`✅ [${timestamp}] Updated transcript count: "${oldValue}" → "${newValue}"`);
         } else {
-            console.warn(`⚠️ [${timestamp}] totalRecords element not found or stats.totalRecords undefined:`, {
+            console.warn(`⚠️ [${timestamp}] totalRecords element not found or stats.total_results undefined:`, {
                 elementFound: !!totalRecords,
-                statsValue: stats.totalRecords,
+                statsValue: stats.total_results,
                 fullStats: stats
             });
         }
@@ -878,18 +878,18 @@ async function refreshAnalyticsStats() {
         console.log(`📊 [${timestamp}] Updating filter count display:`, {
             elementFound: !!activeFiltersCount,
             filterCount: filterCount,
-            hasResults: stats.totalRecords !== undefined
+            hasResults: stats.total_results !== undefined
         });
         
         if (activeFiltersCount) {
             const oldValue = activeFiltersCount.textContent;
             
-            if (filterCount > 0 && stats.totalRecords !== undefined) {
-                const enhancedText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${stats.totalRecords.toLocaleString()} results)`;
+            if (filterCount > 0 && stats.total_results !== undefined) {
+                const enhancedText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${stats.total_results.toLocaleString()} results)`;
                 activeFiltersCount.textContent = enhancedText;
                 console.log(`✅ [${timestamp}] Enhanced filter count: "${oldValue}" → "${enhancedText}"`);
-            } else if (filterCount === 0 && stats.totalRecords !== undefined) {
-                const totalText = `0 filters (${stats.totalRecords.toLocaleString()} total)`;
+            } else if (filterCount === 0 && stats.total_results !== undefined) {
+                const totalText = `0 filters (${stats.total_results.toLocaleString()} total)`;
                 activeFiltersCount.textContent = totalText;
                 console.log(`✅ [${timestamp}] Zero filters display: "${oldValue}" → "${totalText}"`);
             } else {
@@ -1280,9 +1280,9 @@ window.compareStatsAPI = async function() {
         console.log('Stats API response (with filters):', withFiltersResult);
         
         console.log('🧪 === COMPARISON RESULTS ===');
-        console.log('No filters total:', noFiltersResult?.totalRecords || 'ERROR');  // ✅ Fixed: total_results → totalRecords (backend compatibility)
-        console.log('With filters total:', withFiltersResult?.totalRecords || 'ERROR');  // ✅ Fixed: total_results → totalRecords (backend compatibility)
-        console.log('Numbers are different:', (noFiltersResult?.totalRecords !== withFiltersResult?.totalRecords));  // ✅ Fixed: total_results → totalRecords (backend compatibility)
+        console.log('No filters total:', noFiltersResult?.total_results || 'ERROR');  // ✅ Fixed: totalRecords → total_results
+        console.log('With filters total:', withFiltersResult?.total_results || 'ERROR');  // ✅ Fixed: totalRecords → total_results
+        console.log('Numbers are different:', (noFiltersResult?.total_results !== withFiltersResult?.total_results));  // ✅ Fixed: totalRecords → total_results
         
         return { noFilters: noFiltersResult, withFilters: withFiltersResult };
     } catch (error) {
