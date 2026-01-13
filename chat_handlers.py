@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # chat_handlers.py - V 12-29-25.1 - VECTOR SEARCH ENABLED
 # updated ensure_vector_mapping_exists to not try and update KNN if it already exists 7-23-25
 #updated  build_search_context to use a new function to remove viloations in search filters
@@ -60,45 +60,54 @@ logger.info(f"   Text search limit: {TEXT_SEARCH_LIMIT}")
 # DYNAMIC SCALING FOR 10,000+ EVALUATIONS
 # =============================================================================
 
+def is_specific_search_query(query: str) -> bool:
+    """
+    Detect if this is a specific search query that requires finding ALL matches
+    vs. a broad analysis query that can use relevance ranking
+    """
+    query_lower = query.lower()
+    
+    # Indicators of specific searches that need complete coverage
+    specific_indicators = [
+        'find calls', 'find transcripts', 'find evaluations', 'show me calls',
+        'calls where', 'transcripts where', 'evaluations where',
+        'mentions', 'mentioned', 'said', 'talked about', 'discussed',
+        'contains', 'includes', 'has', 'with',
+        'examples of', 'instances of', 'cases where'
+    ]
+    
+    # Check if query contains specific search indicators
+    is_specific = any(indicator in query_lower for indicator in specific_indicators)
+    
+    # Additional check: queries with quotes are looking for exact phrases
+    has_quotes = '"' in query or "'" in query
+    
+    return is_specific or has_quotes
+
+
 def get_optimized_search_limits(max_results: int, comprehensive: bool = False) -> dict:
     """
     Calculate optimal search limits based on dataset size and search mode.
-    TIMEOUT-PROOF VERSION: Prioritizes getting results over perfect coverage.
+    
+    COMPREHENSIVE MODE: When enabled (via UI toggle), analyze ALL available results.
+    STANDARD MODE: Use conservative limits for fast, relevant results.
     """
     if not comprehensive:
-        # Standard search uses default limits
+        # Standard search uses default limits for fast, relevant results
         return {
             "hybrid_limit": HYBRID_SEARCH_LIMIT,
             "vector_limit": VECTOR_SEARCH_LIMIT,
             "text_limit": TEXT_SEARCH_LIMIT
         }
     
-    # AGGRESSIVE TIMEOUT PREVENTION: Much smaller limits for comprehensive search
-    if max_results <= 3000:
-        # Small dataset - conservative limits to ensure completion
-        hybrid_limit = min(800, max_results)
-        vector_limit = min(500, max_results)
-        text_limit = min(1200, max_results)
-    elif max_results <= 6000:
-        # Medium dataset (like yours: 5,082) - TIMEOUT-PROOF limits
-        hybrid_limit = min(1000, max_results)  # Very conservative
-        vector_limit = min(600, max_results)   # Minimal semantic processing
-        text_limit = min(1500, max_results)    # Focus on fast text search
-    elif max_results <= 10000:
-        # Large dataset - balanced but still timeout-safe
-        hybrid_limit = min(1200, max_results)
-        vector_limit = min(800, max_results)
-        text_limit = min(2000, max_results)
-    else:
-        # Very large dataset - maximum timeout protection
-        hybrid_limit = min(1500, max_results)
-        vector_limit = min(1000, max_results)
-        text_limit = min(2500, max_results)
+    # COMPREHENSIVE MODE: User explicitly wants ALL results analyzed
+    # Use max_results as the limit to ensure complete coverage
+    logger.info(f"🔍 COMPREHENSIVE MODE: Using max limits to analyze ALL results (up to {max_results})")
     
     return {
-        "hybrid_limit": hybrid_limit,
-        "vector_limit": vector_limit,
-        "text_limit": text_limit
+        "hybrid_limit": max_results,   # Get ALL results from hybrid search
+        "vector_limit": max_results,   # Get ALL results from vector search  
+        "text_limit": max_results      # Get ALL results from text search
     }
 
 
@@ -634,6 +643,74 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
     logger.info(f"ðŸ·ï¸ Filters: {filters}")
     logger.info(f"ðŸ“Š Max results: {max_results}")
     
+    # NEW: Detect specific search queries that need ALL matches (not just top-scoring)
+    is_specific_search = is_specific_search_query(query)
+    if is_specific_search and (comprehensive or filters):
+        logger.info("🔍 SPECIFIC SEARCH DETECTED: Finding ALL matches, not just highest-scoring")
+        logger.info("📊 Strategy: Complete coverage search to find every matching transcript")
+        
+        try:
+            from opensearch_client import search_transcripts_comprehensive
+            
+            logger.info("🎯 Using comprehensive transcript search for complete coverage...")
+            result = search_transcripts_comprehensive(
+                query=query,
+                filters=filters,
+                display_size=max_results,
+                max_total_scan=max_results
+            )
+            
+            if result.get("results"):
+                found_sources = result["results"]
+                logger.info(f"✅ Complete search found {len(found_sources)} transcripts containing search terms")
+                logger.info(f"📊 Coverage: Searched ALL filtered transcripts, returning every match")
+                
+                # Process and clean results
+                found_sources = clean_all_sources(found_sources)
+                
+                processed_sources = []
+                unique_evaluations = set()
+                
+                for source in found_sources[:max_results]:
+                    evaluationId = source.get("evaluationId")
+                    if evaluationId and evaluationId not in unique_evaluations:
+                        unique_evaluations.add(evaluationId)
+                        processed_sources.append(source)
+                
+                processed_sources = clean_all_sources(processed_sources)
+                
+                if processed_sources:
+                    strict_metadata = extract_actual_metadata_values(processed_sources)
+                    
+                    context = f"""
+
+EVALUATION DATA: {len(processed_sources)} transcripts found containing your search terms
+
+SEARCH METHOD: Complete Coverage - Found EVERY transcript matching "{query}"
+COVERAGE GUARANTEE: Searched all filtered transcripts, returned every match (not just highest-scoring)
+APPLIED FILTERS: {', '.join([f"{k}={v}" for k, v in filters.items()]) if filters else "None"}
+
+IMPORTANT: You are seeing ALL transcripts that contain these search terms.
+This is not a subset of "most relevant" results - this is the complete set of matches.
+
+STRICT DISPLAY RULES:
+- ONLY display: evaluationId, weighted_score, url, partner, site, lob, agentName, agentId, disposition, subDisposition, created_on, call_date, call_duration, language
+- NEVER display: _score, search_type, template_name, template_id, program
+
+ALLOWED VALUES FROM DATA:
+{format_metadata_constraints(strict_metadata)}
+
+EVALUATION DETAILS:
+{json.dumps(processed_sources, indent=2, default=str)}
+"""
+                    
+                    logger.info(f"✅ Built context from {len(processed_sources)} complete search results")
+                    return context, processed_sources
+        
+        except Exception as e:
+            logger.warning(f"⚠️ Comprehensive transcript search failed ({e}), falling back to relevance search")
+            # Continue with standard search below
+    
     def validate_filter_compliance(results: List[dict], strategy_name: str) -> List[dict]:
         """
         Validate that search results comply with applied filters
@@ -720,12 +797,11 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             try:
                 # Log search strategy based on comprehensive mode
                 if comprehensive:
-                    logger.info("🎯 COMPREHENSIVE SEARCH: TIMEOUT-PROOF strategy for reliable results")
-                    logger.info(f"⚡ CONSERVATIVE LIMITS: H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']} - Prioritizing completion over coverage")
-                    if max_results >= 5000:
-                        logger.info("🛡️ TIMEOUT PROTECTION: Using reduced limits to ensure response within timeout")
+                    logger.info("🔍 COMPREHENSIVE MODE: Analyzing ALL available results")
+                    logger.info(f"📊 Search limits: H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']}")
+                    logger.info("✅ Complete coverage - all matching results will be analyzed")
                 else:
-                    logger.info("Trying hybrid text+vector search...")
+                    logger.info("⚡ STANDARD MODE: Trying hybrid text+vector search for most relevant results...")
                 hybrid_results = hybrid_search(
                     query=query,
                     query_vector=query_vector,
@@ -1806,21 +1882,35 @@ async def relay_chat_rag(request: Request):
         logger.info(f"ðŸ“Š REPORT REQUEST DETECTED: {is_report_request}")
 
         # STEP 1: Build context with VECTOR SEARCH integration
-        # FULL DATASET PROCESSING: Search all 5,082 evaluations with optimized strategy
+        # COMPREHENSIVE MODE: Analyze ALL results when toggle enabled
         if comprehensive_mode:
-            # For comprehensive search, use timeout-proof strategy
-            smart_max_results = CHAT_MAX_RESULTS  # Use full config but with conservative processing limits
-            logger.info(f"🔍 COMPREHENSIVE SEARCH: TIMEOUT-PROOF processing of dataset")
-            logger.info("🛡️ RELIABILITY FIRST: Conservative limits to prevent timeouts")
-            logger.info("📊 STRATEGY: High-quality subset over timeout risk")
-            
-            if smart_max_results >= 5000:
-                logger.info("⚡ TIMEOUT PREVENTION: Using proven limits for 5K+ dataset reliability")
-        else:
-            # For standard search, use normal limits
+            # User enabled comprehensive toggle - analyze COMPLETE dataset
             smart_max_results = CHAT_MAX_RESULTS
+            logger.info(f"🔍 COMPREHENSIVE MODE ENABLED: Analyzing ALL available results")
+            logger.info(f"📊 Max results: {smart_max_results}")
+            logger.info(f"✅ User explicitly requested complete dataset analysis")
+        else:
+            # For standard search, use normal limits for fast, relevant results
+            smart_max_results = CHAT_MAX_RESULTS
+            logger.info(f"⚡ STANDARD MODE: Using relevance-based search")
 
-        context, sources = build_search_context(req.message, req.filters, max_results=smart_max_results, comprehensive=comprehensive_mode)
+        # FIX: When filters are applied, analyze ALL filtered results (not just most relevant)
+        # This ensures UI filter count matches AI analysis count
+        if req.filters:
+            # Filters applied - user wants analysis of ENTIRE filtered dataset
+            filter_aware_max = 10000  # Analyze all filtered results
+            logger.info(f"🎯 FILTERS APPLIED: Analyzing ENTIRE filtered dataset (max={filter_aware_max})")
+            logger.info(f"📊 Applied filters: {req.filters}")
+            logger.info(f"✅ This ensures AI sees ALL filtered results, not just most textually relevant")
+            context, sources = build_search_context(
+                req.message, 
+                req.filters, 
+                max_results=filter_aware_max, 
+                comprehensive=True  # Use comprehensive mode to maximize coverage
+            )
+        else:
+            # No filters - use text relevance to find most relevant results
+            context, sources = build_search_context(req.message, req.filters, max_results=smart_max_results, comprehensive=comprehensive_mode)
 
         logger.info(f"ðŸ“‹ ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 

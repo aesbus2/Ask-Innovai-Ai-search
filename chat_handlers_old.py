@@ -56,6 +56,52 @@ logger.info(f"   Hybrid search limit: {HYBRID_SEARCH_LIMIT}")
 logger.info(f"   Vector search limit: {VECTOR_SEARCH_LIMIT}")
 logger.info(f"   Text search limit: {TEXT_SEARCH_LIMIT}")
 
+# =============================================================================
+# DYNAMIC SCALING FOR 10,000+ EVALUATIONS
+# =============================================================================
+
+def get_optimized_search_limits(max_results: int, comprehensive: bool = False) -> dict:
+    """
+    Calculate optimal search limits based on dataset size and search mode.
+    TIMEOUT-PROOF VERSION: Prioritizes getting results over perfect coverage.
+    """
+    if not comprehensive:
+        # Standard search uses default limits
+        return {
+            "hybrid_limit": HYBRID_SEARCH_LIMIT,
+            "vector_limit": VECTOR_SEARCH_LIMIT,
+            "text_limit": TEXT_SEARCH_LIMIT
+        }
+    
+    # AGGRESSIVE TIMEOUT PREVENTION: Much smaller limits for comprehensive search
+    if max_results <= 3000:
+        # Small dataset - conservative limits to ensure completion
+        hybrid_limit = min(800, max_results)
+        vector_limit = min(500, max_results)
+        text_limit = min(1200, max_results)
+    elif max_results <= 6000:
+        # Medium dataset (like yours: 5,082) - TIMEOUT-PROOF limits
+        hybrid_limit = min(1000, max_results)  # Very conservative
+        vector_limit = min(600, max_results)   # Minimal semantic processing
+        text_limit = min(1500, max_results)    # Focus on fast text search
+    elif max_results <= 10000:
+        # Large dataset - balanced but still timeout-safe
+        hybrid_limit = min(1200, max_results)
+        vector_limit = min(800, max_results)
+        text_limit = min(2000, max_results)
+    else:
+        # Very large dataset - maximum timeout protection
+        hybrid_limit = min(1500, max_results)
+        vector_limit = min(1000, max_results)
+        text_limit = min(2500, max_results)
+    
+    return {
+        "hybrid_limit": hybrid_limit,
+        "vector_limit": vector_limit,
+        "text_limit": text_limit
+    }
+
+
 def clean_source_metadata(source: dict) -> dict:
     """
     Clean a single source to only include allowed API fields
@@ -143,46 +189,64 @@ def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
             metadata["evaluations"].add(eval_id)
         
         # Agent information
-        if meta.get("agentName"):
-            metadata["agents"].append(meta["agentName"])
+        # Agent - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
+        agentName_value = meta.get("agentName") or source.get("agentName")
+        if agentName_value:
+            metadata["agents"].append(agentName_value)
         
-        if meta.get("agentId"):
-            metadata["agent_ids"].add(meta["agentId"])
+        # AgentId - with fallback to both levels
+        agentId_value = meta.get("agentId") or source.get("agentId")
+        if agentId_value:
+            metadata["agent_ids"].add(agentId_value)
         
         # Disposition information
-        if meta.get("disposition"):
-            metadata["dispositions"].append(meta["disposition"])
+        # Disposition - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
+        disposition_value = meta.get("disposition") or source.get("disposition")
+        if disposition_value:
+            metadata["dispositions"].append(disposition_value)
         
-        if meta.get("subDisposition"):
-            metadata["subDispositions"].append(meta["subDisposition"])
+        # subDisposition - OPTIMIZED: ROOT level preferred per OpenSearch
+        subDisposition_value = source.get("subDisposition") or meta.get("subDisposition")
+        if subDisposition_value:
+            metadata["subDispositions"].append(subDisposition_value)
         
         # Program information
         if meta.get("program"):
             metadata["programs"].append(meta["program"])
         
         # Partner and site information
-        if meta.get("partner"):
-            metadata["partners"].append(meta["partner"])
+        # Partner - OPTIMIZED: ROOT level preferred per OpenSearch
+        partner_value = source.get("partner") or meta.get("partner")
+        if partner_value:
+            metadata["partners"].append(partner_value)
         
-        if meta.get("site"):
-            metadata["sites"].append(meta["site"])
+        # Site - OPTIMIZED: ROOT level preferred per OpenSearch
+        site_value = source.get("site") or meta.get("site")
+        if site_value:
+            metadata["sites"].append(site_value)
         
         # LOB (Line of Business) information
-        if meta.get("lob"):
-            metadata["lobs"].append(meta["lob"])
+        # LOB - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
+        lob_value = meta.get("lob") or source.get("lob")
+        if lob_value:
+            metadata["lobs"].append(lob_value)
         
         # Score information
-        if meta.get("weighted_score"):
+        # Weighted Score - with fallback to both levels
+        weighted_score_value = meta.get("weighted_score") or source.get("weighted_score")
+        if weighted_score_value:
             try:
-                score = float(meta["weighted_score"])
+                score = float(weighted_score_value)
                 metadata["weighted_scores"].append(score)
             except (ValueError, TypeError):
                 # Skip invalid scores
                 pass
         
         # URL information
-        if meta.get("url"):
-            metadata["urls"].append(meta["url"])
+        # URL - OPTIMIZED: ROOT level preferred per OpenSearch, with fallback
+        url_value = source.get("url") or meta.get("url")
+        if url_value:
+            metadata["urls"].append(url_value)
         
         # Call information
         if meta.get("call_duration"):
@@ -191,8 +255,10 @@ def extract_search_metadata(sources: List[dict]) -> Dict[str, Any]:
         if meta.get("call_date"):
             metadata["call_dates"].append(meta["call_date"])
         
-        if meta.get("language"):
-            metadata["languages"].append(meta["language"])
+        # Language - OPTIMIZED: METADATA level preferred per OpenSearch, with fallback
+        language_value = meta.get("language") or source.get("language")
+        if language_value:
+            metadata["languages"].append(language_value)
         
         if meta.get("call_type"):
             metadata["call_types"].append(meta["call_type"])
@@ -556,6 +622,13 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
     """
     if max_results is None:
         max_results = CHAT_MAX_RESULTS
+
+    # Get optimized search limits based on dataset size and mode
+    search_limits = get_optimized_search_limits(max_results, comprehensive)
+    
+    # Performance monitoring
+    search_start_time = time.time()
+
     
     logger.info(f"ðŸ“‹ Query: '{query}'")
     logger.info(f"ðŸ·ï¸ Filters: {filters}")
@@ -647,15 +720,17 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             try:
                 # Log search strategy based on comprehensive mode
                 if comprehensive:
-                    logger.info("🎯 COMPREHENSIVE SEARCH: Text-focused search across FULL dataset")
-                    logger.info("📊 COMPLETE COVERAGE: Processing all 5,082 evaluations for maximum recall")
+                    logger.info("🎯 COMPREHENSIVE SEARCH: TIMEOUT-PROOF strategy for reliable results")
+                    logger.info(f"⚡ CONSERVATIVE LIMITS: H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']} - Prioritizing completion over coverage")
+                    if max_results >= 5000:
+                        logger.info("🛡️ TIMEOUT PROTECTION: Using reduced limits to ensure response within timeout")
                 else:
                     logger.info("Trying hybrid text+vector search...")
                 hybrid_results = hybrid_search(
                     query=query,
                     query_vector=query_vector,
                     filters=filters,
-                    size=min(max_results, HYBRID_SEARCH_LIMIT),  # Full dataset processing for comprehensive search
+                    size=min(max_results, search_limits['hybrid_limit']),  # Dynamic scaling for large datasets
                     vector_weight=0.3 if comprehensive else 0.6  # Lower semantic weight for comprehensive search precision
                 )
                 
@@ -682,7 +757,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                 vector_results = search_vector(
                     query_vector=query_vector,
                     filters=filters,
-                    size=max_results - len(all_sources)  
+                    size=min(max_results - len(all_sources), search_limits["vector_limit"])  # Dynamic vector limit
                 )
                 
                 logger.info(f" Vector search returned {len(vector_results)} hits")
@@ -713,7 +788,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                 text_results = search_opensearch(
                     query=query,
                     filters=filters,
-                    size=max_results - len(all_sources)  # Direct calculation, no remaining_slots
+                    size=min(max_results - len(all_sources), search_limits["text_limit"])  # Dynamic text limit
                 )
                 
                 logger.info(f" Text search returned {len(text_results)} hits")
@@ -933,6 +1008,17 @@ Remember: You are showing actual evaluation records, not search results.
                 # Final removal of template_name before returning (was kept for filter checking)
                 source.pop("template_name", None)
             
+            # Performance monitoring - TIMEOUT-PROOF version
+            search_duration = time.time() - search_start_time
+            logger.info(f"⏱️ SEARCH COMPLETED: {search_duration:.2f} seconds for {len(processed_sources)} results")
+            
+            if comprehensive and search_duration > 15:
+                logger.warning(f"⚠️ PERFORMANCE: Query took {search_duration:.2f}s - approaching timeout threshold")
+            elif comprehensive and search_duration > 20:
+                logger.error(f"🚨 TIMEOUT RISK: {search_duration:.2f}s - consider further optimization")
+            elif comprehensive and search_duration < 10:
+                logger.info(f"✅ OPTIMAL PERFORMANCE: {search_duration:.2f}s - well within timeout limits")
+
             return context, processed_sources
             
         else:
@@ -1404,13 +1490,13 @@ def build_sources_summary_with_details(sources, filters=None):
         # Get metadata
         metadata = source.get("metadata", {})
         
-        # Extract basic fields with enhanced search info
-        agent = (metadata.get("agentName") or "Unknown").strip()        
-        program = (metadata.get("program") or "Unknown").strip()
+        # Extract basic fields with OPTIMIZED access patterns (based on OpenSearch structure)
+        agent = (metadata.get("agentName") or source.get("agentName") or "Unknown").strip()        
+        program = (metadata.get("program") or source.get("program") or "Unknown").strip()
         template = (source.get("template_name") or "Unknown").strip()
-        disposition = (metadata.get("disposition") or "Unknown").strip()
-        partner = (metadata.get("partner") or "Unknown").strip()
-        site = (metadata.get("site") or "Unknown").strip()
+        disposition = (metadata.get("disposition") or source.get("disposition") or "Unknown").strip()
+        partner = (source.get("partner") or metadata.get("partner") or "Unknown").strip()
+        site = (source.get("site") or metadata.get("site") or "Unknown").strip()
         
         # Extract date
         date_field = (source.get("created_on") or 
@@ -1545,31 +1631,31 @@ def build_sources_summary_with_details(sources, filters=None):
                 })
         
         # Track partners and sites details
-        if partner != "Unknown":
-            unique_partners.add(partner)
-            if partner not in partners_details:
-                partners_details[partner] = {
-                    "partner_name": partner,
-                    "evaluation_count": 0,
-                    "programs": set(),
-                    "agents": set()
-                }
-            partners_details[partner]["evaluation_count"] += 1
-            partners_details[partner]["programs"].add(program)
-            partners_details[partner]["agents"].add(agent)
+        # Include all partners, even "Unknown" ones:
+    unique_partners.add(partner)
+    if partner not in partners_details:
+        partners_details[partner] = {
+            "partner_name": partner,
+            "evaluation_count": 0,
+            "programs": set(),
+            "agents": set()
+        }
+    partners_details[partner]["evaluation_count"] += 1
+    partners_details[partner]["programs"].add(program)
+    partners_details[partner]["agents"].add(agent)
         
-        if site != "Unknown":
-            unique_sites.add(site)
-            if site not in sites_details:
-                sites_details[site] = {
-                    "site_name": site,
-                    "evaluation_count": 0,
-                    "programs": set(),
-                    "agents": set()
-                }
-            sites_details[site]["evaluation_count"] += 1
-            sites_details[site]["programs"].add(program)
-            sites_details[site]["agents"].add(agent)
+        # Include all sites, even "Unknown" ones:
+    unique_sites.add(site)
+    if site not in sites_details:
+        sites_details[site] = {
+            "site_name": site,
+            "evaluation_count": 0,
+            "programs": set(),
+            "agents": set()
+        }
+    sites_details[site]["evaluation_count"] += 1
+    sites_details[site]["programs"].add(program)
+    sites_details[site]["agents"].add(agent)
     
     # Calculate date range
     date_range = "No data"
@@ -1722,10 +1808,14 @@ async def relay_chat_rag(request: Request):
         # STEP 1: Build context with VECTOR SEARCH integration
         # FULL DATASET PROCESSING: Search all 5,082 evaluations with optimized strategy
         if comprehensive_mode:
-            # For comprehensive search, process full dataset with text-focused optimization
-            smart_max_results = CHAT_MAX_RESULTS  # Remove artificial cap - search all data
-            logger.info(f"🔍 COMPREHENSIVE SEARCH: Processing ALL evaluations (up to {smart_max_results})")
-            logger.info("📊 FULL COVERAGE: Text-focused strategy across entire 5,082 evaluation dataset")
+            # For comprehensive search, use timeout-proof strategy
+            smart_max_results = CHAT_MAX_RESULTS  # Use full config but with conservative processing limits
+            logger.info(f"🔍 COMPREHENSIVE SEARCH: TIMEOUT-PROOF processing of dataset")
+            logger.info("🛡️ RELIABILITY FIRST: Conservative limits to prevent timeouts")
+            logger.info("📊 STRATEGY: High-quality subset over timeout risk")
+            
+            if smart_max_results >= 5000:
+                logger.info("⚡ TIMEOUT PREVENTION: Using proven limits for 5K+ dataset reliability")
         else:
             # For standard search, use normal limits
             smart_max_results = CHAT_MAX_RESULTS
@@ -1812,10 +1902,35 @@ Keep formatting simple and readable.
 - List sub-disposition as bullet points and included trends and insights
 - list all partners included in metadata "partner" filters
 
+## CRITICAL: Weighted Score Usage Rules:
+
+**NEVER use weighted_score values to calculate percentages:**
+- The "weighted_score" field is a QUALITY METRIC, not a count or frequency
+- weighted_score values should ONLY be reported as scores (e.g., "average weighted score of 58.00")
+- NEVER convert weighted_score to percentages or use it in percentage calculations
+- WRONG: "58% of evaluations..." when 58 comes from weighted_score field
+- WRONG: "Device issues represent 67% of problems" when 67 is a weighted_score
+- CORRECT: "Average weighted score of 58.00"
+- CORRECT: "Quality score: 67.00"
+
+**When to use percentages (based on COUNTS only):**
+- Percentages represent proportions of the total evaluation count
+- Calculate as: (evaluation_count / total_evaluations) × 100
+- Always show: COUNT first, then percentage
+- CORRECT: "Device issues in 1,200 evaluations (24% of 5,000 total)"
+- CORRECT: "30% of agents (15 out of 50) had scores above 80"
+
+**The ONLY exception for weighted_score percentages:**
+- When calculating what percentage of evaluations fall into score ranges
+- CORRECT: "40% of evaluations (2,000 of 5,000) had weighted scores above 75"
+- CORRECT: "25% of evaluations scored between 60-70 on the weighted scale"
+- This is acceptable because you're counting evaluations, not using the score as a percentage
+
 ## Guidelines:
 - Base answers strictly on the provided context and data
 - Do not generate or estimate statistics not present in the context
-- provided evaluation counts along with other relevant metrics
+- Provide evaluation counts along with percentages and relevant metrics
+- Always show counts alongside percentages (e.g., "150 evaluations (30%)")
 - Be concise and professional - avoid lengthy excerpts
 - If information is not available, state that clearly
 - Focus on business insights rather than raw data dumps
