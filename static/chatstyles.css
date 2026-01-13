@@ -278,8 +278,8 @@ body {
     overflow: hidden;
     box-shadow: 2px 0 10px rgba(0,0,0,0.05);
     transition: transform 0.3s ease;
-    position:fixed; /* Fixed positioning so chat area can use full width */
-    left: 35;
+    position: fixed; /* Fixed positioning so chat area can use full width */
+    left: 35px;
     top: 70px; /* Below header */
     height: calc(100vh - 70px);
     z-index: 999; /* Below tabs (1001) but above content */
@@ -1200,14 +1200,16 @@ body {
     }
 
 
-@media (max-width: 480px) {
+@media (max-width: 992px) {
     .main-layout {
         padding-top: 70px; /* Match main layout padding */
+        width: 100%; /* Full width on small screens */
     }
     
     .header {
         padding: 6px 8px; /* Compact padding for small screens */
         height: 60px; /* Same 60px height on small screens */
+        width: 100%; /* Full width on small screens */
     }
     
     .header h1 {
