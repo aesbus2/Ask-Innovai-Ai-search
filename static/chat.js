@@ -1025,6 +1025,7 @@ function getComprehensiveToggleState() {
 function updateComprehensiveMode() {
     const toggle = document.getElementById('comprehensiveToggle');
     const description = document.getElementById('searchModeDescription');
+    const toggleContainer = document.querySelector('.comprehensive-search-toggle');
     
     if (toggle && description) {
         if (toggle.checked) {
@@ -1032,12 +1033,18 @@ function updateComprehensiveMode() {
             description.textContent = '(Comprehensive - searches all data)';
             description.style.color = '#6e32a0';
             description.style.fontWeight = 'bold';
+            if (toggleContainer) {
+                toggleContainer.classList.add('active');
+            }
             console.log('🔍 COMPREHENSIVE MODE: ON - Will search full dataset');
         } else {
             // Smart detection mode
             description.textContent = '(Smart detection)';
             description.style.color = '#999';
             description.style.fontWeight = 'normal';
+            if (toggleContainer) {
+                toggleContainer.classList.remove('active');
+            }
             console.log('⚡ SMART MODE: ON - Will use automatic detection');
         }
     }
