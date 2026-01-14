@@ -290,12 +290,21 @@ async function loadFilterOptions() {
     console.log("🔄 Loading filter options...");
     
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), PRODUCTION_CONFIG.FILTER_LOAD_TIMEOUT);
+
         const response = await withRetry(
-            () => fetch('/analytics/filter-options', {
-                timeout: PRODUCTION_CONFIG.FILTER_LOAD_TIMEOUT
+            () => fetch('/filter_options_metadata', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                signal: controller.signal
             }),
             "Loading filter options"
         );
+        
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
             throw new Error(`Filter API returned ${response.status}: ${response.statusText}`);
@@ -305,15 +314,33 @@ async function loadFilterOptions() {
         console.log("📊 Raw filter options received:", data);
         
         // Update global filter options
-        filterOptions = { ...filterOptions, ...data };
+        filterOptions = {
+            templates: data.templates || [],
+            programs: data.programs || [],
+            partners: data.partners || [],
+            sites: data.sites || [],
+            lobs: data.lobs || [],
+            callDispositions: data.callDispositions || [],
+            callSubDispositions: data.callSubDispositions || [],
+            languages: data.languages || [],
+            callTypes: data.callTypes || []
+        };
         
         // Populate UI dropdowns
-        populateFilterDropdowns(data);
+        populateFilterDropdowns();
         
         performanceMetrics.filterLoadTime = Date.now() - startTime;
         performanceMetrics.lastFilterUpdate = new Date();
         
         console.log(`✅ Filter options loaded successfully in ${performanceMetrics.filterLoadTime}ms`);
+        console.log('📊 Filter counts:', {
+            templates: filterOptions.templates.length,
+            programs: filterOptions.programs.length,
+            partners: filterOptions.partners.length,
+            sites: filterOptions.sites.length,
+            lobs: filterOptions.lobs.length,
+            dispositions: filterOptions.callDispositions.length
+        });
         
         // Update status indicators
         updateDataStatusIndicators('success');
@@ -333,7 +360,7 @@ async function loadFilterOptions() {
     }
 }
 
-function populateFilterDropdowns(data) {
+function populateFilterDropdowns() {
     console.log("🔧 Populating filter dropdowns...");
     
     const dropdownMappings = {
@@ -351,14 +378,14 @@ function populateFilterDropdowns(data) {
         const element = document.getElementById(elementId);
         const countElement = document.getElementById(countElementId);
         
-        if (element && data[dataKey]) {
+        if (element && filterOptions[dataKey]) {
             // Clear existing options (keep "All" option)
             const allOption = element.querySelector('option[value=""]');
             element.innerHTML = '';
             if (allOption) element.appendChild(allOption);
             
             // Add new options
-            data[dataKey].forEach(item => {
+            filterOptions[dataKey].forEach(item => {
                 const option = document.createElement('option');
                 option.value = typeof item === 'string' ? item : item.value || item.name;
                 option.textContent = typeof item === 'string' ? item : item.label || item.name || item.value;
@@ -367,10 +394,10 @@ function populateFilterDropdowns(data) {
             
             // Update count indicator
             if (countElement) {
-                countElement.textContent = `(${data[dataKey].length})`;
+                countElement.textContent = `(${filterOptions[dataKey].length})`;
             }
             
-            console.log(`✅ Populated ${elementId} with ${data[dataKey].length} options`);
+            console.log(`✅ Populated ${elementId} with ${filterOptions[dataKey].length} options`);
         } else {
             console.warn(`⚠️ Element ${elementId} not found or no data for ${dataKey}`);
         }
