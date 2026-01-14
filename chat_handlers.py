@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# chat_handlers.py - V 12-29-25.1 - VECTOR SEARCH ENABLED
+# chat_handlers.py - 12-29-25.1 v4.9.6- VECTOR SEARCH ENABLED
 # updated ensure_vector_mapping_exists to not try and update KNN if it already exists 7-23-25
 #updated  build_search_context to use a new function to remove viloations in search filters
 # added strict metadata verification to ensure all results comply with filters
