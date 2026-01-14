@@ -30,355 +30,363 @@
         </div>
 
         <div class="main-layout">
-            <!-- Filter Toggle Tab - Smaller and moves with panel -->
-            <div class="sidebar-tab" onclick="toggleSidebar()" id="sidebarTab">
-                <span class="material-icons">menu_open</span>
-                <span class="tab-text">FILTERS</span>
-            </div>
+            <!-- Left Panel: Sidebar with Filter Tabs -->
+            <div class="left-panel">
+                <!-- Filter Tabs positioned relative to sidebar -->
+                <div class="filter-tabs">
+                    <!-- Filter Toggle Tab -->
+                    <div class="sidebar-tab" onclick="toggleSidebar()" id="sidebarTab">
+                        <span class="material-icons">menu_open</span>
+                        <span class="tab-text">FILTERS</span>
+                    </div>
 
-            <!-- Apply Filters Tab - Applies filters and closes sidebar -->
-            <div class="apply-tab" onclick="applyFiltersAndClose()" id="applyTab">
-                <span class="material-icons">check</span>
-                <span class="tab-text">APPLY</span>
-            </div>
+                    <!-- Apply Filters Tab -->
+                    <div class="apply-tab" onclick="applyFiltersAndClose()" id="applyTab">
+                        <span class="material-icons">check</span>
+                        <span class="tab-text">APPLY</span>
+                    </div>
 
-            <!-- Cancel Filters Tab - Closes sidebar without applying -->
-            <div class="cancel-tab" onclick="cancelFilters()" id="cancelTab">
-                <span class="material-icons">close</span>
-                <span class="tab-text">CANCEL</span>
-            </div>
-
-            <!-- Sidebar -->
-            <div class="sidebar" id="sidebar">
-                <div class="sidebar-header">
-                    <h3>Real-Time Analytics Filters</h3>
-                    <p>All options loaded from live evaluation database</p>
+                    <!-- Cancel Filters Tab -->
+                    <div class="cancel-tab" onclick="cancelFilters()" id="cancelTab">
+                        <span class="material-icons">close</span>
+                        <span class="tab-text">CANCEL</span>
+                    </div>
                 </div>
 
-                <div class="filter-panel">
-                    <!-- Date Filters -->
-                    <div class="filter-section">
-                        <h4>
-                            <div class="section-title">
-                                <span class="material-icons">date_range</span>
-                                Date & Time Filters
+                <!-- Sidebar - Always visible but can be collapsed -->
+                <div class="sidebar" id="sidebar">
+                    <div class="sidebar-header">
+                        <h3>Real-Time Analytics Filters</h3>
+                        <p>All options loaded from live evaluation database</p>
+                    </div>
+
+                    <div class="filter-panel">
+                        <!-- Date Filters -->
+                        <div class="filter-section">
+                            <h4>
+                                <div class="section-title">
+                                    <span class="material-icons">date_range</span>
+                                    Date & Time Filters
+                                </div>
+                            </h4>
+                            <div class="filter-content">
+                                <div class="filter-group">
+                                    <label class="filter-label">Call Date Range</label>
+                                    <div class="date-range">
+                                        <input type="date" id="startCallDate" class="filter-input" title="Start Date">
+                                        <input type="date" id="endCallDate" class="filter-input" title="End Date">
+                                    </div>
+                                </div>
                             </div>
-                        </h4>
-                        <div class="filter-content">
-                            <div class="filter-group">
-                                <label class="filter-label">Call Date Range</label>
-                                <div class="date-range">
-                                    <input type="date" id="startCallDate" class="filter-input" title="Start Date">
-                                    <input type="date" id="endCallDate" class="filter-input" title="End Date">
+                        </div>
+
+                        <!-- Organizational Hierarchy -->
+                        <div class="filter-section">
+                            <h4>
+                                <div class="section-title">
+                                    <span class="material-icons">account_tree</span>
+                                    Organizational Hierarchy
+                                </div>
+                                <span id="hierarchyDataStatus" class="data-status data-status-ok">
+                                    ✅ Ready
+                                </span>
+                            </h4>
+                            <div class="filter-content">
+                                <div class="hierarchy-note">
+                                    <strong>REAL DATA Filters:</strong> Template (evaluation form) → Program (business
+                                    unit) → Partner → Site → LOB
+                                    <br><small>All options loaded from your actual evaluation database</small>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label class="filter-label">
+                                        Template (Evaluation Form)
+                                        <span id="templateCount" class="count-indicator"></span>
+                                    </label>
+                                    <select id="templateFilter" class="filter-select"
+                                        onchange="updateHierarchyFilters('template')">
+                                        <option value="">All Templates</option>
+                                    </select>
+                                    <small class="filter-help">
+                                        InnovAi QA evaluation templates
+                                    </small>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label class="filter-label">
+                                        Program (Business Unit)
+                                        <span id="programCount" class="count-indicator"></span>
+                                    </label>
+                                    <select id="programFilter" class="filter-select"
+                                        onchange="updateHierarchyFilters('program')">
+                                        <option value="">All Programs</option>
+                                    </select>
+                                    <small class="filter-help">
+                                       Metro, ASW, T-Mobile Prepaid
+                                    </small>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label class="filter-label">
+                                        Partner (Vendor)
+                                        <span id="partnerCount" class="count-indicator"></span>
+                                    </label>
+                                    <select id="partnerFilter" class="filter-select"
+                                        onchange="updateHierarchyFilters('partner')">
+                                        <option value="">All Partners</option>
+                                    </select>
+                                    <small class="filter-help">
+                                        Call center vendors
+                                    </small>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label class="filter-label">
+                                        Site (Location)
+                                        <span id="siteCount" class="count-indicator"></span>
+                                    </label>
+                                    <select id="siteFilter" class="filter-select" onchange="updateHierarchyFilters('site')">
+                                        <option value="">All Sites</option>
+                                    </select>
+                                    <small class="filter-help">
+                                        where the site is located
+                                    </small>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label class="filter-label">
+                                        Line of Business (LOB)
+                                        <span id="lobCount" class="count-indicator"></span>
+                                    </label>
+                                    <select id="lobFilter" class="filter-select">
+                                        <option value="">All LOBs</option>
+                                    </select>
+                                    <small class="filter-help">
+                                        CSR, DSG, WNP, Specialty, etc.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Call Identifiers -->
+                        <div class="filter-section">
+                            <h4>
+                                <div class="section-title">
+                                    <span class="material-icons">fingerprint</span>
+                                    Call Identifiers
+                                </div>
+                            </h4>
+                            <div class="filter-content">
+                                <div class="filter-group">
+                                    <label class="filter-label">Evaluation ID</label>
+                                    <input type="text" id="evaluationIdFilter" class="filter-input"
+                                        placeholder="Enter evaluation ID...">
+                                    <small class="filter-help">
+                                        Unique evaluation identifier
+                                    </small>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label class="filter-label">Agent Name</label>
+                                    <input type="text" id="agentNameFilter" class="filter-input"
+                                        placeholder="Enter agent name...">
+                                    <small class="filter-help">
+                                        Agent's full name or partial match
+                                    </small>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label class="filter-label">Agent ID</label>
+                                    <input type="text" id="agentIdFilter" class="filter-input"
+                                        placeholder="Enter agent ID...">
+                                    <small class="filter-help">
+                                        Unique agent identifier
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Call Metadata -->
+                        <div class="filter-section">
+                            <h4>
+                                <div class="section-title">
+                                    <span class="material-icons">call</span>
+                                    Call Information
+                                </div>
+                                <span id="callMetaDataStatus" class="data-status data-status-ok">
+                                    ✅ Ready
+                                </span>
+                            </h4>
+                            <div class="filter-content">
+                                <div class="filter-group">
+                                    <label class="filter-label">
+                                        Disposition (Primary)
+                                        <span id="dispositionCount" class="count-indicator"></span>
+                                    </label>
+                                    <select id="dispositionFilter" class="filter-select"
+                                        onchange="updateSubDispositions()">
+                                        <option value="">All Dispositions</option>
+                                    </select>
+                                    <small class="filter-help">
+                                        Primary call outcome
+                                    </small>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label class="filter-label">
+                                        Sub-Disposition
+                                        <span id="subDispositionCount" class="count-indicator"></span>
+                                    </label>
+                                    <select id="subDispositionFilter" class="filter-select">
+                                        <option value="">All Sub-Dispositions</option>
+                                    </select>
+                                    <small class="filter-help">
+                                        Secondary call outcome
+                                    </small>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label class="filter-label">
+                                        Language
+                                        <span id="languageCount" class="count-indicator"></span>
+                                    </label>
+                                    <select id="languageFilter" class="filter-select">
+                                        <option value="">All Languages</option>
+                                    </select>
+                                    <small class="filter-help">
+                                        Call language (EN, ES, etc.)
+                                    </small>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label class="filter-label">Call Duration (seconds)</label>
+                                    <div class="input-grid">
+                                        <input type="number" id="minDurationFilter" class="filter-input"
+                                            placeholder="Min" min="0">
+                                        <input type="number" id="maxDurationFilter" class="filter-input"
+                                            placeholder="Max" min="0">
+                                    </div>
+                                    <small class="filter-help">
+                                        Call length in seconds
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quality Scoring -->
+                        <div class="filter-section">
+                            <h4>
+                                <div class="section-title">
+                                    <span class="material-icons">assessment</span>
+                                    Quality Scoring
+                                </div>
+                            </h4>
+                            <div class="filter-content">
+                                <div class="filter-group">
+                                    <label class="filter-label">Weighted Score Range</label>
+                                    <div class="input-grid">
+                                        <input type="number" id="minScoreFilter" class="filter-input"
+                                            placeholder="Min Score" min="0" max="100" step="0.1">
+                                        <input type="number" id="maxScoreFilter" class="filter-input"
+                                            placeholder="Max Score" min="0" max="100" step="0.1">
+                                    </div>
+                                    <small class="filter-help">
+                                        0-100 quality score range
+                                    </small>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Organizational Hierarchy -->
-                    <div class="filter-section">
-                        <h4>
-                            <div class="section-title">
-                                <span class="material-icons">account_tree</span>
-                                Organizational Hierarchy
-                            </div>
-                            <span id="hierarchyDataStatus" class="data-status data-status-ok">
-                                ✅ Ready
-                            </span>
-                        </h4>
-                        <div class="filter-content">
-                            <div class="hierarchy-note">
-                                <strong>REAL DATA Filters:</strong> Template (evaluation form) → Program (business
-                                unit) → Partner → Site → LOB
-                                <br><small>All options loaded from your actual evaluation database</small>
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">
-                                    Template (Evaluation Form)
-                                    <span id="templateCount" class="count-indicator"></span>
-                                </label>
-                                <select id="templateFilter" class="filter-select"
-                                    onchange="updateHierarchyFilters('template')">
-                                    <option value="">All Templates</option>
-                                </select>
-                                <small class="filter-help">
-                                    InnovAi QA evaluation templates
-                                </small>
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">
-                                    Program (Business Unit)
-                                    <span id="programCount" class="count-indicator"></span>
-                                </label>
-                                <select id="programFilter" class="filter-select"
-                                    onchange="updateHierarchyFilters('program')">
-                                    <option value="">All Programs</option>
-                                </select>
-                                <small class="filter-help">
-                                   Metro, ASW, T-Mobile Prepaid
-                                </small>
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">
-                                    Partner (Vendor)
-                                    <span id="partnerCount" class="count-indicator"></span>
-                                </label>
-                                <select id="partnerFilter" class="filter-select"
-                                    onchange="updateHierarchyFilters('partner')">
-                                    <option value="">All Partners</option>
-                                </select>
-                                <small class="filter-help">
-                                    Call center vendors
-                                </small>
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">
-                                    Site (Location)
-                                    <span id="siteCount" class="count-indicator"></span>
-                                </label>
-                                <select id="siteFilter" class="filter-select" onchange="updateHierarchyFilters('site')">
-                                    <option value="">All Sites</option>
-                                </select>
-                                <small class="filter-help">
-                                    where the site is located
-                                </small>
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">
-                                    Line of Business (LOB)
-                                    <span id="lobCount" class="count-indicator"></span>
-                                </label>
-                                <select id="lobFilter" class="filter-select">
-                                    <option value="">All LOBs</option>
-                                </select>
-                                <small class="filter-help">
-                                    CSR, DSG, WNP, Specialty, etc.
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Call Identifiers -->
-                    <div class="filter-section">
-                        <h4>
-                            <div class="section-title">
-                                <span class="material-icons">fingerprint</span>
-                                Call Identifiers
-                            </div>
-                        </h4>
-                        <div class="filter-content">
-                            <div class="filter-group">
-                                <label class="filter-label">Evaluation ID</label>
-                                <input type="text" id="evaluationIdFilter" class="filter-input"
-                                    placeholder="e.g., EVAL-12345-2024" maxlength="50">
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">Phone Number</label>
-                                <input type="text" id="phoneNumberFilter" class="filter-input"
-                                    placeholder="e.g., 3094399902" maxlength="15">
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">Contact ID</label>
-                                <input type="text" id="contactIdFilter" class="filter-input"
-                                    placeholder="e.g., 3014818427" maxlength="20">
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">Transaction ID (UCID)/label>
-                                <input type="text" id="ucidFilter" class="filter-input"
-                                    placeholder="e.g., 000011103817514224423" maxlength="30">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Call Classification -->
-                    <div class="filter-section">
-                        <h4>
-                            <div class="section-title">
-                                <span class="material-icons">call</span>
-                                Call Classification
-                            </div>
-                            <span id="callDataStatus" class="data-status data-status-ok">
-                                ✅ Ready
-                            </span>
-                        </h4>
-                        <div class="filter-content">
-                            <div class="filter-group">
-                                <label class="filter-label">
-                                    Call Disposition
-                                    <span id="dispositionCount" class="count-indicator"></span>
-                                </label>
-                                <select id="callDispositionFilter" class="filter-select"
-                                    onchange="updateSubDispositions()">
-                                    <option value="">All Dispositions</option>
-                                </select>
-                                <small class="filter-help">
-                                    Main interaction reason
-                                </small>
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">
-                                    Call Sub-Disposition
-                                    <span id="subDispositionCount" class="count-indicator"></span>
-                                </label>
-                                <select id="callSubDispositionFilter" class="filter-select">
-                                    <option value="">All Sub-Dispositions</option>
-                                </select>
-                                <small class="filter-help">
-                                    Detailed reason for the interaction
-                                </small>
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">
-                                    Call Language
-                                    <span id="languageCount" class="count-indicator"></span>
-                                </label>
-                                <select id="languageFilter" class="filter-select">
-                                    <option value="">All Languages</option>
-                                </select>
-                            </div>
-
-                            <div class="filter-group">
-                                <label class="filter-label">
-                                    Call Type
-                                    <span id="callTypeCount" class="count-indicator"></span>
-                                </label>
-                                <select id="callTypeFilter" class="filter-select">
-                                    <option value="">All Call Types</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Action Buttons -->
+                    <!-- Filter Actions - Bottom of sidebar -->
                     <div class="filter-actions">
+                        <button class="apply-btn" onclick="applyFilters()">
+                            <span class="material-icons">search</span>
+                            Apply Filters
+                        </button>
                         <button class="clear-btn" onclick="clearFilters()">
-                            <span class="material-icons">clear</span>
+                            <span class="material-icons">clear_all</span>
                             Clear All
                         </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Chat Area -->
+            <!-- Right Panel: Chat Area (Full Width) -->
             <div class="chat-area">
                 <div class="chat-header">
                     <div class="chat-header-top">
                         <div>
-                            <div class="chat-title">Call Center Analytics Dashboard</div>
-                            <div class="chat-subtitle">AI-powered insights from real evaluation data</div>
+                            <div class="chat-title">Metro AI Assistant</div>
+                            <div class="chat-subtitle">Real-time call center analytics and insights</div>
                         </div>
                         <div class="chat-stats">
                             <div class="stat-item">
-                                <span class="material-icons">dataset</span>
-                                <span id="totalRecords">Ready for analysis</span>
+                                <span class="material-icons">filter_list</span>
+                                <span id="activeFiltersCount">0 filters</span>
                             </div>
                             <div class="stat-item">
-                                <span class="material-icons">filter_alt</span>
-                                <span id="activeFiltersCount">0 filters</span>
+                                <span class="material-icons">analytics</span>
+                                <span id="totalRecords">0 evaluations</span>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Header Filter Display -->
-                    <div class="chat-header-filters" id="chatHeaderFilters">
-                        <!-- Filter tags will be populated here -->
+                    <div class="chat-header-filters" id="activeFiltersDisplay">
+                        <!-- Active filters will be displayed here as tags -->
                     </div>
                 </div>
 
                 <div class="messages-container" id="messagesContainer">
-                    <!-- Welcome Screen -->
                     <div class="welcome-screen" id="welcomeScreen">
-                        <div class="welcome-icon">📞</div>
-                        <h2 class="welcome-title">InnovAi Call Center Analytics</h2>
+                        <div class="welcome-icon">💬</div>
+                        <h2 class="welcome-title">Ready to Analyze</h2>
                         <p class="welcome-subtitle">
-                            Ask InnovAI to analyze call dispositions, agent performance, site comparisons, and more from
-                            your live evaluation database...
+                            Use filters to narrow your dataset, then ask questions about call center performance,
+                            agent quality, or specific evaluations.
                         </p>
 
                         <div class="example-questions">
                             <div class="example-card"
-                                onclick="askQuestion('Create a concise weekly call quality analysis from audit data. Summarize Strengths, Weaknesses, and Opportunities with a clear bottom-line insight for each. Include key metrics (percentages, counts, week-over-week changes), site performance highlights, root-cause trends, and agent-controllable vs non-controllable factors. Use a professional, leadership-ready tone and clearly identify critical risks, performance gains, and priority coaching focus areas.')">
-                                <h4>Executive Summary Report</h4>
-                                <p>Analyze customer service metrics and agent performance trends</p>
+                                onclick="sendMessage('Show me top performing agents by weighted score')">
+                                <h4>Agent Performance</h4>
+                                <p>Analyze agent quality scores and identify top performers</p>
+                                <span class="card-more-indicator">Click to analyze →</span>
                             </div>
                             <div class="example-card"
-                                onclick="askQuestion('Review customer service transcripts and generate a CSAT analysis. Identify satisfaction drivers, friction points, empathy and closing gaps, repeat-contact signals, and resolution quality. Summarize what’s working, what’s hurting CSAT, and priority coaching actions in a leadership-ready tone.')">
-                                <h4>Customer Satisfaction</h4>
-                                <p>General Customer Satisfaction (CSAT) Analysis</p>
+                                onclick="sendMessage('What are the most common call dispositions?')">
+                                <h4>Call Outcomes</h4>
+                                <p>Review call dispositions and resolution patterns</p>
+                                <span class="card-more-indicator">Click to explore →</span>
                             </div>
                             <div class="example-card"
-                                onclick="askQuestion('Review transcripts for churn risk signals (dissatisfaction, cancel intent, carrier switching). Classify risk level, key drivers, mitigation success, and agent-controllable gaps. Output a concise churn risk summary and intervention priorities. “Output sections: Churn Risk Summary, Risk Levels, Key Drivers, Mitigated vs Unmitigated, Coaching or Save Opportunities.')">
-                                <h4>Identify Churn Risk</h4>
-                                <p>Churn Risk Summary, Risk Levels, Key Drivers, Mitigated vs Unmitigated, Coaching or Save Opportunities.
-                                    enhancement</p>
+                                onclick="sendMessage('Compare partner performance across sites')">
+                                <h4>Partner Analysis</h4>
+                                <p>Compare vendor performance metrics across locations</p>
+                                <span class="card-more-indicator">Click to compare →</span>
                             </div>
-                            <div class="example-card"
-                                onclick="askQuestion('Generate a weekly retention performance analysis from audit data. Summarize what iss working, what is broken, and key opportunities across the retention funnel (attempts, offers, saves). Include save rate, attempt rate, red flags, week-over-week changes, site performance, rejection reasons, and agent-controllable vs non-controllable failures. Highlight risks where fundamentals decline despite strong results, and identify priority coaching actions in a leadership-ready, data-driven tone.')">
-                                <h4>Retention Report</h4>
-                                <p>Retention performance analysis from audit data. Summarize what is working, what iss broken, and key opportunities.
-                                    <span class="card-more-indicator">• Click for detailed criteria</span>
-                                </p>
-                            </div>
-                           </div>
+                        </div>
                     </div>
 
-                    <!-- Chat Messages -->
-                    <div id="chatMessages" class="hidden">
-                        <!-- Chat sessions will be populated here -->
-                    </div>
+                    <!-- Messages will be dynamically added here -->
                 </div>
 
                 <!-- Quick Questions -->
-                <div class="quick-questions" id="quickQuestions">
-                    <h4>💡 Quick Analytics Questions</h4>
-                    <div class="question-buttons">
-                        <button class="question-btn"
-                            onclick="askQuestion('show me all call that are less than 60 seconds')">
-                            Short Calls
-                        </button>
-                        <button class="question-btn"
-                            onclick="askQuestion('Show me the longest calls with their outcomes and patterns, and the call type')">
-                            Long Calls
-                        </button>
-                        <button class="question-btn"
-                            onclick="askQuestion('Show me all the calls where the agent made a sales offer or account upgrade')">
-                            Sales opportunities
-                        </button>
-                        <button class="question-btn"
-                            onclick="askQuestion('What patterns do we see for calls that require technical troubleshooting?')">
-                            Troubleshooting patterns
-                        </button>
-                        </div>
+                <div class="quick-questions" id="quickQuestions" style="display: none;">
+                    <h4>Suggested Follow-up Questions:</h4>
+                    <div class="question-buttons" id="questionButtons">
+                        <!-- Dynamic buttons will be added here -->
+                    </div>
                 </div>
 
                 <!-- Chat Input -->
                 <div class="chat-input-area">
-                    <!-- Comprehensive Search Toggle - Minimal -->
-                    <div style="margin-bottom: 8px; font-size: 0.85rem;">
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #666;">
-                            <input type="checkbox" id="comprehensiveToggle" onchange="updateComprehensiveMode()" style="margin: 0;">
-                            <span>🔍 Comprehensive Search</span>
-                            <span id="searchModeDescription" style="font-size: 0.8rem; color: #999; font-style: italic;">(Smart detection)</span>
-                        </label>
-                    </div>
-                    
                     <div class="input-container">
                         <textarea id="chatInput" class="chat-input"
-                            placeholder="Ask specific questions about calls, dispositions, site performance, quality metrics, or any evaluation data from your live database..."
-                            rows="1" onkeydown="handleKeyPress(event)"></textarea>
-                        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
-                            <span class="material-icons">analytics</span>
-                            Analyze
+                            placeholder="Ask about call center analytics, agent performance, or specific evaluations..."
+                            rows="1"></textarea>
+                        <button id="sendButton" class="send-btn" onclick="sendMessage()">
+                            <span class="material-icons">send</span>
+                            Send
                         </button>
                     </div>
                 </div>
@@ -387,236 +395,29 @@
     </div>
 
     <script>
-    // Sidebar toggle functionality - integrates with existing chat.js
-    function toggleSidebar() {
+    // Initialize sidebar functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🚀 Metro AI Call Center Analytics initialized');
+        
+        // Initialize filter display monitoring
+        initializeFilterMonitoring();
+        
+        // Initialize sidebar state
         const sidebar = document.getElementById('sidebar');
-        const tab = document.getElementById('sidebarTab');
-        
-        if (!sidebar) {
-            console.error('Sidebar element not found');
-            return;
-        }
-        
-        const isOpen = sidebar.classList.contains('open');
-        
-        if (isOpen) {
-            // Close sidebar
-            sidebar.classList.remove('open');
-            if (tab) tab.classList.remove('active');
-            removeBackdrop();
-            console.log('Sidebar toggled: CLOSED');
-        } else {
-            // Open sidebar
-            sidebar.classList.add('open');
-            if (tab) tab.classList.add('active');
-            createBackdrop();
-            console.log('Sidebar toggled: OPEN');
-        }
-    }
-    
-    // Apply filters and close sidebar automatically
-    function applyFiltersAndClose() {
-        console.log('🔄 Apply filters and close sidebar...');
-        
-        // First apply the filters (this function comes from chat.js)
-        if (typeof window.applyFilters === 'function') {
-            window.applyFilters();
-        } else {
-            console.warn('⚠️ applyFilters function not yet loaded');
-        }
-        
-        // Then close the sidebar
-        const sidebar = document.getElementById('sidebar');
-        const tab = document.getElementById('sidebarTab');
-        
-        if (sidebar && sidebar.classList.contains('open')) {
-            sidebar.classList.remove('open');
-            if (tab) tab.classList.remove('active');
-            removeBackdrop();
-            console.log('✅ Filters applied and sidebar closed');
-        }
-    }
-    
-    // Cancel filters and close sidebar without applying changes
-    function cancelFilters() {
-        console.log('❌ Cancel filters - closing sidebar without applying changes...');
-        
-        // Close the sidebar without applying changes
-        const sidebar = document.getElementById('sidebar');
-        const tab = document.getElementById('sidebarTab');
-        
-        if (sidebar && sidebar.classList.contains('open')) {
-            sidebar.classList.remove('open');
-            if (tab) tab.classList.remove('active');
-            removeBackdrop();
-            console.log('✅ Sidebar closed without applying changes');
-        }
-        
-        // Optional: Reset form to previous state
-        // (You can add logic here to reset filter form if needed)
-    }
-    
-    // SIMPLE manual filter enhancement - NO automatic monitoring
-    function enhanceFilterDisplay() {
-        const activeFiltersElement = document.getElementById('activeFiltersCount');
-        const totalRecordsElement = document.getElementById('totalRecords');
-        
-        if (!activeFiltersElement || !totalRecordsElement) {
-            console.log('❌ Elements not found');
-            return false;
-        }
-        
-        const totalText = totalRecordsElement.textContent || '';
-        const filterText = activeFiltersElement.textContent || '';
-        
-        console.log('📊 Current display values:', { totalText, filterText });
-        
-        // Only enhance if it's basic format and not already enhanced
-        if (filterText.match(/^\d+ filters?$/) && !filterText.includes('results') && !filterText.includes('total')) {
-            const totalMatch = totalText.match(/([0-9,]+)/);
-            const filterMatch = filterText.match(/^(\d+)/);
-            
-            if (totalMatch && filterMatch) {
-                const totalCount = totalMatch[1];
-                const filterCount = parseInt(filterMatch[1]);
-                
-                let enhancedText;
-                if (filterCount > 0) {
-                    enhancedText = `${filterCount} filter${filterCount !== 1 ? 's' : ''} (${totalCount} results)`;
-                } else {
-                    enhancedText = `0 filters (${totalCount} total)`;
-                }
-                
-                activeFiltersElement.textContent = enhancedText;
-                console.log(`✅ Enhanced: "${filterText}" → "${enhancedText}"`);
-                return true;
-            }
-        } else {
-            console.log('📊 Display already enhanced or no data available');
-            return false;
-        }
-    }
-    
-    // Monitor for changes to the analytics display and enhance them
-    function monitorAnalyticsUpdates() {
-        const totalRecordsElement = document.getElementById('totalRecords');
-        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
-        
-        if (!totalRecordsElement || !activeFiltersCountElement) {
-            console.error('❌ Cannot monitor - required elements not found');
-            return;
-        }
-        
-        // Create observer for both elements
-        const observer = new MutationObserver(function(mutations) {
-            let shouldEnhance = false;
-            
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList' || mutation.type === 'characterData') {
-                    console.log('🔄 Analytics update detected on:', mutation.target.id || mutation.target.className);
-                    shouldEnhance = true;
-                }
-            });
-            
-            if (shouldEnhance) {
-                // Multiple timeouts to catch different update patterns
-                setTimeout(() => enhanceFilterCountDisplay(), 50);
-                setTimeout(() => enhanceFilterCountDisplay(), 200);
-                setTimeout(() => enhanceFilterCountDisplay(), 500);
-            }
-        });
-        
-        // Observe both elements
-        const observeConfig = {
-            childList: true,
-            subtree: true,
-            characterData: true,
-            attributes: false
-        };
-        
-        observer.observe(totalRecordsElement, observeConfig);
-        observer.observe(activeFiltersCountElement, observeConfig);
-        
-        // Also set up periodic enhancement (fallback)
-        setInterval(() => {
-            const current = activeFiltersCountElement.textContent || '';
-            if (current.includes('filters') && !current.includes('results') && !current.includes('total')) {
-                console.log('🔄 Periodic enhancement check - needs update');
-                enhanceFilterCountDisplay();
-            }
-        }, 3000);
-        
-        console.log('📊 Advanced analytics display monitor activated');
-    }
-    
-    // Create backdrop overlay
-    function createBackdrop() {
-        removeBackdrop(); // Remove existing first
-        
-        const backdrop = document.createElement('div');
-        backdrop.className = 'sidebar-backdrop';
-        backdrop.id = 'sidebarBackdrop';
-        backdrop.addEventListener('click', closeSidebar);
-        
-        document.body.appendChild(backdrop);
-        
-        setTimeout(() => {
-            backdrop.classList.add('show');
-        }, 10);
-    }
-    
-    // Remove backdrop overlay
-    function removeBackdrop() {
-        const backdrop = document.getElementById('sidebarBackdrop');
-        if (backdrop) {
-            backdrop.classList.remove('show');
-            setTimeout(() => backdrop.remove(), 300);
-        }
-    }
-    
-    // Close sidebar (used by backdrop click)
-    function closeSidebar() {
-        const sidebar = document.getElementById('sidebar');
-        const tab = document.getElementById('sidebarTab');
-        
-        if (sidebar && sidebar.classList.contains('open')) {
-            sidebar.classList.remove('open');
-            if (tab) tab.classList.remove('active');
-            removeBackdrop();
-            console.log('Sidebar closed via backdrop');
-        }
-    }
-    
-    // Initialize sidebar state when page loads
-    document.addEventListener('DOMContentLoaded', function () {
-        console.log("🎛️ Sidebar integration initializing...");
-        
-        // Initialize sidebar as closed
-        const sidebar = document.getElementById('sidebar');
-        const tab = document.getElementById('sidebarTab');
-        
-        if (sidebar) {
-            sidebar.classList.remove('open');
-            console.log('✅ Sidebar initialized: CLOSED');
-        }
-        
-        if (tab) {
-            tab.classList.remove('active');
-            console.log('✅ Sidebar tab initialized: INACTIVE');
-        }
-        
-        // Initialize apply tab
+        const sidebarTab = document.getElementById('sidebarTab');
         const applyTab = document.getElementById('applyTab');
+        const cancelTab = document.getElementById('cancelTab');
+        
+        if (sidebar && sidebarTab) {
+            console.log('✅ Sidebar elements found and initialized');
+        }
+        
         if (applyTab) {
             console.log('✅ Apply tab initialized');
-            // Apply tab doesn't have active states, it's action-based
         }
         
-        // Initialize cancel tab
-        const cancelTab = document.getElementById('cancelTab');
         if (cancelTab) {
             console.log('✅ Cancel tab initialized');
-            // Cancel tab doesn't have active states, it's action-based
         }
         
         removeBackdrop(); // Clean up any existing backdrop
@@ -626,77 +427,61 @@
             console.warn('⚠️ applyFilters function not yet loaded, will be available when chat.js loads');
         }
         
-        // NO automatic monitoring - manual enhancement only
         console.log('📊 Filter enhancement available via manual functions only');
         console.log('💡 Use enhanceNow() or testEnhancedDisplay() to enhance filter display');
-        
-        // Note: No automatic monitoring to prevent loops
-        
-        // Note: Analytics stats are handled by the main chat.js file
-        console.log('📊 Filter counts will be enhanced to show results by monitor system');
     });
     
-    // MANUAL ONLY debug functions - no automatic monitoring
-    window.testEnhancedDisplay = function() {
-        console.log('🧪 Manual enhancement test...');
-        const result = enhanceFilterDisplay();
-        console.log('🧪 Enhancement result:', result);
+    // Placeholder functions that will be replaced by chat.js
+    window.toggleSidebar = window.toggleSidebar || function() {
+        const sidebar = document.getElementById('sidebar');
+        const leftPanel = document.querySelector('.left-panel');
+        
+        if (sidebar && leftPanel) {
+            sidebar.classList.toggle('collapsed');
+            leftPanel.classList.toggle('collapsed');
+        }
     };
     
-    window.enhanceNow = function() {
-        console.log('🔧 Manual enhancement triggered...');
-        return enhanceFilterDisplay();
+    window.applyFiltersAndClose = window.applyFiltersAndClose || function() {
+        console.log('🔄 Apply filters and close called - waiting for chat.js...');
+        if (typeof window.applyFilters === 'function') {
+            window.applyFilters();
+        }
+        // Don't close sidebar in this layout - it stays visible
     };
     
-    window.checkFilterDisplay = function() {
+    window.cancelFilters = window.cancelFilters || function() {
+        console.log('❌ Cancel filters called');
+        // Clear any pending filter changes if needed
+        // Don't close sidebar in this layout - it stays visible
+    };
+    
+    // Initialize other functions as needed
+    window.sendMessage = window.sendMessage || function(message) {
+        console.log('💬 Send message called:', message);
+    };
+    
+    window.exportChat = window.exportChat || function() {
+        console.log('📥 Export chat called');
+    };
+    
+    window.clearChat = window.clearChat || function() {
+        console.log('🔄 Clear chat called');
+    };
+    
+    // Filter monitoring and enhancement functions
+    function initializeFilterMonitoring() {
+        // Initialize with basic values
         const activeElement = document.getElementById('activeFiltersCount');
         const totalElement = document.getElementById('totalRecords');
         
-        console.log('🔍 Current display state:');
-        console.log('  activeFiltersCount:', activeElement ? `"${activeElement.textContent}"` : 'NOT FOUND');
-        console.log('  totalRecords:', totalElement ? `"${totalElement.textContent}"` : 'NOT FOUND');
+        if (activeElement) activeElement.textContent = '0 filters';
+        if (totalElement) totalElement.textContent = '0 evaluations';
         
-        return {
-            activeFilters: activeElement ? activeElement.textContent : null,
-            totalRecords: totalElement ? totalElement.textContent : null
-        };
-    };
+        console.log('📊 Filter display initialized');
+    }
     
-    // Manual enhancement function
-    window.enhanceNow = function() {
-        console.log(`🧪 Setting basic display: ${filterCount} filters with ${resultCount} results`);
-        
-        const activeElement = document.getElementById('activeFiltersCount');
-        const totalElement = document.getElementById('totalRecords');
-        
-        if (totalElement) {
-            totalElement.textContent = `${resultCount.toLocaleString()} evaluations`;
-        }
-        if (activeElement) {
-            // Set basic format that can be manually enhanced
-            activeElement.textContent = `${filterCount} filter${filterCount !== 1 ? 's' : ''}`;
-        }
-        
-        console.log('💡 Now call enhanceNow() to enhance the display');
-        
-        return {
-            activeFilters: activeElement ? activeElement.textContent : null,
-            totalRecords: totalElement ? totalElement.textContent : null
-        };
-    };
-    
-    // Force enhancement function reference
-    window.forceEnhanceDisplay = forceUpdateFilterDisplay;
-    
-    window.testInterceptor = function() {
-        const activeElement = document.getElementById('activeFiltersCount');
-        if (activeElement) {
-            console.log('🧪 Testing interceptor by setting "2 filters"...');
-            activeElement.textContent = '2 filters';
-        }
-    };
-    
-    // Test function to manually set visible content and verify elements exist
+    // Debug functions
     window.testElementsVisibility = function() {
         console.log('🧪 Testing element visibility...');
         
@@ -706,7 +491,6 @@
         if (totalElement) {
             totalElement.textContent = 'TEST: 9,999 evaluations';
             totalElement.style.color = 'red';
-            totalElement.style.fontSize = '16px';
             totalElement.style.fontWeight = 'bold';
             console.log('✅ totalRecords element found and updated');
         } else {
@@ -716,76 +500,14 @@
         if (activeElement) {
             activeElement.textContent = 'TEST: 5 filters';
             activeElement.style.color = 'red';
-            activeElement.style.fontSize = '16px';
             activeElement.style.fontWeight = 'bold';
             console.log('✅ activeFiltersCount element found and updated');
         } else {
             console.error('❌ activeFiltersCount element NOT FOUND');
-        }
-        
-        // Also test the parent containers
-        const chatStats = document.querySelector('.chat-stats');
-        if (chatStats) {
-            console.log('✅ .chat-stats container found');
-            console.log('Chat stats display style:', window.getComputedStyle(chatStats).display);
-            console.log('Chat stats visibility:', window.getComputedStyle(chatStats).visibility);
-            console.log('Chat stats dimensions:', {
-                width: chatStats.offsetWidth,
-                height: chatStats.offsetHeight,
-                top: chatStats.offsetTop,
-                left: chatStats.offsetLeft
-            });
-        } else {
-            console.error('❌ .chat-stats container NOT FOUND');
-        }
-        
-        const chatHeader = document.querySelector('.chat-header');
-        if (chatHeader) {
-            console.log('✅ .chat-header container found');
-            console.log('Chat header dimensions:', {
-                width: chatHeader.offsetWidth,
-                height: chatHeader.offsetHeight,
-                top: chatHeader.offsetTop,
-                left: chatHeader.offsetLeft
-            });
-        } else {
-            console.error('❌ .chat-header container NOT FOUND');
-        }
-    };
-    
-    // Fallback applyFilters function (will be replaced by chat.js when it loads)
-    if (typeof window.applyFilters !== 'function') {
-        window.applyFilters = function() {
-            console.log('🔄 Apply filters called (fallback) - waiting for chat.js to load...');
-            // The real applyFilters will be available once chat.js loads
-            if (window.applyFilters && window.applyFilters !== arguments.callee) {
-                window.applyFilters();
-            }
-        };
-    }
-    
-    // Debug function to test tabs
-    window.testTabs = function() {
-        console.log('🧪 Testing tab functionality...');
-        const sidebar = document.getElementById('sidebar');
-        const sidebarTab = document.getElementById('sidebarTab');
-        const applyTab = document.getElementById('applyTab');
-        const cancelTab = document.getElementById('cancelTab');
-        
-        console.log('Elements found:', {
-            sidebar: !!sidebar,
-            sidebarTab: !!sidebarTab, 
-            applyTab: !!applyTab,
-            cancelTab: !!cancelTab
-        });
-        
-        if (sidebar) {
-            console.log('Sidebar classes:', sidebar.className);
         }
     };
     </script>
 
     <script src="/static/chat.js"></script>
 </body>
-
 </html>

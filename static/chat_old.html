@@ -32,14 +32,20 @@
         <div class="main-layout">
             <!-- Filter Toggle Tab - Smaller and moves with panel -->
             <div class="sidebar-tab" onclick="toggleSidebar()" id="sidebarTab">
-                <span class="material-icons">tune</span>
+                <span class="material-icons">menu_open</span>
                 <span class="tab-text">FILTERS</span>
             </div>
 
-            <!-- Apply Filters Tab - Below Filter Tab -->
-            <div class="apply-tab" onclick="applyFilters()" id="applyTab">
+            <!-- Apply Filters Tab - Applies filters and closes sidebar -->
+            <div class="apply-tab" onclick="applyFiltersAndClose()" id="applyTab">
                 <span class="material-icons">check</span>
                 <span class="tab-text">APPLY</span>
+            </div>
+
+            <!-- Cancel Filters Tab - Closes sidebar without applying -->
+            <div class="cancel-tab" onclick="cancelFilters()" id="cancelTab">
+                <span class="material-icons">close</span>
+                <span class="tab-text">CANCEL</span>
             </div>
 
             <!-- Sidebar -->
@@ -301,26 +307,27 @@
 
                         <div class="example-questions">
                             <div class="example-card"
-                                onclick="askQuestion('Review the overall tone, acknowledgement, empathy, and call ownership across agents.')">
-                                <h4>Review Customer Service</h4>
-                                <p>Analyze basic customer service metrics and agent performance trends</p>
+                                onclick="askQuestion('Create a concise weekly call quality analysis from audit data. Summarize Strengths, Weaknesses, and Opportunities with a clear bottom-line insight for each. Include key metrics (percentages, counts, week-over-week changes), site performance highlights, root-cause trends, and agent-controllable vs non-controllable factors. Use a professional, leadership-ready tone and clearly identify critical risks, performance gains, and priority coaching focus areas.')">
+                                <h4>Executive Summary Report</h4>
+                                <p>Analyze customer service metrics and agent performance trends</p>
                             </div>
                             <div class="example-card"
-                                onclick="askQuestion('Identify customer satisfaction or frustration, highlight patterns in unresolved issues, and call sub-dispositions for transactions.')">
+                                onclick="askQuestion('Review customer service transcripts and generate a CSAT analysis. Identify satisfaction drivers, friction points, empathy and closing gaps, repeat-contact signals, and resolution quality. Summarize what’s working, what’s hurting CSAT, and priority coaching actions in a leadership-ready tone.')">
                                 <h4>Customer Satisfaction</h4>
-                                <p>Deep dive into call resolution analysis and performance optimization opportunities</p>
+                                <p>General Customer Satisfaction (CSAT) Analysis</p>
                             </div>
                             <div class="example-card"
-                                onclick="askQuestion('Identify calls with a high Churn risk and provide coaching insights')">
+                                onclick="askQuestion('Review transcripts for churn risk signals (dissatisfaction, cancel intent, carrier switching). Classify risk level, key drivers, mitigation success, and agent-controllable gaps. Output a concise churn risk summary and intervention priorities. “Output sections: Churn Risk Summary, Risk Levels, Key Drivers, Mitigated vs Unmitigated, Coaching or Save Opportunities.')">
                                 <h4>Identify Churn Risk</h4>
-                                <p>Identify low-scoring evaluations and suggest coaching or process
+                                <p>Churn Risk Summary, Risk Levels, Key Drivers, Mitigated vs Unmitigated, Coaching or Save Opportunities.
                                     enhancement</p>
                             </div>
                             <div class="example-card"
-                                onclick="askQuestion('Identify calls with a High Sales Risk where a successful sale was made')">
-                                <h4>Sales Risk Analysis</h4>
-                                <p>Focus is on identifying turnover risks from bad pitch practices (cancel/chargeback exposure) and incomplete sale processes (order fulfillment failures).
-                                    </p>
+                                onclick="askQuestion('Generate a weekly retention performance analysis from audit data. Summarize what iss working, what is broken, and key opportunities across the retention funnel (attempts, offers, saves). Include save rate, attempt rate, red flags, week-over-week changes, site performance, rejection reasons, and agent-controllable vs non-controllable failures. Highlight risks where fundamentals decline despite strong results, and identify priority coaching actions in a leadership-ready, data-driven tone.')">
+                                <h4>Retention Report</h4>
+                                <p>Retention performance analysis from audit data. Summarize what is working, what iss broken, and key opportunities.
+                                    <span class="card-more-indicator">• Click for detailed criteria</span>
+                                </p>
                             </div>
                            </div>
                     </div>
@@ -356,6 +363,15 @@
 
                 <!-- Chat Input -->
                 <div class="chat-input-area">
+                    <!-- Comprehensive Search Toggle - Minimal -->
+                    <div style="margin-bottom: 8px; font-size: 0.85rem;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #666;">
+                            <input type="checkbox" id="comprehensiveToggle" onchange="updateComprehensiveMode()" style="margin: 0;">
+                            <span>🔍 Comprehensive Search</span>
+                            <span id="searchModeDescription" style="font-size: 0.8rem; color: #999; font-style: italic;">(Smart detection)</span>
+                        </label>
+                    </div>
+                    
                     <div class="input-container">
                         <textarea id="chatInput" class="chat-input"
                             placeholder="Ask specific questions about calls, dispositions, site performance, quality metrics, or any evaluation data from your live database..."
@@ -396,6 +412,48 @@
             createBackdrop();
             console.log('Sidebar toggled: OPEN');
         }
+    }
+    
+    // Apply filters and close sidebar automatically
+    function applyFiltersAndClose() {
+        console.log('🔄 Apply filters and close sidebar...');
+        
+        // First apply the filters (this function comes from chat.js)
+        if (typeof window.applyFilters === 'function') {
+            window.applyFilters();
+        } else {
+            console.warn('⚠️ applyFilters function not yet loaded');
+        }
+        
+        // Then close the sidebar
+        const sidebar = document.getElementById('sidebar');
+        const tab = document.getElementById('sidebarTab');
+        
+        if (sidebar && sidebar.classList.contains('open')) {
+            sidebar.classList.remove('open');
+            if (tab) tab.classList.remove('active');
+            removeBackdrop();
+            console.log('✅ Filters applied and sidebar closed');
+        }
+    }
+    
+    // Cancel filters and close sidebar without applying changes
+    function cancelFilters() {
+        console.log('❌ Cancel filters - closing sidebar without applying changes...');
+        
+        // Close the sidebar without applying changes
+        const sidebar = document.getElementById('sidebar');
+        const tab = document.getElementById('sidebarTab');
+        
+        if (sidebar && sidebar.classList.contains('open')) {
+            sidebar.classList.remove('open');
+            if (tab) tab.classList.remove('active');
+            removeBackdrop();
+            console.log('✅ Sidebar closed without applying changes');
+        }
+        
+        // Optional: Reset form to previous state
+        // (You can add logic here to reset filter form if needed)
     }
     
     // SIMPLE manual filter enhancement - NO automatic monitoring
@@ -554,6 +612,13 @@
             // Apply tab doesn't have active states, it's action-based
         }
         
+        // Initialize cancel tab
+        const cancelTab = document.getElementById('cancelTab');
+        if (cancelTab) {
+            console.log('✅ Cancel tab initialized');
+            // Cancel tab doesn't have active states, it's action-based
+        }
+        
         removeBackdrop(); // Clean up any existing backdrop
         
         // Ensure applyFilters function is available
@@ -597,7 +662,8 @@
         };
     };
     
-    window.simulateBasicDisplay = function(filterCount, resultCount) {
+    // Manual enhancement function
+    window.enhanceNow = function() {
         console.log(`🧪 Setting basic display: ${filterCount} filters with ${resultCount} results`);
         
         const activeElement = document.getElementById('activeFiltersCount');
@@ -619,25 +685,6 @@
         };
     };
     
-    window.simulateFilterUpdate = function(filterCount, resultCount) {
-        const activeFiltersCountElement = document.getElementById('activeFiltersCount');
-        const totalRecordsElement = document.getElementById('totalRecords');
-        
-        if (activeFiltersCountElement) {
-            activeFiltersCountElement.textContent = `${filterCount} filters`;
-        }
-        if (totalRecordsElement) {
-            totalRecordsElement.textContent = `${resultCount.toLocaleString()} evaluations`;
-        }
-        
-        // Trigger enhancement immediately and with delays
-        enhanceFilterCountDisplay();
-        setTimeout(() => enhanceFilterCountDisplay(), 100);
-        setTimeout(() => enhanceFilterCountDisplay(), 500);
-        
-        console.log(`🧪 Simulated: ${filterCount} filters with ${resultCount} results`);
-    };
-    
     // Force enhancement function reference
     window.forceEnhanceDisplay = forceUpdateFilterDisplay;
     
@@ -646,6 +693,63 @@
         if (activeElement) {
             console.log('🧪 Testing interceptor by setting "2 filters"...');
             activeElement.textContent = '2 filters';
+        }
+    };
+    
+    // Test function to manually set visible content and verify elements exist
+    window.testElementsVisibility = function() {
+        console.log('🧪 Testing element visibility...');
+        
+        const totalElement = document.getElementById('totalRecords');
+        const activeElement = document.getElementById('activeFiltersCount');
+        
+        if (totalElement) {
+            totalElement.textContent = 'TEST: 9,999 evaluations';
+            totalElement.style.color = 'red';
+            totalElement.style.fontSize = '16px';
+            totalElement.style.fontWeight = 'bold';
+            console.log('✅ totalRecords element found and updated');
+        } else {
+            console.error('❌ totalRecords element NOT FOUND');
+        }
+        
+        if (activeElement) {
+            activeElement.textContent = 'TEST: 5 filters';
+            activeElement.style.color = 'red';
+            activeElement.style.fontSize = '16px';
+            activeElement.style.fontWeight = 'bold';
+            console.log('✅ activeFiltersCount element found and updated');
+        } else {
+            console.error('❌ activeFiltersCount element NOT FOUND');
+        }
+        
+        // Also test the parent containers
+        const chatStats = document.querySelector('.chat-stats');
+        if (chatStats) {
+            console.log('✅ .chat-stats container found');
+            console.log('Chat stats display style:', window.getComputedStyle(chatStats).display);
+            console.log('Chat stats visibility:', window.getComputedStyle(chatStats).visibility);
+            console.log('Chat stats dimensions:', {
+                width: chatStats.offsetWidth,
+                height: chatStats.offsetHeight,
+                top: chatStats.offsetTop,
+                left: chatStats.offsetLeft
+            });
+        } else {
+            console.error('❌ .chat-stats container NOT FOUND');
+        }
+        
+        const chatHeader = document.querySelector('.chat-header');
+        if (chatHeader) {
+            console.log('✅ .chat-header container found');
+            console.log('Chat header dimensions:', {
+                width: chatHeader.offsetWidth,
+                height: chatHeader.offsetHeight,
+                top: chatHeader.offsetTop,
+                left: chatHeader.offsetLeft
+            });
+        } else {
+            console.error('❌ .chat-header container NOT FOUND');
         }
     };
     
@@ -666,11 +770,13 @@
         const sidebar = document.getElementById('sidebar');
         const sidebarTab = document.getElementById('sidebarTab');
         const applyTab = document.getElementById('applyTab');
+        const cancelTab = document.getElementById('cancelTab');
         
         console.log('Elements found:', {
             sidebar: !!sidebar,
             sidebarTab: !!sidebarTab, 
-            applyTab: !!applyTab
+            applyTab: !!applyTab,
+            cancelTab: !!cancelTab
         });
         
         if (sidebar) {

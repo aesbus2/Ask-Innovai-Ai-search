@@ -13,7 +13,6 @@ body {
 
 .container {
     display: flex;
-    flex-direction: column;
     width: 100vw; /* Full viewport width */
     height: 100vh;
     overflow: hidden;
@@ -23,7 +22,7 @@ body {
 .header {
     background: linear-gradient(135deg, #6e32a0 0%, #e20074 100%);
     color: white;
-    padding: 8px 16px;
+    padding: 8px 16px; /* Balanced padding for 60px height */
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -33,45 +32,45 @@ body {
     right: 0;
     z-index: 1000;
     box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-    height: 60px;
+    height: 60px; /* EXACTLY 60px - fixed height */
 }
 
 .header h1 {
-    font-size: 18px;
+    font-size: 18px; /* Converted from 1.16px */
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 8px; /* Proper spacing */
     margin: 0;
 }
 
 .version-badge {
     background: rgba(255, 255, 255, 0.2);
-    padding: 4px 8px;
+    padding: 4px 8px; /* Proper padding for 60px header */
     border-radius: 12px;
-    font-size: 0.75em;
+    font-size: 0.75em; /* Good readable size for 60px header */
     font-weight: 500;
     margin-left: 8px;
 }
 
 .header-controls {
     display: flex;
-    gap: 8px;
+    gap: 8px; /* Reduced from 12px */
 }
 
 .header-btn {
     background: rgba(255, 255, 255, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.3);
     color: white;
-    padding: 8px 12px;
+    padding: 8px 12px; /* Proper padding for 60px header */
     border-radius: 6px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 14px; /* Converted from 14px */
     transition: all 0.2s;
     display: flex;
     align-items: center;
     gap: 6px;
-    height: 40px;
+    height: 40px; /* Fits nicely in 60px header with padding */
 }
 
 .header-btn:hover {
@@ -79,49 +78,40 @@ body {
     transform: translateY(-1px);
 }
 
-/* Main Layout - Full width below header */
+/* Main Layout */
 .main-layout {
     display: flex;
-    width: 100%;
-    height: calc(100vh - 60px); /* Full height minus header */
-    margin-top: 60px; /* Account for fixed header */
-    overflow: hidden;
+    width: 100%; /* Full available width */
+    height: 100vh;
+    padding-top: 70px; /* 60px header + 10px clearance */
 }
 
-/* Left Panel - Contains sidebar and filter tabs */
-.left-panel {
-    position: relative;
-    display: flex;
-    background: white;
-    border-right: 1px solid #e1e8ed;
-    box-shadow: 2px 0 10px rgba(0,0,0,0.05);
-    transition: width 0.3s ease;
-    width: 420px; /* Default width */
-    min-width: 420px; /* Prevent shrinking */
-    max-width: 600px; /* Maximum width */
+/* Sidebar backdrop overlay */
+.sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 998; /* Below sidebar but above everything else */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
-.left-panel.collapsed {
-    width: 60px; /* Width when collapsed, just showing tabs */
-    min-width: 60px;
+.sidebar-backdrop.show {
+    opacity: 1;
+    visibility: visible;
 }
 
-/* Filter Tabs - Positioned relative to left panel */
-.filter-tabs {
-    position: absolute;
-    right: 0;
-    top: 50px; /* Start positioning from top */
-    width: 35px;
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-/* Sidebar toggle tab */
+/* Sidebar toggle tab - Always at left edge */
 .sidebar-tab {
-    width: 35px;
-    height: 90px;
+    position: fixed; /* Fixed to viewport */
+    left: 0px; /* Always at left edge */
+    top: 170px; /* Position below header with some spacing */
+    width: 35px; /* Smaller: was 45px */
+    height: 90px; /* Smaller: was 120px */
     background: linear-gradient(135deg, #6e32a0 0%, #e20074 100%);
     color: white;
     display: flex;
@@ -129,9 +119,10 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    border-radius: 0 6px 6px 0;
+    border-radius: 0 6px 6px 0; /* Smaller rounded edges: was 8px */
     box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
     transition: all 0.3s ease;
+    z-index: 1001; /* Above sidebar and backdrop */
     user-select: none;
 }
 
@@ -141,6 +132,7 @@ body {
     box-shadow: 4px 4px 12px rgba(0,0,0,0.3);
 }
 
+/* Active state when sidebar is open */
 .sidebar-tab.active {
     background: linear-gradient(135deg, #8e4bc7 0%, #ff2a9b 100%);
     transform: translateX(5px);
@@ -148,23 +140,26 @@ body {
 }
 
 .sidebar-tab .material-icons {
-    font-size: 16px;
-    margin-bottom: 6px;
+    font-size: 16px; /* Smaller: was 20px */
+    margin-bottom: 6px; /* Smaller: was 8px */
 }
 
 .sidebar-tab .tab-text {
-    font-size: 9px;
+    font-size: 9px; /* Smaller: was 10px */
     font-weight: 600;
-    writing-mode: vertical-rl;
+    writing-mode: vertical-rl; /* Vertical text */
     text-orientation: mixed;
     letter-spacing: 1px;
 }
 
-/* Apply Filters Tab */
+/* Apply Filters Tab - Always at left edge, positioned below filter tab */
 .apply-tab {
+    position: fixed;
+    left: 0px; /* Always at left edge */
+    top: 275px; /* Position below filter tab (170 + 90 + 15px spacing) */
     width: 35px;
     height: 90px;
-    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%); /* Green gradient */
     color: white;
     display: flex;
     flex-direction: column;
@@ -174,6 +169,7 @@ body {
     border-radius: 0 6px 6px 0;
     box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
     transition: all 0.3s ease;
+    z-index: 1001;
     user-select: none;
 }
 
@@ -196,11 +192,14 @@ body {
     letter-spacing: 1px;
 }
 
-/* Cancel Filters Tab */
+/* Cancel Filters Tab - Red/orange gradient for cancel action */
 .cancel-tab {
+    position: fixed;
+    left: 0px; /* Always at left edge - no moving */
+    top: 380px; /* Position below apply tab (275 + 90 + 15px spacing) */
     width: 35px;
     height: 90px;
-    background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+    background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%); /* Red to orange gradient */
     color: white;
     display: flex;
     flex-direction: column;
@@ -210,6 +209,7 @@ body {
     border-radius: 0 6px 6px 0;
     box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
     transition: all 0.3s ease;
+    z-index: 1001;
     user-select: none;
 }
 
@@ -232,70 +232,144 @@ body {
     letter-spacing: 1px;
 }
 
-/* Sidebar - Always visible but can be collapsed */
-.sidebar {
-    width: 100%;
+/* Fix filter menu grey state issues */
+.filter-select {
+    background: white; /* Force white background */
+    border: 1px solid #ddd;
+    color: #333;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: #6e32a0;
+    background: white; /* Ensure white on focus */
+}
+
+.filter-select:disabled {
+    background: #f8f9fa !important; /* Light grey only when disabled */
+    color: #6c757d;
+    cursor: not-allowed;
+}
+
+/* Remove stuck loading state */
+.filter-select.loading-filter {
+    background: #f8f9fa !important;
+    color: #6c757d;
+}
+
+/* Ensure filter sections have proper background */
+.filter-section {
     background: white;
+    border: none;
+    margin-bottom: 0;
+}
+
+/* Sidebar - Hidden by default, shows when .open class added */
+.sidebar {
+    width: 420px; /* Increased from 380px for better full-width usage */
+    background: white;
+    border-right: 1px solid #e1e8ed;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transition: transform 0.3s ease;
-    transform: translateX(0); /* Always visible by default */
+    box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+    transition: transform 0.3s ease;    
+    left: 35px;
+    top: 70px; /* Below header */
+    height: calc(100vh - 70px);
+    z-index: 999; /* Below tabs (1001) but above content */
+    transform: translateX(-100%); /* Hidden by default */
 }
 
-/* When left panel is collapsed, hide sidebar content but keep structure */
-.left-panel.collapsed .sidebar {
-    transform: translateX(-100%);
+.sidebar.open {
+    transform: translateX(0); /* Shown when open class added */
 }
 
-/* Ensure tabs stay visible when collapsed */
-.left-panel.collapsed .filter-tabs {
-    right: -35px; /* Move tabs to the edge when collapsed */
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .sidebar.open {
+        transform: translateX(0);
+    }
+    
+    /* Adjust all three tabs on mobile */
+    .sidebar-tab {
+        top: 140px; /* Higher up on mobile */
+        width: 30px; /* Even smaller on mobile */
+        height: 80px;
+        left: 0px; /* Always at left edge */
+    }
+    
+    .apply-tab {
+        top: 235px; /* Adjust position relative to sidebar tab */
+        width: 30px;
+        height: 80px;
+        left: 0px; /* Always at left edge */
+    }
+    
+    .cancel-tab {
+        top: 330px; /* Adjust position relative to apply tab (235 + 80 + 15px spacing) */
+        width: 30px;
+        height: 80px;
+        left: 0px; /* Always at left edge */
+    }
+    
+    .sidebar-tab .material-icons,
+    .apply-tab .material-icons,
+    .cancel-tab .material-icons {
+        font-size: 14px;
+        margin-bottom: 4px;
+    }
+    
+    .sidebar-tab .tab-text,
+    .apply-tab .tab-text,
+    .cancel-tab .tab-text {
+        font-size: 8px;
+    }
 }
 
 .sidebar-header {
     padding: 20px;
     border-bottom: 1px solid #e1e8ed;
     background: #f8f9fa;
-    flex-shrink: 0;
 }
 
 .sidebar-header h3 {
     color: #6e32a0;
-    font-size: 18px;
+    font-size: 18px; /* Converted from 1.16px */
     margin-bottom: 8px;
 }
 
 .sidebar-header p {
     color: #666;
-    font-size: 14px;
+    font-size: 14px; /* Converted from 14px */
 }
 
 /* Filter Panel */
 .filter-panel {
     flex: 1;
     overflow-y: auto;
-    padding: 0;
+    padding: 35;
 }
 
 .filter-section {
     border-bottom: 1px solid #f0f0f0;
-    background: white;
 }
 
 .filter-section h4 {
     padding: 16px 20px;
     margin: 0;
     background: #fafbfc;
-    color: #495057;
-    font-size: 14px;
-    font-weight: 600;
+    border-bottom: 1px solid #e1e8ed;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    cursor: pointer;
-    user-select: none;
-    border-bottom: 1px solid #e1e8ed;
+    font-size: 15px; /* Converted from 15px */
+    font-weight: 600;
+    color: #495057;
 }
 
 .section-title {
@@ -311,40 +385,23 @@ body {
 
 .data-status {
     font-size: 12px;
-    padding: 2px 8px;
-    border-radius: 12px;
+    padding: 2px 6px;
+    border-radius: 10px;
     font-weight: 500;
 }
 
-.data-status-ok {
-    background: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-}
+.data-status-ok { color: #28a745; }
+.data-status-warning { color: #ffc107; }
+.data-status-error { color: #dc3545; }
 
-.data-status-loading {
-    background: #fff3cd;
-    color: #856404;
-    border: 1px solid #ffeaa7;
-}
-
-.data-status-error {
-    background: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
-}
-
+/* FIXED: Filter content with proper overflow containment */
 .filter-content {
-    padding: 16px 20px;
-    display: block;
-}
-
-.filter-section.collapsed .filter-content {
-    display: none;
+    padding: 32px;
+    overflow: hidden; /* Prevent content from escaping */
 }
 
 .filter-group {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .filter-group:last-child {
@@ -355,26 +412,39 @@ body {
     display: block;
     margin-bottom: 6px;
     font-weight: 500;
-    color: #495057;
     font-size: 14px;
+    color: #495057;
 }
 
 .count-indicator {
     color: #6c757d;
-    font-weight: 400;
-    font-size: 12px;
-    margin-left: 4px;
+    font-weight: normal;
+    font-size: 13px;
+}
+
+.count-indicator.data-status-ok {
+    color: #155724;
+    background: #d4edda;
+}
+
+.count-indicator.data-status-warning {
+    color: #856404;
+    background: #fff3cd;
+}
+
+.count-indicator.data-status-error {
+    color: #721c24;
+    background: #f8d7da;
 }
 
 .filter-input, .filter-select {
     width: 100%;
     padding: 8px 12px;
     border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 14px;
-    transition: border-color 0.2s ease;
-    background: white;
-    color: #333;
+    transition: all 0.2s;
+    box-sizing: border-box; /* Ensure proper sizing */
 }
 
 .filter-input:focus, .filter-select:focus {
@@ -383,38 +453,44 @@ body {
     box-shadow: 0 0 0 2px rgba(110, 50, 160, 0.1);
 }
 
-.filter-select:disabled {
-    background: #f8f9fa !important;
-    color: #6c757d;
+.filter-input:disabled, .filter-select:disabled {
+    background-color: #f5f5f5;
+    opacity: 0.6;
     cursor: not-allowed;
 }
 
 .filter-help {
-    display: block;
     color: #6c757d;
-    font-size: 12px;
-    margin-top: 4px;
-    font-style: italic;
+    font-size: 13px;
+    margin-top: 4px; 
+    display: block;
+    line-height: 1.3;
 }
 
+/* FIXED: Date range container with proper containment */
 .date-range, .input-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+    width: 100%; /* Ensure it stays within container */
+    box-sizing: border-box;
+}
+
+.date-range input, .input-grid input {
+    min-width: 0; /* Allow inputs to shrink */
 }
 
 .hierarchy-note {
-    background: #e3f2fd;
-    border: 1px solid #bbdefb;
+    background: #f8f9fa;
+    border: 1px solid #e1e8ed;
     border-radius: 6px;
     padding: 12px;
     margin-bottom: 16px;
-    font-size: 13px;
-    color: #1976d2;
+    font-size: 14px;
 }
 
 .hierarchy-note strong {
-    color: #1565c0;
+    color: #6e32a0;
 }
 
 /* Filter Actions */
@@ -424,7 +500,6 @@ body {
     background: #f8f9fa;
     display: flex;
     gap: 10px;
-    flex-shrink: 0;
 }
 
 .apply-btn, .clear-btn {
@@ -463,42 +538,53 @@ body {
     color: #495057;
 }
 
-/* Chat Area - Takes remaining width */
+/* Chat Area */
 .chat-area {
     flex: 1;
     display: flex;
     flex-direction: column;
     background: white;
     overflow: hidden;
-    width: 100%; /* Take all remaining width */
+    margin-top: 8px; /* Additional safety margin to prevent header overlap */
 }
+
+/* DEBUG: Uncomment these lines to visualize header boundaries */
+/*
+.header {
+    border-bottom: 3px solid red !important;
+}
+
+.chat-header {
+    border-top: 3px solid blue !important;
+    border-bottom: 3px solid green !important;
+}
+*/
 
 .chat-header {
     background: white;
     border-bottom: 1px solid #e1e8ed;
-    padding: 12px 20px;
-    position: relative;
-    z-index: 1;
-    flex-shrink: 0;
+    padding: 12px 20px; /* Reduced from 20px to make more compact */
+    position: relative; /* Ensure it's positioned relative to its container */
+    z-index: 1; /* Below the main header but above other content */
 }
 
 .chat-header-top {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 12px;
+    margin-bottom: 12px; /* Reduced from 16px */
 }
 
 .chat-title {
-    font-size: 18px;
+    font-size: 18px; /* Converted from 1.16px */
     font-weight: 600;
     color: #2c3e50;
-    margin-bottom: 2px;
+    margin-bottom: 2px; /* Reduced from 4px */
 }
 
 .chat-subtitle {
     color: #6c757d;
-    font-size: 14px;
+    font-size: 14px; /* Converted from 14px */
 }
 
 .chat-stats {
@@ -519,6 +605,7 @@ body {
     color: #6e32a0;
 }
 
+/* IMPROVED: Filter tags display */
 .chat-header-filters {
     display: flex;
     flex-wrap: wrap;
@@ -555,7 +642,7 @@ body {
     border: none;
     color: #1976d2;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 1.16px;
     padding: 0;
     width: 16px;
     height: 16px;
@@ -604,7 +691,7 @@ body {
 }
 
 .welcome-subtitle {
-    font-size: 18px;
+    font-size: 1.16px;
     color: #6c757d;
     margin-bottom: 40px;
     line-height: 1.5;
@@ -690,12 +777,147 @@ body {
     font-size: 13px;
 }
 
+.user-message .message-type {
+    color: #6e32a0;
+}
+
+.assistant-message .message-type {
+    color: #28a745;
+}
+
 .message-content {
     line-height: 1.6;
     color: #2c3e50;
-    white-space: pre-wrap;
-    word-wrap: break-word;
+    white-space: pre-wrap; /* Preserve line breaks and spacing */
+    word-wrap: break-word; /* Handle long words */
     font-size: 15px;
+}
+
+/* Enhanced formatting for assistant messages */
+.assistant-message .message-content {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+/* Handle different content types in messages */
+.message-content p {
+    margin: 0 0 12px 0;
+    line-height: 1.6;
+}
+
+.message-content p:last-child {
+    margin-bottom: 0;
+}
+
+.message-content h1,
+.message-content h2,
+.message-content h3,
+.message-content h4,
+.message-content h5,
+.message-content h6 {
+    color: #6e32a0;
+    margin: 32px 0 8px 0;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.message-content h1 { font-size: 22px; }
+.message-content h2 { font-size: 19px; }
+.message-content h3 { font-size: 1.16px; }
+.message-content h4 { font-size: 16px; }
+
+.message-content ul,
+.message-content ol {
+    margin: 8px 0 12px 20px;
+    padding: 0;
+}
+
+.message-content li {
+    margin: 4px 0;
+    line-height: 1.5;
+}
+
+.message-content strong,
+.message-content b {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.message-content em,
+.message-content i {
+    font-style: italic;
+    color: #495057;
+}
+
+.message-content code {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.9em;
+    color: #d63384;
+}
+
+.message-content pre {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 12px 0;
+    overflow-x: auto;
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.message-content pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+}
+
+.message-content blockquote {
+    border-left: 4px solid #6e32a0;
+    background: #f8f9fa;
+    margin: 12px 0;
+    padding: 12px 16px;
+    color: #495057;
+    font-style: italic;
+}
+
+.message-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 14px;
+}
+
+.message-content th,
+.message-content td {
+    border: 1px solid #dee2e6;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.message-content th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.message-content tr:nth-child(even) {
+    background: #f8f9fa;
+}
+
+/* Handle line breaks in plain text */
+.message-content br {
+    line-height: 1.8;
+}
+
+/* Improve spacing for structured content */
+.message-content > *:first-child {
+    margin-top: 0;
 }
 
 .message-content > *:last-child {
@@ -749,6 +971,10 @@ body {
 }
 
 /* Loading Animation */
+.loading-message {
+    border-left: 4px solid #6e32a0;
+}
+
 .loading-indicator {
     display: flex;
     align-items: center;
@@ -793,7 +1019,6 @@ body {
     background: white;
     border-top: 1px solid #e1e8ed;
     padding: 16px 20px;
-    flex-shrink: 0;
 }
 
 .quick-questions h4 {
@@ -830,7 +1055,6 @@ body {
     background: white;
     border-top: 1px solid #e1e8ed;
     padding: 16px 20px;
-    flex-shrink: 0;
 }
 
 .input-container {
@@ -872,7 +1096,6 @@ body {
     align-items: center;
     gap: 6px;
     min-width: 100px;
-    flex-shrink: 0;
 }
 
 .send-btn:hover:not(:disabled) {
@@ -902,74 +1125,14 @@ body {
 }
 
 /* Responsive Design */
-@media (max-width: 1200px) {
-    .left-panel {
-        width: 350px;
-        min-width: 350px;
-    }
-}
-
-@media (max-width: 992px) {
-    .left-panel {
-        width: 320px;
-        min-width: 320px;
-    }
-    
-    .chat-stats {
-        flex-direction: column;
-        gap: 8px;
-        align-items: flex-start;
-    }
-    
-    .stat-item {
-        font-size: 12px;
-    }
-}
-
 @media (max-width: 768px) {
-    .main-layout {
-        flex-direction: column;
-    }
-    
-    .left-panel {
-        width: 100%;
-        min-width: auto;
-        max-height: 40vh;
-        border-right: none;
-        border-bottom: 1px solid #e1e8ed;
-    }
-    
-    .left-panel.collapsed {
-        max-height: 60px;
-        width: 100%;
-    }
-    
-    .filter-tabs {
-        right: 10px;
-        top: 10px;
-        flex-direction: row;
-        gap: 10px;
-        width: auto;
-    }
-    
-    .sidebar-tab,
-    .apply-tab,
-    .cancel-tab {
-        width: 30px;
-        height: 50px;
-    }
-    
-    .chat-area {
-        flex: 1;
-        min-height: 0;
-    }
-    
     .header {
-        padding: 8px 12px;
+        padding: 8px 12px; /* Slightly less padding on mobile */
+        height: 60px; /* Same 60px height on mobile */
     }
     
     .header h1 {
-        font-size: 16px;
+        font-size: 16px; /* Converted from 16px */
     }
     
     .header-btn span:not(.material-icons) {
@@ -977,10 +1140,16 @@ body {
     }
     
     .header-btn {
-        padding: 6px 8px;
+        padding: 6px 8px; /* Proper mobile button padding */
         min-width: auto;
-        height: 36px;
+        height: 36px; /* Fits nicely in 60px header */
         justify-content: center;
+    }
+    
+    .version-badge {
+        font-size: 0.7em; /* Good size for 60px mobile header */
+        padding: 3px 6px; /* Proper padding for mobile */
+    }
     }
     
     .date-range, .input-grid {
@@ -989,6 +1158,17 @@ body {
     
     .example-questions {
         grid-template-columns: 1fr;
+    }
+    
+    /* Keep chat-stats visible but make them more mobile-friendly */
+    .chat-stats {
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+    }
+    
+    .stat-item {
+        font-size: 12px;
     }
     
     .filter-actions {
@@ -1005,25 +1185,57 @@ body {
         align-self: flex-end;
         min-width: 80px;
     }
-}
+    
+    /* Overlay for mobile sidebar */
+    .sidebar.open::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 380px;
+        width: calc(100vw - 380px);
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: -1;
+    }
 
-@media (max-width: 480px) {
+
+@media (max-width: 992px) {
+    .main-layout {
+        padding-top: 70px; /* Match main layout padding */
+        width: 100%; /* Full width on small screens */
+    }
+    
     .header {
-        padding: 6px 8px;
+        padding: 6px 8px; /* Compact padding for small screens */
+        height: 60px; /* Same 60px height on small screens */
+        width: 100%; /* Full width on small screens */
     }
     
     .header h1 {
-        font-size: 14px;
+        font-size: 14px; /* Converted from 14px */
     }
     
     .header-btn {
-        padding: 2px 4px;
+        padding: 2px 4px; /* Ultra-compact buttons */
         min-width: 24px;
         height: 24px;
+        justify-content: center;
     }
     
     .version-badge {
-        display: none;
+        display: none; /* Hide version badge on tiny screens */
+    }
+    
+    .sidebar {
+        width: 100%;
+        top: 70px; /* Match main-layout padding */
+        height: calc(100vh - 70px);
+    }
+    }
+    
+    .sidebar.open::before {
+        left: 0;
+        width: 100vw;
     }
     
     .welcome-screen {
@@ -1033,7 +1245,7 @@ body {
     .welcome-title {
         font-size: 24px;
     }
-}
+
 
 /* High contrast mode support */
 @media (prefers-contrast: high) {
@@ -1058,13 +1270,8 @@ body {
 
 /* Print styles */
 @media print {
-    .sidebar, .header, .chat-input-area, .quick-questions, .filter-tabs {
+    .sidebar, .header, .chat-input-area, .quick-questions {
         display: none;
-    }
-    
-    .main-layout {
-        margin-top: 0;
-        height: auto;
     }
     
     .chat-area {
