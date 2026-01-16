@@ -2087,3 +2087,372 @@ async def relay_chat_rag(request: Request):
             logger.error(f"❌ Two-stage search failed: {e}")
             context = create_empty_search_context("search_error", str(e))
             sources = []
+
+        logger.info(f"🔍 ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
+
+        MIN_CONTEXT_CHARS = 2500
+        MIN_DISTINCT_EVALS = 5        
+
+        # BLOCK hallucinated responses if no real data
+        if (not context or not sources 
+            or len(context) < MIN_CONTEXT_CHARS 
+            or len({s.get("evaluationId") for s in sources if s.get("evaluationId")}) < MIN_DISTINCT_EVALS):
+            logger.warning("⚠️ No context found → skipping LLM and returning no-data message.")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "reply": "No relevant evaluation data was found for your query. Please adjust your filters or try a different question.",
+                    "sources_summary": {
+                        "evaluations": 0,
+                        "agents": 0,
+                        "date_range": "No data",
+                        "partners": 0,
+                        "sites": 0,
+                        "dispositions": 0
+                    },
+                    "sources_details": {},
+                    "sources_totals": {},
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat(),
+                    "filter_context": req.filters,
+                    "metadata_info": {
+                        "context_found": False,
+                        "model": "llama-3.1-8b-instruct",
+                        "version": "5.0.0_two_stage_optimized"
+                    }
+                }
+            )
+
+        # STEP 3: Build system message for Llama
+        system_message = (
+            f"""You are Metro AI, an advanced call center analytics assistant. You analyze customer service transcripts and evaluations to provide actionable insights.
+
+SEARCH OPTIMIZATION: This data was found using two-stage search optimization:
+- Stage 1: Scanned complete dataset to find all matches
+- Stage 2: Processing only relevant matches (not entire dataset)
+
+{GROUNDING_POLICY}
+
+# Analysis Context
+{context}
+
+# Instructions
+- Base your analysis strictly on the transcript context above
+- Provide specific examples and quotes when relevant
+- If asked about trends or patterns, only reference what's shown in the data
+- For reports, organize information clearly with key findings
+- If the data doesn't support a conclusion, clearly state this limitation
+"""
+        )
+
+        # STEP 4: Streamlined Llama payload
+        user_only_history = [
+                {"role": "user", "content": h["content"]}
+                for h in (req.history or [])
+                if h.get("role") == "user"
+            ][-5:]
+        
+        llama_payload = {
+            "messages": [
+                {"role": "system", "content": system_message},
+                *user_only_history,
+                {"role": "user", "content": req.message}
+            ],
+            "temperature": GENAI_TEMPERATURE,
+            "max_tokens": GENAI_MAX_TOKENS,
+            "top_p": 0.9,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0,
+            "stop": ["<|eot_id|>", "<|end_of_text|>"]
+        }
+
+        headers = {
+            "Authorization": f"Bearer {GENAI_ACCESS_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        logger.info("🦙 Making Llama 3.1 API call with two-stage optimized context...")
+        
+        if not GENAI_ENDPOINT or not GENAI_ACCESS_KEY:
+            logger.error("❌ Missing Llama GenAI configuration!")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "reply": "Llama AI service not configured. Please check your GENAI_ENDPOINT and GENAI_ACCESS_KEY environment variables.",
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+
+        genai_response = None
+        successful_url = None
+        
+        # Try different URL formats
+        possible_urls = [
+            f"{GENAI_ENDPOINT.rstrip('/')}/api/v1/chat/completions",
+            f"{GENAI_ENDPOINT.rstrip('/')}/v1/chat/completions",            
+            f"{GENAI_ENDPOINT.rstrip('/')}/v1/completions",
+            f"{GENAI_ENDPOINT.rstrip('/')}/completions",
+            GENAI_ENDPOINT.rstrip('/')
+        ]
+        
+        for url in possible_urls:
+            try:
+                logger.info(f"🧪 Trying Llama URL: {url}")
+                
+                genai_response = requests.post(
+                    url,
+                    headers=headers,
+                    json=llama_payload,
+                    timeout=60
+                )
+                
+                logger.info(f"📡 Llama Response Status: {genai_response.status_code} for {url}")
+                
+                if genai_response.ok:
+                    successful_url = url
+                    break
+                else:
+                    logger.warning(f"⚠️ URL {url} returned {genai_response.status_code}")
+                    
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"⚠️ URL {url} failed: {e}")
+                continue
+        
+        if not genai_response or not genai_response.ok:
+            error_text = genai_response.text if genai_response else "No response"
+            logger.error(f"❌ All Llama API URLs failed. Last error: {error_text[:200]}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "reply": f"Error calling Llama AI service: {error_text[:100]}",
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat(),
+                    "debug_info": {
+                        "tried_endpoints": possible_urls,
+                        "error": error_text[:200]
+                    }
+                }
+            )
+        
+        try:
+            result = genai_response.json()
+            logger.info(f"🦙 Llama JSON response received: {len(str(result))} chars")
+        except json.JSONDecodeError:
+            logger.error(f"❌ Invalid JSON from Llama API: {genai_response.text[:200]}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "reply": "Invalid response from AI service",
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+        
+        # STEP 5: Extract reply from various response formats
+        reply_text = ""
+        if "choices" in result and result["choices"]:
+            choice = result["choices"][0]
+            if "message" in choice and "content" in choice["message"]:
+                reply_text = choice["message"]["content"].strip()
+                logger.info(f"✅ Extracted Llama reply: {len(reply_text)} chars")
+            elif "text" in choice:
+                reply_text = choice["text"].strip()
+            elif "delta" in choice and "content" in choice["delta"]:
+                reply_text = choice["delta"]["content"].strip()
+        elif "text" in result:
+            reply_text = result["text"].strip()
+        elif "content" in result:
+            reply_text = result["content"].strip()
+        elif "response" in result:
+            reply_text = result["response"].strip()
+        
+        if not reply_text:
+            logger.error("❌ Could not extract reply from Llama response")
+            reply_text = "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
+        
+        # Clean up Llama response artifacts
+        if reply_text:
+            reply_text = reply_text.replace("<|eot_id|>", "").replace("<|end_of_text|>", "")
+            reply_text = reply_text.replace("<|start_header_id|>", "").replace("<|end_header_id|>", "")
+            reply_text = reply_text.strip()
+        
+        logger.info(f"🎯 Final Llama reply length: {len(reply_text)} characters")
+               
+        # STEP 6: Process sources for response - REMOVE internal fields
+        unique_sources = []
+        seen_ids = set()
+        
+        # Define allowed fields for display
+        ALLOWED_DISPLAY_FIELDS = {
+            "evaluationId","url", "partner", "site", "lob",
+            "agentName", "agentId", "disposition", "subDisposition",
+            "created_on", "call_date", "call_duration", "language", "evaluation"
+        }
+        
+        for source in sources:
+            evaluationId = source.get("evaluationId")
+            if evaluationId and evaluationId not in seen_ids:
+                # Build clean source with ONLY allowed fields
+                clean_source = {"evaluationId": evaluationId}
+                
+                # Add only allowed fields
+                for field in ALLOWED_DISPLAY_FIELDS:
+                    if source.get(field) is not None:
+                        value = source.get(field)
+                        if value and str(value).strip() and str(value).lower() not in ["unknown", "null", "n/a"]:
+                            clean_source[field] = value
+                
+                # Never include forbidden fields
+                forbidden_fields = ["template_name", "search_type", "score", "vector_enhanced", 
+                                  "_score", "_id", "_index", "program", "internalId"]
+                for forbidden in forbidden_fields:
+                    clean_source.pop(forbidden, None)
+                
+                unique_sources.append(clean_source)
+                seen_ids.add(evaluationId)
+        
+        logger.info(f"🎯 Cleaned {len(unique_sources)} sources for display")
+
+        # STEP 7: Build sources summary without internal metadata
+        sources_data = {
+            "summary": {
+                "evaluations": len(unique_sources),
+                "partners": len(set(s.get("partner", "") for s in unique_sources if s.get("partner"))),
+                "sites": len(set(s.get("site", "") for s in unique_sources if s.get("site"))),
+                "dispositions": len(set(s.get("disposition", "") for s in unique_sources if s.get("disposition"))),
+                "agents": len(set(s.get("agentName", "") for s in unique_sources if s.get("agentName"))),
+                "date_range": "See evaluation details"
+            },
+            "details": {
+                "total_evaluations": len(unique_sources),
+                "filters_applied": req.filters
+            },
+            "totals": {
+                "evaluations_processed": len(unique_sources)
+            },
+            "display_limit": 20
+        }
+
+        # STEP 8: Build response WITHOUT internal search metadata
+        response_data = {
+            "reply": reply_text,
+            "response": reply_text,
+            "sources_summary": sources_data["summary"],
+            "sources_details": sources_data["details"],
+            "sources_totals": sources_data["totals"],
+            "display_limit": sources_data["display_limit"],
+            "sources": unique_sources[:20],  # Already cleaned
+            "timestamp": datetime.now().isoformat(),
+            "filter_context": req.filters,
+            "metadata_info": {
+                "total_evaluations": len(unique_sources),
+                "context_found": bool(context and "NO DATA FOUND" not in context),
+                "processing_time": round(time.time() - start_time, 2),
+                "filters_applied": bool(req.filters),
+                "model": "llama-3.1-8b-instruct",
+                "version": "5.0.0_two_stage_optimized"
+            }
+        }
+        
+        logger.info("✅ CHAT RESPONSE COMPLETE")
+        logger.info(f"🎯 Reply: {len(reply_text)} chars, Sources: {len(unique_sources)} evaluations")
+        
+        return JSONResponse(content=response_data)
+
+    except Exception as e:
+        logger.error(f"❌ ENHANCED CHAT REQUEST FAILED: {e}")
+        import traceback
+        logger.error(f"🔍 Traceback: {traceback.format_exc()}")
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "reply": "⚠️ No relevant evaluation data was found for your query. Please adjust your filters or try a different question.",
+                "sources_summary": {
+                    "evaluations": 0,
+                    "agents": 0,
+                    "date_range": "No data",
+                    "partners": 0,
+                    "sites": 0,
+                    "dispositions": 0
+                },
+                "sources_details": {},
+                "sources_totals": {},
+                "sources": [],
+                "timestamp": datetime.now().isoformat(),
+                "filter_context": req.filters,
+                "metadata_info": {
+                    "context_found": False,
+                    "model": "llama-3.1-8b-instruct",
+                    "version": "5.0.0_two_stage_optimized"
+                }
+            }
+        )
+    
+def clean_source_for_response(source: dict) -> dict:
+    """
+    Clean a source dictionary to only include allowed API fields.
+    This should be used before sending any source data in responses.
+    """
+    ALLOWED_FIELDS = {
+        "evaluationId", "weighted_score", "url", "partner", "site", "lob",
+        "agentName", "agentId", "disposition", "subDisposition",
+        "created_on", "call_date", "call_duration", "language", "evaluation"
+    }
+    
+    FORBIDDEN_FIELDS = {
+        "_score", "_id", "_index", "score", "search_type", "match_count",
+        "chunk_id", "vector_score", "text_score", "hybrid_score",
+        "template_name", "template_id", "program", "internalId",
+        "vector_enhanced", "vector_dimension", "best_matching_chunks"
+    }
+    
+    cleaned = {}
+    
+    # Only include allowed fields
+    for field in ALLOWED_FIELDS:
+        if source.get(field) is not None:
+            value = source.get(field)
+            if value and str(value).strip() and str(value).lower() not in ["unknown", "null", "n/a"]:
+                cleaned[field] = value
+    
+    # Ensure no forbidden fields
+    for forbidden in FORBIDDEN_FIELDS:
+        cleaned.pop(forbidden, None)
+    
+    return cleaned
+
+# =============================================================================
+# HEALTH ENDPOINTS
+# =============================================================================
+
+@health_router.get("/health")
+async def health_check():
+    return {
+        "status": "ok",
+        "components": {
+            "opensearch": {"status": "connected"},
+            "embedding_service": {"status": "healthy"},
+            "genai_agent": {"status": "configured"},
+            "vector_search": {"status": "enabled"}
+        },
+        "enhancements": {
+            "document_structure": "enhanced v5.0.0",
+            "metadata_verification": "enabled",
+            "strict_data_alignment": "enforced",
+            "evaluation_chunk_distinction": "implemented",
+            "vector_search": "enabled",
+            "hybrid_search": "enabled",
+            "two_stage_optimization": "enabled"
+        }
+    }
+
+@health_router.get("/last_import_info")
+async def last_import_info():
+    return {
+        "status": "success",
+        "last_import_timestamp": datetime.now().isoformat(),
+        "vector_search_enabled": True,
+        "two_stage_optimization": True
+    }
