@@ -11,6 +11,9 @@ import logging
 import requests
 import time
 import json
+import csv
+import io
+import uuid
 from datetime import datetime
 from typing import Dict, Any, List, Literal, Tuple
 
@@ -18,7 +21,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-# Ã¢Å“â€¦ VECTOR SEARCH ENABLED - Uncommented imports
+# âœ… VECTOR SEARCH ENABLED - Uncommented imports
 from opensearch_client import search_opensearch, search_vector, hybrid_search
 from embedder import embed_text
 
@@ -44,17 +47,224 @@ GENAI_MODEL = os.getenv("GENAI_MODEL", "n/a")
 GENAI_TEMPERATURE = float(os.getenv("GENAI_TEMPERATURE", "0.7"))
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 
-CHAT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "10000"))  
+CHAT_MAX_RESULTS = min(int(os.getenv("CHAT_MAX_RESULTS", "8000")), 8000)  # FIXED: Cap at 8000 for full coverage while staying under 10k OpenSearch limit  
 HYBRID_SEARCH_LIMIT = int(os.getenv("HYBRID_SEARCH_LIMIT", "1000"))  
 VECTOR_SEARCH_LIMIT = int(os.getenv("VECTOR_SEARCH_LIMIT", "1000"))  
 TEXT_SEARCH_LIMIT = int(os.getenv("TEXT_SEARCH_LIMIT", "1000"))   
 
 
 
-logger.info(f"   Max total results: {CHAT_MAX_RESULTS}")
+logger.info(f"🔧 CSV DOWNLOAD + OPENSEARCH FIXES APPLIED:")
+logger.info(f"   Max total results: {CHAT_MAX_RESULTS} (capped to prevent OpenSearch 10k limit errors)")
 logger.info(f"   Hybrid search limit: {HYBRID_SEARCH_LIMIT}")
 logger.info(f"   Vector search limit: {VECTOR_SEARCH_LIMIT}")
 logger.info(f"   Text search limit: {TEXT_SEARCH_LIMIT}")
+logger.info(f"   CSV downloads enabled for keyword searches")
+logger.info(f"   Validation thresholds lowered for better matching")
+
+# =============================================================================
+# CSV DOWNLOAD FUNCTIONALITY FOR KEYWORD SEARCHES
+# =============================================================================
+
+def is_keyword_search(query: str) -> bool:
+    """
+    Detect if this is a keyword search that should return CSV results
+    vs an analytical query that should use AI analysis
+    """
+    query_lower = query.lower().strip()
+    
+    # Keyword search indicators
+    keyword_indicators = [
+        'show me', 'find', 'search', 'list', 'get', 'where',
+        'mentioned', 'said', 'talked about', 'discussed', 'contains',
+        'calls where', 'transcripts where', 'evaluations where',
+        'with', 'has', 'includes', 'agent mentioned', 'customer said'
+    ]
+    
+    # Analytical query indicators (should use AI)
+    analytical_indicators = [
+        'analyze', 'analysis', 'report', 'summary', 'summarize',
+        'insights', 'trends', 'patterns', 'compare', 'comparison',
+        'performance', 'quality', 'metrics', 'statistics', 'review',
+        'assess', 'evaluate', 'what does', 'how many', 'percentage'
+    ]
+    
+    # Check for analytical terms first (higher priority)
+    has_analytical = any(term in query_lower for term in analytical_indicators)
+    if has_analytical:
+        return False  # Use AI analysis
+    
+    # Check for keyword search terms
+    has_keyword = any(term in query_lower for term in keyword_indicators)
+    
+    # Also consider queries with quotes as keyword searches
+    has_quotes = '"' in query or "'" in query
+    
+    # Simple keyword checks (single words or short phrases)
+    word_count = len(query.split())
+    is_simple = word_count <= 4
+    
+    return has_keyword or has_quotes or is_simple
+
+def generate_csv_from_search_results(search_results: List[Dict], query: str) -> str:
+    """
+    Generate CSV content from search results
+    """
+    csv_buffer = io.StringIO()
+    
+    # Define CSV headers
+    headers = [
+        'EvaluationID',
+        'Agent_Name', 
+        'Call_Date',
+        'Partner',
+        'Site',
+        'LOB',
+        'Disposition',
+        'Sub_Disposition',
+        'Transcript_Preview',
+        'Highlighted_Snippets',
+        'Score',
+        'Template_Name'
+    ]
+    
+    writer = csv.DictWriter(csv_buffer, fieldnames=headers)
+    writer.writeheader()
+    
+    # Process each search result
+    for result in search_results:
+        # Extract metadata safely
+        metadata = result.get('metadata', {})
+        
+        # Get transcript preview
+        transcript = result.get('transcript', '') or result.get('transcript_text', '')
+        transcript_preview = transcript[:200] + '...' if len(transcript) > 200 else transcript
+        
+        # Get highlighted snippets
+        highlights = result.get('highlighted_snippets', [])
+        highlighted_text = ' | '.join(highlights[:3]) if highlights else 'No highlights'
+        
+        # Build CSV row
+        csv_row = {
+            'EvaluationID': result.get('evaluationId', 'Unknown'),
+            'Agent_Name': metadata.get('agentName') or metadata.get('agent_name', 'Unknown'),
+            'Call_Date': metadata.get('call_date') or metadata.get('created_on', 'Unknown'),
+            'Partner': metadata.get('partner', 'Unknown'),
+            'Site': metadata.get('site', 'Unknown'), 
+            'LOB': metadata.get('lob', 'Unknown'),
+            'Disposition': metadata.get('disposition', 'Unknown'),
+            'Sub_Disposition': metadata.get('subDisposition') or metadata.get('sub_disposition', 'Unknown'),
+            'Transcript_Preview': transcript_preview.replace('\n', ' ').replace('\r', ''),
+            'Highlighted_Snippets': highlighted_text.replace('\n', ' ').replace('\r', ''),
+            'Score': round(result.get('_score', 0), 2),
+            'Template_Name': result.get('template_name', 'Unknown')
+        }
+        
+        writer.writerow(csv_row)
+    
+    csv_content = csv_buffer.getvalue()
+    csv_buffer.close()
+    
+    return csv_content
+
+def save_csv_for_download(csv_content: str, query: str) -> str:
+    """
+    Save CSV content to file and return download path
+    """
+    # Create downloads directory if it doesn't exist
+    downloads_dir = "/mnt/user-data/outputs"
+    os.makedirs(downloads_dir, exist_ok=True)
+    
+    # Generate unique filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_query = "".join(c for c in query if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
+    filename = f"search_results_{safe_query}_{timestamp}.csv"
+    filepath = os.path.join(downloads_dir, filename)
+    
+    # Write CSV content to file
+    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        f.write(csv_content)
+    
+    return filepath
+
+def handle_keyword_search_csv(req: ChatRequest) -> JSONResponse:
+    """
+    Handle keyword searches by returning CSV download instead of AI analysis
+    """
+    query = req.message
+    logger.info(f"🔍 KEYWORD SEARCH DETECTED: '{query}' - Generating CSV download")
+    
+    try:
+        # Import search function
+        from opensearch_client import search_transcripts_comprehensive
+        
+        # Perform comprehensive search to find ALL matches
+        search_result = search_transcripts_comprehensive(
+            query=query,
+            filters=req.filters,
+            display_size=8000,  # Get up to 8000 results (full coverage of 5,082 docs)
+            max_total_scan=8000
+        )
+        
+        if "error" in search_result:
+            logger.error(f"❌ Search failed: {search_result['error']}")
+            return JSONResponse(
+                status_code=500,
+                content={"error": f"Search failed: {search_result['error']}"}
+            )
+        
+        matches = search_result.get("display_results", [])
+        summary = search_result.get("comprehensive_summary", {})
+        
+        total_searched = summary.get("total_evaluations_searched", 0) 
+        matches_found = len(matches)
+        
+        logger.info(f"✅ CSV SEARCH COMPLETE:")
+        logger.info(f"   📊 Total transcripts searched: {total_searched:,}")
+        logger.info(f"   🎯 Matches found: {matches_found:,}")
+        
+        if matches_found == 0:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "reply": f"No transcripts found containing '{query}'. Try different keywords or check spelling.",
+                    "search_type": "keyword_csv",
+                    "matches_found": 0,
+                    "total_searched": total_searched,
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+        
+        # Generate CSV
+        csv_content = generate_csv_from_search_results(matches, query)
+        csv_filepath = save_csv_for_download(csv_content, query)
+        
+        # Return response with download info
+        return JSONResponse(
+            status_code=200,
+            content={
+                "reply": f"✅ **Found {matches_found:,} transcripts containing '{query}'**\n\nSearched: {total_searched:,} total transcripts\nMatch rate: {round((matches_found/total_searched)*100, 1)}%\n\n📁 **CSV Download Ready**\n\n**File contains:**\n• Evaluation IDs and metadata\n• Agent names and call details  \n• Transcript previews with highlights\n• Search scores and rankings\n\n**Next steps:**\n• Download CSV for analysis in Excel\n• Use specific Evaluation IDs for focused AI analysis\n• Apply additional filters to narrow results",
+                "search_type": "keyword_csv", 
+                "matches_found": matches_found,
+                "total_searched": total_searched,
+                "csv_download": {
+                    "filename": os.path.basename(csv_filepath),
+                    "filepath": csv_filepath,
+                    "size_mb": round(os.path.getsize(csv_filepath) / (1024*1024), 2),
+                    "records": matches_found
+                },
+                "sources": matches[:20],  # Show first 20 for preview
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ CSV keyword search failed: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Keyword search failed: {str(e)}"}
+        )
 
 # =============================================================================
 # DYNAMIC SCALING FOR 10,000+ EVALUATIONS
@@ -102,7 +312,7 @@ def get_optimized_search_limits(max_results: int, comprehensive: bool = False) -
     
     # COMPREHENSIVE MODE: User explicitly wants ALL results analyzed
     # Use max_results as the limit to ensure complete coverage
-    logger.info(f"ðŸ” COMPREHENSIVE MODE: Using max limits to analyze ALL results (up to {max_results})")
+    logger.info(f"🔍 COMPREHENSIVE MODE: Using max limits to analyze ALL results (up to {max_results})")
     
     return {
         "hybrid_limit": max_results,   # Get ALL results from hybrid search
@@ -398,7 +608,7 @@ DO NOT GENERATE OR ESTIMATE ANY NUMBERS, DATES, OR STATISTICS.
     urls = metadata_summary.get("urls", [])
     call_durations = metadata_summary.get("call_durations", [])
     
-    # Ã¢Å“â€¦ Get vector search information
+    # âœ… Get vector search information
     vector_search_used = metadata_summary.get("vector_search_used", False)
     hybrid_search_used = metadata_summary.get("hybrid_search_used", False)
     search_types = metadata_summary.get("search_types", [])
@@ -407,7 +617,7 @@ DO NOT GENERATE OR ESTIMATE ANY NUMBERS, DATES, OR STATISTICS.
     context = f"""
 VERIFIED EVALUATION DATA FOUND: {metadata_summary.get('total_evaluations', 0)} unique evaluations from {metadata_summary.get('total_chunks_found', 0)} content sources
 
-Ã¢Å“â€¦ ENHANCED SEARCH CAPABILITIES USED:
+âœ… ENHANCED SEARCH CAPABILITIES USED:
 - Vector Search: {'ENABLED' if vector_search_used else 'NOT USED'}
 - Hybrid Search: {'ENABLED' if hybrid_search_used else 'NOT USED'}  
 - Search Types: {', '.join(str(t) for t in search_types) if search_types else 'Standard'}
@@ -435,7 +645,7 @@ CRITICAL INSTRUCTIONS:
 6. Use only the agent names found: {', '.join(str(name) for name in essential_fields.get('agentName', [])[:10]) if essential_fields.get('agentName') else 'No agent data'}
 7. Use only the dispositions found: {', '.join(str(d) for d in metadata_summary.get('dispositions', [])[:10]) if metadata_summary.get('dispositions') else 'No disposition data'}
 8. If asked about scores, use only these weighted scores: {', '.join(str(score) for score in weighted_scores[:10]) if weighted_scores else 'No score data'}
-9. Ã¢Å“â€¦ NOTE: Results enhanced with {'vector similarity matching' if vector_search_used else 'text matching only'}
+9. âœ… NOTE: Results enhanced with {'vector similarity matching' if vector_search_used else 'text matching only'}
 
 DATA VERIFICATION STATUS: {metadata_summary.get('data_verification', 'VERIFIED_REAL_DATA')}
 SEARCH ENHANCEMENT: {'VECTOR-ENHANCED' if vector_search_used or hybrid_search_used else 'TEXT-ONLY'}
@@ -505,7 +715,7 @@ def _extract_transcript_text(hit: dict) -> str:
             if is_conversation and not is_qa_format:
                 transcript_text = text
                 found_field = field_name
-                logger.debug(f"Ã¢Å“â€¦ Found conversation format in field '{field_name}' for eval {src.get('evaluationId')}")
+                logger.debug(f"âœ… Found conversation format in field '{field_name}' for eval {src.get('evaluationId')}")
                 break
             # If this is Q&A format, continue looking for better content
             elif is_qa_format:
@@ -513,7 +723,7 @@ def _extract_transcript_text(hit: dict) -> str:
                 if not transcript_text:
                     transcript_text = text
                     found_field = field_name
-                    logger.debug(f"Ã¢Å¡Â Ã¯Â¸Â Using Q&A format from field '{field_name}' as fallback for eval {src.get('evaluationId')}")
+                    logger.debug(f"âš ï¸ Using Q&A format from field '{field_name}' as fallback for eval {src.get('evaluationId')}")
                 continue
             # If it's other content, use it if we haven't found conversation yet
             else:
@@ -526,11 +736,11 @@ def _extract_transcript_text(hit: dict) -> str:
     
     if not transcript_text:
         available_fields = [k for k, v in src.items() if v is not None and str(v).strip()]
-        logger.warning(f"Ã¢ÂÅ’ No substantial transcript text found for document: {eval_id}")
-        logger.debug(f"Ã°Å¸â€œâ€¹ Available source fields: {available_fields}")
+        logger.warning(f"âŒ No substantial transcript text found for document: {eval_id}")
+        logger.debug(f"ðŸ“‹ Available source fields: {available_fields}")
     else:
         content_type = "conversation" if ("Speaker" in transcript_text and "00:" in transcript_text) else "Q&A" if ("Question:" in transcript_text) else "other"
-        logger.debug(f"Ã¢Å“â€¦ Extracted {len(transcript_text)} chars of {content_type} content from field '{found_field}' for eval {eval_id}")
+        logger.debug(f"âœ… Extracted {len(transcript_text)} chars of {content_type} content from field '{found_field}' for eval {eval_id}")
     
     return transcript_text
 
@@ -588,14 +798,14 @@ def debug_transcript_extraction(hit: dict) -> dict:
         has_text_field = bool(src.get("text"))
         
         if has_transcript_field:
-            debug_info["recommendations"].append("Ã¢Å“â€¦ 'transcript' field exists - check if it contains actual content")
+            debug_info["recommendations"].append("âœ… 'transcript' field exists - check if it contains actual content")
         elif has_evaluation_field:
-            debug_info["recommendations"].append("Ã¢Å“â€¦ 'evaluation' field exists - this might contain transcript data")
+            debug_info["recommendations"].append("âœ… 'evaluation' field exists - this might contain transcript data")
         elif has_text_field:
-            debug_info["recommendations"].append("Ã¢Å“â€¦ 'text' field exists - this might contain transcript data")
+            debug_info["recommendations"].append("âœ… 'text' field exists - this might contain transcript data")
         else:
-            debug_info["recommendations"].append("Ã¢ÂÅ’ No obvious transcript fields found")
-            debug_info["recommendations"].append("Ã°Å¸â€Â Check if transcript data is stored under a different field name")
+            debug_info["recommendations"].append("âŒ No obvious transcript fields found")
+            debug_info["recommendations"].append("ðŸ” Check if transcript data is stored under a different field name")
     
     return debug_info
 
@@ -639,9 +849,9 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
     search_start_time = time.time()
 
     
-    logger.info(f"Ã°Å¸â€œâ€¹ Query: '{query}'")
-    logger.info(f"Ã°Å¸ÂÂ·Ã¯Â¸Â Filters: {filters}")
-    logger.info(f"Ã°Å¸â€œÅ  Max results: {max_results}")
+    logger.info(f"ðŸ“‹ Query: '{query}'")
+    logger.info(f"ðŸ·ï¸ Filters: {filters}")
+    logger.info(f"ðŸ“Š Max results: {max_results}")
     
     # NEW: Detect specific search queries that need ALL matches (not just top-scoring)
     is_specific_search = is_specific_search_query(query)
@@ -655,19 +865,19 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
     )
     
     if use_comprehensive_search:
-        logger.info("ðŸ” SPECIFIC SEARCH DETECTED: Finding ALL matches, not just highest-scoring")
+        logger.info("🔍 SPECIFIC SEARCH DETECTED: Finding ALL matches, not just highest-scoring")
         
         # Warn about long search times for large datasets
         if not filters and max_results > 3000:
-            logger.warning(f"âš ï¸ Comprehensive search on large dataset ({max_results} records)")
-            logger.warning(f"âš ï¸ This may take 30-60 seconds - processing all transcripts...")
+            logger.warning(f"⚠️ Comprehensive search on large dataset ({max_results} records)")
+            logger.warning(f"⚠️ This may take 30-60 seconds - processing all transcripts...")
         
-        logger.info(f"ðŸ“Š Strategy: Complete coverage search (filters={'present' if filters else 'none'}, max={max_results})")
+        logger.info(f"📊 Strategy: Complete coverage search (filters={'present' if filters else 'none'}, max={max_results})")
         
         try:
             from opensearch_client import search_transcripts_comprehensive
             
-            logger.info("ðŸŽ¯ Using comprehensive transcript search for complete coverage...")
+            logger.info("🎯 Using comprehensive transcript search for complete coverage...")
             
             # Allow larger scans for comprehensive mode
             scan_limit = min(max_results, 5000)  # Up to 5000 records
@@ -682,12 +892,12 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             
             # CRITICAL: Check for results first - if none, raise exception to fall back
             if not result.get("results"):
-                logger.warning("âš ï¸ Comprehensive search returned no results")
+                logger.warning("⚠️ Comprehensive search returned no results")
                 raise Exception("No results from comprehensive search")
             
             found_sources = result["results"]
-            logger.info(f"âœ… Complete search found {len(found_sources)} transcripts containing search terms")
-            logger.info(f"ðŸ“Š Coverage: Searched {'filtered' if filters else 'all'} transcripts, returning every match")
+            logger.info(f"✅ Complete search found {len(found_sources)} transcripts containing search terms")
+            logger.info(f"📊 Coverage: Searched {'filtered' if filters else 'all'} transcripts, returning every match")
             
             # Process and clean results
             found_sources = clean_all_sources(found_sources)
@@ -703,11 +913,11 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                     processed_sources.append(source)
             
             total_matches = len(processed_sources)
-            logger.info(f"ðŸ“Š Total unique matches found: {total_matches}")
+            logger.info(f"📊 Total unique matches found: {total_matches}")
             
             # Check if we have matches
             if total_matches == 0:
-                logger.warning("âš ï¸ No unique matches after processing")
+                logger.warning("⚠️ No unique matches after processing")
                 raise Exception("No unique matches found")
             
             # CRITICAL: Limit results passed to AI to prevent server crash
@@ -717,11 +927,11 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             
             # Verify ai_sample is not empty
             if not ai_sample:
-                logger.error("âŒ AI sample empty after cleaning")
+                logger.error("❌ AI sample empty after cleaning")
                 raise Exception("Empty AI sample")
             
             if total_matches > MAX_AI_RESULTS:
-                logger.warning(f"âš ï¸ Found {total_matches} matches - sending {MAX_AI_RESULTS} representative sample to AI to prevent timeout")
+                logger.warning(f"⚠️ Found {total_matches} matches - sending {MAX_AI_RESULTS} representative sample to AI to prevent timeout")
             
             strict_metadata = extract_actual_metadata_values(ai_sample)
             
@@ -749,12 +959,12 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
 {json.dumps(ai_sample, indent=2, default=str)}
 """
             
-            logger.info(f"âœ… Built context: {total_matches} total matches, {len(ai_sample)} sent to AI for analysis")
-            logger.info("ðŸŽ¯ COMPREHENSIVE SEARCH COMPLETE - RETURNING NOW (NO FALLTHROUGH)")
+            logger.info(f"✅ Built context: {total_matches} total matches, {len(ai_sample)} sent to AI for analysis")
+            logger.info("🎯 COMPREHENSIVE SEARCH COMPLETE - RETURNING NOW (NO FALLTHROUGH)")
             return context, ai_sample  # CRITICAL: This MUST execute - we checked all conditions above
         
         except Exception as e:
-            logger.warning(f"âš ï¸ Comprehensive transcript search failed ({e}), falling back to relevance search")
+            logger.warning(f"⚠️ Comprehensive transcript search failed ({e}), falling back to relevance search")
             # Continue with standard search below
     
     def validate_filter_compliance(results: List[dict], strategy_name: str) -> List[dict]:
@@ -809,7 +1019,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
         if violations:
             logger.debug(f"Filter violations in {strategy_name}: {len(violations)} results removed")
         
-        logger.info(f"Ã¢Å“â€¦ {strategy_name} validation: {len(valid_results)}/{len(results)} valid")
+        logger.info(f"âœ… {strategy_name} validation: {len(valid_results)}/{len(results)} valid")
         return valid_results
     
     try:
@@ -817,7 +1027,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
         
         client = get_opensearch_client()
         if not client:
-            logger.error("Ã¢ÂÅ’ No OpenSearch client available")
+            logger.error("âŒ No OpenSearch client available")
             return "Search system unavailable.", []
         
         if not test_connection():
@@ -843,11 +1053,11 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
             try:
                 # Log search strategy based on comprehensive mode
                 if comprehensive:
-                    logger.info("ðŸ” COMPREHENSIVE MODE: Analyzing ALL available results")
-                    logger.info(f"ðŸ“Š Search limits: H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']}")
-                    logger.info("âœ… Complete coverage - all matching results will be analyzed")
+                    logger.info("🔍 COMPREHENSIVE MODE: Analyzing ALL available results")
+                    logger.info(f"📊 Search limits: H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']}")
+                    logger.info("✅ Complete coverage - all matching results will be analyzed")
                 else:
-                    logger.info("âš¡ STANDARD MODE: Trying hybrid text+vector search for most relevant results...")
+                    logger.info("⚡ STANDARD MODE: Trying hybrid text+vector search for most relevant results...")
                 hybrid_results = hybrid_search(
                     query=query,
                     query_vector=query_vector,
@@ -870,7 +1080,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
                 
                 
             except Exception as e:
-                logger.error(f"Ã¢ÂÅ’ Hybrid search failed: {e}")
+                logger.error(f"âŒ Hybrid search failed: {e}")
         
         # Strategy 2: Pure vector search as fallback/supplement
         if query_vector and len(all_sources) < max_results:  
@@ -901,7 +1111,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
                 search_methods_used.append("vector")
                 
             except Exception as e:
-                logger.error(f"Ã¢ÂÅ’ Vector search failed: {e}")
+                logger.error(f"âŒ Vector search failed: {e}")
         
         # Strategy 3: Text search as fallback - WITH STRICT VALIDATION
         if len(all_sources) < max_results:
@@ -970,7 +1180,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
                 
                 if template_names and filters["template_name"] not in template_names:
                     filter_compliance_passed = False
-                    logger.warning("Ã¢Å¡Â Ã¯Â¸Â Template filter violation detected")
+                    logger.warning("âš ï¸ Template filter violation detected")
             
             # Check other filter compliance
             for filter_key in ["partner", "site", "disposition", "lob"]:
@@ -1005,7 +1215,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
 
 EVALUATION DATA FOUND: {len(processed_sources)} evaluations matching "{query}"
 
-FILTER STATUS: {"Ã¢Å“â€¦ All requested filters applied" if filter_compliance_passed else "Ã¢Å¡Â Ã¯Â¸Â Some filter constraints may not have matches"}
+FILTER STATUS: {"âœ… All requested filters applied" if filter_compliance_passed else "âš ï¸ Some filter constraints may not have matches"}
 APPLIED FILTERS: {', '.join([f"{k}={v}" for k, v in filters.items()]) if filters else "None"}
 
 STRICT DISPLAY RULES - YOU MUST FOLLOW:
@@ -1080,7 +1290,7 @@ EVALUATION DETAILS:
                         source['transcript_preview'] = transcript[:50]
                         transcripts_added += 1
                         
-                        logger.debug(f"Ã¢Å“â€¦ Added transcript for eval {source.get('evaluationId')}: {len(transcript)} chars")
+                        logger.debug(f"âœ… Added transcript for eval {source.get('evaluationId')}: {len(transcript)} chars")
                     else:
                         eval_str += "\n[No transcript available for this evaluation]\n"
                         source['has_transcript'] = False
@@ -1095,7 +1305,7 @@ EVALUATION DETAILS:
                 context += "\n" + "="*50 + "\n"  # Add separator between evaluations
             
             # Log how many transcripts were added
-            logger.info(f"Ã°Å¸â€œÂ Added {transcripts_added} transcripts to context out of {min(10, len(processed_sources))} evaluations")
+            logger.info(f"ðŸ“ Added {transcripts_added} transcripts to context out of {min(10, len(processed_sources))} evaluations")
             
             if len(processed_sources) > 10:
                 context += f"\n... and {len(processed_sources) - 10} more evaluations\n"
@@ -1121,9 +1331,9 @@ Evaluation ID: [evaluationId]
 Remember: You are showing actual evaluation records, not search results.
 """
             
-            logger.info(f"Ã¢Å“â€¦ Context built: {len(context)} chars, {len(processed_sources)} cleaned sources")
-            logger.info("Ã°Å¸â€â€™ Strict filtering applied - internal fields removed from display")
-            logger.info(f"Ã°Å¸â€œâ€¹ Filter compliance: {'PASSED' if filter_compliance_passed else 'VIOLATIONS DETECTED'}")
+            logger.info(f"âœ… Context built: {len(context)} chars, {len(processed_sources)} cleaned sources")
+            logger.info("ðŸ”’ Strict filtering applied - internal fields removed from display")
+            logger.info(f"ðŸ“‹ Filter compliance: {'PASSED' if filter_compliance_passed else 'VIOLATIONS DETECTED'}")
             # Mark sources as verified
             for source in processed_sources:
                 source["metadata_verified"] = True
@@ -1132,23 +1342,23 @@ Remember: You are showing actual evaluation records, not search results.
             
             # Performance monitoring - TIMEOUT-PROOF version
             search_duration = time.time() - search_start_time
-            logger.info(f"â±ï¸ SEARCH COMPLETED: {search_duration:.2f} seconds for {len(processed_sources)} results")
+            logger.info(f"⏱️ SEARCH COMPLETED: {search_duration:.2f} seconds for {len(processed_sources)} results")
             
             if comprehensive and search_duration > 15:
-                logger.warning(f"âš ï¸ PERFORMANCE: Query took {search_duration:.2f}s - approaching timeout threshold")
+                logger.warning(f"⚠️ PERFORMANCE: Query took {search_duration:.2f}s - approaching timeout threshold")
             elif comprehensive and search_duration > 20:
-                logger.error(f"ðŸš¨ TIMEOUT RISK: {search_duration:.2f}s - consider further optimization")
+                logger.error(f"🚨 TIMEOUT RISK: {search_duration:.2f}s - consider further optimization")
             elif comprehensive and search_duration < 10:
-                logger.info(f"âœ… OPTIMAL PERFORMANCE: {search_duration:.2f}s - well within timeout limits")
+                logger.info(f"✅ OPTIMAL PERFORMANCE: {search_duration:.2f}s - well within timeout limits")
 
             return context, processed_sources
             
         else:
-            logger.warning("Ã¢Å¡Â Ã¯Â¸Â No valid sources after processing")
+            logger.warning("âš ï¸ No valid sources after processing")
             return create_empty_search_context("no_valid_sources"), []
 
     except Exception as e:
-        logger.error(f"Ã¢ÂÅ’ Search context build failed: {e}")
+        logger.error(f"âŒ Search context build failed: {e}")
         return create_empty_search_context("system_error", str(e)), []
 
             
@@ -1191,7 +1401,7 @@ def build_filtered_context_with_rules(sources: List[dict], query: str, filters: 
 
 EVALUATION DATA FOUND: {len(sources)} evaluations for query: "{query}"
 
-Ã°Å¸â€â€™ STRICT DISPLAY RULES - YOU MUST FOLLOW THESE:
+ðŸ”’ STRICT DISPLAY RULES - YOU MUST FOLLOW THESE:
 1. NEVER display these internal fields: _score, score, search_type, Type, Template, Program (unless in allowed list)
 2. NEVER display match counts, relevance scores, or search quality indicators
 3. NEVER display internal IDs like _id, _index, chunk_id, internalId
@@ -1413,14 +1623,14 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     import logging
     logger = logging.getLogger(__name__)
     
-    logger.info("Ã°Å¸â€œÅ  Metadata Verification Complete:")
+    logger.info("ðŸ“Š Metadata Verification Complete:")
     logger.info(f"   - Total evaluations: {verification['total_evaluations']}")
     logger.info(f"   - Data verification: {verification['data_verification']}")
     logger.info(f"   - Consistency score: {verification['data_consistency'].get('consistency_score', 0)}%")
     logger.info(f"   - Alignment issues: {len(verification['alignment_issues'])}")
     
     if verification["alignment_issues"]:
-        logger.warning(f"Ã¢Å¡Â Ã¯Â¸Â Found {len(verification['alignment_issues'])} alignment issues")
+        logger.warning(f"âš ï¸ Found {len(verification['alignment_issues'])} alignment issues")
         for issue in verification["alignment_issues"][:3]:  # Log first 3 issues
             logger.warning(f"   - {issue}")
     
@@ -1467,43 +1677,7 @@ def extract_actual_metadata_values(sources: List[dict]) -> Dict[str, List[str]]:
 
 def create_empty_search_context(status="no_data", error_msg=""):
     """Create empty search context for error cases"""
-    if status == "no_matches":
-        return """
-NO MATCHING DATA FOUND: No transcripts contain the requested search terms.
-
-The search scanned all available records but found no matches for your specific query.
-
-INSTRUCTIONS:
-- Clearly state that no matching transcripts were found
-- Suggest trying different keywords or broader search terms
-- Recommend checking spelling or using alternative phrases
-- Do not generate any statistics or data about non-matching records
-"""
-    elif status == "collection_failed":
-        return """
-SEARCH COLLECTION FAILED: Unable to scan records for matches.
-
-The search system encountered an error while trying to collect matching transcripts.
-
-INSTRUCTIONS:
-- Inform the user that the search collection process failed
-- Suggest trying again or simplifying the search query
-- Recommend contacting support if the issue persists
-- Do not generate any data or statistics
-"""
-    elif status == "search_error":
-        return f"""
-SEARCH ERROR: An error occurred during the search process.
-
-Error details: {error_msg[:200]}
-
-INSTRUCTIONS:
-- Inform the user that there was a technical error during search
-- Suggest trying again with different search terms
-- Recommend contacting technical support if issues continue
-- Do not generate any statistics or data
-"""
-    elif status == "opensearch_unavailable":
+    if status == "opensearch_unavailable":
         return """
 SEARCH ERROR: OpenSearch connection failed.
 
@@ -1564,13 +1738,13 @@ def build_sources_summary_with_details(sources, filters=None):
                 "dispositions": 0,
                 "partners": 0,
                 "sites": 0,
-                "vector_enhanced": 0,  # Ã¢Å“â€¦ NEW
-                "search_methods": []   # Ã¢Å“â€¦ NEW
+                "vector_enhanced": 0,  # âœ… NEW
+                "search_methods": []   # âœ… NEW
             },
             "details": {},
             "totals": {},
             "full_data": {},
-            "search_enhancement": {  # Ã¢Å“â€¦ NEW
+            "search_enhancement": {  # âœ… NEW
                 "vector_search_used": False,
                 "hybrid_search_used": False,
                 "search_quality": "text_only"
@@ -1579,7 +1753,7 @@ def build_sources_summary_with_details(sources, filters=None):
     
     DISPLAY_LIMIT = 25
     
-    # Ã¢Å“â€¦ NEW: Track vector search usage
+    # âœ… NEW: Track vector search usage
     vector_enhanced_count = 0
     search_methods = set()
     vector_search_used = False
@@ -1610,7 +1784,7 @@ def build_sources_summary_with_details(sources, filters=None):
     seen_evaluationIds = set()
 
     for source in sources:
-        # Ã¢Å“â€¦ Track search enhancement info
+        # âœ… Track search enhancement info
         search_type = source.get("search_type", "unknown")
         search_methods.add(search_type)
         
@@ -1690,9 +1864,9 @@ def build_sources_summary_with_details(sources, filters=None):
             "date": formatted_date,
             "score": metadata.get("weighted_score", "N/A"),
             "duration": metadata.get("call_duration", "N/A"),
-            "search_type": search_type,  # Ã¢Å“â€¦ NEW
-            "vector_enhanced": source.get("vector_enhanced", False),  # Ã¢Å“â€¦ NEW
-            "search_score": source.get("score", 0)  # Ã¢Å“â€¦ NEW
+            "search_type": search_type,  # âœ… NEW
+            "vector_enhanced": source.get("vector_enhanced", False),  # âœ… NEW
+            "search_score": source.get("score", 0)  # âœ… NEW
         }
         evaluations_details.append(evaluation_detail)
         
@@ -1849,7 +2023,7 @@ def build_sources_summary_with_details(sources, filters=None):
         }
         programs_list.append(program_record)
     
-    # Ã¢Å“â€¦ Build final response with vector search enhancement info
+    # âœ… Build final response with vector search enhancement info
     summary = {
         "evaluations": len(unique_evaluations),
         "agents": len(unique_agents),
@@ -1861,8 +2035,8 @@ def build_sources_summary_with_details(sources, filters=None):
         "dispositions": len(unique_dispositions),
         "partners": len(unique_partners),
         "sites": len(unique_sites),
-        "vector_enhanced": vector_enhanced_count,  # Ã¢Å“â€¦ NEW
-        "search_methods": list(search_methods)      # Ã¢Å“â€¦ NEW
+        "vector_enhanced": vector_enhanced_count,  # âœ… NEW
+        "search_methods": list(search_methods)      # âœ… NEW
     }
     
     # Prepare detailed data
@@ -1920,7 +2094,7 @@ def build_sources_summary_with_details(sources, filters=None):
         "sites": len(sites_details)
     }
     
-    # Ã¢Å“â€¦ NEW: Search enhancement information
+    # âœ… NEW: Search enhancement information
     search_enhancement = {
         "vector_search_used": vector_search_used,
         "hybrid_search_used": hybrid_search_used,
@@ -1937,7 +2111,7 @@ def build_sources_summary_with_details(sources, filters=None):
         "totals": totals,
         "full_data": full_data_for_download,
         "display_limit": DISPLAY_LIMIT,
-        "search_enhancement": search_enhancement  # Ã¢Å“â€¦ NEW
+        "search_enhancement": search_enhancement  # âœ… NEW
     }
 
 # =============================================================================
@@ -1954,202 +2128,65 @@ async def relay_chat_rag(request: Request):
         # Extract comprehensive mode for precision control
         comprehensive_mode = body.get("comprehensive", False)
         if comprehensive_mode:
-            logger.info("ðŸ” COMPREHENSIVE SEARCH MODE ENABLED")
+            logger.info("🔍 COMPREHENSIVE SEARCH MODE ENABLED")
 
 
-        logger.info(f"Ã°Å¸â€™Â¬ ENHANCED CHAT REQUEST WITH VECTOR SEARCH: {req.message[:60]}")
-        logger.info(f"Ã°Å¸â€Å½ FILTERS RECEIVED: {req.filters}")
+        logger.info(f"ðŸ’¬ ENHANCED CHAT REQUEST WITH VECTOR SEARCH: {req.message[:60]}")
+        logger.info(f"ðŸ”Ž FILTERS RECEIVED: {req.filters}")
+
+
+        # CSV DOWNLOAD ROUTING: Check if this is a keyword search
+        if is_keyword_search(req.message):
+            logger.info(f"🔍 KEYWORD SEARCH DETECTED: Routing to CSV download")
+            return handle_keyword_search_csv(req)
+
+        # Continue with AI analysis for analytical queries
+        logger.info(f"🤖 ANALYTICAL QUERY DETECTED: Proceeding with AI analysis")
 
         is_report_request = detect_report_query(req.message)
-        logger.info(f"Ã°Å¸â€œÅ  REPORT REQUEST DETECTED: {is_report_request}")
+        logger.info(f"ðŸ“Š REPORT REQUEST DETECTED: {is_report_request}")
 
         # STEP 1: Build context with VECTOR SEARCH integration
-        # PERFORMANCE-AWARE COMPREHENSIVE MODE: Balance thoroughness with speed
+        # COMPREHENSIVE MODE: Analyze ALL results when toggle enabled
         if comprehensive_mode:
-            # User enabled comprehensive toggle - use performance-aware limits
-            # Large datasets (5000+ transcripts) need smaller limits to avoid timeouts
-            performance_limit = min(CHAT_MAX_RESULTS, 2500)  # Max 2500 for large datasets
-            smart_max_results = performance_limit
-            logger.info(f"🔍 COMPREHENSIVE MODE ENABLED: Performance-aware analysis")
-            logger.info(f"📊 Max results: {smart_max_results} (performance-optimized for large datasets)")
-            logger.info(f"⚡ This prevents 504 timeouts while maintaining comprehensive coverage")
+            # User enabled comprehensive toggle - analyze COMPLETE dataset
+            smart_max_results = CHAT_MAX_RESULTS
+            logger.info(f"🔍 COMPREHENSIVE MODE ENABLED: Analyzing ALL available results")
+            logger.info(f"📊 Max results: {smart_max_results}")
+            logger.info(f"✅ User explicitly requested complete dataset analysis")
         else:
-            # For standard search, use conservative limits for fast, relevant results
-            smart_max_results = min(CHAT_MAX_RESULTS, 1000)  # Conservative limit for speed
-            logger.info(f"⚡ STANDARD MODE: Using relevance-based search (limit: {smart_max_results})")
+            # For standard search, use normal limits for fast, relevant results
+            smart_max_results = CHAT_MAX_RESULTS
+            logger.info(f"⚡ STANDARD MODE: Using relevance-based search")
 
-        # TWO-STAGE SEARCH OPTIMIZATION: Integrated directly into chat flow
-        # Stage 1: Fast Collection - scan all records for matches
-        # Stage 2: Targeted Processing - only process matches for AI
-        
-        logger.info("🚀 TWO-STAGE SEARCH OPTIMIZATION")
-        logger.info(f"📊 Query: '{req.message}' | Filters: {bool(req.filters)} | Comprehensive: {comprehensive_mode}")
-        
-        # QUERY OPTIMIZATION: Extract searchable terms from complex analytical queries
-        def extract_searchable_terms(complex_query: str) -> str:
-            """Extract concrete searchable terms from analytical queries"""
-            # Key terms that might appear in call center transcripts
-            searchable_terms = []
-            query_lower = complex_query.lower()
-            
-            # Churn/cancellation related terms
-            if any(word in query_lower for word in ["churn", "cancel", "quit", "leave", "switch", "dissatisfaction"]):
-                searchable_terms.extend(["cancel", "switch", "frustrated", "angry", "unhappy", "leave", "quit", "dissatisfied"])
-            
-            # Service related terms
-            if any(word in query_lower for word in ["service", "support", "help", "issue", "problem"]):
-                searchable_terms.extend(["service", "support", "help", "issue", "problem", "complaint"])
-                
-            # Product related terms  
-            if any(word in query_lower for word in ["phone", "carrier", "network", "billing"]):
-                searchable_terms.extend(["phone", "carrier", "network", "billing", "plan", "device"])
-            
-            # If we found relevant terms, use them; otherwise use original query
-            if searchable_terms:
-                # Remove duplicates and join
-                unique_terms = list(dict.fromkeys(searchable_terms))[:5]  # Max 5 terms
-                simplified_query = " ".join(unique_terms)
-                logger.info(f"🔍 Query simplified: '{complex_query}' → '{simplified_query}'")
-                return simplified_query
-            else:
-                # For simpler queries, just use the first few words
-                words = complex_query.split()[:3]  # First 3 words
-                simplified = " ".join(words)
-                if simplified != complex_query:
-                    logger.info(f"🔍 Query shortened: '{complex_query}' → '{simplified}'")
-                return simplified
-        
-        # Use simplified query for search but keep original for AI analysis
-        search_query = extract_searchable_terms(req.message)
-        
-        # Set collection limits based on mode - FIXED: Stay under OpenSearch 10k limit
-        if comprehensive_mode:
-            collection_scan_limit = 9000  # Stay safely under OpenSearch 10k limit
-            logger.info(f"📈 COMPREHENSIVE MODE: Scanning up to {collection_scan_limit} records (OpenSearch limit: 10k)")
-        else:
-            collection_scan_limit = 5000  # Conservative limit for standard mode
-            logger.info(f"⚡ STANDARD MODE: Scanning up to {collection_scan_limit} records")
-        
-        # STAGE 1: FAST COLLECTION - Scan ALL records to find matches
-        logger.info("🔍 STAGE 1: Fast collection - scanning ALL records for matches...")
-        
-        try:
-            from opensearch_client import search_transcripts_comprehensive
-            
-            # Use comprehensive search to collect ALL matches with simplified query
-            collection_result = search_transcripts_comprehensive(
-                query=search_query,  # Use simplified query for better matching
-                filters=req.filters,
-                display_size=smart_max_results,  # How many matches to return for processing
-                max_total_scan=collection_scan_limit  # How many total records to scan
+        # FIX: When filters are applied, analyze ALL filtered results (not just most relevant)
+        # This ensures UI filter count matches AI analysis count
+        if req.filters:
+            # Filters applied - user wants analysis of ENTIRE filtered dataset
+            filter_aware_max = 10000  # Analyze all filtered results
+            logger.info(f"🎯 FILTERS APPLIED: Analyzing ENTIRE filtered dataset (max={filter_aware_max})")
+            logger.info(f"📊 Applied filters: {req.filters}")
+            logger.info(f"✅ This ensures AI sees ALL filtered results, not just most textually relevant")
+            context, sources = build_search_context(
+                req.message, 
+                req.filters, 
+                max_results=filter_aware_max, 
+                comprehensive=True  # Use comprehensive mode to maximize coverage
             )
-            
-            # DEBUG: Log the raw collection result
-            logger.info(f"🔍 DEBUG: Collection result keys: {list(collection_result.keys()) if isinstance(collection_result, dict) else 'Not a dict'}")
-            
-            if "error" in collection_result:
-                logger.error(f"❌ Stage 1 collection failed: {collection_result['error']}")
-                context = create_empty_search_context("collection_failed")
-                sources = []
-            else:
-                matching_transcripts = collection_result.get("display_results", [])
-                summary = collection_result.get("comprehensive_summary", {})
-                
-                # DEBUG: Log detailed results
-                logger.info(f"🔍 DEBUG: Raw matching transcripts count: {len(matching_transcripts)}")
-                logger.info(f"🔍 DEBUG: Summary keys: {list(summary.keys()) if summary else 'No summary'}")
-                
-                # Log collection results
-                total_searched = summary.get("total_evaluations_searched", 0)
-                matches_found = summary.get("evaluations_with_matches", 0) 
-                match_percentage = summary.get("match_percentage", 0)
-                
-                logger.info(f"✅ STAGE 1 COMPLETE:")
-                logger.info(f"   📊 Total records scanned: {total_searched:,}")
-                logger.info(f"   🎯 Matches found: {matches_found:,}")
-                logger.info(f"   📈 Match rate: {match_percentage}%")
-                logger.info(f"   🔄 Processing {len(matching_transcripts)} matches for AI analysis")
-                
-                if not matching_transcripts:
-                    logger.warning("⚠️ No matching transcripts found in Stage 1")
-                    logger.warning("🔍 DEBUG: This suggests the search_transcripts_comprehensive function found no matches")
-                    logger.warning(f"🔍 DEBUG: Search query was: '{search_query}'")
-                    logger.warning(f"🔍 DEBUG: Original query was: '{req.message}'")
-                    logger.warning(f"🔍 DEBUG: Filters were: {req.filters}")
-                    context = create_empty_search_context("no_matches")
-                    sources = []
-                else:
-                    # STAGE 2: TARGETED PROCESSING - Build context from ONLY the matches
-                    logger.info("🎯 STAGE 2: Targeted processing - building context from matches only...")
-                    
-                    processed_sources = []
-                    context_parts = []
-                    unique_evaluations = set()
-                    
-                    for i, transcript_result in enumerate(matching_transcripts[:smart_max_results]):
-                        evaluation_id = transcript_result.get("evaluationId")
-                        if not evaluation_id or evaluation_id in unique_evaluations:
-                            continue
-                            
-                        unique_evaluations.add(evaluation_id)
-                        
-                        # Extract transcript content
-                        transcript_text = transcript_result.get("transcript", "")
-                        if not transcript_text or len(transcript_text.strip()) < 50:
-                            continue
-                        
-                        # Build source for AI processing
-                        source = {
-                            "evaluationId": evaluation_id,
-                            "text": transcript_text[:2000],  # Limit for processing efficiency
-                            "search_type": "two_stage_optimized",
-                            "match_score": transcript_result.get("_score", 0),
-                            "highlighted_snippets": transcript_result.get("highlighted_snippets", []),
-                            "metadata_verified": True
-                        }
-                        
-                        # Add metadata
-                        metadata = transcript_result.get("metadata", {})
-                        for field in ["partner", "site", "lob", "agentName", "disposition", "subDisposition", "call_date"]:
-                            if metadata.get(field):
-                                source[field] = metadata[field]
-                            elif transcript_result.get(field):
-                                source[field] = transcript_result[field]
-                        
-                        processed_sources.append(source)
-                        
-                        # Add to context for AI
-                        context_part = f"DOC {i+1} (ID: {evaluation_id}):\n{transcript_text[:1500]}\n\n"
-                        context_parts.append(context_part)
-                    
-                    # Build final context
-                    context = "\n".join(context_parts)
-                    sources = processed_sources
-                    
-                    logger.info(f"✅ STAGE 2 COMPLETE:")
-                    logger.info(f"   🎯 Processed sources: {len(sources)}")
-                    logger.info(f"   📝 Context size: {len(context):,} characters")
-                    logger.info(f"   🚀 OPTIMIZATION: Only relevant matches sent to AI (not entire dataset)")
-        
-        except Exception as e:
-            logger.error(f"❌ Two-stage search failed: {e}")
-            context = create_empty_search_context("search_error", str(e))
-            sources = []
+        else:
+            # No filters - use text relevance to find most relevant results
+            context, sources = build_search_context(req.message, req.filters, max_results=smart_max_results, comprehensive=comprehensive_mode)
 
-        logger.info(f"🔍 ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
+        logger.info(f"ðŸ“‹ ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 
-        # ADJUSTED: More reasonable thresholds for real-world data
-        MIN_CONTEXT_CHARS = 500   # Lowered from 2500 to 500 - more realistic
-        MIN_DISTINCT_EVALS = 1    # Lowered from 5 to 1 - even 1 match is valuable        
+        MIN_CONTEXT_CHARS = 500   # FIXED: Lowered from 2500 - more realistic for real data
+        MIN_DISTINCT_EVALS = 1    # FIXED: Lowered from 5 - even 1 match is valuable        
 
         # BLOCK hallucinated responses if no real data
         if (not context or not sources 
             or len(context) < MIN_CONTEXT_CHARS 
             or len({s.get("evaluationId") for s in sources if s.get("evaluationId")}) < MIN_DISTINCT_EVALS):
-            logger.warning("⚠️ No context found → skipping LLM and returning no-data message.")
-            logger.warning(f"   Context length: {len(context) if context else 0} (min: {MIN_CONTEXT_CHARS})")
-            logger.warning(f"   Sources count: {len(sources) if sources else 0}")
-            logger.warning(f"   Unique evals: {len({s.get('evaluationId') for s in sources if s.get('evaluationId')}) if sources else 0} (min: {MIN_DISTINCT_EVALS})")
+            logger.warning(" No context found â€” skipping LLM and returning no-data message.")
             return JSONResponse(
                 status_code=200,
                 content={
@@ -2158,52 +2195,111 @@ async def relay_chat_rag(request: Request):
                         "evaluations": 0,
                         "agents": 0,
                         "date_range": "No data",
+                        "opportunities": 0,
+                        "churn_triggers": 0,
+                        "programs": 0,
+                        "templates": 0,
+                        "dispositions": 0,
                         "partners": 0,
                         "sites": 0,
-                        "dispositions": 0
+                        "vector_enhanced": 0,
+                        "search_methods": []
                     },
                     "sources_details": {},
                     "sources_totals": {},
                     "sources": [],
+                    "search_enhancement": {
+                        "vector_search_used": True,
+                        "hybrid_search_used": False,
+                        "search_quality": "none"
+                    },
                     "timestamp": datetime.now().isoformat(),
                     "filter_context": req.filters,
-                    "metadata_info": {
+                    "search_metadata": {
+                        "vector_search_enabled": True,
                         "context_found": False,
+                        "context_length": 0,
                         "model": "llama-3.1-8b-instruct",
-                        "version": "5.0.0_two_stage_optimized"
+                        "version": "4.8.0_vector_enabled",
+                        "note": "Blocked LLM due to missing OpenSearch context"
                     }
                 }
             )
 
-        # STEP 3: Build system message for Llama
-        system_message = (
-            f"""You are Metro AI, an advanced call center analytics assistant. You analyze customer service transcripts and evaluations to provide actionable insights.
+        
+        # STEP 2: Enhanced system message with vector search awareness
+        system_message = f"""You are a professional call center analytics assistant. Provide clear, concise executive level insights based on the filtered evaluation data.
 
-SEARCH OPTIMIZATION: This data was found using two-stage search optimization:
-- Stage 1: Scanned complete dataset to find all matches
-- Stage 2: Processing only relevant matches (not entire dataset)
-- Query Optimization: Complex analytical queries are simplified to find relevant transcripts (e.g., "churn risk analysis" → searches for "cancel switch frustrated angry")
+## Response Format:
 
-IMPORTANT: The user's original question was: "{req.message}"
-Even though we searched for simpler terms ("{search_query}"), you should answer the user's original complex question using the transcript data found.
+Format your response with:
+- **Bold text** for key points using markdown
+- Bullet points for lists
+- Clear section headers
 
-{GROUNDING_POLICY}
+Keep formatting simple and readable.
 
-# Analysis Context
+**Key Findings:**
+- Summarize main patterns and trends
+- Focus on actionable insights
+- Provide churn analysis and potential retention strategies
+- list sales attempts and success rartes
+    - list sales for phones, devices, plans, home internet,
+- Include brief relevant quotes as a summaryonly when essential (max 2-3)
+
+**Recommendations:**
+- Provide specific, actionable steps 
+- Prioritize by impact
+- Provide coaching recommendations
+
+**Summary:**
+- Overall assessment and metrics
+- List sub-disposition as bullet points and included trends and insights
+- list all partners included in metadata "partner" filters
+
+## CRITICAL: Weighted Score Usage Rules:
+
+**NEVER use weighted_score values to calculate percentages:**
+- The "weighted_score" field is a QUALITY METRIC, not a count or frequency
+- weighted_score values should ONLY be reported as scores (e.g., "average weighted score of 58.00")
+- NEVER convert weighted_score to percentages or use it in percentage calculations
+- WRONG: "58% of evaluations..." when 58 comes from weighted_score field
+- WRONG: "Device issues represent 67% of problems" when 67 is a weighted_score
+- CORRECT: "Average weighted score of 58.00"
+- CORRECT: "Quality score: 67.00"
+
+**When to use percentages (based on COUNTS only):**
+- Percentages represent proportions of the total evaluation count
+- Calculate as: (evaluation_count / total_evaluations) × 100
+- Always show: COUNT first, then percentage
+- CORRECT: "Device issues in 1,200 evaluations (24% of 5,000 total)"
+- CORRECT: "30% of agents (15 out of 50) had scores above 80"
+
+**The ONLY exception for weighted_score percentages:**
+- When calculating what percentage of evaluations fall into score ranges
+- CORRECT: "40% of evaluations (2,000 of 5,000) had weighted scores above 75"
+- CORRECT: "25% of evaluations scored between 60-70 on the weighted scale"
+- This is acceptable because you're counting evaluations, not using the score as a percentage
+
+## Guidelines:
+- Base answers strictly on the provided context and data
+- Do not generate or estimate statistics not present in the context
+- Provide evaluation counts along with percentages and relevant metrics
+- Always show counts alongside percentages (e.g., "150 evaluations (30%)")
+- Be concise and professional - avoid lengthy excerpts
+- If information is not available, state that clearly
+- Focus on business insights rather than raw data dumps
+
+CONTEXT:
 {context}
 
-# Instructions
-- Base your analysis strictly on the transcript context above
-- Answer the user's ORIGINAL question: "{req.message}"
-- The search may have used simplified terms, but provide analysis for the original complex query
-- Provide specific examples and quotes when relevant
-- If asked about trends or patterns, only reference what's shown in the data
-- For reports, organize information clearly with key findings
-- If the data doesn't support a conclusion, clearly state this limitation
+Rules:
+- Use only the provided evaluation data
+- Keep quotes brief and relevant
+- If no relevant data exists, return: "No relevant data found for this query."
 """
-        )
 
-        # STEP 4: Streamlined Llama payload
+        # STEP 3: Streamlined Llama payload
         user_only_history = [
                 {"role": "user", "content": h["content"]}
                 for h in (req.history or [])
@@ -2211,6 +2307,7 @@ Even though we searched for simpler terms ("{search_query}"), you should answer 
             ][-5:]
         
         llama_payload = {
+
             "messages": [
                 {"role": "system", "content": system_message},
                 *user_only_history,
@@ -2229,10 +2326,10 @@ Even though we searched for simpler terms ("{search_query}"), you should answer 
             "Content-Type": "application/json"
         }
 
-        logger.info("🦙 Making Llama 3.1 API call with two-stage optimized context...")
+        logger.info("ðŸ¦™ Making Llama 3.1 API call with vector-enhanced context...")
         
         if not GENAI_ENDPOINT or not GENAI_ACCESS_KEY:
-            logger.error("❌ Missing Llama GenAI configuration!")
+            logger.error("âŒ Missing Llama GenAI configuration!")
             return JSONResponse(
                 status_code=500,
                 content={
@@ -2256,7 +2353,7 @@ Even though we searched for simpler terms ("{search_query}"), you should answer 
         
         for url in possible_urls:
             try:
-                logger.info(f"🧪 Trying Llama URL: {url}")
+                logger.info(f"ðŸ§ª Trying Llama URL: {url}")
                 
                 genai_response = requests.post(
                     url,
@@ -2265,55 +2362,61 @@ Even though we searched for simpler terms ("{search_query}"), you should answer 
                     timeout=60
                 )
                 
-                logger.info(f"📡 Llama Response Status: {genai_response.status_code} for {url}")
+                logger.info(f"ðŸ“¥ Llama Response Status: {genai_response.status_code} for {url}")
                 
                 if genai_response.ok:
                     successful_url = url
                     break
                 else:
-                    logger.warning(f"⚠️ URL {url} returned {genai_response.status_code}")
+                    logger.warning(f"âš ï¸ URL {url} returned {genai_response.status_code}")
                     
             except requests.exceptions.RequestException as e:
-                logger.warning(f"⚠️ URL {url} failed: {e}")
+                logger.warning(f"âš ï¸ URL {url} failed: {e}")
                 continue
         
         if not genai_response or not genai_response.ok:
             error_text = genai_response.text if genai_response else "No response"
-            logger.error(f"❌ All Llama API URLs failed. Last error: {error_text[:200]}")
+            logger.error(f"âŒ All Llama API URLs failed. Last error: {error_text[:500]}")
+            
             return JSONResponse(
                 status_code=500,
                 content={
-                    "reply": f"Error calling Llama AI service: {error_text[:100]}",
+                    "reply": f"I apologize, but I'm having trouble connecting to the Llama AI service. Status: {genai_response.status_code if genai_response else 'Connection failed'}. Please try again or contact support.",
                     "sources": [],
                     "timestamp": datetime.now().isoformat(),
-                    "debug_info": {
-                        "tried_endpoints": possible_urls,
-                        "error": error_text[:200]
+                    "search_metadata": {
+                        "error": f"Llama API error: {genai_response.status_code if genai_response else 'Connection failed'}",
+                        "context_length": len(context),
+                        "processing_time": round(time.time() - start_time, 2)
                     }
                 }
             )
-        
+
+        logger.info(f"âœ… Successful Llama URL: {successful_url}")
+
         try:
             result = genai_response.json()
-            logger.info(f"🦙 Llama JSON response received: {len(str(result))} chars")
-        except json.JSONDecodeError:
-            logger.error(f"❌ Invalid JSON from Llama API: {genai_response.text[:200]}")
+            logger.info(f"ðŸ“Š Llama Response Structure: {list(result.keys())}")
+            
+        except ValueError as e:
+            logger.error(f"âŒ Llama response is not valid JSON: {e}")
             return JSONResponse(
                 status_code=500,
                 content={
-                    "reply": "Invalid response from AI service",
+                    "reply": "I apologize, but received an invalid response from the Llama AI service. Please try again.",
                     "sources": [],
                     "timestamp": datetime.now().isoformat()
                 }
             )
         
-        # STEP 5: Extract reply from various response formats
-        reply_text = ""
-        if "choices" in result and result["choices"]:
+        # STEP 4: Extract reply from Llama response
+        reply_text = None
+        
+        if "choices" in result and result["choices"] and len(result["choices"]) > 0:
             choice = result["choices"][0]
             if "message" in choice and "content" in choice["message"]:
                 reply_text = choice["message"]["content"].strip()
-                logger.info(f"✅ Extracted Llama reply: {len(reply_text)} chars")
+                logger.info(f"âœ… Extracted Llama reply: {len(reply_text)} chars")
             elif "text" in choice:
                 reply_text = choice["text"].strip()
             elif "delta" in choice and "content" in choice["delta"]:
@@ -2326,7 +2429,7 @@ Even though we searched for simpler terms ("{search_query}"), you should answer 
             reply_text = result["response"].strip()
         
         if not reply_text:
-            logger.error("❌ Could not extract reply from Llama response")
+            logger.error("âŒ Could not extract reply from Llama response")
             reply_text = "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
         
         # Clean up Llama response artifacts
@@ -2335,9 +2438,9 @@ Even though we searched for simpler terms ("{search_query}"), you should answer 
             reply_text = reply_text.replace("<|start_header_id|>", "").replace("<|end_header_id|>", "")
             reply_text = reply_text.strip()
         
-        logger.info(f"🎯 Final Llama reply length: {len(reply_text)} characters")
+        logger.info(f"ðŸ“ Final Llama reply length: {len(reply_text)} characters")
                
-        # STEP 6: Process sources for response - REMOVE internal fields
+        #  STEP 5: Process sources for response - REMOVE internal fields
         unique_sources = []
         seen_ids = set()
         
@@ -2370,9 +2473,9 @@ Even though we searched for simpler terms ("{search_query}"), you should answer 
                 unique_sources.append(clean_source)
                 seen_ids.add(evaluationId)
         
-        logger.info(f"🎯 Cleaned {len(unique_sources)} sources for display")
+        logger.info(f"ðŸ“ Cleaned {len(unique_sources)} sources for display")
 
-        # STEP 7: Build sources summary without internal metadata
+        # STEP 6: Build sources summary without internal metadata
         sources_data = {
             "summary": {
                 "evaluations": len(unique_sources),
@@ -2392,7 +2495,7 @@ Even though we searched for simpler terms ("{search_query}"), you should answer 
             "display_limit": 20
         }
 
-        # STEP 8: Build response WITHOUT internal search metadata
+        # STEP 7: Build response WITHOUT internal search metadata
         response_data = {
             "reply": reply_text,
             "response": reply_text,
@@ -2409,24 +2512,27 @@ Even though we searched for simpler terms ("{search_query}"), you should answer 
                 "processing_time": round(time.time() - start_time, 2),
                 "filters_applied": bool(req.filters),
                 "model": "llama-3.1-8b-instruct",
-                "version": "5.0.0_two_stage_optimized"
+                "version": "5.0.0_clean_metadata"
             }
         }
         
-        logger.info("✅ CHAT RESPONSE COMPLETE")
-        logger.info(f"🎯 Reply: {len(reply_text)} chars, Sources: {len(unique_sources)} evaluations")
+        # Remove any references to search types, scores, or internal mechanics
+        # No vector_sources, hybrid_sources, search_type counts, etc.
+        
+        logger.info("âœ… CHAT RESPONSE COMPLETE")
+        logger.info(f"ðŸ“Š Reply: {len(reply_text)} chars, Sources: {len(unique_sources)} evaluations")
         
         return JSONResponse(content=response_data)
 
     except Exception as e:
-        logger.error(f"❌ ENHANCED CHAT REQUEST FAILED: {e}")
+        logger.error(f"âŒ ENHANCED CHAT REQUEST FAILED: {e}")
         import traceback
-        logger.error(f"🔍 Traceback: {traceback.format_exc()}")
+        logger.error(f"ðŸ” Traceback: {traceback.format_exc()}")
         
         return JSONResponse(
             status_code=200,
             content={
-                "reply": "⚠️ No relevant evaluation data was found for your query. Please adjust your filters or try a different question.",
+                "reply": "âš ï¸ No relevant evaluation data was found for your query. Please adjust your filters or try a different question.",
                 "sources_summary": {
                     "evaluations": 0,
                     "agents": 0,
@@ -2443,7 +2549,7 @@ Even though we searched for simpler terms ("{search_query}"), you should answer 
                 "metadata_info": {
                     "context_found": False,
                     "model": "llama-3.1-8b-instruct",
-                    "version": "5.0.0_two_stage_optimized"
+                    "version": "5.0.0_clean_metadata"
                 }
             }
         )
@@ -2480,7 +2586,6 @@ def clean_source_for_response(source: dict) -> dict:
         cleaned.pop(forbidden, None)
     
     return cleaned
-
 # =============================================================================
 # HEALTH ENDPOINTS
 # =============================================================================
@@ -2493,16 +2598,15 @@ async def health_check():
             "opensearch": {"status": "connected"},
             "embedding_service": {"status": "healthy"},
             "genai_agent": {"status": "configured"},
-            "vector_search": {"status": "enabled"}
+            "vector_search": {"status": "enabled"}  # âœ… NEW
         },
         "enhancements": {
-            "document_structure": "enhanced v5.0.0",
+            "document_structure": "enhanced v4.8.0",
             "metadata_verification": "enabled",
             "strict_data_alignment": "enforced",
             "evaluation_chunk_distinction": "implemented",
-            "vector_search": "enabled",
-            "hybrid_search": "enabled",
-            "two_stage_optimization": "enabled"
+            "vector_search": "enabled",  # âœ… NEW
+            "hybrid_search": "enabled"   # âœ… NEW
         }
     }
 
@@ -2511,6 +2615,5 @@ async def last_import_info():
     return {
         "status": "success",
         "last_import_timestamp": datetime.now().isoformat(),
-        "vector_search_enabled": True,
-        "two_stage_optimization": True
+        "vector_search_enabled": True  # âœ… NEW
     }
