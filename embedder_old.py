@@ -96,7 +96,7 @@ class TransformerEmbeddingService:
     
     def preload(self):
         """PERFORMANCE: Preload the model during app startup to avoid delays"""
-        logger.info("ðŸ”¥ Preloading embedding model for faster searches...")
+        logger.info("🔥 Preloading embedding model for faster searches...")
         load_start = time.time()
         
         try:
@@ -110,18 +110,18 @@ class TransformerEmbeddingService:
                 "billing inquiry"
             ]
             
-            logger.info("ðŸ”¥ Warming up with test embeddings...")
+            logger.info("🔥 Warming up with test embeddings...")
             for text in warmup_texts:
                 self.embed_single(text)
             
             load_time = time.time() - load_start
             self.embedding_stats["model_load_time"] = load_time
             
-            logger.info(f"âœ… Embedding model preloaded successfully in {load_time:.2f}s")
-            logger.info(f"ðŸ“Š Model ready for fast searches (dimension: {self.embedding_dimension})")
+            logger.info(f"✅ Embedding model preloaded successfully in {load_time:.2f}s")
+            logger.info(f"📊 Model ready for fast searches (dimension: {self.embedding_dimension})")
             
         except Exception as e:
-            logger.error(f"âŒ Model preloading failed: {e}")
+            logger.error(f"❌ Model preloading failed: {e}")
             raise
     
     def _ensure_model_loaded(self):
@@ -142,7 +142,7 @@ class TransformerEmbeddingService:
             self.model_loading = True
             
             try:
-                logger.info(f"ðŸ”„ Loading embedding model: {self.model_name}")
+                logger.info(f"🔄 Loading embedding model: {self.model_name}")
                 load_start = time.time()
                 
                 if self.provider == "openai":
@@ -154,13 +154,13 @@ class TransformerEmbeddingService:
                 self.embedding_stats["model_load_time"] = load_time
                 self.model_loaded = True
                 
-                logger.info(f"âœ… Model loaded in {load_time:.2f}s")
+                logger.info(f"✅ Model loaded in {load_time:.2f}s")
                 
             except Exception as e:
-                logger.error(f"âŒ Failed to load model: {e}")
+                logger.error(f"❌ Failed to load model: {e}")
                 # Fallback to local if OpenAI fails
                 if self.provider == "openai":
-                    logger.info("ðŸ”„ Falling back to local sentence-transformers")
+                    logger.info("🔄 Falling back to local sentence-transformers")
                     self.provider = "local"
                     self.backend = "local"
                     self.model_name = "sentence-transformers/all-MiniLM-L6-v2"
@@ -196,51 +196,27 @@ class TransformerEmbeddingService:
             raise Exception(f"Failed to initialize OpenAI client: {e}")
     
     def _initialize_local(self):
-        """Initialize local sentence-transformers backend with timeout handling"""
+        """Initialize local sentence-transformers backend"""
         try:
             from sentence_transformers import SentenceTransformer
-            import requests
             
-            # Set longer timeouts for HuggingFace Hub downloads to prevent blocking
-            try:
-                import huggingface_hub
-                huggingface_hub.constants.DEFAULT_REQUEST_TIMEOUT = 60  # 60 seconds instead of 10
-                logger.info("🔧 Extended HuggingFace Hub timeout to prevent blocking")
-            except:
-                pass
+            # Load the model
+            logger.info(f"Loading sentence-transformers model: {self.model_name}")
+            self.model = SentenceTransformer(self.model_name)
             
-            # Load the model with better error handling
-            logger.info(f"🔽 Loading sentence-transformers model: {self.model_name}")
-            logger.info("ℹ️  Note: This is for VECTOR SEARCH, not your main AI model")
-            logger.info("ℹ️  First-time download may take several minutes...")
+            # Check if we need to adjust dimensions
+            model_dim = self.model.get_sentence_embedding_dimension()
+            logger.info(f"Model native dimension: {model_dim}, target dimension: {self.embedding_dimension}")
             
-            try:
-                self.model = SentenceTransformer(self.model_name)
-                logger.info(f"✅ Vector search model loaded: {self.model_name}")
-            except Exception as download_error:
-                logger.warning(f"⚠️  Vector model download failed: {download_error}")
-                logger.info("💡 Falling back to dummy embeddings - vector search disabled")
-                logger.info("💡 Your MAIN AI CHAT (Llama 3.1 8B) is unaffected")
-                self.model = None
-                return
+            if model_dim != self.embedding_dimension:
+                logger.warning(f"Model dimension ({model_dim}) != target dimension ({self.embedding_dimension}). Embeddings will be truncated/padded.")
             
-            # Check dimensions
-            if self.model:
-                model_dim = self.model.get_sentence_embedding_dimension()
-                logger.info(f"📏 Model dimension: {model_dim}, target: {self.embedding_dimension}")
-                
-                if model_dim != self.embedding_dimension:
-                    logger.warning(f"⚠️  Dimension mismatch - embeddings will be adjusted")
+            logger.info(f"Local sentence-transformers model loaded: {self.model_name}")
             
         except ImportError:
-            logger.error("❌ sentence-transformers not installed - vector search disabled")
-            logger.info("💡 Your MAIN AI CHAT (Llama 3.1 8B) is unaffected")
-            logger.info("💡 Run: pip install sentence-transformers to enable vector search")
-            self.model = None
+            raise ImportError("sentence-transformers package not installed. Run: pip install sentence-transformers")
         except Exception as e:
-            logger.error(f"❌ Vector model failed: {e}")
-            logger.info("💡 Vector search disabled - MAIN AI CHAT unaffected")
-            self.model = None
+            raise Exception(f"Failed to load model {self.model_name}: {e}")
     
     @lru_cache(maxsize=EMBEDDING_LRU_CACHE_SIZE)
     def _cached_embed_single(self, text: str) -> tuple:
@@ -324,7 +300,7 @@ class TransformerEmbeddingService:
         
         # More accurate token counting for different models
         if self.model_name == "sentence-transformers/all-MiniLM-L6-v2":
-            # Rough approximation: 1 token â‰ˆ 4 characters for English text
+            # Rough approximation: 1 token ≈ 4 characters for English text
             estimated_tokens = len(text) // 4
             if estimated_tokens > self.max_length:
                 logger.debug(f"Text has ~{estimated_tokens} estimated tokens, may exceed {self.max_length} token limit")
@@ -876,4 +852,4 @@ if __name__ == "__main__":
         print(f" Health check failed: {health.get('error', 'Unknown error')}")
         print("Fix the embedder before running main.py!")
     
-    print("\nðŸ Testing complete!")
+    print("\n🏁 Testing complete!")
