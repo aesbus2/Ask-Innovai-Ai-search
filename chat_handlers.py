@@ -2143,6 +2143,23 @@ async def relay_chat_rag(request: Request):
         # Continue with AI analysis for analytical queries
         logger.info(f"🤖 ANALYTICAL QUERY DETECTED: Proceeding with AI analysis")
 
+        # COMPLETE DATASET COVERAGE: For analytical queries, ensure we see ALL data
+        is_analytical_report = any(term in req.message.lower() for term in [
+            "analysis", "analyze", "report", "summary", "summarize", "review",
+            "performance", "quality", "metrics", "statistics", "trends", "weekly",
+            "monthly", "quarterly", "overview", "assessment", "evaluation"
+        ])
+        
+        if is_analytical_report:
+            logger.info(f"📊 COMPREHENSIVE REPORT DETECTED: Ensuring complete dataset coverage")
+            # Override limits to ensure we capture ALL 5,082+ transcripts
+            analytical_max_results = 6000  # Safely above your total dataset size
+            comprehensive_mode = True  # Force comprehensive analysis
+            logger.info(f"🔍 FORCING COMPLETE COVERAGE: {analytical_max_results} max results for comprehensive analysis")
+        else:
+            analytical_max_results = CHAT_MAX_RESULTS
+
+
         is_report_request = detect_report_query(req.message)
         logger.info(f"ðŸ“Š REPORT REQUEST DETECTED: {is_report_request}")
 
@@ -2150,20 +2167,20 @@ async def relay_chat_rag(request: Request):
         # COMPREHENSIVE MODE: Analyze ALL results when toggle enabled
         if comprehensive_mode:
             # User enabled comprehensive toggle - analyze COMPLETE dataset
-            smart_max_results = CHAT_MAX_RESULTS
+            smart_max_results = analytical_max_results  # Use analytical limits for complete coverage
             logger.info(f"🔍 COMPREHENSIVE MODE ENABLED: Analyzing ALL available results")
             logger.info(f"📊 Max results: {smart_max_results}")
             logger.info(f"✅ User explicitly requested complete dataset analysis")
         else:
             # For standard search, use normal limits for fast, relevant results
-            smart_max_results = CHAT_MAX_RESULTS
-            logger.info(f"⚡ STANDARD MODE: Using relevance-based search")
+            smart_max_results = analytical_max_results  # Still use analytical limits for reports
+            logger.info(f"⚡ STANDARD MODE: Using relevance-based search with analytical coverage")
 
         # FIX: When filters are applied, analyze ALL filtered results (not just most relevant)
         # This ensures UI filter count matches AI analysis count
         if req.filters:
             # Filters applied - user wants analysis of ENTIRE filtered dataset
-            filter_aware_max = 10000  # Analyze all filtered results
+            filter_aware_max = analytical_max_results  # Use analytical limits for complete coverage
             logger.info(f"🎯 FILTERS APPLIED: Analyzing ENTIRE filtered dataset (max={filter_aware_max})")
             logger.info(f"📊 Applied filters: {req.filters}")
             logger.info(f"✅ This ensures AI sees ALL filtered results, not just most textually relevant")
