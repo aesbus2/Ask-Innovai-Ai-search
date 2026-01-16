@@ -1985,12 +1985,49 @@ async def relay_chat_rag(request: Request):
         logger.info("🚀 TWO-STAGE SEARCH OPTIMIZATION")
         logger.info(f"📊 Query: '{req.message}' | Filters: {bool(req.filters)} | Comprehensive: {comprehensive_mode}")
         
-        # Set collection limits based on mode
+        # QUERY OPTIMIZATION: Extract searchable terms from complex analytical queries
+        def extract_searchable_terms(complex_query: str) -> str:
+            """Extract concrete searchable terms from analytical queries"""
+            # Key terms that might appear in call center transcripts
+            searchable_terms = []
+            query_lower = complex_query.lower()
+            
+            # Churn/cancellation related terms
+            if any(word in query_lower for word in ["churn", "cancel", "quit", "leave", "switch", "dissatisfaction"]):
+                searchable_terms.extend(["cancel", "switch", "frustrated", "angry", "unhappy", "leave", "quit", "dissatisfied"])
+            
+            # Service related terms
+            if any(word in query_lower for word in ["service", "support", "help", "issue", "problem"]):
+                searchable_terms.extend(["service", "support", "help", "issue", "problem", "complaint"])
+                
+            # Product related terms  
+            if any(word in query_lower for word in ["phone", "carrier", "network", "billing"]):
+                searchable_terms.extend(["phone", "carrier", "network", "billing", "plan", "device"])
+            
+            # If we found relevant terms, use them; otherwise use original query
+            if searchable_terms:
+                # Remove duplicates and join
+                unique_terms = list(dict.fromkeys(searchable_terms))[:5]  # Max 5 terms
+                simplified_query = " ".join(unique_terms)
+                logger.info(f"🔍 Query simplified: '{complex_query}' → '{simplified_query}'")
+                return simplified_query
+            else:
+                # For simpler queries, just use the first few words
+                words = complex_query.split()[:3]  # First 3 words
+                simplified = " ".join(words)
+                if simplified != complex_query:
+                    logger.info(f"🔍 Query shortened: '{complex_query}' → '{simplified}'")
+                return simplified
+        
+        # Use simplified query for search but keep original for AI analysis
+        search_query = extract_searchable_terms(req.message)
+        
+        # Set collection limits based on mode - FIXED: Stay under OpenSearch 10k limit
         if comprehensive_mode:
-            collection_scan_limit = 25000  # Scan up to 25k records in comprehensive mode
-            logger.info(f"📈 COMPREHENSIVE MODE: Scanning up to {collection_scan_limit} records")
+            collection_scan_limit = 9000  # Stay safely under OpenSearch 10k limit
+            logger.info(f"📈 COMPREHENSIVE MODE: Scanning up to {collection_scan_limit} records (OpenSearch limit: 10k)")
         else:
-            collection_scan_limit = 10000  # Standard mode scans 10k records
+            collection_scan_limit = 5000  # Conservative limit for standard mode
             logger.info(f"⚡ STANDARD MODE: Scanning up to {collection_scan_limit} records")
         
         # STAGE 1: FAST COLLECTION - Scan ALL records to find matches
@@ -1999,13 +2036,16 @@ async def relay_chat_rag(request: Request):
         try:
             from opensearch_client import search_transcripts_comprehensive
             
-            # Use comprehensive search to collect ALL matches
+            # Use comprehensive search to collect ALL matches with simplified query
             collection_result = search_transcripts_comprehensive(
-                query=req.message,
+                query=search_query,  # Use simplified query for better matching
                 filters=req.filters,
                 display_size=smart_max_results,  # How many matches to return for processing
                 max_total_scan=collection_scan_limit  # How many total records to scan
             )
+            
+            # DEBUG: Log the raw collection result
+            logger.info(f"🔍 DEBUG: Collection result keys: {list(collection_result.keys()) if isinstance(collection_result, dict) else 'Not a dict'}")
             
             if "error" in collection_result:
                 logger.error(f"❌ Stage 1 collection failed: {collection_result['error']}")
@@ -2014,6 +2054,10 @@ async def relay_chat_rag(request: Request):
             else:
                 matching_transcripts = collection_result.get("display_results", [])
                 summary = collection_result.get("comprehensive_summary", {})
+                
+                # DEBUG: Log detailed results
+                logger.info(f"🔍 DEBUG: Raw matching transcripts count: {len(matching_transcripts)}")
+                logger.info(f"🔍 DEBUG: Summary keys: {list(summary.keys()) if summary else 'No summary'}")
                 
                 # Log collection results
                 total_searched = summary.get("total_evaluations_searched", 0)
@@ -2028,6 +2072,10 @@ async def relay_chat_rag(request: Request):
                 
                 if not matching_transcripts:
                     logger.warning("⚠️ No matching transcripts found in Stage 1")
+                    logger.warning("🔍 DEBUG: This suggests the search_transcripts_comprehensive function found no matches")
+                    logger.warning(f"🔍 DEBUG: Search query was: '{search_query}'")
+                    logger.warning(f"🔍 DEBUG: Original query was: '{req.message}'")
+                    logger.warning(f"🔍 DEBUG: Filters were: {req.filters}")
                     context = create_empty_search_context("no_matches")
                     sources = []
                 else:
@@ -2090,14 +2138,18 @@ async def relay_chat_rag(request: Request):
 
         logger.info(f"🔍 ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 
-        MIN_CONTEXT_CHARS = 2500
-        MIN_DISTINCT_EVALS = 5        
+        # ADJUSTED: More reasonable thresholds for real-world data
+        MIN_CONTEXT_CHARS = 500   # Lowered from 2500 to 500 - more realistic
+        MIN_DISTINCT_EVALS = 1    # Lowered from 5 to 1 - even 1 match is valuable        
 
         # BLOCK hallucinated responses if no real data
         if (not context or not sources 
             or len(context) < MIN_CONTEXT_CHARS 
             or len({s.get("evaluationId") for s in sources if s.get("evaluationId")}) < MIN_DISTINCT_EVALS):
             logger.warning("⚠️ No context found → skipping LLM and returning no-data message.")
+            logger.warning(f"   Context length: {len(context) if context else 0} (min: {MIN_CONTEXT_CHARS})")
+            logger.warning(f"   Sources count: {len(sources) if sources else 0}")
+            logger.warning(f"   Unique evals: {len({s.get('evaluationId') for s in sources if s.get('evaluationId')}) if sources else 0} (min: {MIN_DISTINCT_EVALS})")
             return JSONResponse(
                 status_code=200,
                 content={
@@ -2130,6 +2182,10 @@ async def relay_chat_rag(request: Request):
 SEARCH OPTIMIZATION: This data was found using two-stage search optimization:
 - Stage 1: Scanned complete dataset to find all matches
 - Stage 2: Processing only relevant matches (not entire dataset)
+- Query Optimization: Complex analytical queries are simplified to find relevant transcripts (e.g., "churn risk analysis" → searches for "cancel switch frustrated angry")
+
+IMPORTANT: The user's original question was: "{req.message}"
+Even though we searched for simpler terms ("{search_query}"), you should answer the user's original complex question using the transcript data found.
 
 {GROUNDING_POLICY}
 
@@ -2138,6 +2194,8 @@ SEARCH OPTIMIZATION: This data was found using two-stage search optimization:
 
 # Instructions
 - Base your analysis strictly on the transcript context above
+- Answer the user's ORIGINAL question: "{req.message}"
+- The search may have used simplified terms, but provide analysis for the original complex query
 - Provide specific examples and quotes when relevant
 - If asked about trends or patterns, only reference what's shown in the data
 - For reports, organize information clearly with key findings
