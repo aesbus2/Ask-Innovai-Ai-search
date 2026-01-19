@@ -826,6 +826,38 @@ def build_chat_prompt(user_query: str, context: str) -> str:
     )
 
 
+def format_metadata_constraints(strict_metadata: Dict[str, Any]) -> str:
+    """
+    Format metadata constraints for AI prompt
+    """
+    if not strict_metadata:
+        return "No metadata constraints available"
+    
+    constraints = []
+    
+    if strict_metadata.get('partners'):
+        constraints.append(f"- Partners: {', '.join(sorted(strict_metadata['partners']))}")
+    
+    if strict_metadata.get('sites'): 
+        constraints.append(f"- Sites: {', '.join(sorted(strict_metadata['sites']))}")
+    
+    if strict_metadata.get('lobs'):
+        constraints.append(f"- LOBs: {', '.join(sorted(strict_metadata['lobs']))}")
+    
+    if strict_metadata.get('dispositions'):
+        constraints.append(f"- Dispositions: {', '.join(sorted(strict_metadata['dispositions']))}")
+    
+    if strict_metadata.get('subDispositions'):
+        constraints.append(f"- SubDispositions: {', '.join(sorted(strict_metadata['subDispositions']))}")
+    
+    if strict_metadata.get('agents'):
+        # Limit agents to first 20 to avoid overly long prompts
+        agents = sorted(strict_metadata['agents'])[:20]
+        constraints.append(f"- Agents: {', '.join(agents)}")
+    
+    return '\n'.join(constraints) if constraints else "No specific metadata constraints"
+
+
 def detect_report_query(message: str) -> bool:
     """Detect if the message is asking for a report or analysis"""
     report_keywords = [
