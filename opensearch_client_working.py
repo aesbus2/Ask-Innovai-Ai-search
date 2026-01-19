@@ -21,7 +21,7 @@ except ImportError:
 VERSION = "4.8.2"
 logger = logging.getLogger(__name__)
 
-# âœ… VECTOR SEARCH ENABLED
+# ✅ VECTOR SEARCH ENABLED
 _client = None
 _vector_support_detected = None  # Will be detected dynamically
 _vector_support_tested = False
@@ -59,9 +59,9 @@ def get_client():
         # Test connection with proper timeout
         test_result = client.ping(request_timeout=5)  # INTEGER: 5 seconds
         if test_result:
-            logger.info("âœ… OpenSearch connection successful")
+            logger.info("✅ OpenSearch connection successful")
         else:
-            logger.warning("âš ï¸ OpenSearch ping returned False")
+            logger.warning("⚠️ OpenSearch ping returned False")
         
         return client
         
@@ -88,22 +88,22 @@ def test_connection() -> bool:
         # Use integer timeout
         result = client.ping(request_timeout=5)
         if result:
-            logger.info("âœ… OpenSearch connection test successful")
+            logger.info("✅ OpenSearch connection test successful")
             return True
         else:
-            logger.error("âŒ OpenSearch ping failed")
+            logger.error("❌ OpenSearch ping failed")
             return False
     except Exception as e:
-        logger.error(f"âŒ OpenSearch connection test failed: {e}")
+        logger.error(f"❌ OpenSearch connection test failed: {e}")
         return False
 
 # =============================================================================
-# âœ… VECTOR SEARCH DETECTION AND SUPPORT - ENABLED
+# ✅ VECTOR SEARCH DETECTION AND SUPPORT - ENABLED
 # =============================================================================
 
 def detect_vector_support(client) -> bool:
     """
-    âœ… ENABLED: Detect if the OpenSearch cluster supports vector search
+    ✅ ENABLED: Detect if the OpenSearch cluster supports vector search
     """
     global _vector_support_detected, _vector_support_tested
     
@@ -140,17 +140,17 @@ def detect_vector_support(client) -> bool:
             client.indices.delete(index=test_index, request_timeout=5)
             
             _vector_support_detected = True
-            logger.info("âœ… Vector search support detected")
+            logger.info("✅ Vector search support detected")
             
         except Exception as e:
             error_msg = str(e).lower()
             if "knn_vector" in error_msg or "unknown type" in error_msg:
                 _vector_support_detected = False
-                logger.warning("âš ï¸ Vector search not supported by cluster")
+                logger.warning("⚠️ Vector search not supported by cluster")
             else:
                 # Other error - assume supported but connection issue
                 _vector_support_detected = True
-                logger.info("âœ… Vector search assumed supported (test failed due to connection)")
+                logger.info("✅ Vector search assumed supported (test failed due to connection)")
         
         _vector_support_tested = True
         return _vector_support_detected
@@ -163,7 +163,7 @@ def detect_vector_support(client) -> bool:
 
 def ensure_vector_mapping_exists(client, index_name: str):
     """
-    âœ… FIXED: Skip vector mapping for existing indices without k-NN
+    ✅ FIXED: Skip vector mapping for existing indices without k-NN
     """
     try:
         # Check if index exists
@@ -177,10 +177,10 @@ def ensure_vector_mapping_exists(client, index_name: str):
             for idx_name, idx_settings in settings_response.items():
                 knn_enabled = idx_settings.get("settings", {}).get("index", {}).get("knn", "false")
                 if str(knn_enabled).lower() != "true":
-                    logger.warning(f"âš ï¸ Index {index_name} doesn't have k-NN enabled - skipping vector mapping")
+                    logger.warning(f"⚠️ Index {index_name} doesn't have k-NN enabled - skipping vector mapping")
                     return  # Skip entirely
                     
-            logger.info(f"âœ… Index {index_name} has k-NN enabled")
+            logger.info(f"✅ Index {index_name} has k-NN enabled")
             
         except Exception as e:
             logger.warning(f"Could not check k-NN settings for {index_name}: {e}")
@@ -192,26 +192,26 @@ def ensure_vector_mapping_exists(client, index_name: str):
 
 
 # =============================================================================
-# âœ… VECTOR SEARCH IMPLEMENTATION - ENABLED
+# ✅ VECTOR SEARCH IMPLEMENTATION - ENABLED
 # =============================================================================
 
 def search_vector(query_vector: List[float], index_override: str = None, 
                  filters: Dict[str, Any] = None, size: int = 50) -> List[Dict]:
     """
-    âœ… ENABLED: Vector similarity search using embeddings
+    ✅ ENABLED: Vector similarity search using embeddings
     """
     client = get_opensearch_client()
     if not client:
-        logger.error("âŒ OpenSearch client not available")
+        logger.error("❌ OpenSearch client not available")
         return []
     
     # Check vector support
     if not detect_vector_support(client):
-        logger.warning("âš ï¸ Vector search not supported, falling back to text search")
+        logger.warning("⚠️ Vector search not supported, falling back to text search")
         return []
     
     index_pattern = index_override or "eval-*"
-    logger.debug(f"ðŸ”® VECTOR SEARCH v{VERSION}: {len(query_vector)}-dim vector, size={size}")
+    logger.debug(f"🔮 VECTOR SEARCH v{VERSION}: {len(query_vector)}-dim vector, size={size}")
     
     try:
         # Build vector search query
@@ -287,8 +287,7 @@ def search_vector(query_vector: List[float], index_override: str = None,
                 "internalId": source.get("internalId"),
                 "template_name": source.get("template_name"),
                 "template_id": source.get("template_id"),
-                "text": source.get("text", source.get("full_text", "")),
-                "evaluation": source.get("evaluation", ""),
+                "text": source.get("text", source.get("full_text", "")),                
                 "transcript": source.get("transcript", ""),
                 "weight_score": source.get("weight_score", source.get("weighted_score")),
                 "url": source.get("url", ""),
@@ -300,26 +299,26 @@ def search_vector(query_vector: List[float], index_override: str = None,
             
             results.append(result)
         
-        logger.info(f"âœ… Vector search completed: {len(results)} results")
+        logger.info(f"✅ Vector search completed: {len(results)} results")
         return results
         
     except Exception as e:
-        logger.error(f"âŒ Vector search failed: {e}")
+        logger.error(f"❌ Vector search failed: {e}")
         return []
 
 def hybrid_search(query: str, query_vector: List[float] = None, 
                  index_override: str = None, filters: Dict[str, Any] = None, 
                  size: int = 50, vector_weight: float = 0.6) -> List[Dict]:
     """
-    âœ… NEW: Hybrid search combining text and vector search with scoring
+    ✅ NEW: Hybrid search combining text and vector search with scoring
     """
     client = get_opensearch_client()
     if not client:
-        logger.error("âŒ OpenSearch client not available")
+        logger.error("❌ OpenSearch client not available")
         return []
     
     index_pattern = index_override or "eval-*"
-    logger.debug(f"ðŸ”¥ HYBRID SEARCH v{VERSION}: text + vector, size={size}, vector_weight={vector_weight}")
+    logger.debug(f"🔥 HYBRID SEARCH v{VERSION}: text + vector, size={size}, vector_weight={vector_weight}")
     
     try:
         # Get available fields for safe queries
@@ -400,7 +399,7 @@ def hybrid_search(query: str, query_vector: List[float] = None,
         }
         
         # Execute hybrid search
-        response = safe_search_with_error_handling(client, index_pattern, search_body, timeout=30)
+        response = safe_search_with_error_handling(client, index_pattern, search_body, timeout=120)
         
         # Process results
         results = []
@@ -417,8 +416,7 @@ def hybrid_search(query: str, query_vector: List[float] = None,
                 "internalId": source.get("internalId"),
                 "template_name": source.get("template_name"),
                 "template_id": source.get("template_id"),
-                "text": source.get("text", source.get("full_text", source.get("evaluation", ""))),
-                "evaluation": source.get("evaluation", ""),
+                "text": source.get("text", source.get("full_text", source.get("transcript", ""))),                
                 "transcript": source.get("transcript", ""),
                 "weight_score": source.get("weight_score", source.get("weighted_score")),
                 "url": source.get("url", ""),
@@ -430,13 +428,13 @@ def hybrid_search(query: str, query_vector: List[float] = None,
             
             results.append(result)
         
-        logger.info(f"âœ… Hybrid search completed: {len(results)} results using {search_type}")
+        logger.info(f"✅ Hybrid search completed: {len(results)} results using {search_type}")
         return results
         
     except Exception as e:
-        logger.error(f"âŒ Hybrid search failed: {e}")
+        logger.error(f"❌ Hybrid search failed: {e}")
         # Fallback to text-only search
-        logger.info("ðŸ”„ Falling back to text-only search")
+        logger.info("🔄 Falling back to text-only search")
         return search_opensearch(query, index_override, filters, size)
     
 
@@ -491,7 +489,7 @@ def get_available_fields(client, index_pattern: str = "eval-*") -> Dict[str, Lis
             "safe_aggregation_fields": {},
             "date_fields": [],
             "numeric_fields": [],
-            "vector_fields": [],  # âœ… NEW: Track vector fields
+            "vector_fields": [],  # ✅ NEW: Track vector fields
             "has_vector_support": False
         }
         
@@ -513,7 +511,7 @@ def get_available_fields(client, index_pattern: str = "eval-*") -> Dict[str, Lis
                     available_fields["date_fields"].append(field_name)
                 elif field_type in ["integer", "long", "float", "double"]:
                     available_fields["numeric_fields"].append(field_name)
-                elif field_type == "knn_vector":  # âœ… NEW: Vector field detection
+                elif field_type == "knn_vector":  # ✅ NEW: Vector field detection
                     available_fields["vector_fields"].append(field_name)
                     available_fields["has_vector_support"] = True
                 
@@ -535,7 +533,7 @@ def get_available_fields(client, index_pattern: str = "eval-*") -> Dict[str, Lis
                         elif meta_type == "text" and "fields" in meta_config and "keyword" in meta_config["fields"]:
                             available_fields["safe_aggregation_fields"][meta_field] = f"metadata.{meta_field}.keyword"
                 
-                # âœ… NEW: Check for nested vector fields (in chunks)
+                # ✅ NEW: Check for nested vector fields (in chunks)
                 if field_name == "chunks" and field_type == "nested":
                     chunk_props = field_config.get("properties", {})
                     for chunk_field, chunk_config in chunk_props.items():
@@ -548,7 +546,7 @@ def get_available_fields(client, index_pattern: str = "eval-*") -> Dict[str, Lis
             if isinstance(available_fields[key], list):
                 available_fields[key] = list(set(available_fields[key]))
         
-        logger.info(f"âœ… Field detection completed: {len(available_fields['text_fields'])} text fields, "
+        logger.info(f"✅ Field detection completed: {len(available_fields['text_fields'])} text fields, "
                    f"{len(available_fields['vector_fields'])} vector fields, "
                    f"vector support: {available_fields['has_vector_support']}")
         
@@ -582,10 +580,9 @@ def build_safe_search_query(query: str, available_fields: Dict[str, List[str]],
     # Build search fields with validation - Updated for API structure
     search_fields = []
     field_priorities = [
-        ("evaluation", 3.0),        # NEW: Full evaluation content (highest priority)
+        # NEW: Full evaluation content (highest priority)
         ("transcript", 2.8),        # NEW: Call transcript (high priority)
-        ("full_text", 2.5),
-        ("evaluation_text", 2.2),
+        ("full_text", 2.5),        
         ("template_name", 2.0),
         ("content", 1.8),
         ("text", 1.5),
@@ -856,7 +853,7 @@ def build_safe_filter_clauses(filters: Dict[str, Any], available_fields: Dict[st
                 logger.debug(f"Added duration filter: {duration_field}")
                 break
     
-    logger.info(f"ðŸŽ¯ Built {len(filter_clauses)} enhanced filter clauses with priority-based logic")
+    logger.info(f"🎯 Built {len(filter_clauses)} enhanced filter clauses with priority-based logic")
     return filter_clauses
 
 # =============================================================================
@@ -885,7 +882,7 @@ def safe_search_with_error_handling(client, index_pattern: str, query_body: Dict
         error_msg = str(e).lower()
         
         if "compile_error" in error_msg or "search_phase_execution_exception" in error_msg:
-            logger.error(f"ðŸš¨ QUERY COMPILATION ERROR: {e}")
+            logger.error(f"🚨 QUERY COMPILATION ERROR: {e}")
             logger.error(f"Failed query: {json.dumps(query_body, indent=2)}")
             
             # Return safe empty result
@@ -913,11 +910,11 @@ def search_opensearch(query: str, index_override: str = None,
     """
     client = get_opensearch_client()
     if not client:
-        logger.error("âŒ OpenSearch client not available")
+        logger.error("❌ OpenSearch client not available")
         return []
     
     index_pattern = index_override or "eval-*"
-    logger.info(f"ðŸ” ENHANCED SEARCH v{VERSION}: query='{query}', size={size}")
+    logger.info(f"🔍 ENHANCED SEARCH v{VERSION}: query='{query}', size={size}")
     
     try:
         # STEP 1: Validate indices exist
@@ -939,11 +936,11 @@ def search_opensearch(query: str, index_override: str = None,
             # Try to import embedder and generate vector
             from embedder import embed_text
             query_vector = embed_text(query)
-            logger.debug(f"âœ… Query vector generated: {len(query_vector)} dimensions")
+            logger.debug(f"✅ Query vector generated: {len(query_vector)} dimensions")
         except ImportError:
-            logger.info("â„¹ï¸ Embedder not available, using text-only search")
+            logger.info("ℹ️ Embedder not available, using text-only search")
         except Exception as e:
-            logger.warning(f"âš ï¸ Vector generation failed: {e}")
+            logger.warning(f"⚠️ Vector generation failed: {e}")
         
         # STEP 4: Use hybrid search if vector is available and supported
         if query_vector and available_fields.get("has_vector_support", False):
@@ -960,14 +957,14 @@ def search_opensearch(query: str, index_override: str = None,
                 has_actual_vectors = test_response.get("hits", {}).get("total", {}).get("value", 0) > 0
                 
                 if has_actual_vectors:
-                    logger.info("ðŸ”¥ Using hybrid text+vector search")
+                    logger.info("🔥 Using hybrid text+vector search")
                     return hybrid_search(query, query_vector, index_pattern, filters, size)
                 else:
-                    logger.info("ðŸ“ No vector data found, using text-only search")
+                    logger.info("📝 No vector data found, using text-only search")
             except Exception as e:
-                logger.info(f"ðŸ“ Vector field check failed: {e}, using text-only search")
+                logger.info(f"📝 Vector field check failed: {e}, using text-only search")
         else:
-            logger.info("ðŸ“ Using text-only search")
+            logger.info("📝 Using text-only search")
         
         # STEP 5: Build safe search query (text-only fallback)
         search_query = build_safe_search_query(query, available_fields, filters)
@@ -1011,8 +1008,7 @@ def search_opensearch(query: str, index_override: str = None,
                 "internalId": source.get("internalId"),
                 "template_name": source.get("template_name"),
                 "template_id": source.get("template_id"),
-                "text": source.get("text", source.get("full_text", source.get("evaluation", ""))),
-                "evaluation": source.get("evaluation", ""),
+                "text": source.get("text", source.get("full_text", source.get("transcript", ""))),                
                 "transcript": source.get("transcript", ""),
                 "weight_score": source.get("weight_score", source.get("weighted_score")),
                 "url": source.get("url", ""),
@@ -1029,7 +1025,7 @@ def search_opensearch(query: str, index_override: str = None,
             
             results.append(result)
         
-        logger.info(f"âœ… Enhanced search completed: {len(results)} results from {response.get('hits', {}).get('total', {}).get('value', 0)} total")
+        logger.info(f"✅ Enhanced search completed: {len(results)} results from {response.get('hits', {}).get('total', {}).get('value', 0)} total")
         
         return results
         
@@ -1059,7 +1055,7 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
     """
     client = get_opensearch_client()
     if not client:
-        logger.error("âŒ OpenSearch client not available")
+        logger.error("❌ OpenSearch client not available")
         return []
     
     index_pattern = "eval-*"
@@ -1068,7 +1064,7 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
     if is_quoted_phrase:
         clean_query = clean_query.strip('"')
     
-    logger.info(f"ðŸŽ¯ DIRECT TRANSCRIPT SEARCH: '{clean_query}' (size={size})")
+    logger.info(f"🎯 DIRECT TRANSCRIPT SEARCH: '{clean_query}' (size={size})")
 
     try:
         # Get available fields for safe queries
@@ -1117,7 +1113,7 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
             "size": size,
             "sort": [{"_score": {"order": "desc"}}],
             "_source": ["evaluationId", "internalId", "template_name", "template_id", 
-                       "transcript_text", "metadata", "evaluation_text"],
+                       "transcript", "metadata", ],
         }
         
         # Add highlighting for matched words
@@ -1200,24 +1196,23 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
                 "program": safe_get_metadata(metadata, ["program"]),
                 "partner": safe_get_metadata(metadata, ["partner"]),
                 "site": safe_get_metadata(metadata, ["site"]),
-                "call_date": safe_get_metadata(metadata, ["call_date", "callDate"]),
-                "search_type": "transcript_only",
+                "call_date": safe_get_metadata(metadata, ["call_date", "callDate"]),                
                 "highlighted_snippets": highlights,
                 "match_count": len(highlights) if highlights else _count_word_occurrences(transcript_content, query)
             }
             
             results.append(result)
         
-        logger.info(f"âœ… Transcript search completed: {len(results)} results")
+        logger.info(f"✅ Transcript search completed: {len(results)} results")
         return results
         
     except Exception as e:
-        logger.error(f"âŒ Transcript search failed: {e}")
+        logger.error(f"❌ Transcript search failed: {e}")
         return []
 
-print("ðŸ”§ FIELD ACCESS ERRORS FIXED!")
-print("ðŸ“ UPDATE: Added safe metadata field access with error handling")
-print("ðŸŽ¯ This should resolve the 'sub_disposition' server error")
+print("🔧 FIELD ACCESS ERRORS FIXED!")
+print("📝 UPDATE: Added safe metadata field access with error handling")
+print("🎯 This should resolve the 'sub_disposition' server error")
 
 def search_transcript_with_context(query: str, evaluation_id: str, 
                                   context_chars: int = 200) -> Dict[str, Any]:
@@ -1281,12 +1276,12 @@ def search_transcript_with_context(query: str, evaluation_id: str,
         }
         
     except Exception as e:
-        logger.error(f"âŒ Transcript context search failed: {e}")
+        logger.error(f"❌ Transcript context search failed: {e}")
         return {"error": str(e)}
     
-print("ðŸ”§ TRANSCRIPT SEARCH FIELD NAMES FIXED!")
-print("ðŸ“ UPDATE: All functions now search 'transcript_text' field instead of 'transcript'")
-print("ðŸŽ¯ This should resolve the 0 results issue with transcript search")
+print("🔧 TRANSCRIPT SEARCH FIELD NAMES FIXED!")
+print("📝 UPDATE: All functions now search 'transcript_text' field instead of 'transcript'")
+print("🎯 This should resolve the 0 results issue with transcript search")
 
 # ===================================================================
 # EXACT MATCH TRANSCRIPT SEARCH FIX
@@ -1300,7 +1295,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
     """
     client = get_opensearch_client()
     if not client:
-        logger.error("âŒ OpenSearch client not available")
+        logger.error("❌ OpenSearch client not available")
         return {"error": "OpenSearch client not available"}
     
     index_pattern = "eval-*"
@@ -1311,7 +1306,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
     if is_quoted_phrase:
         clean_query = clean_query.strip('"')
     
-    logger.info(f"ðŸ” DIRECT TRANSCRIPT SEARCH: '{clean_query}' {('(exact phrase)' if is_quoted_phrase else '')} (display={display_size})")
+    logger.info(f"🔍 DIRECT TRANSCRIPT SEARCH: '{clean_query}' {('(exact phrase)' if is_quoted_phrase else '')} (display={display_size})")
     
     try:
         # Get available fields for safe queries
@@ -1381,7 +1376,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             "size": max_total_scan,
             "sort": [{"_score": {"order": "desc"}}],
             "_source": ["evaluationId", "internalId", "template_name", "template_id", 
-                       "transcript_text", "metadata", "evaluation_text"],
+                       "transcript", "metadata"],
             "track_total_hits": True
         }
         
@@ -1401,7 +1396,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         response = safe_search_with_error_handling(client, index_pattern, comprehensive_search_body, timeout=30)
         all_hits = response.get("hits", {}).get("hits", [])
         
-        logger.info(f"ðŸ” Direct search found {len(all_hits)} potential matches")
+        logger.info(f"🔍 Direct search found {len(all_hits)} potential matches")
         
         # VALIDATION: Ensure results actually contain search terms
         validated_results = []
@@ -1420,23 +1415,16 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             
             content_lower = transcript_content.lower()
             
-            # FIXED: Detect analytical queries and skip keyword validation
-            analytical_terms = ["analysis", "analyze", "report", "summary", "summarize", "review",
-                            "performance", "quality", "metrics", "statistics", "trends", "weekly",
-                            "monthly", "quarterly", "overview", "assessment", "evaluation"]
-            is_analytical_query = any(term in clean_query.lower() for term in analytical_terms)
-            # Validation logic - skip for analytical queries
-            if not is_analytical_query:
-                if is_quoted_phrase:
-                    # For quoted phrases, require exact phrase
-                    if clean_query.lower() not in content_lower:
-                        continue
-                else:
-                    # For regular queries, require at least one search word
-                    words_found = [word for word in search_words if word in content_lower]
-                    if not words_found:
-                        continue
-
+            # Validation logic
+            if is_quoted_phrase:
+                # For quoted phrases, require exact phrase
+                if clean_query.lower() not in content_lower:
+                    continue
+            else:
+                # For regular queries, require at least one search word
+                words_found = [word for word in search_words if word in content_lower]
+                if not words_found:
+                    continue
             
             # This is a valid match
             highlights = hit.get("highlight", {}).get("transcript_text", [])
@@ -1538,7 +1526,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         }
         
     except Exception as e:
-        logger.error(f"âŒ Direct transcript search failed: {e}")
+        logger.error(f"❌ Direct transcript search failed: {e}")
         return {"error": str(e)}
 
 # =============================================================================
@@ -1549,7 +1537,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
     """Enhanced index creation with vector field mappings"""
     try:
         if client.indices.exists(index=index_name, request_timeout=10):
-            logger.info(f"âœ… Index {index_name} already exists")
+            logger.info(f"✅ Index {index_name} already exists")
             # Still check if vector mapping needs to be added
             if detect_vector_support(client):
                 ensure_vector_mapping_exists(client, index_name)
@@ -1577,9 +1565,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
                 # Content fields
                 "text": {"type": "text", "analyzer": "standard"},
                 "full_text": {"type": "text", "analyzer": "standard"},
-                "content": {"type": "text", "analyzer": "standard"},
-                "evaluation_text": {"type": "text", "analyzer": "standard"},
-                "evaluation": {"type": "text", "analyzer": "standard"},
+                "content": {"type": "text", "analyzer": "standard"},                
                 "transcript": {"type": "text", "analyzer": "standard"},
                 
                 # Nested chunks with vector support
@@ -1588,11 +1574,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
                     "properties": {
                         "text": {"type": "text", "analyzer": "standard"},
                         "content": {"type": "text", "analyzer": "standard"},
-                        "content_type": {"type": "keyword"},
-                        "question": {"type": "text", "analyzer": "standard"},
-                        "answer": {"type": "text", "analyzer": "standard"},
-                        "section": {"type": "keyword"},
-                        "score": {"type": "float"},
+                        "content_type": {"type": "keyword"},                        
                         "chunk_id": {"type": "keyword"}
                     }
                 },
@@ -1616,8 +1598,7 @@ def ensure_evaluation_index_exists(client, index_name: str):
                         "call_date": {"type": "date"},
                         "call_duration": {"type": "integer"},
                         "created_on": {"type": "date"},
-                        "call_type": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                        "weighted_score": {"type": "integer"},
+                        "call_type": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},                        
                         "url": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                     }
                 },
@@ -1632,9 +1613,9 @@ def ensure_evaluation_index_exists(client, index_name: str):
         }
     }
     
-    # âœ… ADD VECTOR FIELDS IF SUPPORTED
+    # ✅ ADD VECTOR FIELDS IF SUPPORTED
     if vector_supported:
-        logger.info(f"âœ… Adding vector fields to index mapping for {index_name}")
+        logger.info(f"✅ Adding vector fields to index mapping for {index_name}")
         
         # Add document-level embedding
         mapping["mappings"]["properties"]["document_embedding"] = {
@@ -1666,18 +1647,18 @@ def ensure_evaluation_index_exists(client, index_name: str):
         )
         
         if vector_supported:
-            logger.info(f"âœ… Created index {index_name} with v{VERSION} mapping + VECTOR SUPPORT")
+            logger.info(f"✅ Created index {index_name} with v{VERSION} mapping + VECTOR SUPPORT")
         else:
-            logger.info(f"âœ… Created index {index_name} with v{VERSION} mapping (no vector support)")
+            logger.info(f"✅ Created index {index_name} with v{VERSION} mapping (no vector support)")
             
     except Exception as e:
-        logger.error(f"âŒ Failed to create index {index_name}: {e}")
+        logger.error(f"❌ Failed to create index {index_name}: {e}")
         raise
 
 def index_document(doc_id: str, document: Dict[str, Any], index_override: str = None) -> bool:
     client = get_opensearch_client()
     if not client:
-        logger.error("âŒ OpenSearch client not available")
+        logger.error("❌ OpenSearch client not available")
         return False
 
     index_name = index_override or "evaluations-grouped"
@@ -1685,7 +1666,7 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
     try:
         ensure_evaluation_index_exists(client, index_name)
 
-        # âœ… Add system fields
+        # ✅ Add system fields
         document["_indexed_at"] = datetime.now().isoformat()
         document["_structure_version"] = VERSION
 
@@ -1694,11 +1675,11 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
         document["_structure_version"] = VERSION
 
         # Safe embedding logic
-        text_for_embedding = document.get("transcript") or document.get("evaluation") or ""
+        text_for_embedding = document.get("transcript") or document.get("text") or document.get("full_text") or ""
         if text_for_embedding.strip():
             document["document_embedding"] = embed_text(text_for_embedding)
         else:
-            logger.warning(f"âš ï¸ No text to embed for document {doc_id}")
+            logger.warning(f"⚠️ No text to embed for document {doc_id}")
             document["document_embedding"] = None
 
         client.index(
@@ -1709,11 +1690,11 @@ def index_document(doc_id: str, document: Dict[str, Any], index_override: str = 
             request_timeout=60
         )
 
-        logger.info(f"âœ… Indexed document {doc_id} in {index_name}")
+        logger.info(f"✅ Indexed document {doc_id} in {index_name}")
         return True
 
     except Exception as e:
-        logger.error(f"âŒ Failed to index document {doc_id}: {e}")
+        logger.error(f"❌ Failed to index document {doc_id}: {e}")
         return False
 
 # =============================================================================
@@ -1830,11 +1811,10 @@ def debug_search_simple(query: str = "test") -> Dict[str, Any]:
                 "has_metadata": "metadata" in source,
                 "has_chunks": "chunks" in source and isinstance(source.get("chunks"), list),
                 "has_weight_score": "weight_score" in source or "weighted_score" in source,
-                "has_url": "url" in source,
-                "has_evaluation": "evaluation" in source,
+                "has_url": "url" in source,               
                 "has_transcript": "transcript" in source,
-                "has_document_embedding": "document_embedding" in source,  # âœ… NEW
-                "has_chunk_embeddings": False,  # âœ… NEW
+                "has_document_embedding": "document_embedding" in source,  # ✅ NEW
+                "has_chunk_embeddings": False,  # ✅ NEW
                 "text_fields": [k for k in source.keys() if isinstance(source.get(k), str) and len(source.get(k, "")) > 50],
                 "metadata_fields": list(source.get("metadata", {}).keys()) if source.get("metadata") else [],
                 "weight_score": source.get("weight_score", source.get("weighted_score")),
@@ -1921,30 +1901,30 @@ def get_connection_status() -> Dict[str, Any]:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
-    print(f"ðŸ§ª Testing OpenSearch Client v{VERSION} WITH VECTOR SEARCH")
+    print(f"🧪 Testing OpenSearch Client v{VERSION} WITH VECTOR SEARCH")
     print("=" * 70)  
     
     # Test health check
     health = health_check()
-    print(f"\nðŸ¥ Health Check: {health['status']}")
+    print(f"\n🏥 Health Check: {health['status']}")
     
     if health["status"] == "healthy":
         print(f"   Cluster: {health['cluster_name']}")
         print(f"   Version: {health['version']}")
         print(f"   Searchable Fields: {health['searchable_fields']}")
         print(f"   Vector Fields: {health['vector_fields']}")
-        print(f"   âœ… Vector Support: {health['vector_support']}")
-        print(f"   âœ… Vector Mapping: {health['has_vector_mapping']}")
+        print(f"   ✅ Vector Support: {health['vector_support']}")
+        print(f"   ✅ Vector Mapping: {health['has_vector_mapping']}")
         
         # Test vector support detection
         client = get_opensearch_client()
         if client:
-            print(f"\nðŸ”® Vector Support Detection...")
+            print(f"\n🔮 Vector Support Detection...")
             vector_supported = detect_vector_support(client)
-            print(f"   Vector Support: {'âœ… ENABLED' if vector_supported else 'âŒ NOT SUPPORTED'}")
+            print(f"   Vector Support: {'✅ ENABLED' if vector_supported else '❌ NOT SUPPORTED'}")
             
             # Test search
-            print(f"\nðŸ” Testing Enhanced Search...")
+            print(f"\n🔍 Testing Enhanced Search...")
             search_results = search_opensearch("customer service", size=3)
             print(f"   Results: {len(search_results)} documents found")
             if search_results:
@@ -1955,7 +1935,7 @@ if __name__ == "__main__":
             
             # Test vector search if supported
             if vector_supported:
-                print(f"\nðŸ”® Testing Vector Search...")
+                print(f"\n🔮 Testing Vector Search...")
                 try:
                     # Create dummy vector for testing
                     dummy_vector = [0.1] * 384  # 384-dimensional dummy vector
@@ -1964,7 +1944,7 @@ if __name__ == "__main__":
                 except Exception as e:
                     print(f"   Vector Search Error: {e}")
                 
-                print(f"\nðŸ”¥ Testing Hybrid Search...")
+                print(f"\n🔥 Testing Hybrid Search...")
                 try:
                     hybrid_results = hybrid_search("customer service", dummy_vector, size=3)
                     print(f"   Hybrid Results: {len(hybrid_results)} documents found")
@@ -1973,18 +1953,18 @@ if __name__ == "__main__":
                 except Exception as e:
                     print(f"   Hybrid Search Error: {e}")
         
-        print(f"\nâœ… All tests completed successfully!")
-        print(f"ðŸŽ‰ OpenSearch Client v{VERSION} with VECTOR SEARCH is ready!")
-        print(f"ðŸ”® Vector search: {'ENABLED' if health.get('vector_support') else 'DISABLED'}")
+        print(f"\n✅ All tests completed successfully!")
+        print(f"🎉 OpenSearch Client v{VERSION} with VECTOR SEARCH is ready!")
+        print(f"🔮 Vector search: {'ENABLED' if health.get('vector_support') else 'DISABLED'}")
         print(f" Hybrid search: AVAILABLE")
         
     else:
-        print(f"âŒ Health check failed: {health.get('error', 'Unknown error')}")
+        print(f"❌ Health check failed: {health.get('error', 'Unknown error')}")
     
     print("=" * 70)
 
 else:
-    logger.info(f"ðŸ”Œ OpenSearch Client v{VERSION} loaded successfully")
+    logger.info(f"🔌 OpenSearch Client v{VERSION} loaded successfully")
     logger.info(f"   Fixes: vector_search_enabled, knn_settings_added")
-    logger.info(f"   ðŸ”® VECTOR SEARCH: ENABLED")
+    logger.info(f"   🔮 VECTOR SEARCH: ENABLED")
     logger.info(f"   Ready for production use with vector search capabilities")

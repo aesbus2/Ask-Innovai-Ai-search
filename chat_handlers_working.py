@@ -11,6 +11,9 @@ import logging
 import requests
 import time
 import json
+import csv
+import io
+import uuid
 from datetime import datetime
 from typing import Dict, Any, List, Literal, Tuple
 
@@ -44,17 +47,224 @@ GENAI_MODEL = os.getenv("GENAI_MODEL", "n/a")
 GENAI_TEMPERATURE = float(os.getenv("GENAI_TEMPERATURE", "0.7"))
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "2000"))
 
-CHAT_MAX_RESULTS = int(os.getenv("CHAT_MAX_RESULTS", "10000"))  
+CHAT_MAX_RESULTS = min(int(os.getenv("CHAT_MAX_RESULTS", "8000")), 8000)  # FIXED: Cap at 8000 for full coverage while staying under 10k OpenSearch limit  
 HYBRID_SEARCH_LIMIT = int(os.getenv("HYBRID_SEARCH_LIMIT", "1000"))  
 VECTOR_SEARCH_LIMIT = int(os.getenv("VECTOR_SEARCH_LIMIT", "1000"))  
 TEXT_SEARCH_LIMIT = int(os.getenv("TEXT_SEARCH_LIMIT", "1000"))   
 
 
 
-logger.info(f"   Max total results: {CHAT_MAX_RESULTS}")
+logger.info(f"🔧 CSV DOWNLOAD + OPENSEARCH FIXES APPLIED:")
+logger.info(f"   Max total results: {CHAT_MAX_RESULTS} (capped to prevent OpenSearch 10k limit errors)")
 logger.info(f"   Hybrid search limit: {HYBRID_SEARCH_LIMIT}")
 logger.info(f"   Vector search limit: {VECTOR_SEARCH_LIMIT}")
 logger.info(f"   Text search limit: {TEXT_SEARCH_LIMIT}")
+logger.info(f"   CSV downloads enabled for keyword searches")
+logger.info(f"   Validation thresholds lowered for better matching")
+
+# =============================================================================
+# CSV DOWNLOAD FUNCTIONALITY FOR KEYWORD SEARCHES
+# =============================================================================
+
+def is_keyword_search(query: str) -> bool:
+    """
+    Detect if this is a keyword search that should return CSV results
+    vs an analytical query that should use AI analysis
+    """
+    query_lower = query.lower().strip()
+    
+    # Keyword search indicators
+    keyword_indicators = [
+        'show me', 'find', 'search', 'list', 'get', 'where',
+        'mentioned', 'said', 'talked about', 'discussed', 'contains',
+        'calls where', 'transcripts where', 'evaluations where',
+        'with', 'has', 'includes', 'agent mentioned', 'customer said'
+    ]
+    
+    # Analytical query indicators (should use AI)
+    analytical_indicators = [
+        'analyze', 'analysis', 'report', 'summary', 'summarize',
+        'insights', 'trends', 'patterns', 'compare', 'comparison',
+        'performance', 'quality', 'metrics', 'statistics', 'review',
+        'assess', 'evaluate', 'what does', 'how many', 'percentage'
+    ]
+    
+    # Check for analytical terms first (higher priority)
+    has_analytical = any(term in query_lower for term in analytical_indicators)
+    if has_analytical:
+        return False  # Use AI analysis
+    
+    # Check for keyword search terms
+    has_keyword = any(term in query_lower for term in keyword_indicators)
+    
+    # Also consider queries with quotes as keyword searches
+    has_quotes = '"' in query or "'" in query
+    
+    # Simple keyword checks (single words or short phrases)
+    word_count = len(query.split())
+    is_simple = word_count <= 4
+    
+    return has_keyword or has_quotes or is_simple
+
+def generate_csv_from_search_results(search_results: List[Dict], query: str) -> str:
+    """
+    Generate CSV content from search results
+    """
+    csv_buffer = io.StringIO()
+    
+    # Define CSV headers
+    headers = [
+        'EvaluationID',
+        'Agent_Name', 
+        'Call_Date',
+        'Partner',
+        'Site',
+        'LOB',
+        'Disposition',
+        'Sub_Disposition',
+        'Transcript_Preview',
+        'Highlighted_Snippets',
+        'Score',
+        'Template_Name'
+    ]
+    
+    writer = csv.DictWriter(csv_buffer, fieldnames=headers)
+    writer.writeheader()
+    
+    # Process each search result
+    for result in search_results:
+        # Extract metadata safely
+        metadata = result.get('metadata', {})
+        
+        # Get transcript preview
+        transcript = result.get('transcript', '') or result.get('transcript_text', '')
+        transcript_preview = transcript[:200] + '...' if len(transcript) > 200 else transcript
+        
+        # Get highlighted snippets
+        highlights = result.get('highlighted_snippets', [])
+        highlighted_text = ' | '.join(highlights[:3]) if highlights else 'No highlights'
+        
+        # Build CSV row
+        csv_row = {
+            'EvaluationID': result.get('evaluationId', 'Unknown'),
+            'Agent_Name': metadata.get('agentName') or metadata.get('agent_name', 'Unknown'),
+            'Call_Date': metadata.get('call_date') or metadata.get('created_on', 'Unknown'),
+            'Partner': metadata.get('partner', 'Unknown'),
+            'Site': metadata.get('site', 'Unknown'), 
+            'LOB': metadata.get('lob', 'Unknown'),
+            'Disposition': metadata.get('disposition', 'Unknown'),
+            'Sub_Disposition': metadata.get('subDisposition') or metadata.get('sub_disposition', 'Unknown'),
+            'Transcript_Preview': transcript_preview.replace('\n', ' ').replace('\r', ''),
+            'Highlighted_Snippets': highlighted_text.replace('\n', ' ').replace('\r', ''),
+            'Score': round(result.get('_score', 0), 2),
+            'Template_Name': result.get('template_name', 'Unknown')
+        }
+        
+        writer.writerow(csv_row)
+    
+    csv_content = csv_buffer.getvalue()
+    csv_buffer.close()
+    
+    return csv_content
+
+def save_csv_for_download(csv_content: str, query: str) -> str:
+    """
+    Save CSV content to file and return download path
+    """
+    # Create downloads directory if it doesn't exist
+    downloads_dir = "/mnt/user-data/outputs"
+    os.makedirs(downloads_dir, exist_ok=True)
+    
+    # Generate unique filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_query = "".join(c for c in query if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
+    filename = f"search_results_{safe_query}_{timestamp}.csv"
+    filepath = os.path.join(downloads_dir, filename)
+    
+    # Write CSV content to file
+    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        f.write(csv_content)
+    
+    return filepath
+
+def handle_keyword_search_csv(req: ChatRequest) -> JSONResponse:
+    """
+    Handle keyword searches by returning CSV download instead of AI analysis
+    """
+    query = req.message
+    logger.info(f"🔍 KEYWORD SEARCH DETECTED: '{query}' - Generating CSV download")
+    
+    try:
+        # Import search function
+        from opensearch_client import search_transcripts_comprehensive
+        
+        # Perform comprehensive search to find ALL matches
+        search_result = search_transcripts_comprehensive(
+            query=query,
+            filters=req.filters,
+            display_size=8000,  # Get up to 8000 results (full coverage of 5,082 docs)
+            max_total_scan=8000
+        )
+        
+        if "error" in search_result:
+            logger.error(f"❌ Search failed: {search_result['error']}")
+            return JSONResponse(
+                status_code=500,
+                content={"error": f"Search failed: {search_result['error']}"}
+            )
+        
+        matches = search_result.get("display_results", [])
+        summary = search_result.get("comprehensive_summary", {})
+        
+        total_searched = summary.get("total_evaluations_searched", 0) 
+        matches_found = len(matches)
+        
+        logger.info(f"✅ CSV SEARCH COMPLETE:")
+        logger.info(f"   📊 Total transcripts searched: {total_searched:,}")
+        logger.info(f"   🎯 Matches found: {matches_found:,}")
+        
+        if matches_found == 0:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "reply": f"No transcripts found containing '{query}'. Try different keywords or check spelling.",
+                    "search_type": "keyword_csv",
+                    "matches_found": 0,
+                    "total_searched": total_searched,
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+        
+        # Generate CSV
+        csv_content = generate_csv_from_search_results(matches, query)
+        csv_filepath = save_csv_for_download(csv_content, query)
+        
+        # Return response with download info
+        return JSONResponse(
+            status_code=200,
+            content={
+                "reply": f"✅ **Found {matches_found:,} transcripts containing '{query}'**\n\nSearched: {total_searched:,} total transcripts\nMatch rate: {round((matches_found/total_searched)*100, 1)}%\n\n📁 **CSV Download Ready**\n\n**File contains:**\n• Evaluation IDs and metadata\n• Agent names and call details  \n• Transcript previews with highlights\n• Search scores and rankings\n\n**Next steps:**\n• Download CSV for analysis in Excel\n• Use specific Evaluation IDs for focused AI analysis\n• Apply additional filters to narrow results",
+                "search_type": "keyword_csv", 
+                "matches_found": matches_found,
+                "total_searched": total_searched,
+                "csv_download": {
+                    "filename": os.path.basename(csv_filepath),
+                    "filepath": csv_filepath,
+                    "size_mb": round(os.path.getsize(csv_filepath) / (1024*1024), 2),
+                    "records": matches_found
+                },
+                "sources": matches[:20],  # Show first 20 for preview
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ CSV keyword search failed: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Keyword search failed: {str(e)}"}
+        )
 
 # =============================================================================
 # DYNAMIC SCALING FOR 10,000+ EVALUATIONS
@@ -671,7 +881,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             
             # Allow larger scans for comprehensive mode
             scan_limit = min(max_results, 5000)  # Up to 5000 records
-            display_limit = min(max_results, 2000)  # Display up to 2000
+            display_limit = min(max_results, 5000)  # Display up to 5000
             
             result = search_transcripts_comprehensive(
                 query=query,
@@ -711,7 +921,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                 raise Exception("No unique matches found")
             
             # CRITICAL: Limit results passed to AI to prevent server crash
-            MAX_AI_RESULTS = 200
+            MAX_AI_RESULTS = 5000
             ai_sample = processed_sources[:MAX_AI_RESULTS]
             ai_sample = clean_all_sources(ai_sample)
             
@@ -1924,6 +2134,32 @@ async def relay_chat_rag(request: Request):
         logger.info(f"ðŸ’¬ ENHANCED CHAT REQUEST WITH VECTOR SEARCH: {req.message[:60]}")
         logger.info(f"ðŸ”Ž FILTERS RECEIVED: {req.filters}")
 
+
+        # CSV DOWNLOAD ROUTING: Check if this is a keyword search
+        if is_keyword_search(req.message):
+            logger.info(f"🔍 KEYWORD SEARCH DETECTED: Routing to CSV download")
+            return handle_keyword_search_csv(req)
+
+        # Continue with AI analysis for analytical queries
+        logger.info(f"🤖 ANALYTICAL QUERY DETECTED: Proceeding with AI analysis")
+
+        # COMPLETE DATASET COVERAGE: For analytical queries, ensure we see ALL data
+        is_analytical_report = any(term in req.message.lower() for term in [
+            "analysis", "analyze", "report", "summary", "summarize", "review",
+            "performance", "quality", "metrics", "statistics", "trends", "weekly",
+            "monthly", "quarterly", "overview", "assessment", "evaluation"
+        ])
+        
+        if is_analytical_report:
+            logger.info(f"📊 COMPREHENSIVE REPORT DETECTED: Ensuring complete dataset coverage")
+            # Override limits to ensure we capture ALL 5,082+ transcripts
+            analytical_max_results = 6000  # Safely above your total dataset size
+            comprehensive_mode = True  # Force comprehensive analysis
+            logger.info(f"🔍 FORCING COMPLETE COVERAGE: {analytical_max_results} max results for comprehensive analysis")
+        else:
+            analytical_max_results = CHAT_MAX_RESULTS
+
+
         is_report_request = detect_report_query(req.message)
         logger.info(f"ðŸ“Š REPORT REQUEST DETECTED: {is_report_request}")
 
@@ -1931,20 +2167,20 @@ async def relay_chat_rag(request: Request):
         # COMPREHENSIVE MODE: Analyze ALL results when toggle enabled
         if comprehensive_mode:
             # User enabled comprehensive toggle - analyze COMPLETE dataset
-            smart_max_results = CHAT_MAX_RESULTS
+            smart_max_results = analytical_max_results  # Use analytical limits for complete coverage
             logger.info(f"🔍 COMPREHENSIVE MODE ENABLED: Analyzing ALL available results")
             logger.info(f"📊 Max results: {smart_max_results}")
             logger.info(f"✅ User explicitly requested complete dataset analysis")
         else:
             # For standard search, use normal limits for fast, relevant results
-            smart_max_results = CHAT_MAX_RESULTS
-            logger.info(f"⚡ STANDARD MODE: Using relevance-based search")
+            smart_max_results = analytical_max_results  # Still use analytical limits for reports
+            logger.info(f"⚡ STANDARD MODE: Using relevance-based search with analytical coverage")
 
         # FIX: When filters are applied, analyze ALL filtered results (not just most relevant)
         # This ensures UI filter count matches AI analysis count
         if req.filters:
             # Filters applied - user wants analysis of ENTIRE filtered dataset
-            filter_aware_max = 10000  # Analyze all filtered results
+            filter_aware_max = analytical_max_results  # Use analytical limits for complete coverage
             logger.info(f"🎯 FILTERS APPLIED: Analyzing ENTIRE filtered dataset (max={filter_aware_max})")
             logger.info(f"📊 Applied filters: {req.filters}")
             logger.info(f"✅ This ensures AI sees ALL filtered results, not just most textually relevant")
@@ -1960,8 +2196,8 @@ async def relay_chat_rag(request: Request):
 
         logger.info(f"ðŸ“‹ ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 
-        MIN_CONTEXT_CHARS = 2500
-        MIN_DISTINCT_EVALS = 5        
+        MIN_CONTEXT_CHARS = 500   # FIXED: Lowered from 2500 - more realistic for real data
+        MIN_DISTINCT_EVALS = 1    # FIXED: Lowered from 5 - even 1 match is valuable        
 
         # BLOCK hallucinated responses if no real data
         if (not context or not sources 
