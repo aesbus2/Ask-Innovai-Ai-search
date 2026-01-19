@@ -1411,7 +1411,18 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
         # Split query into words for validation
         search_words = clean_query.lower().split()
         
-        for hit in all_hits[:display_size]:
+        # FIXED: For analytical queries, process ALL hits, not just display_size
+        analytical_terms = ["analysis", "analyze", "report", "summary", "summarize", "review",
+                           "performance", "quality", "metrics", "statistics", "trends", "weekly",
+                           "monthly", "quarterly", "overview", "assessment", "evaluation"]
+        is_analytical_query = any(term in clean_query.lower() for term in analytical_terms)
+        
+        # Use all hits for analytical queries, display_size for keyword searches
+        hits_to_process = all_hits if is_analytical_query else all_hits[:display_size]
+        
+        logger.info(f"🔍 Processing {len(hits_to_process)} hits (analytical_query={is_analytical_query}, display_size={display_size})")
+        
+        for hit in hits_to_process:
             source = hit.get("_source", {})
             transcript_content = source.get("transcript_text", "")
             
@@ -1420,11 +1431,6 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             
             content_lower = transcript_content.lower()
             
-            # FIXED: Detect analytical queries and skip keyword validation
-            analytical_terms = ["analysis", "analyze", "report", "summary", "summarize", "review",
-                            "performance", "quality", "metrics", "statistics", "trends", "weekly",
-                            "monthly", "quarterly", "overview", "assessment", "evaluation"]
-            is_analytical_query = any(term in clean_query.lower() for term in analytical_terms)
             # Validation logic - skip for analytical queries
             if not is_analytical_query:
                 if is_quoted_phrase:
