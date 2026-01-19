@@ -2289,7 +2289,35 @@ async def relay_chat_rag(request: Request):
 
         
         # STEP 2: Enhanced system message with vector search awareness
-        system_message = f"""You are a professional call center analytics assistant. Provide clear, concise executive level insights based on the filtered evaluation data.
+        system_message = f"""You are a professional call center analytics assistant. Provide clear, concise executive level insights based STRICTLY on the filtered evaluation data.
+
+## CRITICAL ANTI-HALLUCINATION RULES:
+
+**NEVER EXPAND OR INTERPRET NAMES:**
+- Use EXACT partner names from data: "CCI", "Telus", "iQor" (never expand "CCI" to "Commonwealth Credit International" or any full company name)
+- Use EXACT site names from data: "Bacolod", "Durban", "Nairobi", "Pradera" (never create "Other" categories or non-existent sites)
+- Use EXACT agent names as provided (never modify or create variants)
+- Use EXACT disposition names as provided (never interpret or expand them)
+
+**STRICT DATA USAGE ONLY:**
+- ONLY report numbers that appear directly in the source data
+- NEVER calculate, estimate, or extrapolate any statistics not explicitly provided
+- If you don't see a specific breakdown in the sources, say "detailed breakdown not available"
+- NEVER create percentage distributions unless the exact percentages are calculated from verifiable counts
+
+**COUNTING RULES:**
+- Count EVALUATIONS only (not data chunks or fragments)
+- Only count what you can directly verify from the source evaluation data
+- If site/partner breakdowns aren't clear from the data, say "site-level breakdown not available with current filters"
+- Always state total evaluations: "Based on {len(sources)} evaluations found"
+
+**FORBIDDEN ACTIONS:**
+- NEVER expand "CCI" to any full company name
+- NEVER create "Other" categories, sites, or partners not in the data
+- NEVER generate week-over-week changes unless explicitly provided in source data
+- NEVER make up specific dates or time periods not in the evaluation data
+- NEVER create mathematical breakdowns not present in source data
+- NEVER invent agent names, sites, or partners not found in the actual data
 
 ## Response Format:
 
@@ -2301,22 +2329,22 @@ Format your response with:
 Keep formatting simple and readable.
 
 **Key Findings:**
-- Summarize main patterns and trends
-- Focus on actionable insights
-- Provide churn analysis and potential retention strategies
-- list sales attempts and success rartes
-    - list sales for phones, devices, plans, home internet,
-- Include brief relevant quotes as a summaryonly when essential (max 2-3)
+- Summarize main patterns and trends from the actual data only
+- Focus on actionable insights based on real evaluation content
+- Provide churn analysis and potential retention strategies only if supported by data
+- List sales attempts and success rates only if present in evaluations
+    - List sales for phones, devices, plans, home internet only if mentioned in data
+- Include brief relevant quotes ONLY when they appear in the actual evaluations (max 2-3)
 
 **Recommendations:**
-- Provide specific, actionable steps 
-- Prioritize by impact
-- Provide coaching recommendations
+- Provide specific, actionable steps based on actual findings
+- Prioritize by impact seen in the evaluation data
+- Provide coaching recommendations supported by real examples
 
 **Summary:**
-- Overall assessment and metrics
-- List sub-disposition as bullet points and included trends and insights
-- list all partners included in metadata "partner" filters
+- Overall assessment based on the actual {len(sources)} evaluations found
+- List sub-dispositions as bullet points only if they appear in the data
+- List all partners that actually appear in the evaluation metadata (never add others)
 
 ## CRITICAL: Weighted Score Usage Rules:
 
@@ -2331,7 +2359,7 @@ Keep formatting simple and readable.
 
 **When to use percentages (based on COUNTS only):**
 - Percentages represent proportions of the total evaluation count
-- Calculate as: (evaluation_count / total_evaluations) Ã— 100
+- Calculate as: (evaluation_count / total_evaluations) × 100
 - Always show: COUNT first, then percentage
 - CORRECT: "Device issues in 1,200 evaluations (24% of 5,000 total)"
 - CORRECT: "30% of agents (15 out of 50) had scores above 80"
@@ -2342,22 +2370,30 @@ Keep formatting simple and readable.
 - CORRECT: "25% of evaluations scored between 60-70 on the weighted scale"
 - This is acceptable because you're counting evaluations, not using the score as a percentage
 
+## DATA VALIDATION REQUIREMENTS:
+- Total evaluations available: {len(sources)}
+- If asked for breakdowns not visible in the evaluation data, respond: "Specific breakdown not available with current data and filters"
+- Never reference data sources not provided in the context below
+
 ## Guidelines:
-- Base answers strictly on the provided context and data
+- Base answers STRICTLY on the provided context and data below
 - Do not generate or estimate statistics not present in the context
 - Provide evaluation counts along with percentages and relevant metrics
 - Always show counts alongside percentages (e.g., "150 evaluations (30%)")
 - Be concise and professional - avoid lengthy excerpts
-- If information is not available, state that clearly
+- If information is not available, state that clearly: "This information is not available in the current evaluation data"
 - Focus on business insights rather than raw data dumps
+- NEVER make assumptions about data not explicitly shown
 
 CONTEXT:
 {context}
 
 Rules:
-- Use only the provided evaluation data
+- Use ONLY the provided evaluation data above
 - Keep quotes brief and relevant
+- Never expand abbreviations or company names
 - If no relevant data exists, return: "No relevant data found for this query."
+- Remember: Use exact names from data, never create or expand them
 """
 
         # STEP 3: Streamlined Llama payload
@@ -2387,7 +2423,7 @@ Rules:
             "Content-Type": "application/json"
         }
 
-        logger.info("Ã°Å¸Â¦â„¢ Making Llama 3.1 API call with vector-enhanced context...")
+        logger.info("Making Llama 3.1 API call with vector-enhanced context...")
         
         if not GENAI_ENDPOINT or not GENAI_ACCESS_KEY:
             logger.error("Ã¢ÂÅ’ Missing Llama GenAI configuration!")
@@ -2414,7 +2450,7 @@ Rules:
         
         for url in possible_urls:
             try:
-                logger.info(f"Ã°Å¸Â§Âª Trying Llama URL: {url}")
+                logger.info(f"Trying Llama URL: {url}")
                 
                 genai_response = requests.post(
                     url,
@@ -2423,21 +2459,21 @@ Rules:
                     timeout=60
                 )
                 
-                logger.info(f"Ã°Å¸â€œÂ¥ Llama Response Status: {genai_response.status_code} for {url}")
+                logger.info(f"Llama Response Status: {genai_response.status_code} for {url}")
                 
                 if genai_response.ok:
                     successful_url = url
                     break
                 else:
-                    logger.warning(f"Ã¢Å¡Â Ã¯Â¸Â URL {url} returned {genai_response.status_code}")
+                    logger.warning(f"URL {url} returned {genai_response.status_code}")
                     
             except requests.exceptions.RequestException as e:
-                logger.warning(f"Ã¢Å¡Â Ã¯Â¸Â URL {url} failed: {e}")
+                logger.warning(f"URL {url} failed: {e}")
                 continue
         
         if not genai_response or not genai_response.ok:
             error_text = genai_response.text if genai_response else "No response"
-            logger.error(f"Ã¢ÂÅ’ All Llama API URLs failed. Last error: {error_text[:500]}")
+            logger.error(f"All Llama API URLs failed. Last error: {error_text[:500]}")
             
             return JSONResponse(
                 status_code=500,
@@ -2453,14 +2489,14 @@ Rules:
                 }
             )
 
-        logger.info(f"Ã¢Å“â€¦ Successful Llama URL: {successful_url}")
+        logger.info(f"Successful Llama URL: {successful_url}")
 
         try:
             result = genai_response.json()
-            logger.info(f"Ã°Å¸â€œÅ  Llama Response Structure: {list(result.keys())}")
+            logger.info(f"Llama Response Structure: {list(result.keys())}")
             
         except ValueError as e:
-            logger.error(f"Ã¢ÂÅ’ Llama response is not valid JSON: {e}")
+            logger.error(f"Llama response is not valid JSON: {e}")
             return JSONResponse(
                 status_code=500,
                 content={
@@ -2477,7 +2513,7 @@ Rules:
             choice = result["choices"][0]
             if "message" in choice and "content" in choice["message"]:
                 reply_text = choice["message"]["content"].strip()
-                logger.info(f"Ã¢Å“â€¦ Extracted Llama reply: {len(reply_text)} chars")
+                logger.info(f"Extracted Llama reply: {len(reply_text)} chars")
             elif "text" in choice:
                 reply_text = choice["text"].strip()
             elif "delta" in choice and "content" in choice["delta"]:
@@ -2490,7 +2526,7 @@ Rules:
             reply_text = result["response"].strip()
         
         if not reply_text:
-            logger.error("Ã¢ÂÅ’ Could not extract reply from Llama response")
+            logger.error("Could not extract reply from Llama response")
             reply_text = "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
         
         # Clean up Llama response artifacts
@@ -2499,7 +2535,7 @@ Rules:
             reply_text = reply_text.replace("<|start_header_id|>", "").replace("<|end_header_id|>", "")
             reply_text = reply_text.strip()
         
-        logger.info(f"Ã°Å¸â€œÂ Final Llama reply length: {len(reply_text)} characters")
+        logger.info(f"Final Llama reply length: {len(reply_text)} characters")
                
         #  STEP 5: Process sources for response - REMOVE internal fields
         unique_sources = []
@@ -2534,7 +2570,7 @@ Rules:
                 unique_sources.append(clean_source)
                 seen_ids.add(evaluationId)
         
-        logger.info(f"Ã°Å¸â€œÂ Cleaned {len(unique_sources)} sources for display")
+        logger.info(f"Cleaned {len(unique_sources)} sources for display")
 
         # STEP 6: Build sources summary without internal metadata
         sources_data = {
