@@ -881,7 +881,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             
             # Allow larger scans for comprehensive mode
             scan_limit = min(max_results, 5000)  # Up to 5000 records
-            display_limit = min(max_results, 2000)  # Display up to 2000
+            display_limit = min(max_results, 5000)  # Display up to 5000
             
             result = search_transcripts_comprehensive(
                 query=query,
@@ -921,7 +921,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                 raise Exception("No unique matches found")
             
             # CRITICAL: Limit results passed to AI to prevent server crash
-            MAX_AI_RESULTS = 200
+            MAX_AI_RESULTS = 5000
             ai_sample = processed_sources[:MAX_AI_RESULTS]
             ai_sample = clean_all_sources(ai_sample)
             
