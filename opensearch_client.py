@@ -1149,7 +1149,7 @@ def search_transcripts_only(query: str, filters: Dict[str, Any] = None,
             transcript_content = source.get("transcript_text", "")
             
             # Skip if transcript is empty or too short
-            if not transcript_content or len(transcript_content.strip()) < 50:
+            if not transcript_content or len(transcript_content.strip()) < 10:
                 continue
             
             content_lower = transcript_content.lower()
@@ -1415,7 +1415,7 @@ def search_transcripts_comprehensive(query: str, filters: Dict[str, Any] = None,
             source = hit.get("_source", {})
             transcript_content = source.get("transcript_text", "")
             
-            if not transcript_content or len(transcript_content.strip()) < 50:
+            if not transcript_content or len(transcript_content.strip()) < 10:
                 continue
             
             content_lower = transcript_content.lower()
