@@ -12,7 +12,6 @@ body {
 }
 
 .container {
-    display: flex;
     width: 100vw; /* Full viewport width */
     height: 100vh;
     overflow: hidden;
