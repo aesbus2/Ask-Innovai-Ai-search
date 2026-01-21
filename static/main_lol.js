@@ -1736,6 +1736,8 @@ function displayEvaluationResults(data, searchedId) {
                 </div>
             </div>
             
+           // Replace the entire section from "<!-- Evaluation Content" to the end of your HTML template with this:
+
            <!-- Content Sections with Tabs -->
            <div class="content-tabs">
                <div class="tab-headers">
@@ -1790,11 +1792,10 @@ function displayEvaluationResults(data, searchedId) {
                    </div>
                </div>
            </div>
-        </div>
-    `;
+       </div>
     
     resultsContainer.innerHTML = html;
-}
+`}
 
 // NEW: Function to switch between tabs
 function switchTab(tabId) {

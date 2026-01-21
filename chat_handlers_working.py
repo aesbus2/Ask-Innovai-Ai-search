@@ -21,7 +21,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-# âœ… VECTOR SEARCH ENABLED - Uncommented imports
+# Ã¢Å“â€¦ VECTOR SEARCH ENABLED - Uncommented imports
 from opensearch_client import search_opensearch, search_vector, hybrid_search
 from embedder import embed_text
 
@@ -54,13 +54,13 @@ TEXT_SEARCH_LIMIT = int(os.getenv("TEXT_SEARCH_LIMIT", "1000"))
 
 
 
-logger.info(f"🔧 CSV DOWNLOAD + OPENSEARCH FIXES APPLIED:")
-logger.info(f"   Max total results: {CHAT_MAX_RESULTS} (capped to prevent OpenSearch 10k limit errors)")
-logger.info(f"   Hybrid search limit: {HYBRID_SEARCH_LIMIT}")
-logger.info(f"   Vector search limit: {VECTOR_SEARCH_LIMIT}")
-logger.info(f"   Text search limit: {TEXT_SEARCH_LIMIT}")
-logger.info(f"   CSV downloads enabled for keyword searches")
-logger.info(f"   Validation thresholds lowered for better matching")
+logger.info("CSV DOWNLOAD + OPENSEARCH FIXES APPLIED:")
+logger.info(f"Max total results: {CHAT_MAX_RESULTS} (capped to prevent OpenSearch 10k limit errors)")
+logger.info(f"Hybrid search limit: {HYBRID_SEARCH_LIMIT}")
+logger.info(f"Vector search limit: {VECTOR_SEARCH_LIMIT}")
+logger.info(f"Text search limit: {TEXT_SEARCH_LIMIT}")
+logger.info("CSV downloads enabled for keyword searches")
+logger.info("Validation thresholds lowered for better matching")
 
 # =============================================================================
 # CSV DOWNLOAD FUNCTIONALITY FOR KEYWORD SEARCHES
@@ -192,7 +192,7 @@ def handle_keyword_search_csv(req: ChatRequest) -> JSONResponse:
     Handle keyword searches by returning CSV download instead of AI analysis
     """
     query = req.message
-    logger.info(f"🔍 KEYWORD SEARCH DETECTED: '{query}' - Generating CSV download")
+    logger.info(f"ðŸ” KEYWORD SEARCH DETECTED: '{query}' - Generating CSV download")
     
     try:
         # Import search function
@@ -207,7 +207,7 @@ def handle_keyword_search_csv(req: ChatRequest) -> JSONResponse:
         )
         
         if "error" in search_result:
-            logger.error(f"❌ Search failed: {search_result['error']}")
+            logger.error(f"âŒ Search failed: {search_result['error']}")
             return JSONResponse(
                 status_code=500,
                 content={"error": f"Search failed: {search_result['error']}"}
@@ -219,9 +219,9 @@ def handle_keyword_search_csv(req: ChatRequest) -> JSONResponse:
         total_searched = summary.get("total_evaluations_searched", 0) 
         matches_found = len(matches)
         
-        logger.info(f"✅ CSV SEARCH COMPLETE:")
-        logger.info(f"   📊 Total transcripts searched: {total_searched:,}")
-        logger.info(f"   🎯 Matches found: {matches_found:,}")
+        logger.info(" CSV SEARCH COMPLETE:")
+        logger.info(f"Total transcripts searched: {total_searched:,}")
+        logger.info(f" Matches found: {matches_found:,}")
         
         if matches_found == 0:
             return JSONResponse(
@@ -244,7 +244,7 @@ def handle_keyword_search_csv(req: ChatRequest) -> JSONResponse:
         return JSONResponse(
             status_code=200,
             content={
-                "reply": f"✅ **Found {matches_found:,} transcripts containing '{query}'**\n\nSearched: {total_searched:,} total transcripts\nMatch rate: {round((matches_found/total_searched)*100, 1)}%\n\n📁 **CSV Download Ready**\n\n**File contains:**\n• Evaluation IDs and metadata\n• Agent names and call details  \n• Transcript previews with highlights\n• Search scores and rankings\n\n**Next steps:**\n• Download CSV for analysis in Excel\n• Use specific Evaluation IDs for focused AI analysis\n• Apply additional filters to narrow results",
+                "reply": f"âœ… **Found {matches_found:,} transcripts containing '{query}'**\n\nSearched: {total_searched:,} total transcripts\nMatch rate: {round((matches_found/total_searched)*100, 1)}%\n\nðŸ“ **CSV Download Ready**\n\n**File contains:**\nâ€¢ Evaluation IDs and metadata\nâ€¢ Agent names and call details  \nâ€¢ Transcript previews with highlights\nâ€¢ Search scores and rankings\n\n**Next steps:**\nâ€¢ Download CSV for analysis in Excel\nâ€¢ Use specific Evaluation IDs for focused AI analysis\nâ€¢ Apply additional filters to narrow results",
                 "search_type": "keyword_csv", 
                 "matches_found": matches_found,
                 "total_searched": total_searched,
@@ -260,7 +260,7 @@ def handle_keyword_search_csv(req: ChatRequest) -> JSONResponse:
         )
         
     except Exception as e:
-        logger.error(f"❌ CSV keyword search failed: {e}")
+        logger.error(f"âŒ CSV keyword search failed: {e}")
         return JSONResponse(
             status_code=500,
             content={"error": f"Keyword search failed: {str(e)}"}
@@ -312,7 +312,7 @@ def get_optimized_search_limits(max_results: int, comprehensive: bool = False) -
     
     # COMPREHENSIVE MODE: User explicitly wants ALL results analyzed
     # Use max_results as the limit to ensure complete coverage
-    logger.info(f"🔍 COMPREHENSIVE MODE: Using max limits to analyze ALL results (up to {max_results})")
+    logger.info(f"ðŸ” COMPREHENSIVE MODE: Using max limits to analyze ALL results (up to {max_results})")
     
     return {
         "hybrid_limit": max_results,   # Get ALL results from hybrid search
@@ -608,7 +608,7 @@ DO NOT GENERATE OR ESTIMATE ANY NUMBERS, DATES, OR STATISTICS.
     urls = metadata_summary.get("urls", [])
     call_durations = metadata_summary.get("call_durations", [])
     
-    # âœ… Get vector search information
+    # Ã¢Å“â€¦ Get vector search information
     vector_search_used = metadata_summary.get("vector_search_used", False)
     hybrid_search_used = metadata_summary.get("hybrid_search_used", False)
     search_types = metadata_summary.get("search_types", [])
@@ -617,7 +617,7 @@ DO NOT GENERATE OR ESTIMATE ANY NUMBERS, DATES, OR STATISTICS.
     context = f"""
 VERIFIED EVALUATION DATA FOUND: {metadata_summary.get('total_evaluations', 0)} unique evaluations from {metadata_summary.get('total_chunks_found', 0)} content sources
 
-âœ… ENHANCED SEARCH CAPABILITIES USED:
+Ã¢Å“â€¦ ENHANCED SEARCH CAPABILITIES USED:
 - Vector Search: {'ENABLED' if vector_search_used else 'NOT USED'}
 - Hybrid Search: {'ENABLED' if hybrid_search_used else 'NOT USED'}  
 - Search Types: {', '.join(str(t) for t in search_types) if search_types else 'Standard'}
@@ -645,7 +645,7 @@ CRITICAL INSTRUCTIONS:
 6. Use only the agent names found: {', '.join(str(name) for name in essential_fields.get('agentName', [])[:10]) if essential_fields.get('agentName') else 'No agent data'}
 7. Use only the dispositions found: {', '.join(str(d) for d in metadata_summary.get('dispositions', [])[:10]) if metadata_summary.get('dispositions') else 'No disposition data'}
 8. If asked about scores, use only these weighted scores: {', '.join(str(score) for score in weighted_scores[:10]) if weighted_scores else 'No score data'}
-9. âœ… NOTE: Results enhanced with {'vector similarity matching' if vector_search_used else 'text matching only'}
+9. Ã¢Å“â€¦ NOTE: Results enhanced with {'vector similarity matching' if vector_search_used else 'text matching only'}
 
 DATA VERIFICATION STATUS: {metadata_summary.get('data_verification', 'VERIFIED_REAL_DATA')}
 SEARCH ENHANCEMENT: {'VECTOR-ENHANCED' if vector_search_used or hybrid_search_used else 'TEXT-ONLY'}
@@ -715,7 +715,7 @@ def _extract_transcript_text(hit: dict) -> str:
             if is_conversation and not is_qa_format:
                 transcript_text = text
                 found_field = field_name
-                logger.debug(f"âœ… Found conversation format in field '{field_name}' for eval {src.get('evaluationId')}")
+                logger.debug(f"Ã¢Å“â€¦ Found conversation format in field '{field_name}' for eval {src.get('evaluationId')}")
                 break
             # If this is Q&A format, continue looking for better content
             elif is_qa_format:
@@ -723,7 +723,7 @@ def _extract_transcript_text(hit: dict) -> str:
                 if not transcript_text:
                     transcript_text = text
                     found_field = field_name
-                    logger.debug(f"âš ï¸ Using Q&A format from field '{field_name}' as fallback for eval {src.get('evaluationId')}")
+                    logger.debug(f"Ã¢Å¡Â Ã¯Â¸Â Using Q&A format from field '{field_name}' as fallback for eval {src.get('evaluationId')}")
                 continue
             # If it's other content, use it if we haven't found conversation yet
             else:
@@ -736,11 +736,11 @@ def _extract_transcript_text(hit: dict) -> str:
     
     if not transcript_text:
         available_fields = [k for k, v in src.items() if v is not None and str(v).strip()]
-        logger.warning(f"âŒ No substantial transcript text found for document: {eval_id}")
-        logger.debug(f"ðŸ“‹ Available source fields: {available_fields}")
+        logger.warning(f"Ã¢ÂÅ’ No substantial transcript text found for document: {eval_id}")
+        logger.debug(f"Ã°Å¸â€œâ€¹ Available source fields: {available_fields}")
     else:
         content_type = "conversation" if ("Speaker" in transcript_text and "00:" in transcript_text) else "Q&A" if ("Question:" in transcript_text) else "other"
-        logger.debug(f"âœ… Extracted {len(transcript_text)} chars of {content_type} content from field '{found_field}' for eval {eval_id}")
+        logger.debug(f"Ã¢Å“â€¦ Extracted {len(transcript_text)} chars of {content_type} content from field '{found_field}' for eval {eval_id}")
     
     return transcript_text
 
@@ -798,14 +798,14 @@ def debug_transcript_extraction(hit: dict) -> dict:
         has_text_field = bool(src.get("text"))
         
         if has_transcript_field:
-            debug_info["recommendations"].append("âœ… 'transcript' field exists - check if it contains actual content")
+            debug_info["recommendations"].append("Ã¢Å“â€¦ 'transcript' field exists - check if it contains actual content")
         elif has_evaluation_field:
-            debug_info["recommendations"].append("âœ… 'evaluation' field exists - this might contain transcript data")
+            debug_info["recommendations"].append("Ã¢Å“â€¦ 'evaluation' field exists - this might contain transcript data")
         elif has_text_field:
-            debug_info["recommendations"].append("âœ… 'text' field exists - this might contain transcript data")
+            debug_info["recommendations"].append("Ã¢Å“â€¦ 'text' field exists - this might contain transcript data")
         else:
-            debug_info["recommendations"].append("âŒ No obvious transcript fields found")
-            debug_info["recommendations"].append("ðŸ” Check if transcript data is stored under a different field name")
+            debug_info["recommendations"].append("Ã¢ÂÅ’ No obvious transcript fields found")
+            debug_info["recommendations"].append("Ã°Å¸â€Â Check if transcript data is stored under a different field name")
     
     return debug_info
 
@@ -824,6 +824,38 @@ def build_chat_prompt(user_query: str, context: str) -> str:
         f"- If multiple documents conflict, note the conflict and cite the DOC ids.\n"
         f"- If nothing relevant is found, use the required fallback sentence above.\n"
     )
+
+
+def format_metadata_constraints(strict_metadata: Dict[str, Any]) -> str:
+    """
+    Format metadata constraints for AI prompt
+    """
+    if not strict_metadata:
+        return "No metadata constraints available"
+    
+    constraints = []
+    
+    if strict_metadata.get('partners'):
+        constraints.append(f"- Partners: {', '.join(sorted(strict_metadata['partners']))}")
+    
+    if strict_metadata.get('sites'): 
+        constraints.append(f"- Sites: {', '.join(sorted(strict_metadata['sites']))}")
+    
+    if strict_metadata.get('lobs'):
+        constraints.append(f"- LOBs: {', '.join(sorted(strict_metadata['lobs']))}")
+    
+    if strict_metadata.get('dispositions'):
+        constraints.append(f"- Dispositions: {', '.join(sorted(strict_metadata['dispositions']))}")
+    
+    if strict_metadata.get('subDispositions'):
+        constraints.append(f"- SubDispositions: {', '.join(sorted(strict_metadata['subDispositions']))}")
+    
+    if strict_metadata.get('agents'):
+        # Limit agents to first 20 to avoid overly long prompts
+        agents = sorted(strict_metadata['agents'])[:20]
+        constraints.append(f"- Agents: {', '.join(agents)}")
+    
+    return '\n'.join(constraints) if constraints else "No specific metadata constraints"
 
 
 def detect_report_query(message: str) -> bool:
@@ -849,9 +881,9 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
     search_start_time = time.time()
 
     
-    logger.info(f"ðŸ“‹ Query: '{query}'")
-    logger.info(f"ðŸ·ï¸ Filters: {filters}")
-    logger.info(f"ðŸ“Š Max results: {max_results}")
+    logger.info(f"Ã°Å¸â€œâ€¹ Query: '{query}'")
+    logger.info(f"Ã°Å¸ÂÂ·Ã¯Â¸Â Filters: {filters}")
+    logger.info(f"Ã°Å¸â€œÅ  Max results: {max_results}")
     
     # NEW: Detect specific search queries that need ALL matches (not just top-scoring)
     is_specific_search = is_specific_search_query(query)
@@ -865,14 +897,14 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
     )
     
     if use_comprehensive_search:
-        logger.info("🔍 SPECIFIC SEARCH DETECTED: Finding ALL matches, not just highest-scoring")
+        logger.info("SPECIFIC SEARCH DETECTED: Finding ALL matches, not just highest-scoring")
         
         # Warn about long search times for large datasets
         if not filters and max_results > 3000:
             logger.warning(f"⚠️ Comprehensive search on large dataset ({max_results} records)")
-            logger.warning(f"⚠️ This may take 30-60 seconds - processing all transcripts...")
+            logger.warning("⚠️ This may take 30-60 seconds - processing all transcripts...")
         
-        logger.info(f"📊 Strategy: Complete coverage search (filters={'present' if filters else 'none'}, max={max_results})")
+        logger.info(f"🔎 Strategy: Complete coverage search (filters={'present' if filters else 'none'}, max={max_results})")
         
         try:
             from opensearch_client import search_transcripts_comprehensive
@@ -881,7 +913,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             
             # Allow larger scans for comprehensive mode
             scan_limit = min(max_results, 5000)  # Up to 5000 records
-            display_limit = min(max_results, 5000)  # Display up to 5000
+            display_limit = min(max_results, 5000)  # Display up to 5000 to match MAX_AI_RESULTS
             
             result = search_transcripts_comprehensive(
                 query=query,
@@ -897,7 +929,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             
             found_sources = result["results"]
             logger.info(f"✅ Complete search found {len(found_sources)} transcripts containing search terms")
-            logger.info(f"📊 Coverage: Searched {'filtered' if filters else 'all'} transcripts, returning every match")
+            logger.info(f"🔎 Coverage: Searched {'filtered' if filters else 'all'} transcripts, returning every match")
             
             # Process and clean results
             found_sources = clean_all_sources(found_sources)
@@ -913,7 +945,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                     processed_sources.append(source)
             
             total_matches = len(processed_sources)
-            logger.info(f"📊 Total unique matches found: {total_matches}")
+            logger.info(f"ðŸ“Š Total unique matches found: {total_matches}")
             
             # Check if we have matches
             if total_matches == 0:
@@ -921,7 +953,7 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
                 raise Exception("No unique matches found")
             
             # CRITICAL: Limit results passed to AI to prevent server crash
-            MAX_AI_RESULTS = 5000
+            MAX_AI_RESULTS = 5000  # Increased to handle your full dataset
             ai_sample = processed_sources[:MAX_AI_RESULTS]
             ai_sample = clean_all_sources(ai_sample)
             
@@ -937,16 +969,27 @@ def build_search_context(query: str, filters: dict, max_results: int = 100, comp
             
             sample_note = f"\n\nNOTE: {total_matches} total matches found. Analyzing representative sample of {len(ai_sample)} transcripts." if total_matches > MAX_AI_RESULTS else ""
             
+            # Calculate actual counts from the data being sent to AI
+            actual_ai_count = len(ai_sample)
+            
             context = f"""
 
-EVALUATION DATA: {total_matches} transcripts found containing your search terms
+EVALUATION DATA SUMMARY: {total_matches} transcripts found matching your search criteria.
 
 SEARCH METHOD: Complete Coverage - Found EVERY transcript matching "{query}"
 SEARCH SCOPE: {"Filtered dataset" if filters else "ALL transcripts in database (complete search)"}
 APPLIED FILTERS: {', '.join([f"{k}={v}" for k, v in filters.items()]) if filters else "None - searched entire database"}
 
-IMPORTANT: You are seeing ALL transcripts that contain these search terms.
-This is not a subset of "most relevant" results - this is the complete set of matches across {"the filtered data" if filters else "your entire transcript database"}.{sample_note}
+IMPORTANT DATA SCOPE:
+- Total Found: {total_matches} matching transcripts
+- Provided for Analysis: {actual_ai_count} evaluation records
+- Data Coverage: {"Complete dataset" if actual_ai_count == total_matches else f"Representative sample ({actual_ai_count} of {total_matches})"}
+
+CRITICAL COUNTING INSTRUCTIONS:
+- You have access to EXACTLY {actual_ai_count} evaluation records in the data below
+- Base ALL counts, percentages, and statistics ONLY on these {actual_ai_count} records
+- DO NOT extrapolate to the full {total_matches} unless explicitly requested
+- When showing percentages, use {actual_ai_count} as the denominator (100%)
 
 STRICT DISPLAY RULES:
 - ONLY display: evaluationId, weighted_score, url, partner, site, lob, agentName, agentId, disposition, subDisposition, created_on, call_date, call_duration, language
@@ -955,11 +998,13 @@ STRICT DISPLAY RULES:
 ALLOWED VALUES FROM DATA:
 {format_metadata_constraints(strict_metadata)}
 
-EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
+EVALUATION RECORDS FOR ANALYSIS ({actual_ai_count} records):
 {json.dumps(ai_sample, indent=2, default=str)}
+
+REMEMBER: Base your analysis on exactly {actual_ai_count} records provided above.
 """
             
-            logger.info(f"✅ Built context: {total_matches} total matches, {len(ai_sample)} sent to AI for analysis")
+            logger.info(f"Built context: {total_matches} total matches, {len(ai_sample)} sent to AI for analysis")
             logger.info("🎯 COMPREHENSIVE SEARCH COMPLETE - RETURNING NOW (NO FALLTHROUGH)")
             return context, ai_sample  # CRITICAL: This MUST execute - we checked all conditions above
         
@@ -1019,7 +1064,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
         if violations:
             logger.debug(f"Filter violations in {strategy_name}: {len(violations)} results removed")
         
-        logger.info(f"âœ… {strategy_name} validation: {len(valid_results)}/{len(results)} valid")
+        logger.info(f"Ã¢Å“â€¦ {strategy_name} validation: {len(valid_results)}/{len(results)} valid")
         return valid_results
     
     try:
@@ -1027,7 +1072,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
         
         client = get_opensearch_client()
         if not client:
-            logger.error("âŒ No OpenSearch client available")
+            logger.error("Ã¢ÂÅ’ No OpenSearch client available")
             return "Search system unavailable.", []
         
         if not test_connection():
@@ -1053,8 +1098,8 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
             try:
                 # Log search strategy based on comprehensive mode
                 if comprehensive:
-                    logger.info("🔍 COMPREHENSIVE MODE: Analyzing ALL available results")
-                    logger.info(f"📊 Search limits: H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']}")
+                    logger.info("🧭 COMPREHENSIVE MODE: Analyzing ALL available results")
+                    logger.info(f"🔎 Search limits: H:{search_limits['hybrid_limit']}, V:{search_limits['vector_limit']}, T:{search_limits['text_limit']}")
                     logger.info("✅ Complete coverage - all matching results will be analyzed")
                 else:
                     logger.info("⚡ STANDARD MODE: Trying hybrid text+vector search for most relevant results...")
@@ -1080,7 +1125,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
                 
                 
             except Exception as e:
-                logger.error(f"âŒ Hybrid search failed: {e}")
+                logger.error(f"❌ Hybrid search failed: {e}")
         
         # Strategy 2: Pure vector search as fallback/supplement
         if query_vector and len(all_sources) < max_results:  
@@ -1111,7 +1156,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
                 search_methods_used.append("vector")
                 
             except Exception as e:
-                logger.error(f"âŒ Vector search failed: {e}")
+                logger.error(f"❌ Vector search failed: {e}")
         
         # Strategy 3: Text search as fallback - WITH STRICT VALIDATION
         if len(all_sources) < max_results:
@@ -1142,7 +1187,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
                 search_methods_used.append("text")
                 
             except Exception as e:
-                logger.error(f"Text search failed: {e}")                
+                logger.error(f"❌ Text search failed: {e}")                
                
         # Final filter validation on combined results
         logger.info(f" Total sources before final cleaning: {len(all_sources)}")
@@ -1180,7 +1225,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
                 
                 if template_names and filters["template_name"] not in template_names:
                     filter_compliance_passed = False
-                    logger.warning("âš ï¸ Template filter violation detected")
+                    logger.warning("Ã¢Å¡Â Ã¯Â¸Â Template filter violation detected")
             
             # Check other filter compliance
             for filter_key in ["partner", "site", "disposition", "lob"]:
@@ -1215,7 +1260,7 @@ EVALUATION DETAILS (SAMPLE FOR ANALYSIS):
 
 EVALUATION DATA FOUND: {len(processed_sources)} evaluations matching "{query}"
 
-FILTER STATUS: {"âœ… All requested filters applied" if filter_compliance_passed else "âš ï¸ Some filter constraints may not have matches"}
+FILTER STATUS: {"All requested filters applied" if filter_compliance_passed else "⚠️ Some filter constraints may not have matches"}
 APPLIED FILTERS: {', '.join([f"{k}={v}" for k, v in filters.items()]) if filters else "None"}
 
 STRICT DISPLAY RULES - YOU MUST FOLLOW:
@@ -1290,7 +1335,7 @@ EVALUATION DETAILS:
                         source['transcript_preview'] = transcript[:50]
                         transcripts_added += 1
                         
-                        logger.debug(f"âœ… Added transcript for eval {source.get('evaluationId')}: {len(transcript)} chars")
+                        logger.debug(f"Ã¢Å“â€¦ Added transcript for eval {source.get('evaluationId')}: {len(transcript)} chars")
                     else:
                         eval_str += "\n[No transcript available for this evaluation]\n"
                         source['has_transcript'] = False
@@ -1305,7 +1350,7 @@ EVALUATION DETAILS:
                 context += "\n" + "="*50 + "\n"  # Add separator between evaluations
             
             # Log how many transcripts were added
-            logger.info(f"ðŸ“ Added {transcripts_added} transcripts to context out of {min(10, len(processed_sources))} evaluations")
+            logger.info(f"Ã°Å¸â€œÂ Added {transcripts_added} transcripts to context out of {min(10, len(processed_sources))} evaluations")
             
             if len(processed_sources) > 10:
                 context += f"\n... and {len(processed_sources) - 10} more evaluations\n"
@@ -1331,9 +1376,9 @@ Evaluation ID: [evaluationId]
 Remember: You are showing actual evaluation records, not search results.
 """
             
-            logger.info(f"âœ… Context built: {len(context)} chars, {len(processed_sources)} cleaned sources")
-            logger.info("ðŸ”’ Strict filtering applied - internal fields removed from display")
-            logger.info(f"ðŸ“‹ Filter compliance: {'PASSED' if filter_compliance_passed else 'VIOLATIONS DETECTED'}")
+            logger.info(f"Ã¢Å“â€¦ Context built: {len(context)} chars, {len(processed_sources)} cleaned sources")
+            logger.info("Ã°Å¸â€â€™ Strict filtering applied - internal fields removed from display")
+            logger.info(f"Ã°Å¸â€œâ€¹ Filter compliance: {'PASSED' if filter_compliance_passed else 'VIOLATIONS DETECTED'}")
             # Mark sources as verified
             for source in processed_sources:
                 source["metadata_verified"] = True
@@ -1342,23 +1387,23 @@ Remember: You are showing actual evaluation records, not search results.
             
             # Performance monitoring - TIMEOUT-PROOF version
             search_duration = time.time() - search_start_time
-            logger.info(f"⏱️ SEARCH COMPLETED: {search_duration:.2f} seconds for {len(processed_sources)} results")
+            logger.info(f"â±ï¸ SEARCH COMPLETED: {search_duration:.2f} seconds for {len(processed_sources)} results")
             
             if comprehensive and search_duration > 15:
-                logger.warning(f"⚠️ PERFORMANCE: Query took {search_duration:.2f}s - approaching timeout threshold")
+                logger.warning(f"âš ï¸ PERFORMANCE: Query took {search_duration:.2f}s - approaching timeout threshold")
             elif comprehensive and search_duration > 20:
-                logger.error(f"🚨 TIMEOUT RISK: {search_duration:.2f}s - consider further optimization")
+                logger.error(f"ðŸš¨ TIMEOUT RISK: {search_duration:.2f}s - consider further optimization")
             elif comprehensive and search_duration < 10:
-                logger.info(f"✅ OPTIMAL PERFORMANCE: {search_duration:.2f}s - well within timeout limits")
+                logger.info(f"âœ… OPTIMAL PERFORMANCE: {search_duration:.2f}s - well within timeout limits")
 
             return context, processed_sources
             
         else:
-            logger.warning("âš ï¸ No valid sources after processing")
+            logger.warning("⚠️ No valid sources after processing")
             return create_empty_search_context("no_valid_sources"), []
 
     except Exception as e:
-        logger.error(f"âŒ Search context build failed: {e}")
+        logger.error(f"❌ Search context build failed: {e}")
         return create_empty_search_context("system_error", str(e)), []
 
             
@@ -1401,7 +1446,7 @@ def build_filtered_context_with_rules(sources: List[dict], query: str, filters: 
 
 EVALUATION DATA FOUND: {len(sources)} evaluations for query: "{query}"
 
-ðŸ”’ STRICT DISPLAY RULES - YOU MUST FOLLOW THESE:
+Ã°Å¸â€â€™ STRICT DISPLAY RULES - YOU MUST FOLLOW THESE:
 1. NEVER display these internal fields: _score, score, search_type, Type, Template, Program (unless in allowed list)
 2. NEVER display match counts, relevance scores, or search quality indicators
 3. NEVER display internal IDs like _id, _index, chunk_id, internalId
@@ -1623,14 +1668,14 @@ def verify_metadata_alignment(sources: List[dict]) -> Dict[str, Any]:
     import logging
     logger = logging.getLogger(__name__)
     
-    logger.info("ðŸ“Š Metadata Verification Complete:")
+    logger.info("Metadata Verification Complete:")
     logger.info(f"   - Total evaluations: {verification['total_evaluations']}")
     logger.info(f"   - Data verification: {verification['data_verification']}")
     logger.info(f"   - Consistency score: {verification['data_consistency'].get('consistency_score', 0)}%")
     logger.info(f"   - Alignment issues: {len(verification['alignment_issues'])}")
     
     if verification["alignment_issues"]:
-        logger.warning(f"âš ï¸ Found {len(verification['alignment_issues'])} alignment issues")
+        logger.warning(f"⚠️ Found {len(verification['alignment_issues'])} alignment issues")
         for issue in verification["alignment_issues"][:3]:  # Log first 3 issues
             logger.warning(f"   - {issue}")
     
@@ -1738,13 +1783,13 @@ def build_sources_summary_with_details(sources, filters=None):
                 "dispositions": 0,
                 "partners": 0,
                 "sites": 0,
-                "vector_enhanced": 0,  # âœ… NEW
-                "search_methods": []   # âœ… NEW
+                "vector_enhanced": 0,  # Ã¢Å“â€¦ NEW
+                "search_methods": []   # Ã¢Å“â€¦ NEW
             },
             "details": {},
             "totals": {},
             "full_data": {},
-            "search_enhancement": {  # âœ… NEW
+            "search_enhancement": {  # Ã¢Å“â€¦ NEW
                 "vector_search_used": False,
                 "hybrid_search_used": False,
                 "search_quality": "text_only"
@@ -1753,7 +1798,7 @@ def build_sources_summary_with_details(sources, filters=None):
     
     DISPLAY_LIMIT = 25
     
-    # âœ… NEW: Track vector search usage
+    # Ã¢Å“â€¦ NEW: Track vector search usage
     vector_enhanced_count = 0
     search_methods = set()
     vector_search_used = False
@@ -1784,7 +1829,7 @@ def build_sources_summary_with_details(sources, filters=None):
     seen_evaluationIds = set()
 
     for source in sources:
-        # âœ… Track search enhancement info
+        # Ã¢Å“â€¦ Track search enhancement info
         search_type = source.get("search_type", "unknown")
         search_methods.add(search_type)
         
@@ -1864,9 +1909,9 @@ def build_sources_summary_with_details(sources, filters=None):
             "date": formatted_date,
             "score": metadata.get("weighted_score", "N/A"),
             "duration": metadata.get("call_duration", "N/A"),
-            "search_type": search_type,  # âœ… NEW
-            "vector_enhanced": source.get("vector_enhanced", False),  # âœ… NEW
-            "search_score": source.get("score", 0)  # âœ… NEW
+            "search_type": search_type,  # Ã¢Å“â€¦ NEW
+            "vector_enhanced": source.get("vector_enhanced", False),  # Ã¢Å“â€¦ NEW
+            "search_score": source.get("score", 0)  # Ã¢Å“â€¦ NEW
         }
         evaluations_details.append(evaluation_detail)
         
@@ -2023,7 +2068,7 @@ def build_sources_summary_with_details(sources, filters=None):
         }
         programs_list.append(program_record)
     
-    # âœ… Build final response with vector search enhancement info
+    # Ã¢Å“â€¦ Build final response with vector search enhancement info
     summary = {
         "evaluations": len(unique_evaluations),
         "agents": len(unique_agents),
@@ -2035,8 +2080,8 @@ def build_sources_summary_with_details(sources, filters=None):
         "dispositions": len(unique_dispositions),
         "partners": len(unique_partners),
         "sites": len(unique_sites),
-        "vector_enhanced": vector_enhanced_count,  # âœ… NEW
-        "search_methods": list(search_methods)      # âœ… NEW
+        "vector_enhanced": vector_enhanced_count,  # Ã¢Å“â€¦ NEW
+        "search_methods": list(search_methods)      # Ã¢Å“â€¦ NEW
     }
     
     # Prepare detailed data
@@ -2094,7 +2139,7 @@ def build_sources_summary_with_details(sources, filters=None):
         "sites": len(sites_details)
     }
     
-    # âœ… NEW: Search enhancement information
+    # Ã¢Å“â€¦ NEW: Search enhancement information
     search_enhancement = {
         "vector_search_used": vector_search_used,
         "hybrid_search_used": hybrid_search_used,
@@ -2111,7 +2156,7 @@ def build_sources_summary_with_details(sources, filters=None):
         "totals": totals,
         "full_data": full_data_for_download,
         "display_limit": DISPLAY_LIMIT,
-        "search_enhancement": search_enhancement  # âœ… NEW
+        "search_enhancement": search_enhancement  # Ã¢Å“â€¦ NEW
     }
 
 # =============================================================================
@@ -2128,20 +2173,20 @@ async def relay_chat_rag(request: Request):
         # Extract comprehensive mode for precision control
         comprehensive_mode = body.get("comprehensive", False)
         if comprehensive_mode:
-            logger.info("🔍 COMPREHENSIVE SEARCH MODE ENABLED")
+            logger.info("ðŸ” COMPREHENSIVE SEARCH MODE ENABLED")
 
 
-        logger.info(f"ðŸ’¬ ENHANCED CHAT REQUEST WITH VECTOR SEARCH: {req.message[:60]}")
-        logger.info(f"ðŸ”Ž FILTERS RECEIVED: {req.filters}")
+        logger.info(f"Ã°Å¸â€™Â¬ ENHANCED CHAT REQUEST WITH VECTOR SEARCH: {req.message[:60]}")
+        logger.info(f"Ã°Å¸â€Å½ FILTERS RECEIVED: {req.filters}")
 
 
         # CSV DOWNLOAD ROUTING: Check if this is a keyword search
         if is_keyword_search(req.message):
-            logger.info(f"🔍 KEYWORD SEARCH DETECTED: Routing to CSV download")
+            logger.info("KEYWORD SEARCH DETECTED: Routing to CSV download")
             return handle_keyword_search_csv(req)
 
         # Continue with AI analysis for analytical queries
-        logger.info(f"🤖 ANALYTICAL QUERY DETECTED: Proceeding with AI analysis")
+        logger.info("ANALYTICAL QUERY DETECTED: Proceeding with AI analysis")
 
         # COMPLETE DATASET COVERAGE: For analytical queries, ensure we see ALL data
         is_analytical_report = any(term in req.message.lower() for term in [
@@ -2151,39 +2196,38 @@ async def relay_chat_rag(request: Request):
         ])
         
         if is_analytical_report:
-            logger.info(f"📊 COMPREHENSIVE REPORT DETECTED: Ensuring complete dataset coverage")
+            logger.info("COMPREHENSIVE REPORT DETECTED: Ensuring complete dataset coverage")
             # Override limits to ensure we capture ALL 5,082+ transcripts
             analytical_max_results = 6000  # Safely above your total dataset size
             comprehensive_mode = True  # Force comprehensive analysis
-            logger.info(f"🔍 FORCING COMPLETE COVERAGE: {analytical_max_results} max results for comprehensive analysis")
+            logger.info(f"FORCING COMPLETE COVERAGE: {analytical_max_results} max results for comprehensive analysis")
         else:
             analytical_max_results = CHAT_MAX_RESULTS
 
 
         is_report_request = detect_report_query(req.message)
-        logger.info(f"ðŸ“Š REPORT REQUEST DETECTED: {is_report_request}")
+        logger.info(f"Ã°Å¸â€œÅ  REPORT REQUEST DETECTED: {is_report_request}")
 
         # STEP 1: Build context with VECTOR SEARCH integration
         # COMPREHENSIVE MODE: Analyze ALL results when toggle enabled
         if comprehensive_mode:
             # User enabled comprehensive toggle - analyze COMPLETE dataset
             smart_max_results = analytical_max_results  # Use analytical limits for complete coverage
-            logger.info(f"🔍 COMPREHENSIVE MODE ENABLED: Analyzing ALL available results")
-            logger.info(f"📊 Max results: {smart_max_results}")
-            logger.info(f"✅ User explicitly requested complete dataset analysis")
+            logger.info("COMPREHENSIVE MODE ENABLED: Analyzing ALL available results")
+            logger.info(f"Max results: {smart_max_results}")
+            logger.info("User explicitly requested complete dataset analysis")
         else:
             # For standard search, use normal limits for fast, relevant results
             smart_max_results = analytical_max_results  # Still use analytical limits for reports
-            logger.info(f"⚡ STANDARD MODE: Using relevance-based search with analytical coverage")
+            logger.info("STANDARD MODE: Using relevance-based search with analytical coverage")
 
         # FIX: When filters are applied, analyze ALL filtered results (not just most relevant)
         # This ensures UI filter count matches AI analysis count
         if req.filters:
             # Filters applied - user wants analysis of ENTIRE filtered dataset
             filter_aware_max = analytical_max_results  # Use analytical limits for complete coverage
-            logger.info(f"🎯 FILTERS APPLIED: Analyzing ENTIRE filtered dataset (max={filter_aware_max})")
-            logger.info(f"📊 Applied filters: {req.filters}")
-            logger.info(f"✅ This ensures AI sees ALL filtered results, not just most textually relevant")
+            logger.info(f"FILTERS APPLIED: Analyzing ENTIRE filtered dataset (max={filter_aware_max})")
+            logger.info(f"Applied filters: {req.filters}")            
             context, sources = build_search_context(
                 req.message, 
                 req.filters, 
@@ -2194,7 +2238,7 @@ async def relay_chat_rag(request: Request):
             # No filters - use text relevance to find most relevant results
             context, sources = build_search_context(req.message, req.filters, max_results=smart_max_results, comprehensive=comprehensive_mode)
 
-        logger.info(f"ðŸ“‹ ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
+        logger.info(f"Ã°Å¸â€œâ€¹ ENHANCED CONTEXT BUILT: {len(context)} chars, {len(sources)} sources")
 
         MIN_CONTEXT_CHARS = 500   # FIXED: Lowered from 2500 - more realistic for real data
         MIN_DISTINCT_EVALS = 1    # FIXED: Lowered from 5 - even 1 match is valuable        
@@ -2203,7 +2247,7 @@ async def relay_chat_rag(request: Request):
         if (not context or not sources 
             or len(context) < MIN_CONTEXT_CHARS 
             or len({s.get("evaluationId") for s in sources if s.get("evaluationId")}) < MIN_DISTINCT_EVALS):
-            logger.warning(" No context found â€” skipping LLM and returning no-data message.")
+            logger.warning(" No context found Ã¢â‚¬â€ skipping LLM and returning no-data message.")
             return JSONResponse(
                 status_code=200,
                 content={
@@ -2245,76 +2289,71 @@ async def relay_chat_rag(request: Request):
 
         
         # STEP 2: Enhanced system message with vector search awareness
-        system_message = f"""You are a professional call center analytics assistant. Provide clear, concise executive level insights based on the filtered evaluation data.
+        # STEP 2: SCHEMA-ENFORCED system message with proper data validation
+        system_message = f"""You are a professional call center analytics assistant. You must provide insights based STRICTLY on properly structured evaluation data.
 
-## Response Format:
+## 🔒 SCHEMA ENFORCEMENT - MANDATORY DATA STRUCTURE
 
-Format your response with:
-- **Bold text** for key points using markdown
-- Bullet points for lists
-- Clear section headers
+**REQUIRED DATA FIELDS (Your System Schema):**
+You may ONLY reference data that contains these standardized fields:
+- agentId, agentName, call_date, call_duration, call_type, created_on, data_version
+- disposition, evaluationId, indexed_at, internalId, language, lob, partner, program
+- site, subDisposition, template_id, template_name, updated, url, weighted_score
 
-Keep formatting simple and readable.
+**CRITICAL: EVALUATION COUNT VALIDATION:**
+- EXACT COUNT: {len(sources)} evaluations found with proper metadata
+- MANDATORY OPENING: "Based on {len(sources)} evaluations found:"
+- This count represents evaluations with valid, schema-compliant metadata
 
-**Key Findings:**
-- Summarize main patterns and trends
-- Focus on actionable insights
-- Provide churn analysis and potential retention strategies
-- list sales attempts and success rartes
-    - list sales for phones, devices, plans, home internet,
-- Include brief relevant quotes as a summaryonly when essential (max 2-3)
+**STRICT DATA INTEGRITY RULES:**
+1. **Only Schema-Compliant Data**: Reference ONLY evaluations that have proper metadata structure
+2. **No Fabricated Values**: If a field is missing or null in the source data, report it as "not available"
+3. **Proper Field Usage**: 
+   - `partner` field contains actual partner names (use exact values, never expand)
+   - `site` field contains actual site locations (use exact values, never create "Other")
+   - `disposition` and `subDisposition` fields contain actual call outcomes
+   - `agentName` and `agentId` fields contain actual agent information
+4. **Count Validation**: Only count evaluations with complete, valid metadata
 
-**Recommendations:**
-- Provide specific, actionable steps 
-- Prioritize by impact
-- Provide coaching recommendations
+**FORBIDDEN DATA VIOLATIONS:**
+- ❌ NEVER create "Other" categories if they don't exist in actual `site` field values
+- ❌ NEVER expand partner abbreviations (if `partner` field = "CCI", keep it "CCI")
+- ❌ NEVER reference data that lacks proper schema compliance
+- ❌ NEVER fabricate breakdowns for data that doesn't have the required metadata fields
+- ❌ NEVER count records that don't meet your established data quality standards
 
-**Summary:**
-- Overall assessment and metrics
-- List sub-disposition as bullet points and included trends and insights
-- list all partners included in metadata "partner" filters
+**DATA QUALITY REQUIREMENTS:**
+- Use evaluations with valid `evaluationId` field
+- Require proper `partner` and `site` metadata for partner/site analysis
+- Require valid `agentName` for agent-level analysis  
+- Require proper `disposition` data for disposition analysis
+- If metadata is incomplete, state: "Analysis limited due to incomplete metadata in some evaluations"
 
-## CRITICAL: Weighted Score Usage Rules:
+**VALIDATION APPROACH:**
+1. **Count Only Valid Records**: Of the {len(sources)} evaluations, only count those with proper metadata for each analysis
+2. **Admit Data Limitations**: If many records lack required fields, clearly state this
+3. **Schema Compliance**: Reference only data that follows your established field structure
+4. **Quality Over Quantity**: Better to report fewer, accurate results than fabricated comprehensive breakdowns
 
-**NEVER use weighted_score values to calculate percentages:**
-- The "weighted_score" field is a QUALITY METRIC, not a count or frequency
-- weighted_score values should ONLY be reported as scores (e.g., "average weighted score of 58.00")
-- NEVER convert weighted_score to percentages or use it in percentage calculations
-- WRONG: "58% of evaluations..." when 58 comes from weighted_score field
-- WRONG: "Device issues represent 67% of problems" when 67 is a weighted_score
-- CORRECT: "Average weighted score of 58.00"
-- CORRECT: "Quality score: 67.00"
+**RESPONSE REQUIREMENTS:**
+- **Opening**: "Based on {len(sources)} evaluations found with valid metadata:"
+- **Data Quality Note**: If applicable: "Analysis based on evaluations with complete [partner/site/agent] metadata"
+- **Limitation Honesty**: "Detailed breakdown not available due to incomplete metadata" when appropriate
 
-**When to use percentages (based on COUNTS only):**
-- Percentages represent proportions of the total evaluation count
-- Calculate as: (evaluation_count / total_evaluations) × 100
-- Always show: COUNT first, then percentage
-- CORRECT: "Device issues in 1,200 evaluations (24% of 5,000 total)"
-- CORRECT: "30% of agents (15 out of 50) had scores above 80"
+**METADATA VALIDATION:**
+- Applied filters: {req.filters if req.filters else 'None'}
+- Only report breakdowns where the source data has the required metadata fields populated
+- Admit when data quality issues prevent detailed analysis
 
-**The ONLY exception for weighted_score percentages:**
-- When calculating what percentage of evaluations fall into score ranges
-- CORRECT: "40% of evaluations (2,000 of 5,000) had weighted scores above 75"
-- CORRECT: "25% of evaluations scored between 60-70 on the weighted scale"
-- This is acceptable because you're counting evaluations, not using the score as a percentage
-
-## Guidelines:
-- Base answers strictly on the provided context and data
-- Do not generate or estimate statistics not present in the context
-- Provide evaluation counts along with percentages and relevant metrics
-- Always show counts alongside percentages (e.g., "150 evaluations (30%)")
-- Be concise and professional - avoid lengthy excerpts
-- If information is not available, state that clearly
-- Focus on business insights rather than raw data dumps
-
-CONTEXT:
+## EVALUATION DATA CONTEXT:
 {context}
 
-Rules:
-- Use only the provided evaluation data
-- Keep quotes brief and relevant
-- If no relevant data exists, return: "No relevant data found for this query."
-"""
+## SCHEMA ENFORCEMENT SUMMARY:
+- Use ONLY the {len(sources)} evaluations with valid metadata structure
+- Reference ONLY values from your established schema fields
+- Admit data limitations rather than fabricate missing information  
+- Maintain data integrity by refusing to create non-existent categories
+- Focus on evaluations that meet your data quality standards"""
 
         # STEP 3: Streamlined Llama payload
         user_only_history = [
@@ -2343,10 +2382,10 @@ Rules:
             "Content-Type": "application/json"
         }
 
-        logger.info("ðŸ¦™ Making Llama 3.1 API call with vector-enhanced context...")
+        logger.info("Making Llama 3.1 API call with vector-enhanced context...")
         
         if not GENAI_ENDPOINT or not GENAI_ACCESS_KEY:
-            logger.error("âŒ Missing Llama GenAI configuration!")
+            logger.error("Missing Llama GenAI configuration!")
             return JSONResponse(
                 status_code=500,
                 content={
@@ -2370,7 +2409,7 @@ Rules:
         
         for url in possible_urls:
             try:
-                logger.info(f"ðŸ§ª Trying Llama URL: {url}")
+                logger.info(f"Trying Llama URL: {url}")
                 
                 genai_response = requests.post(
                     url,
@@ -2379,21 +2418,21 @@ Rules:
                     timeout=60
                 )
                 
-                logger.info(f"ðŸ“¥ Llama Response Status: {genai_response.status_code} for {url}")
+                logger.info(f"Llama Response Status: {genai_response.status_code} for {url}")
                 
                 if genai_response.ok:
                     successful_url = url
                     break
                 else:
-                    logger.warning(f"âš ï¸ URL {url} returned {genai_response.status_code}")
+                    logger.warning(f"URL {url} returned {genai_response.status_code}")
                     
             except requests.exceptions.RequestException as e:
-                logger.warning(f"âš ï¸ URL {url} failed: {e}")
+                logger.warning(f"URL {url} failed: {e}")
                 continue
         
         if not genai_response or not genai_response.ok:
             error_text = genai_response.text if genai_response else "No response"
-            logger.error(f"âŒ All Llama API URLs failed. Last error: {error_text[:500]}")
+            logger.error(f"All Llama API URLs failed. Last error: {error_text[:500]}")
             
             return JSONResponse(
                 status_code=500,
@@ -2409,14 +2448,14 @@ Rules:
                 }
             )
 
-        logger.info(f"âœ… Successful Llama URL: {successful_url}")
+        logger.info(f"Successful Llama URL: {successful_url}")
 
         try:
             result = genai_response.json()
-            logger.info(f"ðŸ“Š Llama Response Structure: {list(result.keys())}")
+            logger.info(f"Llama Response Structure: {list(result.keys())}")
             
         except ValueError as e:
-            logger.error(f"âŒ Llama response is not valid JSON: {e}")
+            logger.error(f"Llama response is not valid JSON: {e}")
             return JSONResponse(
                 status_code=500,
                 content={
@@ -2433,7 +2472,7 @@ Rules:
             choice = result["choices"][0]
             if "message" in choice and "content" in choice["message"]:
                 reply_text = choice["message"]["content"].strip()
-                logger.info(f"âœ… Extracted Llama reply: {len(reply_text)} chars")
+                logger.info(f"Extracted Llama reply: {len(reply_text)} chars")
             elif "text" in choice:
                 reply_text = choice["text"].strip()
             elif "delta" in choice and "content" in choice["delta"]:
@@ -2446,7 +2485,7 @@ Rules:
             reply_text = result["response"].strip()
         
         if not reply_text:
-            logger.error("âŒ Could not extract reply from Llama response")
+            logger.error("Could not extract reply from Llama response")
             reply_text = "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
         
         # Clean up Llama response artifacts
@@ -2455,7 +2494,7 @@ Rules:
             reply_text = reply_text.replace("<|start_header_id|>", "").replace("<|end_header_id|>", "")
             reply_text = reply_text.strip()
         
-        logger.info(f"ðŸ“ Final Llama reply length: {len(reply_text)} characters")
+        logger.info(f"Final Llama reply length: {len(reply_text)} characters")
                
         #  STEP 5: Process sources for response - REMOVE internal fields
         unique_sources = []
@@ -2490,7 +2529,7 @@ Rules:
                 unique_sources.append(clean_source)
                 seen_ids.add(evaluationId)
         
-        logger.info(f"ðŸ“ Cleaned {len(unique_sources)} sources for display")
+        logger.info(f"Cleaned {len(unique_sources)} sources for display")
 
         # STEP 6: Build sources summary without internal metadata
         sources_data = {
@@ -2536,20 +2575,20 @@ Rules:
         # Remove any references to search types, scores, or internal mechanics
         # No vector_sources, hybrid_sources, search_type counts, etc.
         
-        logger.info("âœ… CHAT RESPONSE COMPLETE")
-        logger.info(f"ðŸ“Š Reply: {len(reply_text)} chars, Sources: {len(unique_sources)} evaluations")
+        logger.info("CHAT RESPONSE COMPLETE")
+        logger.info(f"Reply: {len(reply_text)} chars, Sources: {len(unique_sources)} evaluations")
         
         return JSONResponse(content=response_data)
 
     except Exception as e:
-        logger.error(f"âŒ ENHANCED CHAT REQUEST FAILED: {e}")
+        logger.error(f"❌ ENHANCED CHAT REQUEST FAILED: {e}")
         import traceback
-        logger.error(f"ðŸ” Traceback: {traceback.format_exc()}")
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         
         return JSONResponse(
             status_code=200,
             content={
-                "reply": "âš ï¸ No relevant evaluation data was found for your query. Please adjust your filters or try a different question.",
+                "reply": "⚠️ No relevant evaluation data was found for your query. Please adjust your filters or try a different question.",
                 "sources_summary": {
                     "evaluations": 0,
                     "agents": 0,
@@ -2615,15 +2654,15 @@ async def health_check():
             "opensearch": {"status": "connected"},
             "embedding_service": {"status": "healthy"},
             "genai_agent": {"status": "configured"},
-            "vector_search": {"status": "enabled"}  # âœ… NEW
+            "vector_search": {"status": "enabled"}  # Ã¢Å“â€¦ NEW
         },
         "enhancements": {
             "document_structure": "enhanced v4.8.0",
             "metadata_verification": "enabled",
             "strict_data_alignment": "enforced",
             "evaluation_chunk_distinction": "implemented",
-            "vector_search": "enabled",  # âœ… NEW
-            "hybrid_search": "enabled"   # âœ… NEW
+            "vector_search": "enabled",  # Ã¢Å“â€¦ NEW
+            "hybrid_search": "enabled"   # Ã¢Å“â€¦ NEW
         }
     }
 
@@ -2632,5 +2671,5 @@ async def last_import_info():
     return {
         "status": "success",
         "last_import_timestamp": datetime.now().isoformat(),
-        "vector_search_enabled": True  # âœ… NEW
+        "vector_search_enabled": True  # Ã¢Å“â€¦ NEW
     }
