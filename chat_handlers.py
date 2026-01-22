@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
-# chat_handlers.py - v4.9.6 + CONVERSATION CONTEXT FIX APPLIED (1/22/2026)
+# chat_handlers.py - v4.9.6 + CONVERSATION CONTEXT FIX APPLIED + PHRASE DETECTION FIXED (1/22/2026)
 # VECTOR SEARCH ENABLED
 # CONVERSATION CONTEXT AWARE - Fixed routing issue for follow-up questions
+# PHRASE DETECTION FIXED: Added missing phrases like "show me this data" and "broken down by"
 # Fixed: Follow-up questions now bypass keyword search and use conversation context
 # updated ensure_vector_mapping_exists to not try and update KNN if it already exists 7-23-25
 #updated  build_search_context to use a new function to remove viloations in search filters
 # added strict metadata verification to ensure all results comply with filters
 #added helper function extract_actual_metadata_values
 # FIXED: Added conversation context detection BEFORE keyword search routing
+# FIXED: Enhanced contextual phrase detection to catch "show me this data broken down by"
 
 import os
 import logging
@@ -2301,7 +2303,10 @@ async def relay_chat_rag(request: Request):
                 "from this data", "from these", "from the analysis",
                 "that did not", "that didn't", "who did not", "who didn't",
                 "breakdown by", "breakdown of", "show me the", "give me the",
-                "provide a list", "give me a breakdown", "agents that", "calls that"
+                "provide a list", "give me a breakdown", "agents that", "calls that",
+                # FIXED: Added missing phrases for "show me this data broken down by"
+                "show me this", "show me this data", "this data", "broken down by", 
+                "broken down", "data broken down", "show this data", "broken down by"
             ]
             
             message_lower = message.lower()
