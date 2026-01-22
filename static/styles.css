@@ -529,7 +529,7 @@ select, input {
     border: 2px solid #ddd;
     border-radius: 6px;
     font-size: 14px;
-    min-width: 200px;
+    min-width: 20px;
 }
 
 select:focus, input:focus {
