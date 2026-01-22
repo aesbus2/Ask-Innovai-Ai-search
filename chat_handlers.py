@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
-# chat_handlers.py - 12-29-25.1 v4.9.6 + CONVERSATION CONTEXT ENHANCEMENT
+# chat_handlers.py - v4.9.6 + CONVERSATION CONTEXT FIX APPLIED (1/22/2026)
 # VECTOR SEARCH ENABLED
-# CONVERSATION CONTEXT AWARE - Fixed follow-up questions (1/21/2026)
+# CONVERSATION CONTEXT AWARE - Fixed routing issue for follow-up questions
+# Fixed: Follow-up questions now bypass keyword search and use conversation context
 # updated ensure_vector_mapping_exists to not try and update KNN if it already exists 7-23-25
 #updated  build_search_context to use a new function to remove viloations in search filters
 # added strict metadata verification to ensure all results comply with filters
 #added helper function extract_actual_metadata_values
-# NEW: Added conversation context detection for follow-up queries
+# FIXED: Added conversation context detection BEFORE keyword search routing
 
 import os
 import logging
@@ -2288,9 +2289,34 @@ async def relay_chat_rag(request: Request):
         logger.info(f"Ã°Å¸â€Å½ FILTERS RECEIVED: {req.filters}")
 
 
-        # CSV DOWNLOAD ROUTING: Check if this is a keyword search
-        if is_keyword_search(req.message):
-            logger.info("KEYWORD SEARCH DETECTED: Routing to CSV download")
+        # CONVERSATION CONTEXT FIX - Detect follow-up questions BEFORE keyword routing
+        def is_contextual_followup(message: str, history: list) -> bool:
+            """Detect contextual follow-up questions that reference previous analysis"""
+            if not history:
+                return False
+            
+            contextual_phrases = [
+                "list the agents", "show the agents", "which agents", "what agents",
+                "list the calls", "show the calls", "which calls", 
+                "from this data", "from these", "from the analysis",
+                "that did not", "that didn't", "who did not", "who didn't",
+                "breakdown by", "breakdown of", "show me the", "give me the",
+                "provide a list", "give me a breakdown", "agents that", "calls that"
+            ]
+            
+            message_lower = message.lower()
+            return any(phrase in message_lower for phrase in contextual_phrases)
+
+        # Check for contextual follow-up BEFORE routing to keyword search
+        is_followup = is_contextual_followup(req.message, req.history)
+        
+        if is_followup:
+            logger.info(f"🔄 CONTEXTUAL FOLLOW-UP DETECTED: '{req.message[:50]}...'")
+            logger.info(f"📚 History length: {len(req.history)} messages")
+            logger.info("⚡ Bypassing keyword search - proceeding to AI analysis with context")
+            # Continue to AI analysis section (don't return early)
+        elif is_keyword_search(req.message):
+            logger.info("🔍 KEYWORD SEARCH DETECTED: Routing to CSV download")
             return handle_keyword_search_csv(req)
 
         # Continue with AI analysis for analytical queries
@@ -2397,16 +2423,48 @@ async def relay_chat_rag(request: Request):
 
         
         # STEP 2: Enhanced system message with CONVERSATION CONTEXT AWARENESS
-        is_contextual = detect_contextual_query(req.message)
+        # Use the same context detection logic as the routing
         
-        if is_contextual and req.history:
+        if is_followup and req.history:
             # Build context-aware system prompt for follow-up questions
-            system_message = build_contextual_system_prompt(context, req.history, req.message)
-            logger.info(f"🔄 CONTEXTUAL QUERY DETECTED: '{req.message[:50]}...'")
+            # Find previous analysis from conversation history
+            context_note = ""
+            for msg in reversed(req.history):
+                if (msg.get("role") == "assistant" and 
+                    msg.get("content") and
+                    "evaluations found" in msg.get("content", "")):
+                    context_note = f"\n\nIMPORTANT CONTEXT: User is asking a follow-up question about the analysis you just provided. Reference the same dataset and findings from your previous response: {msg['content'][:500]}...\n\n"
+                    break
+            
+            system_message = f"""{context_note}You are a professional call center analytics assistant with conversation memory.
+
+CURRENT CONTEXTUAL REQUEST: {req.message}
+
+CONTEXTUAL UNDERSTANDING:
+- User is referring to data from previous analysis in this conversation
+- "list the agents" / "show the agents" = extract agent information from the same dataset
+- "breakdown by partner/site" = reorganize the SAME evaluation data by different dimensions  
+- Maintain consistency with previous analysis numbers and findings
+
+## Response Format:
+Format your response with:
+- **Bold text** for key points using markdown
+- Bullet points for lists
+- Reference to previous analysis when appropriate: "From the [X] evaluations analyzed earlier..."
+
+CONTEXT DATA:
+{context}
+
+Rules:
+- Base answers on the provided context data
+- Reference previous conversation for consistency  
+- Keep response professional and executive-ready
+"""
+            logger.info(f"🔄 CONTEXTUAL QUERY: Using conversation-aware system prompt")
             logger.info(f"📚 Using conversation history with {len(req.history)} previous messages")
         else:
             # Use standard schema-enforced system prompt for new queries
-            logger.info(f"🆕 NEW QUERY: '{req.message[:50]}...'")
+            logger.info(f"🆕 NEW QUERY: Using standard system prompt")
             system_message = f"""You are a professional call center analytics assistant. You must provide insights based STRICTLY on properly structured evaluation data.
 
 ## 🔒 SCHEMA ENFORCEMENT - MANDATORY DATA STRUCTURE

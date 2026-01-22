@@ -99,7 +99,7 @@ body {
 /* Sidebar toggle tab - Now positioned relative to sidebar */
 .sidebar-tab {
     position: absolute; /* Position relative to main-layout */
-    left: 385px; /* Position near right edge of 420px sidebar */
+    left: -35px; /* Position near right edge of 420px sidebar */
     top: 100px; /* Position from top of main-layout */
     width: 35px;
     height: 90px;
@@ -146,7 +146,7 @@ body {
 /* Apply Filters Tab - Positioned relative to sidebar */
 .apply-tab {
     position: absolute;
-    left: 385px; /* Same as sidebar tab */
+    left: -35px; /* Same as sidebar tab */
     top: 205px; /* Below sidebar tab (100 + 90 + 15px spacing) */
     width: 35px;
     height: 90px;
