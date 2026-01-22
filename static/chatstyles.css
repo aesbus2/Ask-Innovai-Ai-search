@@ -16,7 +16,7 @@ body {
 
 .container {
     width: 100vw; /* Full viewport width */
-    height: 100vh;
+    height: 90vh;
     overflow: hidden;
 }
 
@@ -83,7 +83,7 @@ body {
 /* Main Layout */
 .main-layout {
     display: flex;
-    width: 100%; /* FIXED: Added missing width property for proper expansion */
+    width: 100vw; /* FIXED: Added missing width property for proper expansion */
     max-width: none;
     height: calc(100vh - 60px); /* Full height minus header */
     margin-top: 60px;
@@ -187,9 +187,9 @@ body {
 /* Cancel Filters Tab - Positioned relative to sidebar */
 .cancel-tab {
     position: absolute;
-    left: 385px; /* Same as other tabs */
+    left: 0px; /* Same as other tabs */
     top: 310px; /* Below apply tab (205 + 90 + 15px spacing) */
-    width: 35px;
+    width: 20px;
     height: 90px;
     background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%); /* Red to orange gradient */
     color: white;
@@ -203,7 +203,7 @@ body {
     transition: all 0.3s ease;
     z-index: 1001;
     user-select: none;
-}
+} 
 
 .cancel-tab:hover {
     background: linear-gradient(135deg, #c82333 0%, #e8590c 100%);
@@ -312,7 +312,7 @@ body {
     .cancel-tab {
         top: 190px; /* Adjust position */
         left: calc(100% - 40px);
-        width: 30px;
+        width: 20px;
         height: 60px;
     }
     
