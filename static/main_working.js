@@ -1,12 +1,10 @@
-// Enhanced main.js for Ask InnovAI Admin Interface v2.2.3
-// BULLETPROOF FIX: Complete error handling for toLocaleString() undefined errors
 // Version: 12-22.1 - Updated for new admin interface
 
 let pollInterval = null
 let isPolling = false;
 
 
-console.log("Ask InnovAI Admin v2.2.4 - Updated for new admin interface");
+console.log("Ask InnovAI Admin v01.12.26.1 - Updated for new admin interface");
 
 // Auto-refresh status every 30 seconds if not actively importing
 setInterval(() => {
@@ -19,7 +17,7 @@ setInterval(() => {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("Ã°Å¸Å¡â‚¬ DOM loaded, initializing enhanced admin interface v6.1.0...");
+    console.log("DOM loaded, initializing enhanced admin interface v6.1.0...");
     refreshStatus();
     checkSystemHealth();
     checkLastImportInfo();
@@ -29,8 +27,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Basic server ping to verify connectivity
     fetch("/ping")
         .then(r => r.json())
-        .then(data => console.log("Ã¢Å“â€¦ Server ping successful:", data))
-        .catch(error => console.error("Ã¢ÂÅ’ Server ping failed:", error));
+        .then(data => console.log("ÃServer ping successful:", data))
+        .catch(error => console.error("Server ping failed:", error));
 
     setupMaxDocsValidation();
 
@@ -257,11 +255,11 @@ function ultraSafeFormat(value) {
 // ============================================================================
 
 async function loadOpenSearchStats() {
-    console.log("Ã°Å¸â€œÅ  Loading OpenSearch statistics...");
+    console.log("Loading OpenSearch statistics...");
     
     const container = document.getElementById('statisticsContainer');
     if (!container) {
-        console.warn('Ã¢ÂÅ’ Statistics container not found - add id="statisticsContainer" to your HTML');
+        console.warn('Statistics container not found - add id="statisticsContainer" to your HTML');
         return;
     }
     
@@ -269,7 +267,7 @@ async function loadOpenSearchStats() {
     container.innerHTML = `
         <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
             <div class="stats-card">
-                <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;">Ã°Å¸â€â€ž</span> Loading...</h3>
+                <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;"></span> Loading...</h3>
                 <div class="stats-number">Please wait</div>
                 <div class="stats-label">Fetching statistics</div>
             </div>
@@ -280,7 +278,7 @@ async function loadOpenSearchStats() {
         const response = await fetch('/opensearch_statistics');
         const data = await response.json();
         
-        console.log("Ã°Å¸â€œÅ  Full OpenSearch response:", data);
+        console.log("Full OpenSearch response:", data);
         
         if (!response.ok) {
             throw new Error(data.error || `HTTP ${response.status}`);
@@ -288,7 +286,7 @@ async function loadOpenSearchStats() {
 
         // Your API returns: { status: "success", data: { total_documents: 2954, ... } }
         const actualData = data.data || data;
-        console.log("Ã°Å¸â€œÅ  Actual statistics data:", actualData);
+        console.log("Actual statistics data:", actualData);
         
         // Ã¢Å“â€¦ FIXED: Handle the actual API response structure
         const stats = {
@@ -345,7 +343,7 @@ async function loadOpenSearchStats() {
                 <!-- Program Data -->
                 ${stats.unique_programs > 0 ? `
                 <div class="stats-card">
-                    <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;">Ã°Å¸ÂÂ¢</span> Programs</h3>
+                    <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;">business</span> Programs</h3>
                     <div class="stats-number">${ultraSafeFormat(stats.unique_programs)}</div>
                     <div class="stats-label">Different Programs</div>
                 </div>` : ''}
@@ -369,7 +367,7 @@ async function loadOpenSearchStats() {
                 <!-- Partner Data -->
                 ${stats.unique_partners > 0 ? `
                 <div class="stats-card">
-                    <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;">Ã°Å¸Â¤Â</span> Partners</h3>
+                    <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;">group</span> Partners</h3>
                     <div class="stats-number">${ultraSafeFormat(stats.unique_partners)}</div>
                     <div class="stats-label">Business Partners</div>
                 </div>` : ''}
@@ -377,7 +375,7 @@ async function loadOpenSearchStats() {
                 <!-- Vector Search Status -->
                 ${stats.vector_support ? `
                 <div class="stats-card ${stats.vector_ready ? 'vector-ready' : 'vector-disabled'}" style="border-color: ${stats.vector_ready ? '#28a745' : '#ffc107'};">
-                    <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;">${stats.vector_ready ? 'Ã°Å¸â€Â' : 'Ã¢Å¡Â Ã¯Â¸Â'}</span> Vector Search</h3>
+                    <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;">${stats.vector_ready ? 'check_circle' : 'warning'}</span> Vector Search</h3>
                     <div class="stats-number">${stats.vector_coverage}%</div>
                     <div class="stats-label">${stats.vector_ready ? 'Ready' : 'Disabled'} (${ultraSafeFormat(stats.documents_with_vectors)} docs)</div>
                 </div>` : ''}
@@ -386,13 +384,13 @@ async function loadOpenSearchStats() {
             <!-- Footer Info -->
             <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #6e32a0;">
                 <div style="font-size: 0.9em; color: #666;">
-                    Ã°Å¸â€œâ€¦ Last updated: ${ultraSafeTimestamp(data.timestamp || new Date())} | 
-                    Ã°Å¸ÂÂ¥ Cluster: <span style="color: ${actualData.cluster_status === 'green' ? '#28a745' : '#dc3545'};">${actualData.cluster_status || 'Unknown'}</span> |
-                    Ã°Å¸â€œÅ  Processing: ${data.processing_time || 'Unknown'}s
+                    Last updated: ${ultraSafeTimestamp(data.timestamp || new Date())} | 
+                    Cluster: <span style="color: ${actualData.cluster_status === 'green' ? '#28a745' : '#dc3545'};">${actualData.cluster_status || 'Unknown'}</span> |
+                    Processing: ${data.processing_time || 'Unknown'}s
                 </div>
                 ${actualData.available_fields ? `
                 <details style="margin-top: 10px;">
-                    <summary style="cursor: pointer; font-weight: bold;">Ã°Å¸â€œâ€¹ Available Fields (${actualData.available_fields.length})</summary>
+                    <summary style="cursor: pointer; font-weight: bold;">expand_more Available Fields (${actualData.available_fields.length})</summary>
                     <div style="margin-top: 8px; font-family: monospace; font-size: 0.8em; background: #fff; padding: 8px; border-radius: 4px;">
                         ${actualData.available_fields.join(', ')}
                     </div>
@@ -401,10 +399,10 @@ async function loadOpenSearchStats() {
         `;
         
         container.innerHTML = html;
-        console.log("Ã¢Å“â€¦ OpenSearch statistics loaded successfully with real data!");
+        console.log("OpenSearch statistics loaded successfully with real data!");
         
     } catch (error) {
-        console.error('Ã¢ÂÅ’ Failed to load OpenSearch statistics:', error);
+        console.error('Failed to load OpenSearch statistics:', error);
         
         // Enhanced error display
         const errorType = error.message.includes('fetch') ? 'network_error' : 
@@ -413,7 +411,7 @@ async function loadOpenSearchStats() {
         
         container.innerHTML = `
             <div class="stats-error" style="text-align: center; padding: 40px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; color: #721c24;">
-                <div style="font-size: 3em; margin-bottom: 16px;">Ã¢ÂÅ’</div>
+                <div style="font-size: 3em; margin-bottom: 16px;">refresh</div>
                 <h3>Statistics Loading Failed</h3>
                 <p><strong>Error:</strong> ${ultraSafeString(error.message)}</p>
                 <div style="margin-top: 20px;">
@@ -421,11 +419,11 @@ async function loadOpenSearchStats() {
                         Ã°Å¸â€â€ž Retry Loading
                     </button>
                     <button class="btn secondary" onclick="window.open('/opensearch_statistics', '_blank')" style="margin-left: 10px;">
-                        Ã°Å¸â€â€” View Raw Data
+                        View Raw Data
                     </button>
                 </div>
                 <div style="margin-top: 16px; font-size: 0.9em; color: #856404; background: #fff3cd; padding: 12px; border-radius: 4px;">
-                    Ã°Å¸â€™Â¡ <strong>Troubleshooting:</strong> Check if your OpenSearch cluster is running and accessible.
+                    <strong>Troubleshooting:</strong> Check if your OpenSearch cluster is running and accessible.
                     Try visiting <code>/opensearch_statistics</code> directly to see the raw response.
                 </div>
             </div>
@@ -458,7 +456,7 @@ function displayStatistics(response, timestamp) {
     const html = `
         <div class="stats-dashboard">
             <div class="stats-card priority-metric">
-                <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;">Ã°Å¸â€ â€</span> Evaluations Processed</h3>
+                <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;">speed</span> Evaluations Processed</h3>
                 <div class="stats-number">${ultraSafeFormat(safeData.total_evaluations)}</div>
                 <div class="stats-label">Total Documents in OpenSearch</div>
             </div>
@@ -492,7 +490,7 @@ function displayStatistics(response, timestamp) {
             
             ${safeData.weighted_scores_available > 0 ? `
             <div class="stats-card">
-                <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;">Ã°Å¸â€œÅ </span> Scored Evaluations</h3>
+                <h3><span class="material-icons" style="vertical-align: middle; font-size: 1em;">person</span> Scored Evaluations</h3>
                 <div class="stats-number">${ultraSafeFormat(safeData.weighted_scores_available)}</div>
                 <div class="stats-label">With Weighted Scores</div>
             </div>` : ''}
@@ -500,15 +498,15 @@ function displayStatistics(response, timestamp) {
         
         <div style="margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #6e32a0;">
             <div style="font-size: 0.9em; color: #666;">
-                Ã°Å¸â€œâ€¦ Last updated: ${ultraSafeTimestamp(responseTimestamp)} | 
-                Ã°Å¸â€â€ž Processing: ${response.processing_time || 'Unknown'}s | 
-                Ã°Å¸ÂÂ·Ã¯Â¸Â Version: ${response.version || 'Unknown'}
+                Last updated: ${ultraSafeTimestamp(responseTimestamp)} | 
+                Processing: ${response.processing_time || 'Unknown'}s | 
+                Version: ${response.version || 'Unknown'}
             </div>
         </div>
     `;
     
     container.innerHTML = html;
-    console.log("Ã°Å¸â€œÅ  Statistics dashboard updated with actual API data");
+    console.log("Statistics dashboard updated with actual API data");
 }
 
 
@@ -578,7 +576,7 @@ function clearDateRange() {
     if (endDate) endDate.value = '';
     
     updateDateRangeDisplay();
-    console.log("Ã°Å¸â€œâ€¦ Date range cleared");
+    console.log("Date range cleared");
 }
 
 function updateImportPreview() {
@@ -598,19 +596,19 @@ function updateImportPreview() {
     // Add date range info
     if (startDate || endDate) {
         if (startDate && endDate) {
-            previewText += `\nÃ°Å¸â€œâ€¦ Date range: ${startDate} to ${endDate}`;
+            previewText += `\n Date range: ${startDate} to ${endDate}`;
         } else if (startDate) {
-            previewText += `\nÃ°Å¸â€œâ€¦ From: ${startDate} onwards`;
+            previewText += `\n From: ${startDate} onwards`;
         } else if (endDate) {
-            previewText += `\nÃ°Å¸â€œâ€¦ Up to: ${endDate}`;
+            previewText += `\n Up to: ${endDate}`;
         }
     }
     
     // Add max docs info
     if (maxDocs !== null && !isNaN(maxDocs)) {
-        previewText += `\nÃ°Å¸â€œÅ  Limited to: ${maxDocs} documents`;
+        previewText += `\n Limited to: ${maxDocs} documents`;
     } else {
-        previewText += `\nÃ°Å¸â€œÅ  Processing: All matching documents`;
+        previewText += `\n Processing: All matching documents`;
     }
     
     importPreviewText.textContent = previewText;
@@ -632,7 +630,7 @@ async function startImport() {
         if (!isNaN(parsedValue) && parsedValue > 0) {
             maxDocs = parsedValue;
         } else {
-            alert("Ã¢ÂÅ’ Max Documents must be a positive number or left empty for all documents");
+            alert("Max Documents must be a positive number or left empty for all documents");
             return;
         }
     }
@@ -649,7 +647,7 @@ async function startImport() {
 
     // Validate date range
     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-        alert("Ã¢ÂÅ’ Start date cannot be after end date");
+        alert("Start date cannot be after end date");
         return;
     }
 
@@ -689,18 +687,18 @@ async function startImport() {
     let dateText = "";
     if (startDate || endDate) {
         if (startDate && endDate) {
-            dateText = `\nDate Range: ${startDate} to ${endDate}`;
+            dateText = `\n Date Range: ${startDate} to ${endDate}`;
         } else if (startDate) {
-            dateText = `\nFrom: ${startDate} onwards`;
+            dateText = `\n rom: ${startDate} onwards`;
         } else if (endDate) {
-            dateText = `\nUp to: ${endDate}`;
+            dateText = `\n Up to: ${endDate}`;
         }
     }
     
     // Add filter info to confirmation
     let filterText = "";
     if (filterUpdatedAfterCreated) {
-        filterText = "\nÃ°Å¸â€Â Filter: Only modified evaluations (updated > created_on)";
+        filterText = "\n Filter: Only modified evaluations (updated > created_on)";
     }
     
     const importTypeText = importType === "incremental" ? "Incremental (only updated documents)" : "Full (all documents)";
@@ -715,23 +713,23 @@ This will fetch evaluation data from your API and index it for search and chat.`
     if (!confirm(confirmMsg)) return;
 
     // Debug logging
-    console.log("Ã°Å¸Å¡â‚¬ Starting import with config:", config);
-    console.log(`Ã°Å¸â€œâ€¹ Import Type Selected: ${importType}`);
-    console.log(`Ã°Å¸â€Â¢ Max Docs Element Value: ${maxDocsInput ? maxDocsInput.value : 'N/A'}`);
-    console.log(`Ã°Å¸â€œÅ  Max Docs Parsed: ${maxDocs}`);
+    console.log("Starting import with config:", config);
+    console.log(`Import Type Selected: ${importType}`);
+    console.log(`ÃMax Docs Element Value: ${maxDocsInput ? maxDocsInput.value : 'N/A'}`);
+    console.log(`Max Docs Parsed: ${maxDocs}`);
 
     if (maxDocs !== null) {
-        console.log(`Ã°Å¸â€œÅ  Max documents limit: ${maxDocs}`);
+        console.log(`Max documents limit: ${maxDocs}`);
     } else {
-        console.log("Ã°Å¸â€œÅ  No document limit - importing all available");
+        console.log("No document limit - importing all available");
     }
 
     if (startDate || endDate) {
-        console.log(`Ã°Å¸â€œâ€¦ Date range: ${startDate || 'unlimited'} to ${endDate || 'unlimited'}`);
+        console.log(`Date range: ${startDate || 'unlimited'} to ${endDate || 'unlimited'}`);
     }
     
     if (filterUpdatedAfterCreated) {
-        console.log("Ã°Å¸â€Â Filter enabled: Only importing evaluations where updated > created_on");
+        console.log("Filter enabled: Only importing evaluations where updated > created_on");
     }
 
     try {
@@ -741,17 +739,17 @@ This will fetch evaluation data from your API and index it for search and chat.`
             body: JSON.stringify(config) // Use config, not requestBody
         });
 
-        console.log("Ã°Å¸â€œÂ¡ POST request sent to: /import");
+        console.log("POST request sent to: /import");
 
         const text = await response.text();
-        console.log("Ã°Å¸â€œÂ¥ Raw response:", text);
+        console.log("Raw response:", text);
 
         let data;
         try {
             data = JSON.parse(text);
         } catch (e) {
-            console.error("Ã¢ÂÅ’ Non-JSON response:", text);
-            alert(`Ã¢ÂÅ’ Server returned non-JSON response: ${text.substring(0, 200)}...`);
+            console.error("Non-JSON response:", text);
+            alert(`Server returned non-JSON response: ${text.substring(0, 200)}...`);
             return;
         }
 
@@ -762,17 +760,17 @@ This will fetch evaluation data from your API and index it for search and chat.`
             }
             if (startDate || endDate) {
                 if (startDate && endDate) {
-                    successMsg += `\nÃ°Å¸â€œâ€¦ Date range: ${startDate} to ${endDate}`;
+                    successMsg += `\n Date range: ${startDate} to ${endDate}`;
                 } else if (startDate) {
-                    successMsg += `\nÃ°Å¸â€œâ€¦ From: ${startDate}`;
+                    successMsg += `\n From: ${startDate}`;
                 } else if (endDate) {
-                    successMsg += `\nÃ°Å¸â€œâ€¦ Up to: ${endDate}`;
+                    successMsg += `\n Up to: ${endDate}`;
                 }
             }
             
             // Add filter status to success message
             if (filterUpdatedAfterCreated) {
-                successMsg += `\nÃ°Å¸â€Â Filter: Only modified evaluations`;
+                successMsg += `\n Filter: Only modified evaluations`;
             }
             
             alert(successMsg);
@@ -781,13 +779,13 @@ This will fetch evaluation data from your API and index it for search and chat.`
             startPolling();
             
         } else {
-            console.error("Ã¢ÂÅ’ Import failed with status:", response.status);
-            console.error("Ã¢ÂÅ’ Error response:", data);
-            alert(`Ã¢ÂÅ’ Import failed: ${data.detail || data.message || data.error || "Unknown error"}`);
+            console.error("Import failed with status:", response.status);
+            console.error("Error response:", data);
+            alert(`Import failed: ${data.detail || data.message || data.error || "Unknown error"}`);
         }
     } catch (error) {
-        console.error("Ã¢ÂÅ’ Import request failed:", error);
-        alert(`Ã¢ÂÅ’ Import request failed: ${error.message}`);
+        console.error("Import request failed:", error);
+        alert(`Import request failed: ${error.message}`);
     }
 }
 
@@ -803,12 +801,12 @@ function safeUpdateElement(elementId, content, fallbackMessage = null) {
             return true;
         } else {
             if (fallbackMessage) {
-                console.warn(`Ã¢Å¡Â Ã¯Â¸Â Element '${elementId}' not found: ${fallbackMessage}`);
+                console.warn(`Element '${elementId}' not found: ${fallbackMessage}`);
             }
             return false;
         }
     } catch (error) {
-        console.error(`Ã¢ÂÅ’ Error updating element '${elementId}':`, error);
+        console.error(`Error updating element '${elementId}':`, error);
         return false;
     }
 }
@@ -821,12 +819,12 @@ function safeUpdateHTML(elementId, htmlContent, fallbackMessage = null) {
             return true;
         } else {
             if (fallbackMessage) {
-                console.warn(`Ã¢Å¡Â Ã¯Â¸Â Element '${elementId}' not found: ${fallbackMessage}`);
+                console.warn(`Element '${elementId}' not found: ${fallbackMessage}`);
             }
             return false;
         }
     } catch (error) {
-        console.error(`Ã¢ÂÅ’ Error updating HTML for element '${elementId}':`, error);
+        console.error(`Error updating HTML for element '${elementId}':`, error);
         return false;
     }
 }
@@ -893,7 +891,7 @@ function updateMaxDocsDisplay() {
 }
 
 function startPolling() {
-    console.log("Ã°Å¸â€â€ž Starting status polling...");
+    console.log("Starting status polling...");
     
     // Stop any existing polling first
     stopPolling();
@@ -904,17 +902,17 @@ function startPolling() {
         try {
             await checkImportStatus();
         } catch (error) {
-            console.error("Ã¢ÂÅ’ Polling error:", error);
+            console.error("Polling error:", error);
             // Don't stop polling on single errors, but log them
         }
     }, 2000); // Poll every 2 seconds
     
-    console.log("Ã¢Å“â€¦ Polling started");
+    console.log("Polling started");
 }
 
 function stopPolling() {
     if (pollInterval) {
-        console.log("Ã°Å¸â€ºâ€˜ Stopping status polling...");
+        console.log("Stopping status polling...");
         clearInterval(pollInterval);
         pollInterval = null;
     }
@@ -926,19 +924,19 @@ async function checkImportStatus() {
         const response = await fetch('/import_status');
         
         if (!response.ok) {
-            console.warn(`Ã¢Å¡Â Ã¯Â¸Â Status check returned ${response.status}`);
+            console.warn(`Status check returned ${response.status}`);
             return;
         }
         
         const data = await response.json();
-        console.log("Ã°Å¸â€œÅ  Import status:", data.status);
+        console.log("Import status:", data.status);
         
         // Update the UI with status
         updateStatus(data);
         
         // Stop polling if import is finished
         if (data.status && !['running', 'starting', 'pending'].includes(data.status.toLowerCase())) {
-            console.log(`Ã°Å¸ÂÂ Import finished with status: ${data.status}`);
+            console.log(`Import finished with status: ${data.status}`);
             stopPolling();
             
             // Refresh stats after completion
@@ -955,7 +953,7 @@ async function checkImportStatus() {
         }
         
     } catch (error) {
-        console.error("Ã¢ÂÅ’ Failed to check import status:", error);
+        console.error("Failed to check import status:", error);
     }
 }
 
@@ -1009,18 +1007,18 @@ function showResults(results) {
     section.classList.remove('hidden');
     
     let html = '<div class="results-summary">';
-    html += `<h3>Ã¢Å“â€¦ Import Completed Successfully</h3>`;
+    html += `<h3>Import Completed Successfully</h3>`;
     
     if (results.total_documents_processed) {
-        html += `<p>Ã°Å¸â€œâ€ž Documents processed: ${results.total_documents_processed.toLocaleString()}</p>`;
+        html += `<p>Documents processed: ${results.total_documents_processed.toLocaleString()}</p>`;
     }
     
     if (results.total_evaluations_indexed) {
-        html += `<p>Ã°Å¸Å½Â¯ Evaluations indexed: ${results.total_evaluations_indexed.toLocaleString()}</p>`;
+        html += `<p>Evaluations indexed: ${results.total_evaluations_indexed.toLocaleString()}</p>`;
     }
     
     if (results.errors && results.errors > 0) {
-        html += `<p>Ã¢Å¡Â Ã¯Â¸Â Errors: ${results.errors}</p>`;
+        html += `<p>Errors: ${results.errors}</p>`;
     }
     
     html += '</div>';
@@ -1028,7 +1026,7 @@ function showResults(results) {
 }
 
 async function refreshStatus() {
-    console.log("Ã°Å¸â€â€ž Refreshing all status information...");
+    console.log("Refreshing all status information...");
     
     try {
         // Run all checks in parallel for better performance
@@ -1038,10 +1036,10 @@ async function refreshStatus() {
         ];
         
         await Promise.allSettled(promises);
-        console.log("Ã¢Å“â€¦ Status refresh completed");
+        console.log("Status refresh completed");
         
     } catch (error) {
-        console.error("Ã¢ÂÅ’ Error during status refresh:", error);
+        console.error("Error during status refresh:", error);
     }
 }
 
@@ -1125,12 +1123,12 @@ function showResults(results) {
     
     // ENHANCED: Define key metrics with Evaluations Processed as priority #1
     const metrics = [
-        { key: 'total_evaluations_indexed', label: 'Evaluations Processed', class: 'success', icon: 'Ã°Å¸â€ â€', priority: 1 },
-        { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: 'Ã°Å¸â€œâ€ž', priority: 2 },
-        { key: 'total_chunks_processed', label: 'Chunks Processed', class: 'info', icon: 'Ã°Å¸Â§Â©', priority: 3 },
+        { key: 'total_evaluations_indexed', label: 'Evaluations Processed', class: 'success', icon: 'verified', priority: 1 },
+        { key: 'total_documents_processed', label: 'Documents Processed', class: 'success', icon: 'verified', priority: 2 },
+        { key: 'total_chunks_processed', label: 'Chunks Processed', class: 'info', icon: 'verified', priority: 3 },
         { key: 'errors', label: 'Errors', class: 'warning', icon: 'Ã¢ÂÅ’', priority: 4 },
-        { key: 'opensearch_errors', label: 'OpenSearch Errors', class: 'danger', icon: 'Ã°Å¸â€Â¥', priority: 5 },
-        { key: 'import_type', label: 'Import Type', class: 'info', icon: 'Ã°Å¸â€â€ž', priority: 6 }
+        { key: 'opensearch_errors', label: 'OpenSearch Errors', class: 'danger', icon: 'verified', priority: 5 },
+        { key: 'import_type', label: 'Import Type', class: 'info', icon: 'flag', priority: 6 }
     ];
     
     // Display key metrics (sorted by priority)
@@ -1169,7 +1167,7 @@ function showResults(results) {
         const collections = ultraSafeArray(results.template_collections_created);
         html += `
             <div class="result-card">
-                <h4>Ã°Å¸â€œÂ Template Collections</h4>
+                <h4>Template Collections</h4>
                 <div class="result-value info">${ultraSafeFormat(collections.length)}</div>
                 <div style="font-size: 0.8em; margin-top: 8px; color: #666;">
                     ${collections.slice(0, 3).map(c => ultraSafeString(c)).join(', ')}
@@ -1185,7 +1183,7 @@ function showResults(results) {
             const timestamp = ultraSafeTimestamp(results.completed_at);
             html += `
                 <div class="result-card">
-                    <h4>Ã¢ÂÂ° Completed At</h4>
+                    <h4>Completed At</h4>
                     <div class="result-value" style="font-size: 1.2em; color: #666;">${timestamp}</div>
                 </div>
             `;
@@ -1198,7 +1196,7 @@ function showResults(results) {
     if (results.success_rate) {
         html += `
             <div class="result-card">
-                <h4>Ã°Å¸â€œË† Success Rate</h4>
+                <h4>Success Rate</h4>
                 <div class="result-value success">${ultraSafeString(results.success_rate)}</div>
             </div>
         `;
@@ -1206,7 +1204,7 @@ function showResults(results) {
     
     grid.innerHTML = html;
     
-    console.log("Ã°Å¸â€œË† Import results displayed with BULLETPROOF handling:", results);
+    console.log("Import results displayed with BULLETPROOF handling:", results);
 }
 
 // ============================================================================
@@ -1214,18 +1212,18 @@ function showResults(results) {
 // ============================================================================
 
 async function checkSystemHealth() {
-    console.log("Ã°Å¸ÂÂ¥ Checking system health...");
+    console.log("Checking system health...");
     
     const container = document.getElementById('healthContainer');
     if (!container) {
-        console.warn('Ã¢ÂÅ’ Health container not found - add id="healthContainer" to your HTML');
+        console.warn('Health container not found - add id="healthContainer" to your HTML');
         return;
     }
     
     container.innerHTML = `
         <div class="health-item">
             <span class="health-label">System Status</span>
-            <span class="health-value">Ã°Å¸â€â€ž Checking...</span>
+            <span class="health-value">Checking...</span>
         </div>
     `;
     
@@ -1233,21 +1231,21 @@ async function checkSystemHealth() {
         const response = await fetch('/health');
         const data = await response.json();
         
-        console.log("Ã°Å¸Â©Âº Health check response:", data);
+        console.log("Health check response:", data);
         
         // Ã¢Å“â€¦ FIXED: Match the actual API response structure
         const isHealthy = response.ok && (data.status === 'ok' || data.status === 'healthy');
         
         // Ã¢Å“â€¦ FIXED: Handle the correct OpenSearch status structure
-        let openSearchStatus = 'Ã¢ÂÅ’ Unknown';
+        let openSearchStatus = 'Unknown';
         if (data.components && data.components.opensearch) {
             const osStatus = data.components.opensearch.status;
             if (osStatus === 'connected') {
-                openSearchStatus = 'Ã¢Å“â€¦ Connected';
+                openSearchStatus = 'Connected';
             } else if (osStatus === 'not configured') {
-                openSearchStatus = 'Ã¢Å¡Â Ã¯Â¸Â Not Configured';
+                openSearchStatus = 'Not Configured';
             } else {
-                openSearchStatus = 'Ã¢ÂÅ’ Disconnected';
+                openSearchStatus = 'Disconnected';
             }
         }
         
@@ -1266,7 +1264,7 @@ async function checkSystemHealth() {
             vectorSearchStatus = `
                 <div class="health-item">
                     <span class="health-label">Vector Search</span>
-                    <span class="health-value">${vectorEnabled ? 'Ã¢Å“â€¦ Enabled' : 'Ã¢ÂÅ’ Disabled'}</span>
+                    <span class="health-value">${vectorEnabled ? 'Enabled' : 'Disabled'}</span>
                 </div>
             `;
         }
@@ -1274,7 +1272,7 @@ async function checkSystemHealth() {
         container.innerHTML = `
             <div class="health-item ${isHealthy ? '' : 'unhealthy'}">
                 <span class="health-label">System Status</span>
-                <span class="health-value">${isHealthy ? 'Ã¢Å“â€¦ Healthy' : 'Ã¢ÂÅ’ Unhealthy'}</span>
+                <span class="health-value">${isHealthy ? 'Healthy' : 'Unhealthy'}</span>
             </div>
             <div class="health-item">
                 <span class="health-label">OpenSearch</span>
@@ -1287,14 +1285,14 @@ async function checkSystemHealth() {
             ${vectorSearchStatus}
         `;
         
-        console.log("Ã¢Å“â€¦ Health check completed successfully");
+        console.log("check¦ Health check completed successfully");
         
     } catch (error) {
-        console.error('Ã¢ÂÅ’ Health check failed:', error);
+        console.error('"error" Health check failed:', error);
         container.innerHTML = `
             <div class="health-item unhealthy">
                 <span class="health-label">System Status</span>
-                <span class="health-value">Ã¢ÂÅ’ Error: ${error.message}</span>
+                <span class="health-value">Error: ${error.message}</span>
             </div>
         `;
     }
@@ -1307,7 +1305,7 @@ async function checkLastImportInfo() {
     
     // Ã¢Å“â€¦ FIXED: Create the container if it doesn't exist
     if (!container) {
-        console.log("Ã¢Å¡Â Ã¯Â¸Â lastImportInfo container not found, creating it...");
+        console.log("lastImportInfo container not found, creating it...");
         
         // Find a good place to add it (after the health container)
         const healthSection = document.getElementById('healthContainer')?.parentElement;
@@ -1325,7 +1323,7 @@ async function checkLastImportInfo() {
             
             container = newContainer;
         } else {
-            console.warn('Ã¢ÂÅ’ Could not create lastImportInfo container - no health section found');
+            console.warn('Could not create lastImportInfo container - no health section found');
             return;
         }
     }
@@ -1333,7 +1331,7 @@ async function checkLastImportInfo() {
     container.innerHTML = `
         <div class="health-item">
             <span class="health-label">Last Import</span>
-            <span class="health-value">Ã°Å¸â€â€ž Checking...</span>
+            <span class="health-value">Checking...</span>
         </div>
     `;
     
@@ -1341,7 +1339,7 @@ async function checkLastImportInfo() {
         const response = await fetch('/import_info');
         const data = await response.json();
         
-        console.log("Ã°Å¸â€œÅ  Import info response:", data);
+        console.log("Import info response:", data);
         
         if (data.last_import) {
             container.innerHTML = `
@@ -1362,7 +1360,7 @@ async function checkLastImportInfo() {
             container.innerHTML = `
                 <div class="health-item">
                     <span class="health-label">Last Import</span>
-                    <span class="health-value">Ã¢Å¡Â Ã¯Â¸Â No import history found</span>
+                    <span class="health-value">No import history found</span>
                 </div>
             `;
         }
@@ -1374,7 +1372,7 @@ async function checkLastImportInfo() {
         container.innerHTML = `
             <div class="health-item unhealthy">
                 <span class="health-label">Last Import</span>
-                <span class="health-value">Ã¢ÂÅ’ Error: ${error.message}</span>
+                <span class="health-value">Error: ${error.message}</span>
             </div>
         `;
     }
@@ -1435,7 +1433,7 @@ async function toggleLogs() {
             
         } catch (error) {
             if (logsContent) {
-                logsContent.innerHTML = `<div style="padding: 16px; color: #dc3545;">Ã¢ÂÅ’ Failed to load logs: ${error.message}</div>`;
+                logsContent.innerHTML = `<div style="padding: 16px; color: #dc3545;">Failed to load logs: ${error.message}</div>`;
             }
         }
     } else {
@@ -1449,7 +1447,7 @@ async function testSearch() {
     
     container.innerHTML = `
         <div class="status processing">
-            Ã°Å¸â€Â Testing search functionality...
+            Testing search functionality...
         </div>
     `;
     
@@ -1466,20 +1464,20 @@ async function testSearch() {
             const resultCount = ultraSafeNumber(data.results?.length || 0);
             container.innerHTML = `
                 <div class="status completed">
-                    Ã¢Å“â€¦ Search test successful! Found ${ultraSafeFormat(resultCount)} results.
+                    Search test successful! Found ${ultraSafeFormat(resultCount)} results.
                 </div>
             `;
         } else {
             container.innerHTML = `
                 <div class="status failed">
-                    Ã¢ÂÅ’ Search test failed: ${ultraSafeString(data.error || 'Unknown error')}
+                    Search test failed: ${ultraSafeString(data.error || 'Unknown error')}
                 </div>
             `;
         }
     } catch (error) {
         container.innerHTML = `
             <div class="status failed">
-                Ã¢ÂÅ’ Search test failed: ${ultraSafeString(error.message)}
+                Search test failed: ${ultraSafeString(error.message)}
             </div>
         `;
     }
@@ -1539,12 +1537,12 @@ async function lookupEvaluation() {
         }
         
         const data = await response.json();
-        console.log('Ã¢Å“â€¦ Evaluation data retrieved:', data);
+        console.log('Evaluation data retrieved:', data);
         
         displayEvaluationResults(data, evaluationId);
         
     } catch (error) {
-        console.error('Ã¢ÂÅ’ Evaluation lookup failed:', error);
+        console.error('Evaluation lookup failed:', error);
         
         let errorMessage = 'Network error - unable to connect to server';
         if (error.message.includes('fetch')) {
@@ -1738,62 +1736,60 @@ function displayEvaluationResults(data, searchedId) {
                 </div>
             </div>
             
-           // Replace the entire section from "<!-- Evaluation Content" to the end of your HTML template with this:
-
-            <!-- Content Sections with Tabs -->
-            <div class="content-tabs">
-                <div class="tab-headers">
-                    <button class="tab-header active" onclick="switchTab('evaluation-tab')" id="evaluation-tab-header">
-                        <span class="material-icons" style="vertical-align: middle; font-size: 1em;">Ã°Å¸â€œÂ</span>
-                        Evaluation Content
-                    </button>
-                    <button class="tab-header" onclick="switchTab('transcript-tab')" id="transcript-tab-header">
-                        <span class="material-icons" style="vertical-align: middle; font-size: 1em;">Ã°Å¸Å½â„¢Ã¯Â¸Â</span>
-                        Call Transcript
-                        ${evalData.transcript ? '<span class="tab-indicator">Ã¢â€”Â</span>' : '<span class="tab-indicator empty">Ã¢â€”â€¹</span>'}
-                    </button>
-                </div>
-                
-                <div class="tab-content">
-                    <!-- Evaluation Content Tab -->
-                    <div id="evaluation-tab" class="tab-panel active">
-                        ${evalData.evaluation ? `
-                        <div class="evaluation-section">
-                            <div class="evaluation-text">
-                                ${evalData.evaluation.replace(/\n/g, '<br>')}
-                            </div>
-                        </div>
-                        ` : `
-                        <div class="no-content">
-                            <span class="material-icons" style="vertical-align: middle; font-size: 1em;">folder</span>
-                            <p>No evaluation content available for this evaluation.</p>
-                        </div>
-                        `}
-                    </div>
-                    
-                    <!-- Transcript Tab -->
-                    <div id="transcript-tab" class="tab-panel">
-                        ${evalData.transcript ? `
-                        <div class="transcript-section">
-                            <div class="transcript-info">
-                                <span class="material-icons" style="vertical-align: middle; font-size: 1em;">Ã¢â€žÂ¹Ã¯Â¸Â</span>
-                                <strong>Call Transcript</strong> 
-                                <span class="transcript-length">(${evalData.transcript.length.toLocaleString()} characters)</span>
-                            </div>
-                            <div class="transcript-text">
-                                ${formatTranscript(evalData.transcript)}
-                            </div>
-                        </div>
-                        ` : `
-                        <div class="no-content">
-                            <span class="material-icons" style="vertical-align: middle; font-size: 1em;">Ã°Å¸Å½â„¢Ã¯Â¸Â</span>
-                            <p>No call transcript available for this evaluation.</p>
-                            <small>Transcript data may not have been captured for this call.</small>
-                        </div>
-                        `}
-                    </div>
-                </div>
-            </div>
+           <!-- Content Sections with Tabs -->
+           <div class="content-tabs">
+               <div class="tab-headers">
+                   <button class="tab-header active" onclick="switchTab('evaluation-tab')" id="evaluation-tab-header">
+                       <span class="material-icons" style="vertical-align: middle; font-size: 1em;">description</span>
+                       Evaluation Content
+                   </button>
+                   <button class="tab-header" onclick="switchTab('transcript-tab')" id="transcript-tab-header">
+                       <span class="material-icons" style="vertical-align: middle; font-size: 1em;">chat</span>
+                       Call Transcript
+                       ${evalData.transcript ? '<span class="tab-indicator"><span class="material-icons" style="font-size: 0.8em;">check_circle</span></span>' : '<span class="tab-indicator empty"><span class="material-icons" style="font-size: 0.8em;">cancel</span></span>'}
+                   </button>
+               </div>
+               
+               <div class="tab-content">
+                   <!-- Evaluation Content Tab -->
+                   <div id="evaluation-tab" class="tab-panel active">
+                       ${evalData.evaluation ? `
+                       <div class="evaluation-section">
+                           <div class="evaluation-text">
+                               ${evalData.evaluation.replace(/\n/g, '<br>')}
+                           </div>
+                       </div>
+                       ` : `
+                       <div class="no-content">
+                           <span class="material-icons" style="vertical-align: middle; font-size: 1em;">article</span>
+                           <p>No evaluation content available for this evaluation.</p>
+                       </div>
+                       `}
+                   </div>
+                   
+                   <!-- Transcript Tab -->
+                   <div id="transcript-tab" class="tab-panel">
+                       ${evalData.transcript ? `
+                       <div class="transcript-section">
+                           <div class="transcript-info">
+                               <span class="material-icons" style="vertical-align: middle; font-size: 1em;">schedule</span>
+                               <strong>Call Transcript</strong> 
+                               <span class="transcript-length">(${evalData.transcript.length.toLocaleString()} characters)</span>
+                           </div>
+                           <div class="transcript-text">
+                               ${formatTranscript(evalData.transcript)}
+                           </div>
+                       </div>
+                       ` : `
+                       <div class="no-content">
+                           <span class="material-icons" style="vertical-align: middle; font-size: 1em;">chat</span>
+                           <p>No call transcript available for this evaluation.</p>
+                           <small>Transcript data may not have been captured for this call.</small>
+                       </div>
+                       `}
+                   </div>
+               </div>
+           </div>
         </div>
     `;
     
@@ -1853,17 +1849,17 @@ function displayEvaluationError(message) {
     
     resultsContainer.innerHTML = `
         <div class="evaluation-error">
-            <h3>Ã¢ÂÅ’ Evaluation Lookup Failed</h3>
+            <h3>Evaluation Lookup Failed</h3>
             <p>${ultraSafeString(message)}</p>
             <div style="margin-top: 16px;">
                 <button onclick="clearEvaluationLookup()" class="btn secondary">
-                    <span class="material-icons" style="vertical-align: middle; font-size: 1em;">Ã°Å¸â€”â€˜Ã¯Â¸Â</span> Clear Results
+                    <span class="material-icons" style="vertical-align: middle; font-size: 1em;"></span> Clear Results
                 </button>
                 <button onclick="lookupEvaluation()" class="btn primary">
-                    <span class="material-icons" style="vertical-align: middle; font-size: 1em;">Ã°Å¸â€â€ž</span> Try Again
+                    <span class="material-icons" style="vertical-align: middle; font-size: 1em;"></span> Try Again
                 </button>
             </div>
-        </div>
+        </div>    
     `;
 }
 
@@ -1902,12 +1898,12 @@ window.toggleLogs = toggleLogs;
 window.testSearch = testSearch;
 window.openChatInterface = openChatInterface;
 window.loadOpenSearchStats = loadOpenSearchStats; // Enhanced statistics function
-// NEW: Evaluation lookup functions
 window.lookupEvaluation = lookupEvaluation;
 window.clearEvaluationLookup = clearEvaluationLookup;
 window.handleEvaluationLookupKeyPress = handleEvaluationLookupKeyPress;
 
-console.log("Ã¢Å“â€¦ Ask InnovAI Admin BULLETPROOF main.js v2.2.3 loaded successfully");
-console.log("Ã°Å¸â€ºÂ¡Ã¯Â¸Â BULLETPROOF: ALL toLocaleString() errors COMPLETELY ELIMINATED");
-console.log("Ã°Å¸â€Â§ COMPLETE PROTECTION: ultraSafe functions handle ALL undefined/null/invalid values");
-console.log("Ã°Å¸â€œÅ  All functions including enhanced statistics with ULTIMATE error handling available");
+console.log("Ask InnovAI Admin BULLETPROOF main.js v2.2.3 loaded successfully");
+console.log("BULLETPROOF: ALL toLocaleString() errors COMPLETELY ELIMINATED");
+console.log("COMPLETE PROTECTION: ultraSafe functions handle ALL undefined/null/invalid values");
+console.log("All functions including enhanced statistics with ULTIMATE error handling available");
+
