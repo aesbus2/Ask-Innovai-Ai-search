@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# chat_handlers.py - v4.9.7 CLEANED UP (1/23/2026) - CONSOLIDATED CONTEXTUAL FUNCTIONS
+# chat_handlers.py - v4.9.7 CLEANED UP (1/26/2026) - CONSOLIDATED CONTEXTUAL FUNCTIONS
 # VECTOR SEARCH ENABLED
 # CONVERSATION CONTEXT AWARE - CLEANED VERSION
 # CONSOLIDATED: Removed duplicate contextual functions, using single detect_contextual_query()
